@@ -1101,9 +1101,10 @@ textarea.form-control {
 
 
 /* ==================================================================
-   16. ALERTS
+   16. ALERTS — Premium Left-Bordered Cards
    ================================================================== */
 
+/* Legacy simple alerts (backward compat) */
 .alert {
     padding: var(--space-3) var(--space-4);
     border-radius: var(--radius-sm);
@@ -1112,35 +1113,99 @@ textarea.form-control {
     line-height: var(--leading-normal);
 }
 
-.alert-success {
-    background: var(--cbn-success-light);
-    color: var(--cbn-success-text);
-    border: 1px solid #A7F3D0;
+.alert-success { background: var(--cbn-success-light); color: var(--cbn-success-text); border: 1px solid #A7F3D0; }
+.alert-danger  { background: var(--cbn-danger-light);  color: var(--cbn-danger-text);  border: 1px solid #FECACA; }
+.alert-warning { background: var(--cbn-warning-light); color: var(--cbn-warning-text); border: 1px solid #FDE68A; }
+.alert-info    { background: var(--cbn-info-light);     color: var(--cbn-info-text);    border: 1px solid #BFDBFE; }
+.alert-error   { background: var(--cbn-danger-light);   color: var(--cbn-danger-text);  border: 1px solid #FECACA; }
+
+/* --- Premium Alert Component (AppAlert) --- */
+.cbn-alert {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-3);
+    padding: var(--space-4) var(--space-5);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--cbn-border);
+    border-left: 4px solid var(--cbn-gray-400);
+    background: var(--cbn-surface-elevated);
+    box-shadow: var(--shadow-level-1);
+    margin-bottom: var(--space-4);
+    font-size: var(--text-body);
+    line-height: var(--leading-normal);
+    animation: cbnAlertIn var(--transition-base) var(--ease-decelerate);
 }
 
-.alert-danger {
-    background: var(--cbn-danger-light);
-    color: var(--cbn-danger-text);
-    border: 1px solid #FECACA;
+@keyframes cbnAlertIn {
+    from { opacity: 0; transform: translateY(-4px); }
+    to   { opacity: 1; transform: translateY(0); }
 }
 
-.alert-warning {
-    background: var(--cbn-warning-light);
-    color: var(--cbn-warning-text);
-    border: 1px solid #FDE68A;
+.cbn-alert-success { border-left-color: var(--cbn-success); background: var(--cbn-success-light); }
+.cbn-alert-warning { border-left-color: var(--cbn-warning); background: var(--cbn-warning-light); }
+.cbn-alert-error   { border-left-color: var(--cbn-danger);  background: var(--cbn-danger-light); }
+.cbn-alert-info    { border-left-color: var(--cbn-green-deep); background: #E8F5EE; }
+
+.cbn-alert-icon {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    margin-top: 1px;
 }
 
-.alert-info {
-    background: var(--cbn-info-light);
-    color: var(--cbn-info-text);
-    border: 1px solid #BFDBFE;
+.cbn-alert-success .cbn-alert-icon { color: var(--cbn-success); }
+.cbn-alert-warning .cbn-alert-icon { color: var(--cbn-warning); }
+.cbn-alert-error   .cbn-alert-icon { color: var(--cbn-danger); }
+.cbn-alert-info    .cbn-alert-icon { color: var(--cbn-green-deep); }
+
+.cbn-alert-content {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-0-5);
 }
+
+.cbn-alert-title {
+    font-size: var(--text-body);
+    font-weight: var(--font-weight-semibold);
+    line-height: var(--leading-tight);
+}
+
+.cbn-alert-success .cbn-alert-title { color: var(--cbn-success-text); }
+.cbn-alert-warning .cbn-alert-title { color: var(--cbn-warning-text); }
+.cbn-alert-error   .cbn-alert-title { color: var(--cbn-danger-text); }
+.cbn-alert-info    .cbn-alert-title { color: var(--cbn-green-dark); }
+
+.cbn-alert-message {
+    color: var(--cbn-text-secondary);
+    font-size: var(--text-body-sm);
+}
+
+.cbn-alert-dismiss {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border: none;
+    background: transparent;
+    border-radius: var(--radius-sm);
+    color: var(--cbn-text-muted);
+    cursor: pointer;
+    transition: all var(--transition-fast) var(--ease-standard);
+}
+
+.cbn-alert-dismiss:hover { background: rgba(0,0,0,0.06); color: var(--cbn-text-secondary); }
+.cbn-alert-dismiss:focus-visible { outline: 2px solid var(--cbn-primary); outline-offset: 2px; }
 
 
 /* ==================================================================
-   17. MODAL
+   17. MODAL — Premium Dialog System
    ================================================================== */
 
+/* Legacy modal styles (backward compat) */
 .modal-overlay {
     position: fixed;
     inset: 0;
@@ -1167,6 +1232,288 @@ textarea.form-control {
     justify-content: space-between;
     align-items: center;
     margin-bottom: var(--space-4);
+}
+
+/* --- Premium Modal Backdrop --- */
+.cbn-modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.45);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding-top: 8vh;
+    z-index: 9000;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity var(--transition-base) var(--ease-standard),
+                visibility var(--transition-base) var(--ease-standard);
+}
+
+.cbn-modal-backdrop-active {
+    opacity: 1;
+    visibility: visible;
+}
+
+/* --- Premium Modal Dialog --- */
+.cbn-modal {
+    position: relative;
+    background: var(--cbn-surface-elevated);
+    border-radius: var(--radius-lg);
+    max-width: 560px;
+    width: 92%;
+    max-height: 80vh;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.12), 0 2px 8px rgba(0, 0, 0, 0.06);
+    overflow: hidden;
+    transform: translateY(-20px);
+    opacity: 0;
+    transition: transform var(--transition-slow) var(--ease-emphasized),
+                opacity var(--transition-base) var(--ease-standard);
+}
+
+.cbn-modal-active {
+    transform: translateY(0);
+    opacity: 1;
+}
+
+/* Size variants */
+.cbn-modal-sm { max-width: 420px; }
+.cbn-modal-lg { max-width: 720px; }
+.cbn-modal-xl { max-width: 900px; }
+
+/* Gold accent line */
+.cbn-modal-accent {
+    height: 3px;
+    background: linear-gradient(90deg, var(--cbn-gold) 0%, var(--cbn-gold-light) 100%);
+    flex-shrink: 0;
+}
+
+.cbn-modal-accent-danger {
+    background: linear-gradient(90deg, var(--cbn-danger) 0%, #FCA5A5 100%);
+}
+
+/* Modal header */
+.cbn-modal-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--space-4);
+    padding: var(--space-5) var(--space-6) 0;
+}
+
+.cbn-modal-header-text {
+    flex: 1;
+    min-width: 0;
+}
+
+.cbn-modal-title {
+    font-family: var(--font-heading);
+    font-size: var(--text-h3);
+    font-weight: var(--font-weight-semibold);
+    color: var(--cbn-text);
+    margin: 0;
+    line-height: var(--leading-tight);
+}
+
+.cbn-modal-subtitle {
+    font-size: var(--text-body-sm);
+    color: var(--cbn-text-muted);
+    margin: var(--space-1) 0 0;
+    line-height: var(--leading-normal);
+}
+
+/* Close button */
+.cbn-modal-close {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border: none;
+    background: transparent;
+    border-radius: var(--radius-sm);
+    color: var(--cbn-text-muted);
+    cursor: pointer;
+    transition: all var(--transition-fast) var(--ease-standard);
+}
+
+.cbn-modal-close:hover {
+    background: var(--cbn-gray-100);
+    color: var(--cbn-text);
+    transform: rotate(90deg);
+}
+
+.cbn-modal-close:focus-visible {
+    outline: 2px solid var(--cbn-primary);
+    outline-offset: 2px;
+}
+
+/* Modal body */
+.cbn-modal-body {
+    padding: var(--space-5) var(--space-6);
+    overflow-y: auto;
+    flex: 1;
+    font-size: var(--text-body);
+    color: var(--cbn-text-secondary);
+    line-height: var(--leading-relaxed);
+}
+
+/* Modal footer */
+.cbn-modal-footer {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: var(--space-3);
+    padding: var(--space-4) var(--space-6);
+    border-top: 1px solid var(--cbn-border);
+    background: var(--cbn-gray-50);
+    border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+}
+
+/* --- Modal Action Buttons --- */
+.cbn-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-5);
+    font-family: var(--font-sans);
+    font-size: var(--text-body);
+    font-weight: var(--font-weight-medium);
+    line-height: var(--leading-normal);
+    border-radius: var(--radius-sm);
+    border: 1px solid transparent;
+    cursor: pointer;
+    transition: all var(--transition-fast) var(--ease-standard);
+    white-space: nowrap;
+}
+
+.cbn-btn:focus-visible {
+    outline: 2px solid var(--cbn-primary);
+    outline-offset: 2px;
+}
+
+.cbn-btn:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+    transform: none;
+}
+
+/* Gold primary action */
+.cbn-btn-gold {
+    background: linear-gradient(135deg, var(--cbn-gold) 0%, #D4AF08 100%);
+    color: #3D3200;
+    border: 1px solid var(--cbn-gold-dark);
+    box-shadow: 0 1px 2px rgba(200, 164, 21, 0.25);
+}
+
+.cbn-btn-gold:hover:not(:disabled) {
+    background: linear-gradient(135deg, #D4AF08 0%, var(--cbn-gold-dark) 100%);
+    box-shadow: 0 2px 6px rgba(200, 164, 21, 0.35);
+    transform: translateY(-1px);
+}
+
+/* Green outline secondary */
+.cbn-btn-outline {
+    background: transparent;
+    color: var(--cbn-green-deep);
+    border: 1px solid var(--cbn-green-deep);
+}
+
+.cbn-btn-outline:hover:not(:disabled) {
+    background: rgba(0, 107, 63, 0.06);
+}
+
+/* Danger destructive */
+.cbn-btn-danger {
+    background: var(--cbn-danger);
+    color: var(--cbn-white);
+    border: 1px solid var(--cbn-danger-dark);
+}
+
+.cbn-btn-danger:hover:not(:disabled) {
+    background: var(--cbn-danger-dark);
+    box-shadow: 0 2px 6px rgba(220, 38, 38, 0.3);
+    transform: translateY(-1px);
+}
+
+/* Green primary */
+.cbn-btn-primary {
+    background: var(--cbn-green-deep);
+    color: var(--cbn-white);
+    border: 1px solid var(--cbn-green-dark);
+}
+
+.cbn-btn-primary:hover:not(:disabled) {
+    background: var(--cbn-primary-hover);
+    transform: translateY(-1px);
+}
+
+/* --- Confirmation Dialog Specifics --- */
+.cbn-confirm-dialog {
+    text-align: center;
+}
+
+.cbn-confirm-body {
+    padding: var(--space-8) var(--space-6) var(--space-6);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-3);
+}
+
+.cbn-confirm-icon {
+    width: 52px;
+    height: 52px;
+    border-radius: var(--radius-full);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: var(--space-1);
+}
+
+.cbn-confirm-icon-gold {
+    background: var(--cbn-gold-pale);
+    color: var(--cbn-gold-dark);
+}
+
+.cbn-confirm-icon-danger {
+    background: var(--cbn-danger-light);
+    color: var(--cbn-danger);
+}
+
+.cbn-confirm-title {
+    font-family: var(--font-heading);
+    font-size: var(--text-h3);
+    font-weight: var(--font-weight-semibold);
+    color: var(--cbn-text);
+    margin: 0;
+    line-height: var(--leading-tight);
+}
+
+.cbn-confirm-message {
+    font-size: var(--text-body);
+    color: var(--cbn-text-secondary);
+    margin: 0;
+    max-width: 340px;
+    line-height: var(--leading-relaxed);
+}
+
+.cbn-confirm-actions {
+    display: flex;
+    gap: var(--space-3);
+    margin-top: var(--space-4);
+    width: 100%;
+    justify-content: center;
+}
+
+.cbn-confirm-actions .cbn-btn {
+    min-width: 100px;
 }
 
 
@@ -4045,5 +4392,200 @@ select.detail-float-input {
 
     .detail-hero-meta {
         gap: var(--space-3);
+    }
+}
+
+
+/* ==================================================================
+   27. TOAST NOTIFICATION SYSTEM
+   ================================================================== */
+
+.cbn-toast-container {
+    position: fixed;
+    top: var(--space-5);
+    right: var(--space-5);
+    z-index: 9500;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+    max-width: 400px;
+    width: 100%;
+    pointer-events: none;
+}
+
+.cbn-toast {
+    position: relative;
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-3);
+    padding: var(--space-4) var(--space-5);
+    background: var(--cbn-surface-elevated);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--cbn-border);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1), 0 2px 4px rgba(0, 0, 0, 0.06);
+    overflow: hidden;
+    pointer-events: auto;
+    animation: cbnToastIn var(--transition-slow) var(--ease-emphasized);
+}
+
+@keyframes cbnToastIn {
+    from {
+        opacity: 0;
+        transform: translateX(40px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+.cbn-toast-icon {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    margin-top: 1px;
+}
+
+.cbn-toast-success .cbn-toast-icon { color: var(--cbn-success); }
+.cbn-toast-warning .cbn-toast-icon { color: var(--cbn-warning); }
+.cbn-toast-error   .cbn-toast-icon { color: var(--cbn-danger); }
+.cbn-toast-info    .cbn-toast-icon { color: var(--cbn-green-deep); }
+
+/* Toast left accent */
+.cbn-toast-success { border-left: 3px solid var(--cbn-success); }
+.cbn-toast-warning { border-left: 3px solid var(--cbn-warning); }
+.cbn-toast-error   { border-left: 3px solid var(--cbn-danger); }
+.cbn-toast-info    { border-left: 3px solid var(--cbn-green-deep); }
+
+.cbn-toast-content {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-0-5);
+}
+
+.cbn-toast-title {
+    font-size: var(--text-body);
+    font-weight: var(--font-weight-semibold);
+    color: var(--cbn-text);
+    line-height: var(--leading-tight);
+}
+
+.cbn-toast-message {
+    font-size: var(--text-body-sm);
+    color: var(--cbn-text-secondary);
+    line-height: var(--leading-normal);
+}
+
+.cbn-toast-dismiss {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border: none;
+    background: transparent;
+    border-radius: var(--radius-xs);
+    color: var(--cbn-text-muted);
+    cursor: pointer;
+    transition: all var(--transition-fast) var(--ease-standard);
+}
+
+.cbn-toast-dismiss:hover {
+    background: var(--cbn-gray-100);
+    color: var(--cbn-text-secondary);
+}
+
+.cbn-toast-dismiss:focus-visible {
+    outline: 2px solid var(--cbn-primary);
+    outline-offset: 1px;
+}
+
+/* Progress bar */
+.cbn-toast-progress {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    height: 3px;
+    width: 100%;
+    transform-origin: left;
+    animation: cbnToastProgress linear forwards;
+    border-radius: 0 0 var(--radius-md) var(--radius-md);
+}
+
+@keyframes cbnToastProgress {
+    from { transform: scaleX(1); }
+    to   { transform: scaleX(0); }
+}
+
+.cbn-toast-progress-success { background: var(--cbn-success); }
+.cbn-toast-progress-warning { background: var(--cbn-warning); }
+.cbn-toast-progress-error   { background: var(--cbn-danger); }
+.cbn-toast-progress-info    { background: var(--cbn-green-deep); }
+
+
+/* ==================================================================
+   28. NOTIFICATION SYSTEM — Responsive
+   ================================================================== */
+
+@media (max-width: 768px) {
+    .cbn-toast-container {
+        right: var(--space-3);
+        left: var(--space-3);
+        max-width: none;
+    }
+
+    .cbn-modal {
+        width: 96%;
+        margin: 0 var(--space-2);
+    }
+
+    .cbn-modal-header { padding: var(--space-4) var(--space-4) 0; }
+    .cbn-modal-body   { padding: var(--space-4); }
+    .cbn-modal-footer { padding: var(--space-3) var(--space-4); }
+
+    .cbn-confirm-actions {
+        flex-direction: column-reverse;
+    }
+
+    .cbn-confirm-actions .cbn-btn {
+        width: 100%;
+    }
+}
+
+@media (max-width: 480px) {
+    .cbn-toast-container {
+        top: var(--space-3);
+        right: var(--space-2);
+        left: var(--space-2);
+    }
+
+    .cbn-toast {
+        padding: var(--space-3) var(--space-4);
+    }
+}
+
+/* Reduced motion preference */
+@media (prefers-reduced-motion: reduce) {
+    .cbn-modal,
+    .cbn-modal-backdrop,
+    .cbn-toast,
+    .cbn-alert {
+        animation: none;
+        transition: opacity var(--transition-fast) var(--ease-standard);
+    }
+
+    .cbn-modal-active {
+        transform: none;
+    }
+
+    .cbn-modal-close:hover {
+        transform: none;
+    }
+
+    .cbn-toast-progress {
+        animation-duration: 0.01ms !important;
     }
 }

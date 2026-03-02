@@ -7,110 +7,392 @@
 @inject ISubmissionRepository SubmissionRepo
 @inject NavigationManager Nav
 
-<div class="page-header">
-    <h1>Submission #@Id</h1>
-    <p>Validation report and submission details</p>
-</div>
+<div class="detail-page">
 
-@if (_loading)
-{
-    <div class="text-center"><span class="spinner"></span></div>
-}
-else if (_submission == null)
-{
-    <div class="alert alert-error">Submission not found</div>
-}
-else
-{
-    <div class="stats-grid">
-        <div class="stat-card">
-            <div class="stat-value"><a href="/templates/@_submission.ReturnCode">@_submission.ReturnCode</a></div>
-            <div class="stat-label">Return Code</div>
-        </div>
-        <div class="stat-card">
-            <div class="stat-value">
-                <span class="badge badge-@GetStatusClass(_submission.Status)">@_submission.Status</span>
-            </div>
-            <div class="stat-label">Status</div>
-        </div>
-        <div class="stat-card">
-            <div class="stat-value">@(_submission.ValidationReport?.Errors.Count ?? 0)</div>
-            <div class="stat-label">Validation Issues</div>
-        </div>
-        <div class="stat-card">
-            <div class="stat-value">@_submission.SubmittedAt.ToString("yyyy-MM-dd HH:mm")</div>
-            <div class="stat-label">Submitted</div>
-        </div>
-    </div>
+    <!-- Breadcrumb -->
+    <nav class="detail-breadcrumb" aria-label="Breadcrumb">
+        <a href="/">Dashboard</a>
+        <span class="detail-breadcrumb-sep" aria-hidden="true">/</span>
+        <a href="/submissions">Submissions</a>
+        <span class="detail-breadcrumb-sep" aria-hidden="true">/</span>
+        <span class="detail-breadcrumb-current">#@Id</span>
+    </nav>
 
-    <div class="card">
-        <div class="card-header"><h2>Submission Info</h2></div>
-        <div class="grid-2">
-            <div class="form-group"><label>Institution ID</label><span>@_submission.InstitutionId</span></div>
-            <div class="form-group"><label>Return Period ID</label><span>@_submission.ReturnPeriodId</span></div>
-            <div class="form-group"><label>Template Version</label><span>@_submission.TemplateVersionId</span></div>
-            <div class="form-group"><label>Processing Time</label><span>@(_submission.ProcessingDurationMs)ms</span></div>
-        </div>
-    </div>
-
-    @if (_submission.ValidationReport != null)
+    @if (_loading)
     {
-        var report = _submission.ValidationReport;
-        <div class="card">
-            <div class="card-header">
-                <h2>Validation Report</h2>
-                <span class="badge badge-@(report.IsValid ? "published" : "deprecated")">
-                    @(report.IsValid ? "Valid" : "Invalid")
-                </span>
+        <div class="dash-loading"><span class="spinner"></span> Loading submission&hellip;</div>
+    }
+    else if (_submission == null)
+    {
+        <div class="detail-alert detail-alert-error">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+            Submission not found
+        </div>
+    }
+    else
+    {
+        <!-- Hero Header -->
+        <section class="detail-hero" role="banner">
+            <div class="detail-hero-left">
+                <div class="detail-hero-title-row">
+                    <h1 class="detail-hero-title">Submission #@Id</h1>
+                    <span class="detail-status detail-status-@_submission.Status.ToString().ToLowerInvariant()">
+                        <span class="detail-status-dot" aria-hidden="true"></span>
+                        @FormatStatus(_submission.Status)
+                    </span>
+                </div>
+                <p class="detail-hero-subtitle">
+                    Return Code <a href="/templates/@_submission.ReturnCode">@_submission.ReturnCode</a>
+                    &middot; Submitted @_submission.SubmittedAt.ToString("d MMM yyyy, HH:mm") UTC
+                </p>
+
+                <div class="detail-hero-meta">
+                    <div class="detail-meta-item">
+                        <span class="detail-meta-label">Return Code</span>
+                        <span class="detail-meta-value">
+                            <a href="/templates/@_submission.ReturnCode" style="text-decoration:none;">
+                                <code>@_submission.ReturnCode</code>
+                            </a>
+                        </span>
+                    </div>
+                    <div class="detail-meta-item">
+                        <span class="detail-meta-label">Institution</span>
+                        <span class="detail-meta-value">@_submission.InstitutionId</span>
+                    </div>
+                    <div class="detail-meta-item">
+                        <span class="detail-meta-label">Period</span>
+                        <span class="detail-meta-value">@_submission.ReturnPeriodId</span>
+                    </div>
+                    <div class="detail-meta-item">
+                        <span class="detail-meta-label">Processing</span>
+                        <span class="detail-meta-value">@(_submission.ProcessingDurationMs)ms</span>
+                    </div>
+                    @if (_submission.TemplateVersionId.HasValue)
+                    {
+                        <div class="detail-meta-item">
+                            <span class="detail-meta-label">Template Version</span>
+                            <span class="detail-meta-value">v@(_submission.TemplateVersionId)</span>
+                        </div>
+                    }
+                </div>
             </div>
 
-            @if (report.Errors.Any())
+            <div class="detail-hero-actions">
+                <a href="/templates/@_submission.ReturnCode" class="btn btn-outline btn-sm">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16" aria-hidden="true"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+                    View Template
+                </a>
+            </div>
+        </section>
+
+        <!-- Tabbed Navigation -->
+        <div class="detail-tabs" role="tablist" aria-label="Submission sections">
+            <button class="detail-tab @(_activeTab == "overview" ? "detail-tab-active" : "")"
+                    role="tab" aria-selected="@(_activeTab == "overview")" @onclick='() => _activeTab = "overview"'>
+                Overview
+            </button>
+            <button class="detail-tab @(_activeTab == "validation" ? "detail-tab-active" : "")"
+                    role="tab" aria-selected="@(_activeTab == "validation")" @onclick='() => _activeTab = "validation"'>
+                Validation
+                @if (_submission.ValidationReport != null)
+                {
+                    <span class="detail-tab-badge">@(_submission.ValidationReport.Errors.Count)</span>
+                }
+            </button>
+            <button class="detail-tab @(_activeTab == "data" ? "detail-tab-active" : "")"
+                    role="tab" aria-selected="@(_activeTab == "data")" @onclick='() => _activeTab = "data"'>
+                Submission Data
+            </button>
+        </div>
+
+        <!-- Tab: Overview -->
+        <div class="detail-tab-content @(_activeTab == "overview" ? "detail-tab-content-active" : "")" role="tabpanel">
+            <div class="detail-section">
+                <div class="detail-section-header">
+                    <h3>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+                        Submission Details
+                    </h3>
+                </div>
+                <div class="detail-section-body">
+                    <div class="detail-info-grid">
+                        <div class="detail-info-item">
+                            <span class="detail-info-label">Submission ID</span>
+                            <span class="detail-info-value">#@_submission.Id</span>
+                        </div>
+                        <div class="detail-info-item">
+                            <span class="detail-info-label">Return Code</span>
+                            <span class="detail-info-value">
+                                <a href="/templates/@_submission.ReturnCode"><code>@_submission.ReturnCode</code></a>
+                            </span>
+                        </div>
+                        <div class="detail-info-item">
+                            <span class="detail-info-label">Status</span>
+                            <span class="detail-info-value">
+                                <span class="detail-status detail-status-@_submission.Status.ToString().ToLowerInvariant()">
+                                    <span class="detail-status-dot" aria-hidden="true"></span>
+                                    @FormatStatus(_submission.Status)
+                                </span>
+                            </span>
+                        </div>
+                        <div class="detail-info-item">
+                            <span class="detail-info-label">Institution ID</span>
+                            <span class="detail-info-value">@_submission.InstitutionId</span>
+                        </div>
+                        <div class="detail-info-item">
+                            <span class="detail-info-label">Return Period ID</span>
+                            <span class="detail-info-value">@_submission.ReturnPeriodId</span>
+                        </div>
+                        @if (_submission.TemplateVersionId.HasValue)
+                        {
+                            <div class="detail-info-item">
+                                <span class="detail-info-label">Template Version ID</span>
+                                <span class="detail-info-value">@_submission.TemplateVersionId</span>
+                            </div>
+                        }
+                        <div class="detail-info-item">
+                            <span class="detail-info-label">Submitted At</span>
+                            <span class="detail-info-value">@_submission.SubmittedAt.ToString("d MMM yyyy, HH:mm:ss") UTC</span>
+                        </div>
+                        <div class="detail-info-item">
+                            <span class="detail-info-label">Processing Duration</span>
+                            <span class="detail-info-value">@(_submission.ProcessingDurationMs)ms</span>
+                        </div>
+                        <div class="detail-info-item">
+                            <span class="detail-info-label">Created At</span>
+                            <span class="detail-info-value">@_submission.CreatedAt.ToString("d MMM yyyy, HH:mm:ss") UTC</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            @if (_submission.ValidationReport != null)
             {
-                <div style="padding:0.5rem 1rem;display:flex;gap:1rem;">
-                    <span>Errors: <strong>@report.ErrorCount</strong></span>
-                    <span>Warnings: <strong>@report.WarningCount</strong></span>
+                <div class="detail-section">
+                    <div class="detail-section-header">
+                        <h3>
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+                            Validation Summary
+                        </h3>
+                        <span class="detail-status @(_submission.ValidationReport.IsValid ? "detail-status-accepted" : "detail-status-rejected")">
+                            <span class="detail-status-dot" aria-hidden="true"></span>
+                            @(_submission.ValidationReport.IsValid ? "Valid" : "Invalid")
+                        </span>
+                    </div>
+                    <div class="detail-section-body">
+                        <div class="detail-validation-summary">
+                            <div class="detail-val-stat detail-val-error">
+                                <div>
+                                    <div class="detail-val-stat-count">@_submission.ValidationReport.ErrorCount</div>
+                                    <div class="detail-val-stat-label">Errors</div>
+                                </div>
+                            </div>
+                            <div class="detail-val-stat detail-val-warning">
+                                <div>
+                                    <div class="detail-val-stat-count">@_submission.ValidationReport.WarningCount</div>
+                                    <div class="detail-val-stat-label">Warnings</div>
+                                </div>
+                            </div>
+                            <div class="detail-val-stat @(_submission.ValidationReport.IsValid ? "detail-val-success" : "detail-val-error")">
+                                <div>
+                                    <div class="detail-val-stat-count">@_submission.ValidationReport.Errors.Count</div>
+                                    <div class="detail-val-stat-label">Total Issues</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+
+        <!-- Tab: Validation -->
+        <div class="detail-tab-content @(_activeTab == "validation" ? "detail-tab-content-active" : "")" role="tabpanel">
+            @if (_submission.ValidationReport != null)
+            {
+                var report = _submission.ValidationReport;
+
+                <!-- Validation Counters -->
+                <div class="detail-section">
+                    <div class="detail-section-header">
+                        <h3>
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                            Validation Report
+                        </h3>
+                        <span class="detail-status @(report.IsValid ? "detail-status-accepted" : "detail-status-rejected")">
+                            <span class="detail-status-dot" aria-hidden="true"></span>
+                            @(report.IsValid ? "Passed" : "Failed")
+                        </span>
+                    </div>
+                    <div class="detail-section-body">
+                        <div class="detail-validation-summary">
+                            <div class="detail-val-stat detail-val-error">
+                                <div>
+                                    <div class="detail-val-stat-count">@report.ErrorCount</div>
+                                    <div class="detail-val-stat-label">Errors</div>
+                                </div>
+                            </div>
+                            <div class="detail-val-stat detail-val-warning">
+                                <div>
+                                    <div class="detail-val-stat-count">@report.WarningCount</div>
+                                    <div class="detail-val-stat-label">Warnings</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
-                <table class="data-table">
-                    <thead>
-                        <tr>
-                            <th>Rule ID</th><th>Category</th><th>Severity</th>
-                            <th>Field</th><th>Message</th><th>Expected</th><th>Actual</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @foreach (var err in report.Errors.OrderBy(e => e.Severity.ToString()))
-                        {
-                            <tr>
-                                <td><code>@err.RuleId</code></td>
-                                <td><span class="badge badge-draft">@err.Category</span></td>
-                                <td>
-                                    <span class="badge badge-@(err.Severity == ValidationSeverity.Error ? "deprecated" : "review")">
-                                        @err.Severity
-                                    </span>
-                                </td>
-                                <td><code>@err.Field</code></td>
-                                <td>@err.Message</td>
-                                <td>@err.ExpectedValue</td>
-                                <td>@err.ActualValue</td>
-                            </tr>
-                        }
-                    </tbody>
-                </table>
+                <!-- Error Table -->
+                @if (report.Errors.Any())
+                {
+                    <!-- Errors Section -->
+                    @{
+                        var errors = report.Errors.Where(e => e.Severity == ValidationSeverity.Error).ToList();
+                        var warnings = report.Errors.Where(e => e.Severity != ValidationSeverity.Error).ToList();
+                    }
+
+                    @if (errors.Any())
+                    {
+                        <div class="detail-section">
+                            <div class="detail-section-header">
+                                <h3>
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+                                    Errors (@errors.Count)
+                                </h3>
+                            </div>
+                            <div style="overflow-x:auto;">
+                                <table class="detail-field-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Rule ID</th>
+                                            <th>Category</th>
+                                            <th>Field</th>
+                                            <th>Message</th>
+                                            <th>Expected</th>
+                                            <th>Actual</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach (var err in errors)
+                                        {
+                                            <tr>
+                                                <td><code>@err.RuleId</code></td>
+                                                <td><span class="list-badge list-badge-info">@err.Category</span></td>
+                                                <td><code>@err.Field</code></td>
+                                                <td>@err.Message</td>
+                                                <td>@err.ExpectedValue</td>
+                                                <td>@err.ActualValue</td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    }
+
+                    @if (warnings.Any())
+                    {
+                        <div class="detail-section">
+                            <div class="detail-section-header">
+                                <h3>
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                                    Warnings (@warnings.Count)
+                                </h3>
+                            </div>
+                            <div style="overflow-x:auto;">
+                                <table class="detail-field-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Rule ID</th>
+                                            <th>Category</th>
+                                            <th>Field</th>
+                                            <th>Message</th>
+                                            <th>Expected</th>
+                                            <th>Actual</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach (var warn in warnings)
+                                        {
+                                            <tr>
+                                                <td><code>@warn.RuleId</code></td>
+                                                <td><span class="list-badge list-badge-info">@warn.Category</span></td>
+                                                <td><code>@warn.Field</code></td>
+                                                <td>@warn.Message</td>
+                                                <td>@warn.ExpectedValue</td>
+                                                <td>@warn.ActualValue</td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    }
+                }
+                else
+                {
+                    <div class="detail-section">
+                        <div class="detail-section-body">
+                            <div class="detail-empty">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="var(--cbn-success)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                                <p class="detail-empty-title">All checks passed</p>
+                                <p class="detail-empty-text">No validation errors or warnings were found for this submission.</p>
+                            </div>
+                        </div>
+                    </div>
+                }
             }
             else
             {
-                <div style="padding:1rem;color:#28a745;">No validation issues found.</div>
+                <div class="detail-section">
+                    <div class="detail-section-body">
+                        <div class="detail-empty">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+                            <p class="detail-empty-title">No validation report</p>
+                            <p class="detail-empty-text">Validation has not been completed for this submission.</p>
+                        </div>
+                    </div>
+                </div>
             }
         </div>
+
+        <!-- Tab: Submission Data -->
+        <div class="detail-tab-content @(_activeTab == "data" ? "detail-tab-content-active" : "")" role="tabpanel">
+            <div class="detail-section">
+                <div class="detail-section-header">
+                    <h3>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
+                        Raw Submission Data
+                    </h3>
+                </div>
+                <div class="detail-section-body">
+                    @if (!string.IsNullOrEmpty(_submission.RawXml))
+                    {
+                        <pre class="detail-code-block">@_submission.RawXml</pre>
+                    }
+                    else if (!string.IsNullOrEmpty(_submission.ParsedDataJson))
+                    {
+                        <pre class="detail-code-block">@_submission.ParsedDataJson</pre>
+                    }
+                    else
+                    {
+                        <div class="detail-empty">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
+                            <p class="detail-empty-title">No raw data available</p>
+                            <p class="detail-empty-text">The raw submission payload is not stored or has been purged.</p>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
     }
-}
+</div>
 
 @code {
     [Parameter] public int Id { get; set; }
 
     private bool _loading = true;
     private Submission? _submission;
+    private string _activeTab = "overview";
 
     protected override async Task OnInitializedAsync()
     {
@@ -118,11 +400,9 @@ else
         _loading = false;
     }
 
-    private static string GetStatusClass(SubmissionStatus status) => status switch
+    private static string FormatStatus(SubmissionStatus status) => status switch
     {
-        SubmissionStatus.Accepted => "published",
-        SubmissionStatus.AcceptedWithWarnings => "review",
-        SubmissionStatus.Rejected => "deprecated",
-        _ => "draft"
+        SubmissionStatus.AcceptedWithWarnings => "Accepted with Warnings",
+        _ => status.ToString()
     };
 }

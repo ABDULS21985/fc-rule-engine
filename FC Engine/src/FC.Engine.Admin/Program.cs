@@ -28,6 +28,10 @@ builder.Services.AddScoped<IngestionOrchestrator>();
 builder.Services.AddScoped<ValidationOrchestrator>();
 builder.Services.AddScoped<AuthService>();
 
+// UI notification & dialog services
+builder.Services.AddScoped<FC.Engine.Admin.Services.ToastService>();
+builder.Services.AddScoped<FC.Engine.Admin.Services.DialogService>();
+
 // Authentication — cookie-based for Blazor Server
 builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
     .AddCookie(options =>
