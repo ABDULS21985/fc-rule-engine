@@ -169,8 +169,20 @@ public class SqlTypeMapperTests
     }
 
     [Fact]
-    public void MapToSqlType_WithOverride_ShouldReturnOverride()
+    public void MapToSqlType_WithOverride_NormalizesNumericToDecimal()
     {
-        _mapper.MapToSqlType(FieldDataType.Money, "NUMERIC(18,4)").Should().Be("NUMERIC(18,4)");
+        // NUMERIC is normalized to DECIMAL for SQL Server compatibility
+        _mapper.MapToSqlType(FieldDataType.Money, "NUMERIC(18,4)").Should().Be("DECIMAL(18,4)");
+    }
+
+    [Theory]
+    [InlineData("BOOLEAN", "BIT")]
+    [InlineData("INTEGER", "INT")]
+    [InlineData("VARCHAR(100)", "NVARCHAR(100)")]
+    [InlineData("TEXT", "NVARCHAR(MAX)")]
+    [InlineData("TIMESTAMP", "DATETIME2")]
+    public void MapToSqlType_NormalizesNonSqlServerTypes(string input, string expected)
+    {
+        _mapper.MapToSqlType(FieldDataType.Text, input).Should().Be(expected);
     }
 }

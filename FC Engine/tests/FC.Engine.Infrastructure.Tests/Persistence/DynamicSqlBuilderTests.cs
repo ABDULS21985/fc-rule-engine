@@ -63,8 +63,8 @@ public class DynamicSqlBuilderTests
         var sql = _builder.BuildSelectByInstitutionAndPeriod("mfcr_300", fields);
 
         sql.Should().Contain("INNER JOIN dbo.return_submissions");
-        sql.Should().Contain("s.institution_id = @institutionId");
-        sql.Should().Contain("s.return_period_id = @returnPeriodId");
+        sql.Should().Contain("s.InstitutionId = @institutionId");
+        sql.Should().Contain("s.ReturnPeriodId = @returnPeriodId");
     }
 
     [Fact]
