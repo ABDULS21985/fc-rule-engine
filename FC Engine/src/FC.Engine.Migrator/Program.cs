@@ -13,6 +13,7 @@ var builder = Host.CreateApplicationBuilder(args);
 builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddScoped<SeedService>();
 builder.Services.AddScoped<FormulaSeedService>();
+builder.Services.AddScoped<FormulaCatalogSeeder>();
 builder.Services.AddScoped<CrossSheetRuleSeedService>();
 builder.Services.AddScoped<AuthService>();
 
@@ -70,6 +71,27 @@ try
 
         foreach (var err in formulaResult.Errors)
             logger.LogWarning("Formula seed error: {Error}", err);
+
+        // Step 4b: Seed formulas from Excel-extracted catalog (CBN-defined formulas using item codes)
+        var formulaCatalogPath = builder.Configuration["Seeding:FormulaCatalogPath"];
+        if (!string.IsNullOrEmpty(formulaCatalogPath) && File.Exists(formulaCatalogPath))
+        {
+            logger.LogInformation("Seeding formulas from catalog: {Path}", formulaCatalogPath);
+            var catalogSeeder = scope.ServiceProvider.GetRequiredService<FormulaCatalogSeeder>();
+            var catalogResult = await catalogSeeder.SeedFromCatalog(formulaCatalogPath, "migrator");
+
+            logger.LogInformation(
+                "Catalog seeding complete: {Templates} templates, {Formulas} formulas, " +
+                "{CrossSheet} cross-sheet rules, {Skipped} skipped, {Warnings} warnings, {Errors} errors",
+                catalogResult.TemplatesSeeded.Count, catalogResult.TotalFormulasCreated,
+                catalogResult.TotalCrossSheetRulesCreated, catalogResult.Skipped.Count,
+                catalogResult.Warnings.Count, catalogResult.Errors.Count);
+
+            foreach (var warn in catalogResult.Warnings)
+                logger.LogWarning("Catalog warning: {Warning}", warn);
+            foreach (var err in catalogResult.Errors)
+                logger.LogWarning("Catalog error: {Error}", err);
+        }
 
         // Step 5: Seed cross-sheet validation rules
         logger.LogInformation("Seeding cross-sheet rules...");

@@ -25,6 +25,7 @@ builder.Services.AddScoped<FormulaService>();
 builder.Services.AddScoped<SeedService>();
 builder.Services.AddScoped<FormulaSeedService>();
 builder.Services.AddScoped<CrossSheetRuleSeedService>();
+builder.Services.AddScoped<FormulaCatalogSeeder>();
 
 // Swagger
 builder.Services.AddEndpointsApiExplorer();

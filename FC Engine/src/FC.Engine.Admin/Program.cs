@@ -20,6 +20,7 @@ builder.Services.AddScoped<TemplateVersioningService>();
 builder.Services.AddScoped<FormulaService>();
 builder.Services.AddScoped<FormulaSeedService>();
 builder.Services.AddScoped<CrossSheetRuleSeedService>();
+builder.Services.AddScoped<FormulaCatalogSeeder>();
 builder.Services.AddScoped<SeedService>();
 builder.Services.AddScoped<IngestionOrchestrator>();
 builder.Services.AddScoped<ValidationOrchestrator>();

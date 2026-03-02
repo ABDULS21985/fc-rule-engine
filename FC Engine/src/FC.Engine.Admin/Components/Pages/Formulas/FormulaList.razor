@@ -1,5 +1,6 @@
 @page "/formulas"
 @using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Authorization
 @attribute [Authorize]
 @using FC.Engine.Domain.Abstractions
 @using FC.Engine.Domain.Enums
@@ -11,7 +12,7 @@
 
 <div class="page-header">
     <h1>Intra-Sheet Formulas</h1>
-    <p>View and manage validation formulas across all templates</p>
+    <p>View and manage validation formulas across all templates. Formulas define how computed fields are validated (e.g., TOTAL CASH = Notes + Coins).</p>
 </div>
 
 @if (!string.IsNullOrEmpty(_message))
@@ -22,7 +23,7 @@
 <div class="card">
     <div class="card-header">
         <div class="filter-bar" style="flex:1;">
-            <input class="form-control" placeholder="Search formulas..." @bind="_search" @bind:event="oninput" />
+            <input class="form-control" placeholder="Search by rule code, field name, or description..." @bind="_search" @bind:event="oninput" />
             <select class="form-control" @bind="_typeFilter">
                 <option value="">All Types</option>
                 @foreach (var ft in Enum.GetValues<FormulaType>())
@@ -48,11 +49,11 @@
     @if (_showAddForm)
     {
         <div style="padding:1rem;background:#f9f9f9;border-bottom:1px solid #eee;">
-            <h3>Add Intra-Sheet Formula</h3>
+            <h3>@(_editFormulaId.HasValue ? "Edit Formula" : "Add Intra-Sheet Formula")</h3>
             <div class="grid-2">
                 <div class="form-group">
                     <label>Template</label>
-                    <select class="form-control" @bind="_addTemplateCode" @bind:after="OnTemplateSelected">
+                    <select class="form-control" @bind="_addTemplateCode" @bind:after="OnTemplateSelected" disabled="@(_editFormulaId.HasValue)">
                         <option value="">Select template...</option>
                         @foreach (var rc in _returnCodes)
                         {
@@ -62,11 +63,11 @@
                 </div>
                 <div class="form-group">
                     <label>Rule Code</label>
-                    <input class="form-control" @bind="_addRuleCode" placeholder="e.g. MFCR300-SUM-001" />
+                    <input class="form-control" @bind="_addRuleCode" placeholder="e.g. MFCR300-SUM-001" disabled="@(_editFormulaId.HasValue)" />
                 </div>
                 <div class="form-group">
-                    <label>Rule Name</label>
-                    <input class="form-control" @bind="_addRuleName" placeholder="e.g. Total Assets Sum Check" />
+                    <label>Rule Name / Description</label>
+                    <input class="form-control" @bind="_addRuleName" placeholder="e.g. TOTAL CASH = Notes + Coins" />
                 </div>
                 <div class="form-group">
                     <label>Formula Type</label>
@@ -79,23 +80,34 @@
                 </div>
                 <div class="form-group">
                     <label>Target Field</label>
-                    <select class="form-control" @bind="_addTargetField">
-                        <option value="">Select field...</option>
-                        @foreach (var f in _selectedTemplateFields)
-                        {
-                            <option value="@f">@f</option>
-                        }
-                    </select>
+                    @if (_selectedTemplateFields.Any())
+                    {
+                        <select class="form-control" @bind="_addTargetField">
+                            <option value="">Select field...</option>
+                            @foreach (var f in _selectedTemplateFields)
+                            {
+                                <option value="@f">@f</option>
+                            }
+                        </select>
+                    }
+                    else
+                    {
+                        <input class="form-control" @bind="_addTargetField" placeholder="e.g. total_cash" />
+                    }
+                </div>
+                <div class="form-group">
+                    <label>Target Line Code (Item Code)</label>
+                    <input class="form-control" @bind="_addTargetLineCode" placeholder="e.g. 10140" />
                 </div>
                 <div class="form-group">
                     <label>Operand Fields (comma-separated)</label>
-                    <input class="form-control" @bind="_addOperandFields" placeholder="e.g. cash_notes,cash_coins,cash_total" />
+                    <input class="form-control" @bind="_addOperandFields" placeholder="e.g. cash_notes,cash_coins" />
                 </div>
                 @if (_addFormulaType == FormulaType.Custom)
                 {
                     <div class="form-group">
-                        <label>Custom Expression</label>
-                        <input class="form-control" @bind="_addExpression" placeholder="e.g. A + B - C" />
+                        <label>Custom Expression (item-code formula)</label>
+                        <input class="form-control" @bind="_addExpression" placeholder="e.g. 10420+10430+10440-10510 or field_a + field_b - field_c" />
                     </div>
                 }
                 <div class="form-group">
@@ -119,8 +131,15 @@
                 </div>
             }
             <div style="display:flex;gap:0.5rem;margin-top:0.5rem;">
-                <button class="btn btn-primary btn-sm" @onclick="AddFormula">Add</button>
-                <button class="btn btn-outline btn-sm" @onclick="() => _showAddForm = false">Cancel</button>
+                @if (_editFormulaId.HasValue)
+                {
+                    <button class="btn btn-primary btn-sm" @onclick="UpdateFormula">Update</button>
+                }
+                else
+                {
+                    <button class="btn btn-primary btn-sm" @onclick="AddFormula">Add</button>
+                }
+                <button class="btn btn-outline btn-sm" @onclick="CancelForm">Cancel</button>
             </div>
         </div>
     }
@@ -134,8 +153,10 @@
         <table class="data-table">
             <thead>
                 <tr>
-                    <th>Template</th><th>Rule Code</th><th>Type</th><th>Target Field</th>
-                    <th>Operands</th><th>Tolerance</th><th>Severity</th><th>Active</th>
+                    <th>Template</th><th>Rule Code</th><th>Name</th><th>Type</th>
+                    <th>Target</th><th>Formula / Operands</th>
+                    <th>Tolerance</th><th>Severity</th>
+                    <th>Actions</th>
                 </tr>
             </thead>
             <tbody>
@@ -144,20 +165,49 @@
                     <tr>
                         <td><a href="/templates/@rc">@rc</a></td>
                         <td><code>@f.RuleCode</code></td>
-                        <td><span class="badge badge-review">@f.FormulaType</span></td>
-                        <td><code>@f.TargetFieldName</code></td>
-                        <td style="max-width:250px;overflow:hidden;text-overflow:ellipsis;">
-                            @(f.FormulaType == FormulaType.Custom ? f.CustomExpression : f.OperandFields)
+                        <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;" title="@f.RuleName">@f.RuleName</td>
+                        <td>
+                            <span class="badge @GetTypeBadgeClass(f.FormulaType)">@f.FormulaType</span>
+                        </td>
+                        <td>
+                            <code>@f.TargetFieldName</code>
+                            @if (!string.IsNullOrEmpty(f.TargetLineCode))
+                            {
+                                <br/><small style="color:#888;">@f.TargetLineCode</small>
+                            }
+                        </td>
+                        <td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;">
+                            @if (f.FormulaType == FormulaType.Custom && !string.IsNullOrEmpty(f.CustomExpression))
+                            {
+                                <code title="@f.CustomExpression">@TruncateExpression(f.CustomExpression, 60)</code>
+                            }
+                            else
+                            {
+                                <code title="@f.OperandFields">@FormatOperands(f.OperandFields, f.FormulaType)</code>
+                            }
                         </td>
                         <td>@f.ToleranceAmount</td>
-                        <td>@f.Severity</td>
-                        <td>@(f.IsActive ? "Yes" : "No")</td>
+                        <td>
+                            <span class="badge @GetSeverityBadgeClass(f.Severity)">@f.Severity</span>
+                        </td>
+                        <td>
+                            <AuthorizeView Roles="Admin,Approver">
+                                <Authorized Context="editAuth">
+                                    <button class="btn btn-outline btn-sm" @onclick="() => EditFormula(rc, f)" title="Edit">Edit</button>
+                                    <button class="btn btn-outline btn-sm" style="color:#e53e3e;" @onclick="() => DeleteFormula(f)" title="Delete">Del</button>
+                                </Authorized>
+                            </AuthorizeView>
+                        </td>
                     </tr>
                 }
             </tbody>
         </table>
         <div class="mt-1 text-muted">
             Showing @Math.Min(200, FilteredFormulas.Count()) of @_allFormulas.Count total formulas
+            @if (!string.IsNullOrEmpty(_templateFilter))
+            {
+                <span> (filtered to @_templateFilter)</span>
+            }
         </div>
     }
 </div>
@@ -170,10 +220,12 @@
     private List<string> _returnCodes = new();
     private List<(string ReturnCode, IntraSheetFormula Formula)> _allFormulas = new();
 
-    // Add form
+    // Add/Edit form state
     private bool _showAddForm;
+    private int? _editFormulaId;
     private string _addTemplateCode = "", _addRuleCode = "", _addRuleName = "";
-    private string _addTargetField = "", _addOperandFields = "", _addExpression = "";
+    private string _addTargetField = "", _addTargetLineCode = "";
+    private string _addOperandFields = "", _addExpression = "";
     private FormulaType _addFormulaType = FormulaType.Sum;
     private decimal _addTolerance = 0.01m;
     private ValidationSeverity _addSeverity = ValidationSeverity.Error;
@@ -184,24 +236,56 @@
         _allFormulas
             .Where(x => string.IsNullOrEmpty(_search) ||
                         x.Formula.RuleCode.Contains(_search, StringComparison.OrdinalIgnoreCase) ||
-                        x.Formula.TargetFieldName.Contains(_search, StringComparison.OrdinalIgnoreCase))
+                        x.Formula.TargetFieldName.Contains(_search, StringComparison.OrdinalIgnoreCase) ||
+                        x.Formula.RuleName.Contains(_search, StringComparison.OrdinalIgnoreCase))
             .Where(x => string.IsNullOrEmpty(_typeFilter) || x.Formula.FormulaType.ToString() == _typeFilter)
             .Where(x => string.IsNullOrEmpty(_templateFilter) || x.ReturnCode == _templateFilter);
 
     protected override async Task OnInitializedAsync()
     {
+        await LoadFormulas();
+        _loading = false;
+    }
+
+    private async Task LoadFormulas()
+    {
         var templates = await Cache.GetAllPublishedTemplates();
         _returnCodes = templates.Select(t => t.ReturnCode).OrderBy(x => x).ToList();
+        _allFormulas.Clear();
         foreach (var t in templates)
+        {
+            if (t.CurrentVersion?.IntraSheetFormulas == null) continue;
             foreach (var f in t.CurrentVersion.IntraSheetFormulas)
                 _allFormulas.Add((t.ReturnCode, f));
-        _loading = false;
+        }
     }
 
     private void ShowAddFormula()
     {
+        ResetForm();
         _showAddForm = true;
         _message = null;
+    }
+
+    private void CancelForm()
+    {
+        _showAddForm = false;
+        _editFormulaId = null;
+    }
+
+    private void ResetForm()
+    {
+        _editFormulaId = null;
+        _addTemplateCode = "";
+        _addRuleCode = "";
+        _addRuleName = "";
+        _addTargetField = "";
+        _addTargetLineCode = "";
+        _addOperandFields = "";
+        _addExpression = "";
+        _addFormulaType = FormulaType.Sum;
+        _addTolerance = 0.01m;
+        _addSeverity = ValidationSeverity.Error;
         _selectedTemplateFields.Clear();
     }
 
@@ -221,32 +305,56 @@
         catch { }
     }
 
+    private void EditFormula(string returnCode, IntraSheetFormula formula)
+    {
+        _showAddForm = true;
+        _editFormulaId = formula.Id;
+        _addTemplateCode = returnCode;
+        _addRuleCode = formula.RuleCode;
+        _addRuleName = formula.RuleName;
+        _addFormulaType = formula.FormulaType;
+        _addTargetField = formula.TargetFieldName;
+        _addTargetLineCode = formula.TargetLineCode ?? "";
+        _addExpression = formula.CustomExpression ?? "";
+        _addTolerance = formula.ToleranceAmount;
+        _addSeverity = formula.Severity;
+        _message = null;
+
+        // Parse operand fields JSON to comma-separated
+        try
+        {
+            var operands = System.Text.Json.JsonSerializer.Deserialize<List<string>>(formula.OperandFields);
+            _addOperandFields = operands != null ? string.Join(", ", operands) : formula.OperandFields;
+        }
+        catch
+        {
+            _addOperandFields = formula.OperandFields;
+        }
+
+        // Load template fields
+        _ = OnTemplateSelected();
+    }
+
     private async Task AddFormula()
     {
         try
         {
-            var operandJson = "[" + string.Join(",",
-                _addOperandFields.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-                    .Select(f => $"\"{f}\"")) + "]";
+            var operandJson = BuildOperandJson(_addOperandFields);
 
             await FormulaService.AddIntraSheetFormula(
                 _selectedTemplateId, _selectedVersionId,
                 _addRuleCode, _addRuleName, _addFormulaType,
                 _addTargetField, operandJson,
                 _addFormulaType == FormulaType.Custom ? _addExpression : null,
-                _addTolerance, _addSeverity, "system");
+                _addTolerance, _addSeverity, "admin");
 
             _message = $"Formula '{_addRuleCode}' added successfully.";
             _messageIsError = false;
             _showAddForm = false;
+            _editFormulaId = null;
 
-            // Reload
             Cache.InvalidateAll();
-            _allFormulas.Clear();
-            var templates = await Cache.GetAllPublishedTemplates();
-            foreach (var t in templates)
-                foreach (var f in t.CurrentVersion.IntraSheetFormulas)
-                    _allFormulas.Add((t.ReturnCode, f));
+            await LoadFormulas();
         }
         catch (Exception ex)
         {
@@ -254,4 +362,96 @@
             _messageIsError = true;
         }
     }
+
+    private async Task UpdateFormula()
+    {
+        if (!_editFormulaId.HasValue) return;
+
+        try
+        {
+            var operandJson = BuildOperandJson(_addOperandFields);
+
+            await FormulaService.UpdateIntraSheetFormula(
+                _editFormulaId.Value, _addRuleName, _addFormulaType,
+                _addTargetField, string.IsNullOrWhiteSpace(_addTargetLineCode) ? null : _addTargetLineCode,
+                operandJson,
+                _addFormulaType == FormulaType.Custom ? _addExpression : null,
+                _addTolerance, _addSeverity, "admin");
+
+            _message = $"Formula '{_addRuleCode}' updated successfully.";
+            _messageIsError = false;
+            _showAddForm = false;
+            _editFormulaId = null;
+
+            Cache.InvalidateAll();
+            await LoadFormulas();
+        }
+        catch (Exception ex)
+        {
+            _message = ex.Message;
+            _messageIsError = true;
+        }
+    }
+
+    private async Task DeleteFormula(IntraSheetFormula formula)
+    {
+        try
+        {
+            await FormulaService.DeleteIntraSheetFormula(formula.Id, "admin");
+            _message = $"Formula '{formula.RuleCode}' deleted.";
+            _messageIsError = false;
+
+            Cache.InvalidateAll();
+            await LoadFormulas();
+        }
+        catch (Exception ex)
+        {
+            _message = ex.Message;
+            _messageIsError = true;
+        }
+    }
+
+    private static string BuildOperandJson(string commaSeparated)
+    {
+        var fields = commaSeparated
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        return "[" + string.Join(",", fields.Select(f => $"\"{f}\"")) + "]";
+    }
+
+    private static string FormatOperands(string operandFieldsJson, FormulaType type)
+    {
+        try
+        {
+            var operands = System.Text.Json.JsonSerializer.Deserialize<List<string>>(operandFieldsJson);
+            if (operands == null || !operands.Any()) return operandFieldsJson;
+            var op = type == FormulaType.Difference ? " - " : " + ";
+            return string.Join(op, operands);
+        }
+        catch
+        {
+            return operandFieldsJson;
+        }
+    }
+
+    private static string TruncateExpression(string expr, int maxLen)
+    {
+        return expr.Length <= maxLen ? expr : expr[..maxLen] + "...";
+    }
+
+    private static string GetTypeBadgeClass(FormulaType type) => type switch
+    {
+        FormulaType.Sum => "badge-published",
+        FormulaType.Difference => "badge-review",
+        FormulaType.Custom => "badge-draft",
+        FormulaType.Equals => "badge-published",
+        _ => "badge-review"
+    };
+
+    private static string GetSeverityBadgeClass(ValidationSeverity severity) => severity switch
+    {
+        ValidationSeverity.Error => "badge-deprecated",
+        ValidationSeverity.Warning => "badge-review",
+        ValidationSeverity.Info => "badge-draft",
+        _ => "badge-draft"
+    };
 }
