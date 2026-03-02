@@ -776,8 +776,7 @@
         try
         {
             await VersioningService.SubmitForReview(_detail!.Id, _activeVersion!.Id, CurrentUser);
-            _message = "Version submitted for review.";
-            _messageIsError = false;
+            Toast.Info("Version submitted for review.", "Submitted");
             await LoadTemplate();
         }
         catch (Exception ex) { SetError(ex.Message); }
@@ -800,8 +799,7 @@
         try
         {
             await VersioningService.Publish(_detail!.Id, _activeVersion!.Id, CurrentUser);
-            _message = "Version published successfully! Physical table created/updated.";
-            _messageIsError = false;
+            Toast.Success("Version published successfully! Physical table created/updated.", "Published");
             _showDdlPreview = false;
             await LoadTemplate();
         }
@@ -830,8 +828,7 @@
                 _newField.XmlElementName = _newField.FieldName;
 
             await TemplateService.AddFieldToVersion(_detail!.Id, _activeVersion!.Id, _newField, CurrentUser);
-            _message = $"Field '{_newField.FieldName}' added successfully.";
-            _messageIsError = false;
+            Toast.Success($"Field '{_newField.FieldName}' added successfully.", "Field Added");
             _showAddField = false;
             await LoadTemplate();
         }
@@ -850,7 +847,6 @@
 
     private void SetError(string msg)
     {
-        _message = msg;
-        _messageIsError = true;
+        _errorMessage = msg;
     }
 }
