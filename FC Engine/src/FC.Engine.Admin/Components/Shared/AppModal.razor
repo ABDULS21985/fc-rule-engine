@@ -1,0 +1,103 @@
+@* Premium reusable modal component with gold accent, backdrop blur, and slide-in animation *@
+
+@if (Visible)
+{
+    <div class="cbn-modal-backdrop @(Visible ? "cbn-modal-backdrop-active" : "")"
+         @onclick="HandleBackdropClick"
+         role="presentation">
+        <div class="cbn-modal @SizeClass @(Visible ? "cbn-modal-active" : "")"
+             role="dialog"
+             aria-modal="true"
+             aria-labelledby="modal-title-@_instanceId"
+             @onclick:stopPropagation="true"
+             @onkeydown="HandleKeyDown"
+             tabindex="-1">
+            <!-- Gold accent line -->
+            <div class="cbn-modal-accent" aria-hidden="true"></div>
+
+            <!-- Header -->
+            @if (HeaderContent is not null || !string.IsNullOrEmpty(Title))
+            {
+                <div class="cbn-modal-header">
+                    <div class="cbn-modal-header-text">
+                        @if (HeaderContent is not null)
+                        {
+                            @HeaderContent
+                        }
+                        else
+                        {
+                            <h2 id="modal-title-@_instanceId" class="cbn-modal-title">@Title</h2>
+                            @if (!string.IsNullOrEmpty(Subtitle))
+                            {
+                                <p class="cbn-modal-subtitle">@Subtitle</p>
+                            }
+                        }
+                    </div>
+                    @if (ShowCloseButton)
+                    {
+                        <button class="cbn-modal-close" @onclick="Close" aria-label="Close dialog" type="button">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="18" height="18" aria-hidden="true">
+                                <line x1="18" y1="6" x2="6" y2="18"/>
+                                <line x1="6" y1="6" x2="18" y2="18"/>
+                            </svg>
+                        </button>
+                    }
+                </div>
+            }
+
+            <!-- Body -->
+            <div class="cbn-modal-body">
+                @ChildContent
+            </div>
+
+            <!-- Footer -->
+            @if (FooterContent is not null)
+            {
+                <div class="cbn-modal-footer">
+                    @FooterContent
+                </div>
+            }
+        </div>
+    </div>
+}
+
+@code {
+    private readonly string _instanceId = Guid.NewGuid().ToString("N")[..6];
+
+    [Parameter] public bool Visible { get; set; }
+    [Parameter] public EventCallback<bool> VisibleChanged { get; set; }
+    [Parameter] public string? Title { get; set; }
+    [Parameter] public string? Subtitle { get; set; }
+    [Parameter] public bool ShowCloseButton { get; set; } = true;
+    [Parameter] public bool CloseOnBackdropClick { get; set; } = true;
+    [Parameter] public bool CloseOnEscape { get; set; } = true;
+    [Parameter] public string Size { get; set; } = "default";
+    [Parameter] public RenderFragment? HeaderContent { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter] public RenderFragment? FooterContent { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    private string SizeClass => Size switch
+    {
+        "sm" => "cbn-modal-sm",
+        "lg" => "cbn-modal-lg",
+        "xl" => "cbn-modal-xl",
+        _ => ""
+    };
+
+    private async Task Close()
+    {
+        await VisibleChanged.InvokeAsync(false);
+        await OnClose.InvokeAsync();
+    }
+
+    private async Task HandleBackdropClick()
+    {
+        if (CloseOnBackdropClick) await Close();
+    }
+
+    private async Task HandleKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Escape" && CloseOnEscape) await Close();
+    }
+}

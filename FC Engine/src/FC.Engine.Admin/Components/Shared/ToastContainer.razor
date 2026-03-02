@@ -1,0 +1,92 @@
+@* Global toast notification container — placed once in MainLayout *@
+@using FC.Engine.Admin.Services
+@inject ToastService ToastService
+@implements IDisposable
+
+<div class="cbn-toast-container" aria-live="polite" aria-label="Notifications">
+    @foreach (var toast in ToastService.Toasts)
+    {
+        <div class="cbn-toast cbn-toast-@GetVariantClass(toast.Variant)" role="status">
+            <div class="cbn-toast-icon" aria-hidden="true">
+                @switch (toast.Variant)
+                {
+                    case ToastVariant.Success:
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="18" height="18">
+                            <path d="M22 11.08V12a10 10 0 11-5.93-9.14"/>
+                            <polyline points="22 4 12 14.01 9 11.01"/>
+                        </svg>
+                        break;
+                    case ToastVariant.Warning:
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="18" height="18">
+                            <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+                            <line x1="12" y1="9" x2="12" y2="13"/>
+                            <line x1="12" y1="17" x2="12.01" y2="17"/>
+                        </svg>
+                        break;
+                    case ToastVariant.Error:
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="18" height="18">
+                            <circle cx="12" cy="12" r="10"/>
+                            <line x1="15" y1="9" x2="9" y2="15"/>
+                            <line x1="9" y1="9" x2="15" y2="15"/>
+                        </svg>
+                        break;
+                    case ToastVariant.Info:
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="18" height="18">
+                            <circle cx="12" cy="12" r="10"/>
+                            <line x1="12" y1="16" x2="12" y2="12"/>
+                            <line x1="12" y1="8" x2="12.01" y2="8"/>
+                        </svg>
+                        break;
+                }
+            </div>
+            <div class="cbn-toast-content">
+                @if (!string.IsNullOrEmpty(toast.Title))
+                {
+                    <strong class="cbn-toast-title">@toast.Title</strong>
+                }
+                <span class="cbn-toast-message">@toast.Message</span>
+            </div>
+            @if (toast.Dismissible)
+            {
+                <button class="cbn-toast-dismiss" @onclick="() => ToastService.Dismiss(toast.Id)" aria-label="Dismiss notification" type="button">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14" aria-hidden="true">
+                        <line x1="18" y1="6" x2="6" y2="18"/>
+                        <line x1="6" y1="6" x2="18" y2="18"/>
+                    </svg>
+                </button>
+            }
+            @if (toast.DurationMs > 0)
+            {
+                <div class="cbn-toast-progress cbn-toast-progress-@GetVariantClass(toast.Variant)"
+                     style="animation-duration: @(toast.DurationMs)ms"
+                     aria-hidden="true"></div>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    protected override void OnInitialized()
+    {
+        ToastService.OnChange += HandleStateChanged;
+    }
+
+    private void HandleStateChanged()
+    {
+        InvokeAsync(StateHasChanged);
+    }
+
+    private static string GetVariantClass(ToastVariant variant) => variant switch
+    {
+        ToastVariant.Success => "success",
+        ToastVariant.Warning => "warning",
+        ToastVariant.Error => "error",
+        ToastVariant.Info => "info",
+        _ => "info"
+    };
+
+    public void Dispose()
+    {
+        ToastService.OnChange -= HandleStateChanged;
+    }
+}

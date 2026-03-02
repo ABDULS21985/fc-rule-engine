@@ -1,0 +1,93 @@
+@* Premium left-bordered alert card with icon support and dismiss capability *@
+
+@if (_visible)
+{
+    <div class="cbn-alert cbn-alert-@VariantClass" role="alert">
+        <div class="cbn-alert-icon" aria-hidden="true">
+            @switch (Variant)
+            {
+                case AlertVariant.Success:
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="20" height="20">
+                        <path d="M22 11.08V12a10 10 0 11-5.93-9.14"/>
+                        <polyline points="22 4 12 14.01 9 11.01"/>
+                    </svg>
+                    break;
+                case AlertVariant.Warning:
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="20" height="20">
+                        <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+                        <line x1="12" y1="9" x2="12" y2="13"/>
+                        <line x1="12" y1="17" x2="12.01" y2="17"/>
+                    </svg>
+                    break;
+                case AlertVariant.Error:
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="20" height="20">
+                        <circle cx="12" cy="12" r="10"/>
+                        <line x1="15" y1="9" x2="9" y2="15"/>
+                        <line x1="9" y1="9" x2="15" y2="15"/>
+                    </svg>
+                    break;
+                case AlertVariant.Info:
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="20" height="20">
+                        <circle cx="12" cy="12" r="10"/>
+                        <line x1="12" y1="16" x2="12" y2="12"/>
+                        <line x1="12" y1="8" x2="12.01" y2="8"/>
+                    </svg>
+                    break;
+            }
+        </div>
+        <div class="cbn-alert-content">
+            @if (!string.IsNullOrEmpty(Title))
+            {
+                <strong class="cbn-alert-title">@Title</strong>
+            }
+            <span class="cbn-alert-message">@Message</span>
+            @if (ChildContent is not null)
+            {
+                @ChildContent
+            }
+        </div>
+        @if (Dismissible)
+        {
+            <button class="cbn-alert-dismiss" @onclick="Dismiss" aria-label="Dismiss alert" type="button">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16" aria-hidden="true">
+                    <line x1="18" y1="6" x2="6" y2="18"/>
+                    <line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+            </button>
+        }
+    </div>
+}
+
+@code {
+    private bool _visible = true;
+
+    [Parameter] public AlertVariant Variant { get; set; } = AlertVariant.Info;
+    [Parameter] public string? Title { get; set; }
+    [Parameter] public string Message { get; set; } = "";
+    [Parameter] public bool Dismissible { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter] public EventCallback OnDismiss { get; set; }
+
+    private string VariantClass => Variant switch
+    {
+        AlertVariant.Success => "success",
+        AlertVariant.Warning => "warning",
+        AlertVariant.Error => "error",
+        AlertVariant.Info => "info",
+        _ => "info"
+    };
+
+    private async Task Dismiss()
+    {
+        _visible = false;
+        await OnDismiss.InvokeAsync();
+    }
+
+    public enum AlertVariant
+    {
+        Success,
+        Warning,
+        Error,
+        Info
+    }
+}

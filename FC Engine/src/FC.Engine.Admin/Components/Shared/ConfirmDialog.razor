@@ -1,0 +1,104 @@
+@* Reusable confirmation dialog for destructive/sensitive actions *@
+@using FC.Engine.Admin.Services
+@inject DialogService DialogService
+@implements IDisposable
+
+@if (DialogService.IsOpen && DialogService.CurrentRequest is not null)
+{
+    var req = DialogService.CurrentRequest;
+
+    <div class="cbn-modal-backdrop cbn-modal-backdrop-active"
+         @onclick="() => DialogService.Complete(false)"
+         role="presentation">
+        <div class="cbn-modal cbn-modal-sm cbn-modal-active cbn-confirm-dialog"
+             role="alertdialog"
+             aria-modal="true"
+             aria-labelledby="confirm-dialog-title"
+             aria-describedby="confirm-dialog-desc"
+             @onclick:stopPropagation="true"
+             @onkeydown="HandleKeyDown"
+             tabindex="-1">
+            <!-- Accent line — red for destructive, gold for normal -->
+            <div class="cbn-modal-accent @(req.IsDestructive ? "cbn-modal-accent-danger" : "")" aria-hidden="true"></div>
+
+            <div class="cbn-confirm-body">
+                <!-- Icon -->
+                <div class="cbn-confirm-icon @(req.IsDestructive ? "cbn-confirm-icon-danger" : "cbn-confirm-icon-gold")">
+                    @if (req.Icon == "delete")
+                    {
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="24" height="24">
+                            <polyline points="3 6 5 6 21 6"/>
+                            <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
+                            <line x1="10" y1="11" x2="10" y2="17"/>
+                            <line x1="14" y1="11" x2="14" y2="17"/>
+                        </svg>
+                    }
+                    else if (req.Icon == "archive")
+                    {
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="24" height="24">
+                            <polyline points="21 8 21 21 3 21 3 8"/>
+                            <rect x="1" y="3" width="22" height="5"/>
+                            <line x1="10" y1="12" x2="14" y2="12"/>
+                        </svg>
+                    }
+                    else if (req.Icon == "publish")
+                    {
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="24" height="24">
+                            <polyline points="16 16 12 12 8 16"/>
+                            <line x1="12" y1="12" x2="12" y2="21"/>
+                            <path d="M20.39 18.39A5 5 0 0018 9h-1.26A8 8 0 103 16.3"/>
+                        </svg>
+                    }
+                    else
+                    {
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="24" height="24">
+                            <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+                            <line x1="12" y1="9" x2="12" y2="13"/>
+                            <line x1="12" y1="17" x2="12.01" y2="17"/>
+                        </svg>
+                    }
+                </div>
+
+                <!-- Title & description -->
+                <h3 id="confirm-dialog-title" class="cbn-confirm-title">@req.Title</h3>
+                <p id="confirm-dialog-desc" class="cbn-confirm-message">@req.Message</p>
+
+                <!-- Actions -->
+                <div class="cbn-confirm-actions">
+                    <button class="cbn-btn cbn-btn-outline" @onclick="() => DialogService.Complete(false)" type="button">
+                        @req.CancelText
+                    </button>
+                    <button class="cbn-btn @(req.IsDestructive ? "cbn-btn-danger" : "cbn-btn-gold")"
+                            @onclick="() => DialogService.Complete(true)" type="button">
+                        @req.ConfirmText
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    protected override void OnInitialized()
+    {
+        DialogService.OnChange += HandleStateChanged;
+    }
+
+    private void HandleStateChanged()
+    {
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void HandleKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Escape")
+        {
+            DialogService.Complete(false);
+        }
+    }
+
+    public void Dispose()
+    {
+        DialogService.OnChange -= HandleStateChanged;
+    }
+}
