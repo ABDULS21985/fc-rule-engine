@@ -7,31 +7,49 @@
 @inject ITemplateMetadataCache Cache
 @inject ISubmissionRepository SubmissionRepo
 @inject ITemplateRepository TemplateRepo
+@inject IFormulaRepository FormulaRepo
 @inject NavigationManager Nav
 
-<div class="page-header">
-    <div>
-        <h1>Dashboard</h1>
-        <p>Executive overview of the Financial Returns Collection &amp; Analysis System</p>
+<!-- Executive Page Header -->
+<header class="dash-header" role="banner">
+    <div class="dash-header-text">
+        <h1>Executive Dashboard</h1>
+        <p>Financial Returns Collection &amp; Analysis System — Operational Overview</p>
     </div>
-</div>
+    <div class="dash-header-meta">
+        <time class="dash-header-date" datetime="@DateTime.UtcNow.ToString("yyyy-MM-dd")">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15" aria-hidden="true">
+                <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+                <line x1="16" y1="2" x2="16" y2="6"/>
+                <line x1="8" y1="2" x2="8" y2="6"/>
+                <line x1="3" y1="10" x2="21" y2="10"/>
+            </svg>
+            @DateTime.UtcNow.ToString("dddd, d MMMM yyyy")
+        </time>
+        <div class="dash-header-status" aria-label="System status: operational">
+            <span class="dash-status-dot" aria-hidden="true"></span>
+            System Operational
+        </div>
+    </div>
+</header>
 
 @if (_loading)
 {
-    <div class="dash-loading">
-        <span class="spinner"></span>
+    <div class="dash-loading" role="status" aria-label="Loading dashboard">
+        <span class="spinner" aria-hidden="true"></span>
         <span>Loading dashboard data...</span>
     </div>
 }
 else
 {
     <!-- Stat Cards Row -->
-    <div class="dash-stats-row">
+    <div class="dash-stats-row" role="region" aria-label="Key metrics">
+        <!-- Card 1: Active Templates -->
         <div class="dash-stat-card dash-stat-green" style="animation-delay: 0ms;">
             <div class="dash-stat-accent"></div>
             <div class="dash-stat-body">
                 <div class="dash-stat-icon-wrap dash-icon-green">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="22" height="22">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="22" height="22" aria-hidden="true">
                         <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
                         <polyline points="14 2 14 8 20 8"/>
                         <line x1="16" y1="13" x2="8" y2="13"/>
@@ -44,69 +62,78 @@ else
                     <span class="dash-stat-label">Active Templates</span>
                 </div>
                 <div class="dash-stat-change dash-change-neutral">
-                    <span>@_totalFields fields</span>
+                    <span>@_totalFields fields configured</span>
                 </div>
             </div>
         </div>
 
+        <!-- Card 2: Pending Review -->
         <div class="dash-stat-card dash-stat-gold" style="animation-delay: 80ms;">
             <div class="dash-stat-accent"></div>
             <div class="dash-stat-body">
                 <div class="dash-stat-icon-wrap dash-icon-gold">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="22" height="22">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="22" height="22" aria-hidden="true">
                         <circle cx="12" cy="12" r="10"/>
                         <polyline points="12 6 12 12 16 14"/>
                     </svg>
                 </div>
                 <div class="dash-stat-data">
-                    <span class="dash-stat-number">@_pendingReviewCount</span>
-                    <span class="dash-stat-label">Pending Review</span>
+                    <span class="dash-stat-number">@(_pendingReviewCount + _draftCount)</span>
+                    <span class="dash-stat-label">Awaiting Action</span>
                 </div>
                 <div class="dash-stat-change dash-change-neutral">
-                    <span>@_draftCount drafts</span>
+                    @if (_pendingReviewCount > 0 || _draftCount > 0)
+                    {
+                        <span>@_pendingReviewCount in review, @_draftCount drafts</span>
+                    }
+                    else
+                    {
+                        <span>all versions published</span>
+                    }
                 </div>
             </div>
         </div>
 
+        <!-- Card 3: Validation Rules -->
         <div class="dash-stat-card dash-stat-blue" style="animation-delay: 160ms;">
             <div class="dash-stat-accent"></div>
             <div class="dash-stat-body">
                 <div class="dash-stat-icon-wrap dash-icon-blue">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="22" height="22">
-                        <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="22" height="22" aria-hidden="true">
+                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
                     </svg>
                 </div>
                 <div class="dash-stat-data">
-                    <span class="dash-stat-number">@_totalFormulas</span>
-                    <span class="dash-stat-label">Validation Formulas</span>
+                    <span class="dash-stat-number">@_totalRules</span>
+                    <span class="dash-stat-label">Validation Rules</span>
                 </div>
                 <div class="dash-stat-change dash-change-neutral">
-                    <span>across all templates</span>
+                    <span>@_totalFormulas intra-sheet, @_crossSheetRuleCount cross-sheet, @_businessRuleCount business</span>
                 </div>
             </div>
         </div>
 
-        <div class="dash-stat-card dash-stat-red" style="animation-delay: 240ms;">
+        <!-- Card 4: Total Submissions -->
+        <div class="dash-stat-card dash-stat-green" style="animation-delay: 240ms;">
             <div class="dash-stat-accent"></div>
             <div class="dash-stat-body">
-                <div class="dash-stat-icon-wrap dash-icon-red">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="22" height="22">
-                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                        <polyline points="7 10 12 15 17 10"/>
-                        <line x1="12" y1="15" x2="12" y2="3"/>
+                <div class="dash-stat-icon-wrap dash-icon-green">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="22" height="22" aria-hidden="true">
+                        <polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/>
+                        <path d="M5.45 5.11L2 12v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.45-6.89A2 2 0 0016.76 4H7.24a2 2 0 00-1.79 1.11z"/>
                     </svg>
                 </div>
                 <div class="dash-stat-data">
                     <span class="dash-stat-number">@_totalSubmissions</span>
                     <span class="dash-stat-label">Total Submissions</span>
                 </div>
-                <div class="dash-stat-change @(_acceptedCount > 0 ? "dash-change-up" : "dash-change-neutral")">
+                <div class="dash-stat-change @(_acceptanceRate > 0 ? "dash-change-up" : "dash-change-neutral")">
                     @if (_totalSubmissions > 0)
                     {
-                        <svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14">
-                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-8.707l-3-3a1 1 0 00-1.414 0l-3 3a1 1 0 001.414 1.414L9 9.414V13a1 1 0 102 0V9.414l1.293 1.293a1 1 0 001.414-1.414z" clip-rule="evenodd"/>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14" aria-hidden="true">
+                            <polyline points="22 4 12 14.01 9 11.01"/>
                         </svg>
-                        <span>@(Math.Round((double)_acceptedCount / _totalSubmissions * 100))% accepted</span>
+                        <span>@_acceptanceRate% acceptance rate</span>
                     }
                     else
                     {
@@ -123,10 +150,9 @@ else
         <div class="dash-card" style="animation-delay: 320ms;">
             <div class="dash-card-header">
                 <h2>
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="18" height="18">
-                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                        <polyline points="7 10 12 15 17 10"/>
-                        <line x1="12" y1="15" x2="12" y2="3"/>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="18" height="18" aria-hidden="true">
+                        <polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/>
+                        <path d="M5.45 5.11L2 12v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.45-6.89A2 2 0 0016.76 4H7.24a2 2 0 00-1.79 1.11z"/>
                     </svg>
                     Recent Submissions
                 </h2>
@@ -136,29 +162,30 @@ else
                 @if (_recentSubmissions.Count == 0)
                 {
                     <div class="dash-empty-state">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="40" height="40" style="color: var(--cbn-gray-300);">
-                            <path d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="40" height="40" style="color: var(--cbn-gray-300);" aria-hidden="true">
+                            <polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/>
+                            <path d="M5.45 5.11L2 12v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.45-6.89A2 2 0 0016.76 4H7.24a2 2 0 00-1.79 1.11z"/>
                         </svg>
-                        <p>No submissions yet</p>
+                        <p>No submissions recorded yet</p>
                     </div>
                 }
                 else
                 {
-                    <table class="dash-mini-table">
+                    <table class="dash-mini-table" aria-label="Recent submissions">
                         <thead>
                             <tr>
-                                <th>Return Code</th>
-                                <th>Institution</th>
-                                <th>Status</th>
-                                <th>Submitted</th>
+                                <th scope="col">Return Code</th>
+                                <th scope="col">Institution</th>
+                                <th scope="col">Status</th>
+                                <th scope="col">Submitted</th>
                             </tr>
                         </thead>
                         <tbody>
                             @foreach (var sub in _recentSubmissions)
                             {
-                                <tr @onclick="() => NavigateToSubmission(sub.Id)" class="dash-row-clickable">
+                                <tr @onclick="() => NavigateToSubmission(sub.Id)" class="dash-row-clickable" tabindex="0" role="link" @onkeydown="(e) => HandleRowKey(e, sub.Id)">
                                     <td class="dash-cell-code">@sub.ReturnCode</td>
-                                    <td>@(sub.Institution?.InstitutionName ?? "—")</td>
+                                    <td>@(sub.Institution?.InstitutionName ?? "\u2014")</td>
                                     <td>
                                         <span class="dash-status-badge dash-status-@sub.Status.ToString().ToLowerInvariant()">
                                             @FormatStatus(sub.Status)
@@ -177,7 +204,7 @@ else
         <div class="dash-card" style="animation-delay: 400ms;">
             <div class="dash-card-header">
                 <h2>
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="18" height="18">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="18" height="18" aria-hidden="true">
                         <path d="M22 11.08V12a10 10 0 11-5.93-9.14"/>
                         <polyline points="22 4 12 14.01 9 11.01"/>
                     </svg>
@@ -187,7 +214,7 @@ else
             </div>
             <div class="dash-card-body">
                 <!-- Structural Category Breakdown -->
-                <div class="dash-health-section">
+                <div class="dash-health-section" role="group" aria-label="Templates by structure">
                     <div class="dash-health-label">By Structure</div>
                     @foreach (var (cat, count) in _categoryBreakdown)
                     {
@@ -197,7 +224,7 @@ else
                                 <span class="dash-progress-name">@cat</span>
                                 <span class="dash-progress-count">@count</span>
                             </div>
-                            <div class="dash-progress-track">
+                            <div class="dash-progress-track" role="progressbar" aria-valuenow="@pct.ToString("F0")" aria-valuemin="0" aria-valuemax="100" aria-label="@cat: @count templates">
                                 <div class="dash-progress-fill dash-fill-@cat.ToLowerInvariant()" style="width: @pct.ToString("F0")%"></div>
                             </div>
                         </div>
@@ -205,7 +232,7 @@ else
                 </div>
 
                 <!-- Frequency Breakdown -->
-                <div class="dash-health-section">
+                <div class="dash-health-section" role="group" aria-label="Templates by frequency">
                     <div class="dash-health-label">By Frequency</div>
                     @foreach (var (freq, count) in _frequencyBreakdown)
                     {
@@ -215,7 +242,7 @@ else
                                 <span class="dash-progress-name">@freq</span>
                                 <span class="dash-progress-count">@count</span>
                             </div>
-                            <div class="dash-progress-track">
+                            <div class="dash-progress-track" role="progressbar" aria-valuenow="@pct.ToString("F0")" aria-valuemin="0" aria-valuemax="100" aria-label="@freq: @count templates">
                                 <div class="dash-progress-fill dash-fill-freq" style="width: @pct.ToString("F0")%"></div>
                             </div>
                         </div>
@@ -223,19 +250,19 @@ else
                 </div>
 
                 <!-- Version Status Summary -->
-                <div class="dash-health-section">
+                <div class="dash-health-section" role="group" aria-label="Template version status">
                     <div class="dash-health-label">Version Status</div>
                     <div class="dash-version-chips">
                         <div class="dash-chip dash-chip-published">
-                            <span class="dash-chip-dot"></span>
+                            <span class="dash-chip-dot" aria-hidden="true"></span>
                             <span>@_publishedVersionCount Published</span>
                         </div>
                         <div class="dash-chip dash-chip-review">
-                            <span class="dash-chip-dot"></span>
+                            <span class="dash-chip-dot" aria-hidden="true"></span>
                             <span>@_pendingReviewCount In Review</span>
                         </div>
                         <div class="dash-chip dash-chip-draft">
-                            <span class="dash-chip-dot"></span>
+                            <span class="dash-chip-dot" aria-hidden="true"></span>
                             <span>@_draftCount Drafts</span>
                         </div>
                     </div>
@@ -245,18 +272,18 @@ else
     </div>
 
     <!-- Quick Actions -->
-    <div class="dash-actions-card" style="animation-delay: 480ms;">
+    <div class="dash-actions-card" style="animation-delay: 480ms;" role="region" aria-label="Quick actions">
         <div class="dash-card-header">
             <h2>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="18" height="18">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="18" height="18" aria-hidden="true">
                     <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
                 </svg>
                 Quick Actions
             </h2>
         </div>
         <div class="dash-actions-grid">
-            <a href="/templates/new" class="dash-action-btn">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="20" height="20">
+            <a href="/templates" class="dash-action-btn">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="22" height="22" aria-hidden="true">
                     <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
                     <polyline points="14 2 14 8 20 8"/>
                     <line x1="12" y1="18" x2="12" y2="12"/>
@@ -265,20 +292,25 @@ else
                 <span>New Template</span>
             </a>
             <a href="/submissions" class="dash-action-btn">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="20" height="20">
-                    <path d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="22" height="22" aria-hidden="true">
+                    <polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/>
+                    <path d="M5.45 5.11L2 12v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.45-6.89A2 2 0 0016.76 4H7.24a2 2 0 00-1.79 1.11z"/>
                 </svg>
                 <span>Review Submissions</span>
             </a>
             <a href="/formulas" class="dash-action-btn">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="20" height="20">
-                    <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="22" height="22" aria-hidden="true">
+                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
                 </svg>
-                <span>Manage Formulas</span>
+                <span>Manage Rules</span>
             </a>
             <a href="/audit" class="dash-action-btn">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="20" height="20">
-                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="22" height="22" aria-hidden="true">
+                    <path d="M16 4h2a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h2"/>
+                    <rect x="8" y="2" width="8" height="4" rx="1" ry="1"/>
+                    <line x1="8" y1="10" x2="16" y2="10"/>
+                    <line x1="8" y1="14" x2="16" y2="14"/>
+                    <line x1="8" y1="18" x2="12" y2="18"/>
                 </svg>
                 <span>View Audit Log</span>
             </a>
@@ -289,9 +321,10 @@ else
 @code {
     private bool _loading = true;
     private int _templateCount, _totalFields, _totalFormulas;
-    private int _fixedRowCount, _multiRowCount, _itemCodedCount;
     private int _totalSubmissions, _acceptedCount, _rejectedCount;
     private int _publishedVersionCount, _pendingReviewCount, _draftCount;
+    private int _crossSheetRuleCount, _businessRuleCount, _totalRules;
+    private int _acceptanceRate;
     private List<(string Freq, int Count)> _frequencyBreakdown = new();
     private List<(string Cat, int Count)> _categoryBreakdown = new();
     private List<Submission> _recentSubmissions = new();
@@ -304,10 +337,6 @@ else
         _templateCount = templates.Count;
         _totalFields = templates.Sum(t => t.CurrentVersion.Fields.Count);
         _totalFormulas = templates.Sum(t => t.CurrentVersion.IntraSheetFormulas.Count);
-
-        _fixedRowCount = templates.Count(t => t.StructuralCategory == nameof(StructuralCategory.FixedRow));
-        _multiRowCount = templates.Count(t => t.StructuralCategory == nameof(StructuralCategory.MultiRow));
-        _itemCodedCount = templates.Count(t => t.StructuralCategory == nameof(StructuralCategory.ItemCoded));
 
         // Frequency breakdown
         _frequencyBreakdown = templates
@@ -325,7 +354,7 @@ else
             .OrderByDescending(x => x.Item2)
             .ToList();
 
-        // Template version status counts (from full repo including drafts)
+        // Template version status counts
         try
         {
             var allTemplates = await TemplateRepo.GetAll();
@@ -339,6 +368,22 @@ else
             _publishedVersionCount = _templateCount;
         }
 
+        // Validation rule counts
+        try
+        {
+            var crossSheetRules = await FormulaRepo.GetAllActiveCrossSheetRules();
+            _crossSheetRuleCount = crossSheetRules.Count;
+
+            var businessRules = await FormulaRepo.GetActiveBusinessRules();
+            _businessRuleCount = businessRules.Count;
+        }
+        catch
+        {
+            // Formula tables may not be populated yet
+        }
+
+        _totalRules = _totalFormulas + _crossSheetRuleCount + _businessRuleCount;
+
         // Submission stats
         try
         {
@@ -347,6 +392,9 @@ else
                            + await SubmissionRepo.GetCountByStatus(SubmissionStatus.AcceptedWithWarnings);
             _rejectedCount = await SubmissionRepo.GetCountByStatus(SubmissionStatus.Rejected);
             _recentSubmissions = (await SubmissionRepo.GetRecent(8)).ToList();
+            _acceptanceRate = _totalSubmissions > 0
+                ? (int)Math.Round((double)_acceptedCount / _totalSubmissions * 100)
+                : 0;
         }
         catch
         {
@@ -357,6 +405,12 @@ else
     }
 
     private void NavigateToSubmission(int id) => Nav.NavigateTo($"/submissions/{id}");
+
+    private void HandleRowKey(KeyboardEventArgs e, int id)
+    {
+        if (e.Key is "Enter" or " ")
+            NavigateToSubmission(id);
+    }
 
     private static string FormatStatus(SubmissionStatus status) => status switch
     {

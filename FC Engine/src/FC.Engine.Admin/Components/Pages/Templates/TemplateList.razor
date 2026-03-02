@@ -9,130 +9,192 @@
 @inject TemplateService TemplateService
 @inject NavigationManager Nav
 
-<div class="page-header">
-    <h1>Return Templates</h1>
-    <p>Manage all @_templates.Count published return templates</p>
-</div>
-
-@if (!string.IsNullOrEmpty(_message))
-{
-    <div class="alert @(_messageIsError ? "alert-error" : "alert-success")">@_message</div>
-}
-
-<div class="card">
-    <div class="card-header">
-        <div class="filter-bar" style="flex:1;">
-            <input class="form-control" placeholder="Search templates..." @bind="_searchTerm" @bind:event="oninput" />
-            <select class="form-control" @bind="_frequencyFilter">
-                <option value="">All Frequencies</option>
-                <option value="Monthly">Monthly</option>
-                <option value="Quarterly">Quarterly</option>
-                <option value="Semi-Annual">Semi-Annual</option>
-                <option value="Computed">Computed</option>
-            </select>
-            <select class="form-control" @bind="_categoryFilter">
-                <option value="">All Categories</option>
-                <option value="FixedRow">FixedRow</option>
-                <option value="MultiRow">MultiRow</option>
-                <option value="ItemCoded">ItemCoded</option>
-            </select>
+<div class="list-page">
+    <div class="list-page-header">
+        <div class="list-page-header-text">
+            <h1>
+                Return Templates
+                @if (!_loading)
+                {
+                    <span class="list-count-chip">@_templates.Count</span>
+                }
+            </h1>
+            <p>Manage all published return templates, their fields, formulas, and physical table mappings</p>
         </div>
-        <AuthorizeView Roles="Admin,Approver">
-            <Authorized Context="createAuth">
-                <button class="btn btn-primary btn-sm" @onclick="ShowCreateForm">New Template</button>
-            </Authorized>
-        </AuthorizeView>
     </div>
 
-    @if (_showCreateForm)
+    @if (!string.IsNullOrEmpty(_message))
     {
-        <div style="padding:1rem;background:#f9f9f9;border-bottom:1px solid #eee;">
-            <h3>Create New Template</h3>
-            <div class="grid-2">
-                <div class="form-group">
-                    <label>Return Code</label>
-                    <input class="form-control" @bind="_createRequest.ReturnCode" placeholder="e.g. MFCR 999" />
-                </div>
-                <div class="form-group">
-                    <label>Name</label>
-                    <input class="form-control" @bind="_createRequest.Name" placeholder="e.g. New Return Template" />
-                </div>
-                <div class="form-group">
-                    <label>Frequency</label>
-                    <select class="form-control" @bind="_createFrequency">
-                        @foreach (var f in Enum.GetValues<ReturnFrequency>())
-                        {
-                            <option value="@f">@f</option>
-                        }
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label>Structural Category</label>
-                    <select class="form-control" @bind="_createCategory">
-                        @foreach (var c in Enum.GetValues<StructuralCategory>())
-                        {
-                            <option value="@c">@c</option>
-                        }
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label>Description</label>
-                    <input class="form-control" @bind="_createRequest.Description" placeholder="Optional description" />
-                </div>
-            </div>
-            <div style="display:flex;gap:0.5rem;margin-top:0.5rem;">
-                <button class="btn btn-primary btn-sm" @onclick="CreateTemplate">Create</button>
-                <button class="btn btn-outline btn-sm" @onclick="() => _showCreateForm = false">Cancel</button>
-            </div>
-        </div>
+        <div class="alert @(_messageIsError ? "alert-error" : "alert-success")">@_message</div>
     }
 
-    @if (_loading)
-    {
-        <div class="text-center"><span class="spinner"></span></div>
-    }
-    else
-    {
-        <table class="data-table">
-            <thead>
-                <tr>
-                    <th>Return Code</th>
-                    <th>Name</th>
-                    <th>Category</th>
-                    <th>Fields</th>
-                    <th>Formulas</th>
-                    <th>Table</th>
-                    <th></th>
-                </tr>
-            </thead>
-            <tbody>
-                @foreach (var t in FilteredTemplates)
+    <div class="list-card">
+        <div class="list-toolbar">
+            <div class="list-toolbar-filters">
+                <div class="list-search-wrap">
+                    <svg class="list-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+                    <input class="list-search-input" placeholder="Search by code or name..." @bind="_searchTerm" @bind:event="oninput" />
+                </div>
+                <select class="list-filter-select" @bind="_frequencyFilter">
+                    <option value="">All Frequencies</option>
+                    <option value="Monthly">Monthly</option>
+                    <option value="Quarterly">Quarterly</option>
+                    <option value="Semi-Annual">Semi-Annual</option>
+                    <option value="Computed">Computed</option>
+                </select>
+                <select class="list-filter-select" @bind="_categoryFilter">
+                    <option value="">All Categories</option>
+                    <option value="FixedRow">FixedRow</option>
+                    <option value="MultiRow">MultiRow</option>
+                    <option value="ItemCoded">ItemCoded</option>
+                </select>
+            </div>
+            <div class="list-toolbar-actions">
+                <AuthorizeView Roles="Admin,Approver">
+                    <Authorized Context="createAuth">
+                        <button class="btn-gold" @onclick="ShowCreateForm">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
+                            New Template
+                        </button>
+                    </Authorized>
+                </AuthorizeView>
+            </div>
+        </div>
+
+        @if (_showCreateForm)
+        {
+            <div class="list-inline-form">
+                <h3>Create New Template</h3>
+                <div class="grid-2">
+                    <div class="form-group">
+                        <label>Return Code</label>
+                        <input class="form-control" @bind="_createRequest.ReturnCode" placeholder="e.g. MFCR 999" />
+                    </div>
+                    <div class="form-group">
+                        <label>Name</label>
+                        <input class="form-control" @bind="_createRequest.Name" placeholder="e.g. New Return Template" />
+                    </div>
+                    <div class="form-group">
+                        <label>Frequency</label>
+                        <select class="form-control" @bind="_createFrequency">
+                            @foreach (var f in Enum.GetValues<ReturnFrequency>())
+                            {
+                                <option value="@f">@f</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Structural Category</label>
+                        <select class="form-control" @bind="_createCategory">
+                            @foreach (var c in Enum.GetValues<StructuralCategory>())
+                            {
+                                <option value="@c">@c</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Description</label>
+                        <input class="form-control" @bind="_createRequest.Description" placeholder="Optional description" />
+                    </div>
+                </div>
+                <div class="list-form-actions">
+                    <button class="btn btn-primary btn-sm" @onclick="CreateTemplate">Create</button>
+                    <button class="btn btn-outline btn-sm" @onclick="CancelCreate">Cancel</button>
+                </div>
+            </div>
+        }
+
+        @if (_loading)
+        {
+            <div class="list-skeleton">
+                @for (var i = 0; i < 6; i++)
                 {
-                    <tr>
-                        <td><strong>@t.ReturnCode</strong></td>
-                        <td>@t.Name</td>
-                        <td>
-                            <span class="badge badge-@t.StructuralCategory.ToLowerInvariant()">
-                                @t.StructuralCategory
-                            </span>
-                        </td>
-                        <td>@t.CurrentVersion.Fields.Count</td>
-                        <td>@t.CurrentVersion.IntraSheetFormulas.Count</td>
-                        <td><code>@t.PhysicalTableName</code></td>
-                        <td>
-                            <button class="btn btn-outline btn-sm" @onclick="() => ViewTemplate(t.ReturnCode)">
-                                View
-                            </button>
-                        </td>
-                    </tr>
+                    <div class="list-skeleton-row">
+                        <div class="list-skeleton-cell" style="width:80px;"></div>
+                        <div class="list-skeleton-cell" style="flex:1;"></div>
+                        <div class="list-skeleton-cell" style="width:70px;"></div>
+                        <div class="list-skeleton-cell" style="width:40px;"></div>
+                        <div class="list-skeleton-cell" style="width:40px;"></div>
+                        <div class="list-skeleton-cell" style="width:120px;"></div>
+                    </div>
                 }
-            </tbody>
-        </table>
+            </div>
+        }
+        else if (!FilteredTemplates.Any())
+        {
+            <div class="list-empty">
+                <svg class="list-empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M12 18v-6"/><path d="m9 15 3-3 3 3"/></svg>
+                <h3 class="list-empty-title">No templates found</h3>
+                <p class="list-empty-text">Try adjusting your search criteria or filters to find what you're looking for.</p>
+            </div>
+        }
+        else
+        {
+            <div class="list-table-wrap">
+                <table class="list-table" role="table">
+                    <thead>
+                        <tr>
+                            <th scope="col">Return Code</th>
+                            <th scope="col">Name</th>
+                            <th scope="col">Category</th>
+                            <th scope="col">Frequency</th>
+                            <th scope="col">Fields</th>
+                            <th scope="col">Formulas</th>
+                            <th scope="col">Physical Table</th>
+                            <th scope="col"></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var t in PagedTemplates)
+                        {
+                            <tr class="list-row-clickable" @onclick="() => ViewTemplate(t.ReturnCode)">
+                                <td class="list-cell-code">@t.ReturnCode</td>
+                                <td class="list-cell-strong">@t.Name</td>
+                                <td>
+                                    <span class="list-badge list-badge-@t.StructuralCategory.ToLowerInvariant()">
+                                        @t.StructuralCategory
+                                    </span>
+                                </td>
+                                <td class="list-cell-muted">@GetFrequency(t.ReturnCode)</td>
+                                <td>@t.CurrentVersion.Fields.Count</td>
+                                <td>@t.CurrentVersion.IntraSheetFormulas.Count</td>
+                                <td class="list-cell-code">@t.PhysicalTableName</td>
+                                <td>
+                                    <div class="list-row-actions">
+                                        <button class="list-action-btn list-action-btn-view" @onclick="() => ViewTemplate(t.ReturnCode)" @onclick:stopPropagation="true">
+                                            View
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
 
-        <div class="mt-1 text-muted">
-            Showing @FilteredTemplates.Count() of @_templates.Count templates
-        </div>
-    }
+            <div class="list-footer">
+                <div class="list-footer-summary">
+                    Showing <strong>@PagedTemplates.Count()</strong> of <strong>@FilteredTemplates.Count()</strong> templates
+                    @if (TotalPages > 1)
+                    {
+                        <span> &mdash; Page @_currentPage of @TotalPages</span>
+                    }
+                </div>
+                @if (TotalPages > 1)
+                {
+                    <div class="list-pagination">
+                        <button class="list-page-btn" disabled="@(_currentPage <= 1)" @onclick="() => _currentPage--">&laquo;</button>
+                        @for (var p = 1; p <= TotalPages; p++)
+                        {
+                            var page = p;
+                            <button class="list-page-btn @(page == _currentPage ? "list-page-btn-active" : "")" @onclick="() => _currentPage = page">@page</button>
+                        }
+                        <button class="list-page-btn" disabled="@(_currentPage >= TotalPages)" @onclick="() => _currentPage++">&raquo;</button>
+                    </div>
+                }
+            </div>
+        }
+    </div>
 </div>
 
 @code {
@@ -143,6 +205,8 @@
     private string _categoryFilter = "";
     private string? _message;
     private bool _messageIsError;
+    private int _currentPage = 1;
+    private const int PageSize = 25;
 
     // Create form
     private bool _showCreateForm;
@@ -158,6 +222,12 @@
         .Where(t => string.IsNullOrEmpty(_frequencyFilter) || GetFrequency(t.ReturnCode) == _frequencyFilter)
         .OrderBy(t => t.ReturnCode);
 
+    private IEnumerable<CachedTemplate> PagedTemplates => FilteredTemplates
+        .Skip((_currentPage - 1) * PageSize)
+        .Take(PageSize);
+
+    private int TotalPages => (int)Math.Ceiling(FilteredTemplates.Count() / (double)PageSize);
+
     protected override async Task OnInitializedAsync()
     {
         _templates = await Cache.GetAllPublishedTemplates();
@@ -171,6 +241,8 @@
         _showCreateForm = true;
         _createRequest = new CreateTemplateRequest { CreatedBy = "system" };
     }
+
+    private void CancelCreate() => _showCreateForm = false;
 
     private async Task CreateTemplate()
     {
