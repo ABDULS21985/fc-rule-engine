@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("FC.Engine.Domain.Tests")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+b32ec22f27b1fa980b8c7d16f04b6a024d36540b")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+96e4db02916a80b69e6cdbb1fa6276a0d50c98ac")]
 [assembly: System.Reflection.AssemblyProductAttribute("FC.Engine.Domain.Tests")]
 [assembly: System.Reflection.AssemblyTitleAttribute("FC.Engine.Domain.Tests")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

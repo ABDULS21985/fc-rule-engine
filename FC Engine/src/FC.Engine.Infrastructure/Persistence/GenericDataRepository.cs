@@ -57,9 +57,9 @@ public class GenericDataRepository : IGenericDataRepository
             var dataRow = new ReturnDataRow();
 
             if (category == StructuralCategory.MultiRow)
-                dataRow.RowKey = dbRow.GetValueOrDefault("serial_no")?.ToString();
+                dataRow.RowKey = (dbRow.TryGetValue("serial_no", out var sn) ? sn?.ToString() : null);
             else if (category == StructuralCategory.ItemCoded)
-                dataRow.RowKey = dbRow.GetValueOrDefault("item_code")?.ToString();
+                dataRow.RowKey = (dbRow.TryGetValue("item_code", out var ic) ? ic?.ToString() : null);
 
             foreach (var field in fields)
             {
@@ -95,9 +95,9 @@ public class GenericDataRepository : IGenericDataRepository
             var dataRow = new ReturnDataRow();
 
             if (category == StructuralCategory.MultiRow)
-                dataRow.RowKey = dbRow.GetValueOrDefault("serial_no")?.ToString();
+                dataRow.RowKey = (dbRow.TryGetValue("serial_no", out var sn) ? sn?.ToString() : null);
             else if (category == StructuralCategory.ItemCoded)
-                dataRow.RowKey = dbRow.GetValueOrDefault("item_code")?.ToString();
+                dataRow.RowKey = (dbRow.TryGetValue("item_code", out var ic) ? ic?.ToString() : null);
 
             foreach (var field in fields)
             {
