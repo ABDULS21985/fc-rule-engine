@@ -10,6 +10,8 @@ using Microsoft.Extensions.Logging;
 var builder = Host.CreateApplicationBuilder(args);
 builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddScoped<SeedService>();
+builder.Services.AddScoped<FormulaSeedService>();
+builder.Services.AddScoped<CrossSheetRuleSeedService>();
 
 var host = builder.Build();
 var logger = host.Services.GetRequiredService<ILogger<Program>>();
@@ -52,6 +54,25 @@ try
 
         foreach (var err in result.Errors)
             logger.LogWarning("Seed error: {Error}", err);
+
+        // Step 4: Seed intra-sheet formulas from schema column patterns
+        logger.LogInformation("Seeding intra-sheet formulas...");
+        var formulaSeedService = scope.ServiceProvider.GetRequiredService<FormulaSeedService>();
+        var formulaResult = await formulaSeedService.SeedFormulasFromSchema(seedSchemaPath, "migrator");
+
+        logger.LogInformation(
+            "Formula seeding complete: {Templates} templates, {Formulas} formulas, {Errors} errors",
+            formulaResult.TemplatesWithFormulas.Count, formulaResult.TotalFormulasCreated,
+            formulaResult.Errors.Count);
+
+        foreach (var err in formulaResult.Errors)
+            logger.LogWarning("Formula seed error: {Error}", err);
+
+        // Step 5: Seed cross-sheet validation rules
+        logger.LogInformation("Seeding cross-sheet rules...");
+        var crossSheetSeedService = scope.ServiceProvider.GetRequiredService<CrossSheetRuleSeedService>();
+        var crossSheetCount = await crossSheetSeedService.SeedCrossSheetRules("migrator");
+        logger.LogInformation("Cross-sheet rules seeded: {Count}", crossSheetCount);
     }
 
     logger.LogInformation("FC Engine Migrator completed successfully");

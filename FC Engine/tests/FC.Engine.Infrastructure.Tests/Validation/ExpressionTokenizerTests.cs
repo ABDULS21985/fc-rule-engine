@@ -105,9 +105,10 @@ public class ExpressionTokenizerTests
     {
         var tokens = _tokenizer.Tokenize("A + B - C * 0.125 >= D");
 
+        // A(0) +(1) B(2) -(3) C(4) *(5) 0.125(6) >=(7) D(8)
         tokens.Should().HaveCount(9);
-        tokens[5].Type.Should().Be(TokenType.Number);
-        tokens[5].Value.Should().Be("0.125");
+        tokens[6].Type.Should().Be(TokenType.Number);
+        tokens[6].Value.Should().Be("0.125");
     }
 
     [Fact]

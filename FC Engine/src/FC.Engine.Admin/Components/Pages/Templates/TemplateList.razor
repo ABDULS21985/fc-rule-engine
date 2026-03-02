@@ -1,0 +1,105 @@
+@page "/templates"
+@using FC.Engine.Domain.Abstractions
+@using FC.Engine.Domain.Enums
+@inject ITemplateMetadataCache Cache
+@inject NavigationManager Nav
+
+<div class="page-header">
+    <h1>Return Templates</h1>
+    <p>Manage all @_templates.Count published return templates</p>
+</div>
+
+<div class="card">
+    <div class="filter-bar">
+        <input class="form-control" placeholder="Search templates..." @bind="_searchTerm" @bind:event="oninput" />
+        <select class="form-control" @bind="_frequencyFilter">
+            <option value="">All Frequencies</option>
+            <option value="Monthly">Monthly</option>
+            <option value="Quarterly">Quarterly</option>
+            <option value="Semi-Annual">Semi-Annual</option>
+            <option value="Computed">Computed</option>
+        </select>
+        <select class="form-control" @bind="_categoryFilter">
+            <option value="">All Categories</option>
+            <option value="FixedRow">FixedRow</option>
+            <option value="MultiRow">MultiRow</option>
+            <option value="ItemCoded">ItemCoded</option>
+        </select>
+    </div>
+
+    @if (_loading)
+    {
+        <div class="text-center"><span class="spinner"></span></div>
+    }
+    else
+    {
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Return Code</th>
+                    <th>Name</th>
+                    <th>Category</th>
+                    <th>Fields</th>
+                    <th>Formulas</th>
+                    <th>Table</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var t in FilteredTemplates)
+                {
+                    <tr>
+                        <td><strong>@t.ReturnCode</strong></td>
+                        <td>@t.Name</td>
+                        <td>
+                            <span class="badge badge-@t.StructuralCategory.ToLowerInvariant()">
+                                @t.StructuralCategory
+                            </span>
+                        </td>
+                        <td>@t.CurrentVersion.Fields.Count</td>
+                        <td>@t.CurrentVersion.IntraSheetFormulas.Count</td>
+                        <td><code>@t.PhysicalTableName</code></td>
+                        <td>
+                            <button class="btn btn-outline btn-sm" @onclick="() => ViewTemplate(t.ReturnCode)">
+                                View
+                            </button>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+
+        <div class="mt-1 text-muted">
+            Showing @FilteredTemplates.Count() of @_templates.Count templates
+        </div>
+    }
+</div>
+
+@code {
+    private bool _loading = true;
+    private IReadOnlyList<CachedTemplate> _templates = Array.Empty<CachedTemplate>();
+    private string _searchTerm = "";
+    private string _frequencyFilter = "";
+    private string _categoryFilter = "";
+
+    private IEnumerable<CachedTemplate> FilteredTemplates => _templates
+        .Where(t => string.IsNullOrEmpty(_searchTerm) ||
+                    t.ReturnCode.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase) ||
+                    t.Name.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase))
+        .Where(t => string.IsNullOrEmpty(_categoryFilter) || t.StructuralCategory == _categoryFilter)
+        .Where(t => string.IsNullOrEmpty(_frequencyFilter) || GetFrequency(t.ReturnCode) == _frequencyFilter)
+        .OrderBy(t => t.ReturnCode);
+
+    protected override async Task OnInitializedAsync()
+    {
+        _templates = await Cache.GetAllPublishedTemplates();
+        _loading = false;
+    }
+
+    private void ViewTemplate(string returnCode) => Nav.NavigateTo($"/templates/{returnCode}");
+
+    private static string GetFrequency(string rc) =>
+        rc.StartsWith("MFCR") ? "Monthly" :
+        rc.StartsWith("QFCR") ? "Quarterly" :
+        rc.StartsWith("SFCR") ? "Semi-Annual" : "Computed";
+}

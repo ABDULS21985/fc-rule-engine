@@ -1,0 +1,113 @@
+@page "/"
+@using FC.Engine.Domain.Abstractions
+@using FC.Engine.Domain.Enums
+@inject ITemplateMetadataCache Cache
+@inject ISubmissionRepository SubmissionRepo
+
+<div class="page-header">
+    <h1>Dashboard</h1>
+    <p>FC Engine Administration Overview</p>
+</div>
+
+@if (_loading)
+{
+    <div class="text-center"><span class="spinner"></span> Loading...</div>
+}
+else
+{
+    <div class="stats-grid">
+        <div class="stat-card">
+            <div class="stat-value">@_templateCount</div>
+            <div class="stat-label">Published Templates</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value">@_totalFields</div>
+            <div class="stat-label">Total Fields</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value">@_totalFormulas</div>
+            <div class="stat-label">Intra-Sheet Formulas</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value">@_fixedRowCount / @_multiRowCount / @_itemCodedCount</div>
+            <div class="stat-label">Fixed / Multi / ItemCoded</div>
+        </div>
+    </div>
+
+    <div class="grid-2">
+        <div class="card">
+            <div class="card-header">
+                <h2>Templates by Frequency</h2>
+            </div>
+            <table class="data-table">
+                <thead>
+                    <tr><th>Frequency</th><th>Count</th></tr>
+                </thead>
+                <tbody>
+                    @foreach (var (freq, count) in _frequencyBreakdown)
+                    {
+                        <tr><td>@freq</td><td>@count</td></tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h2>Templates by Category</h2>
+            </div>
+            <table class="data-table">
+                <thead>
+                    <tr><th>Category</th><th>Count</th><th>Total Fields</th></tr>
+                </thead>
+                <tbody>
+                    @foreach (var (cat, count, fields) in _categoryBreakdown)
+                    {
+                        <tr>
+                            <td><span class="badge badge-@cat.ToLowerInvariant()">@cat</span></td>
+                            <td>@count</td>
+                            <td>@fields</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+}
+
+@code {
+    private bool _loading = true;
+    private int _templateCount, _totalFields, _totalFormulas;
+    private int _fixedRowCount, _multiRowCount, _itemCodedCount;
+    private List<(string Freq, int Count)> _frequencyBreakdown = new();
+    private List<(string Cat, int Count, int Fields)> _categoryBreakdown = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        var templates = await Cache.GetAllPublishedTemplates();
+
+        _templateCount = templates.Count;
+        _totalFields = templates.Sum(t => t.CurrentVersion.Fields.Count);
+        _totalFormulas = templates.Sum(t => t.CurrentVersion.IntraSheetFormulas.Count);
+
+        _fixedRowCount = templates.Count(t => t.StructuralCategory == nameof(StructuralCategory.FixedRow));
+        _multiRowCount = templates.Count(t => t.StructuralCategory == nameof(StructuralCategory.MultiRow));
+        _itemCodedCount = templates.Count(t => t.StructuralCategory == nameof(StructuralCategory.ItemCoded));
+
+        // Frequency breakdown from return code prefix
+        _frequencyBreakdown = templates
+            .GroupBy(t => t.ReturnCode.StartsWith("MFCR") ? "Monthly" :
+                          t.ReturnCode.StartsWith("QFCR") ? "Quarterly" :
+                          t.ReturnCode.StartsWith("SFCR") ? "Semi-Annual" : "Computed")
+            .Select(g => (g.Key, g.Count()))
+            .OrderByDescending(x => x.Item2)
+            .ToList();
+
+        _categoryBreakdown = templates
+            .GroupBy(t => t.StructuralCategory)
+            .Select(g => (g.Key, g.Count(), g.Sum(t => t.CurrentVersion.Fields.Count)))
+            .ToList();
+
+        _loading = false;
+    }
+}

@@ -14,7 +14,7 @@ public class SeedService
     private readonly ITemplateRepository _templateRepo;
 
     // Tables to skip (not return templates)
-    private static readonly HashSet<string> SkipTables = new(StringComparer.OrdinalIgnoreCase)
+    internal static readonly HashSet<string> SkipTables = new(StringComparer.OrdinalIgnoreCase)
     {
         "sheet2_return_codes", "cleaned_summary", "summary",
         "institutions", "return_periods", "return_submissions",

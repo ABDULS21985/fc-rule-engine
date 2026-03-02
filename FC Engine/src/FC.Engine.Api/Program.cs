@@ -21,6 +21,8 @@ builder.Services.AddScoped<TemplateService>();
 builder.Services.AddScoped<TemplateVersioningService>();
 builder.Services.AddScoped<FormulaService>();
 builder.Services.AddScoped<SeedService>();
+builder.Services.AddScoped<FormulaSeedService>();
+builder.Services.AddScoped<CrossSheetRuleSeedService>();
 
 // Swagger
 builder.Services.AddEndpointsApiExplorer();

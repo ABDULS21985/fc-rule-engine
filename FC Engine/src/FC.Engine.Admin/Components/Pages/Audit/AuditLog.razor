@@ -1,0 +1,120 @@
+@page "/audit"
+@using FC.Engine.Domain.Abstractions
+@using FC.Engine.Infrastructure.Metadata
+@using Microsoft.EntityFrameworkCore
+@inject IServiceProvider ServiceProvider
+
+<div class="page-header">
+    <h1>Audit Log</h1>
+    <p>Track all metadata changes across the system</p>
+</div>
+
+<div class="card">
+    <div class="filter-bar">
+        <input class="form-control" placeholder="Filter by entity..." @bind="_entityFilter" @bind:event="oninput" />
+        <input class="form-control" placeholder="Filter by user..." @bind="_userFilter" @bind:event="oninput" />
+        <button class="btn btn-primary" @onclick="LoadAuditLog">Refresh</button>
+    </div>
+
+    @if (_loading)
+    {
+        <div class="text-center"><span class="spinner"></span></div>
+    }
+    else if (_entries.Any())
+    {
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Timestamp</th>
+                    <th>Action</th>
+                    <th>Entity</th>
+                    <th>Entity ID</th>
+                    <th>User</th>
+                    <th>Changes</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var entry in FilteredEntries.Take(100))
+                {
+                    <tr>
+                        <td>@entry.Timestamp.ToString("yyyy-MM-dd HH:mm:ss")</td>
+                        <td><span class="badge @GetActionBadge(entry.Action)">@entry.Action</span></td>
+                        <td>@entry.EntityType</td>
+                        <td>@entry.EntityId</td>
+                        <td>@entry.PerformedBy</td>
+                        <td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;">
+                            @(entry.NewValues?.Length > 100 ? entry.NewValues[..100] + "..." : entry.NewValues)
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+
+        <div class="mt-1 text-muted">Showing @Math.Min(100, FilteredEntries.Count()) entries</div>
+    }
+    else
+    {
+        <div class="text-center text-muted">No audit log entries found</div>
+    }
+</div>
+
+@code {
+    private bool _loading = true;
+    private string _entityFilter = "";
+    private string _userFilter = "";
+    private List<AuditEntry> _entries = new();
+
+    private IEnumerable<AuditEntry> FilteredEntries => _entries
+        .Where(e => string.IsNullOrEmpty(_entityFilter) ||
+                    e.EntityType.Contains(_entityFilter, StringComparison.OrdinalIgnoreCase))
+        .Where(e => string.IsNullOrEmpty(_userFilter) ||
+                    e.PerformedBy.Contains(_userFilter, StringComparison.OrdinalIgnoreCase));
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAuditLog();
+    }
+
+    private async Task LoadAuditLog()
+    {
+        _loading = true;
+        try
+        {
+            using var scope = ServiceProvider.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<MetadataDbContext>();
+            _entries = await db.Set<AuditLogEntry>()
+                .OrderByDescending(a => a.PerformedAt)
+                .Take(500)
+                .Select(a => new AuditEntry
+                {
+                    Timestamp = a.PerformedAt,
+                    Action = a.Action,
+                    EntityType = a.EntityType,
+                    EntityId = a.EntityId.ToString(),
+                    PerformedBy = a.PerformedBy,
+                    NewValues = a.NewValues
+                })
+                .ToListAsync();
+        }
+        catch { _entries = new(); }
+        _loading = false;
+    }
+
+    private static string GetActionBadge(string action) => action switch
+    {
+        "Created" => "badge-published",
+        "Updated" => "badge-review",
+        "Deleted" => "badge-deprecated",
+        _ => "badge-draft"
+    };
+
+    private record AuditEntry
+    {
+        public DateTime Timestamp { get; init; }
+        public string Action { get; init; } = "";
+        public string EntityType { get; init; } = "";
+        public string EntityId { get; init; } = "";
+        public string PerformedBy { get; init; } = "";
+        public string? NewValues { get; init; }
+    }
+}

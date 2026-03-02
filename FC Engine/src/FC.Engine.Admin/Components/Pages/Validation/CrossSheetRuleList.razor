@@ -1,0 +1,75 @@
+@page "/cross-sheet-rules"
+@using FC.Engine.Domain.Abstractions
+@using FC.Engine.Domain.Validation
+@inject IFormulaRepository FormulaRepo
+
+<div class="page-header">
+    <h1>Cross-Sheet Validation Rules</h1>
+    <p>Rules that validate relationships between different return templates</p>
+</div>
+
+@if (_loading)
+{
+    <div class="text-center"><span class="spinner"></span></div>
+}
+else
+{
+    <div class="stats-grid">
+        <div class="stat-card">
+            <div class="stat-value">@_rules.Count</div>
+            <div class="stat-label">Total Rules</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value">@_rules.Count(r => r.IsActive)</div>
+            <div class="stat-label">Active Rules</div>
+        </div>
+    </div>
+
+    <div class="card">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Rule Code</th>
+                    <th>Name</th>
+                    <th>Description</th>
+                    <th>Operands</th>
+                    <th>Expression</th>
+                    <th>Severity</th>
+                    <th>Active</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var rule in _rules)
+                {
+                    <tr>
+                        <td><code>@rule.RuleCode</code></td>
+                        <td><strong>@rule.RuleName</strong></td>
+                        <td style="max-width:250px;">@rule.Description</td>
+                        <td>
+                            @foreach (var op in rule.Operands)
+                            {
+                                <div><code>@op.OperandAlias</code> = @op.TemplateReturnCode.@op.FieldName
+                                    @if (!string.IsNullOrEmpty(op.AggregateFunction)) { <span class="badge badge-review">@op.AggregateFunction</span> }
+                                </div>
+                            }
+                        </td>
+                        <td><code>@rule.Expression?.Expression</code></td>
+                        <td>@rule.Severity</td>
+                        <td>@(rule.IsActive ? "Yes" : "No")</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+
+@code {
+    private bool _loading = true;
+    private IReadOnlyList<CrossSheetRule> _rules = Array.Empty<CrossSheetRule>();
+
+    protected override async Task OnInitializedAsync()
+    {
+        _rules = await FormulaRepo.GetAllActiveCrossSheetRules();
+        _loading = false;
+    }
+}

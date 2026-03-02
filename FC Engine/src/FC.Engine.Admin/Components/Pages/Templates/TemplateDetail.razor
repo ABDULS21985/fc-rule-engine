@@ -1,0 +1,204 @@
+@page "/templates/{ReturnCode}"
+@using FC.Engine.Domain.Abstractions
+@using FC.Engine.Domain.Enums
+@using FC.Engine.Domain.Metadata
+@inject ITemplateMetadataCache Cache
+@inject IXsdGenerator XsdGenerator
+@inject NavigationManager Nav
+
+<div class="page-header">
+    <h1>@ReturnCode</h1>
+    <p>@_template?.Name</p>
+</div>
+
+@if (_loading)
+{
+    <div class="text-center"><span class="spinner"></span></div>
+}
+else if (_template == null)
+{
+    <div class="alert alert-danger">Template not found: @ReturnCode</div>
+}
+else
+{
+    <div class="stats-grid">
+        <div class="stat-card">
+            <div class="stat-value">@_template.CurrentVersion.Fields.Count</div>
+            <div class="stat-label">Fields</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value">@_template.CurrentVersion.IntraSheetFormulas.Count</div>
+            <div class="stat-label">Formulas</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value">
+                <span class="badge badge-@_template.StructuralCategory.ToLowerInvariant()">
+                    @_template.StructuralCategory
+                </span>
+            </div>
+            <div class="stat-label">Category</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value">v@(_template.CurrentVersion.VersionNumber)</div>
+            <div class="stat-label">Version</div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <h2>Template Info</h2>
+        </div>
+        <div class="grid-2">
+            <div class="form-group">
+                <label>Physical Table</label>
+                <code>@_template.PhysicalTableName</code>
+            </div>
+            <div class="form-group">
+                <label>XML Root</label>
+                <code>@_template.XmlRootElement</code>
+            </div>
+            <div class="form-group">
+                <label>XML Namespace</label>
+                <code>@_template.XmlNamespace</code>
+            </div>
+            <div class="form-group">
+                <label>Version ID</label>
+                <span>@_template.CurrentVersion.Id</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <h2>Fields (@_template.CurrentVersion.Fields.Count)</h2>
+            <button class="btn btn-outline btn-sm" @onclick="ToggleXsd">
+                @(_showXsd ? "Hide" : "Show") XSD
+            </button>
+        </div>
+
+        @if (_showXsd && !string.IsNullOrEmpty(_xsdContent))
+        {
+            <pre style="background:#f5f5f5;padding:1rem;border-radius:6px;overflow-x:auto;font-size:0.8rem;max-height:400px;">@_xsdContent</pre>
+        }
+
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Field Name</th>
+                    <th>Display Name</th>
+                    <th>Line Code</th>
+                    <th>Data Type</th>
+                    <th>SQL Type</th>
+                    <th>Required</th>
+                    <th>Flags</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var f in _template.CurrentVersion.Fields)
+                {
+                    <tr>
+                        <td>@f.FieldOrder</td>
+                        <td><code>@f.FieldName</code></td>
+                        <td>@f.DisplayName</td>
+                        <td>@f.LineCode</td>
+                        <td>@f.DataType</td>
+                        <td><code>@f.SqlType</code></td>
+                        <td>@(f.IsRequired ? "Yes" : "")</td>
+                        <td>
+                            @if (f.IsKeyField) { <span class="badge badge-published">Key</span> }
+                            @if (f.IsComputed) { <span class="badge badge-review">Computed</span> }
+                            @if (f.IsYtdField) { <span class="badge badge-draft">YTD</span> }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+
+    @if (_template.CurrentVersion.IntraSheetFormulas.Any())
+    {
+        <div class="card">
+            <div class="card-header">
+                <h2>Intra-Sheet Formulas (@_template.CurrentVersion.IntraSheetFormulas.Count)</h2>
+            </div>
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Rule Code</th>
+                        <th>Type</th>
+                        <th>Target</th>
+                        <th>Operands</th>
+                        <th>Tolerance</th>
+                        <th>Severity</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var f in _template.CurrentVersion.IntraSheetFormulas)
+                    {
+                        <tr>
+                            <td><code>@f.RuleCode</code></td>
+                            <td><span class="badge badge-review">@f.FormulaType</span></td>
+                            <td><code>@f.TargetFieldName</code></td>
+                            <td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;">@f.OperandFields</td>
+                            <td>@f.ToleranceAmount</td>
+                            <td>@f.Severity</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+
+    @if (_template.CurrentVersion.ItemCodes.Any())
+    {
+        <div class="card">
+            <div class="card-header">
+                <h2>Item Codes (@_template.CurrentVersion.ItemCodes.Count)</h2>
+            </div>
+            <table class="data-table">
+                <thead>
+                    <tr><th>Code</th><th>Description</th><th>Order</th></tr>
+                </thead>
+                <tbody>
+                    @foreach (var ic in _template.CurrentVersion.ItemCodes)
+                    {
+                        <tr>
+                            <td><code>@ic.ItemCode</code></td>
+                            <td>@ic.ItemDescription</td>
+                            <td>@ic.SortOrder</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+}
+
+@code {
+    [Parameter] public string ReturnCode { get; set; } = "";
+
+    private bool _loading = true;
+    private bool _showXsd;
+    private string? _xsdContent;
+    private CachedTemplate? _template;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _template = await Cache.GetPublishedTemplate(ReturnCode);
+        }
+        catch { _template = null; }
+        _loading = false;
+    }
+
+    private async Task ToggleXsd()
+    {
+        _showXsd = !_showXsd;
+        if (_showXsd && _xsdContent == null)
+        {
+            _xsdContent = await XsdGenerator.GenerateSchemaXml(ReturnCode);
+        }
+    }
+}

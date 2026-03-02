@@ -1,0 +1,105 @@
+@page "/formulas"
+@using FC.Engine.Domain.Abstractions
+@using FC.Engine.Domain.Enums
+@inject ITemplateMetadataCache Cache
+
+<div class="page-header">
+    <h1>Intra-Sheet Formulas</h1>
+    <p>View and manage validation formulas across all templates</p>
+</div>
+
+<div class="card">
+    <div class="filter-bar">
+        <input class="form-control" placeholder="Search formulas..." @bind="_search" @bind:event="oninput" />
+        <select class="form-control" @bind="_typeFilter">
+            <option value="">All Types</option>
+            @foreach (var ft in Enum.GetValues<FormulaType>())
+            {
+                <option value="@ft">@ft</option>
+            }
+        </select>
+        <select class="form-control" @bind="_templateFilter">
+            <option value="">All Templates</option>
+            @foreach (var rc in _returnCodes)
+            {
+                <option value="@rc">@rc</option>
+            }
+        </select>
+    </div>
+
+    @if (_loading)
+    {
+        <div class="text-center"><span class="spinner"></span></div>
+    }
+    else
+    {
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Template</th>
+                    <th>Rule Code</th>
+                    <th>Type</th>
+                    <th>Target Field</th>
+                    <th>Operands</th>
+                    <th>Tolerance</th>
+                    <th>Severity</th>
+                    <th>Active</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var (rc, f) in FilteredFormulas.Take(200))
+                {
+                    <tr>
+                        <td><a href="/templates/@rc">@rc</a></td>
+                        <td><code>@f.RuleCode</code></td>
+                        <td><span class="badge badge-review">@f.FormulaType</span></td>
+                        <td><code>@f.TargetFieldName</code></td>
+                        <td style="max-width:250px;overflow:hidden;text-overflow:ellipsis;">
+                            @(f.FormulaType == FormulaType.Custom ? f.CustomExpression : f.OperandFields)
+                        </td>
+                        <td>@f.ToleranceAmount</td>
+                        <td>@f.Severity</td>
+                        <td>@(f.IsActive ? "Yes" : "No")</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+
+        <div class="mt-1 text-muted">
+            Showing @Math.Min(200, FilteredFormulas.Count()) of @_allFormulas.Count total formulas
+        </div>
+    }
+</div>
+
+@code {
+    private bool _loading = true;
+    private string _search = "";
+    private string _typeFilter = "";
+    private string _templateFilter = "";
+    private List<string> _returnCodes = new();
+    private List<(string ReturnCode, FC.Engine.Domain.Metadata.IntraSheetFormula Formula)> _allFormulas = new();
+
+    private IEnumerable<(string ReturnCode, FC.Engine.Domain.Metadata.IntraSheetFormula Formula)> FilteredFormulas =>
+        _allFormulas
+            .Where(x => string.IsNullOrEmpty(_search) ||
+                        x.Formula.RuleCode.Contains(_search, StringComparison.OrdinalIgnoreCase) ||
+                        x.Formula.TargetFieldName.Contains(_search, StringComparison.OrdinalIgnoreCase))
+            .Where(x => string.IsNullOrEmpty(_typeFilter) || x.Formula.FormulaType.ToString() == _typeFilter)
+            .Where(x => string.IsNullOrEmpty(_templateFilter) || x.ReturnCode == _templateFilter);
+
+    protected override async Task OnInitializedAsync()
+    {
+        var templates = await Cache.GetAllPublishedTemplates();
+        _returnCodes = templates.Select(t => t.ReturnCode).OrderBy(x => x).ToList();
+
+        foreach (var t in templates)
+        {
+            foreach (var f in t.CurrentVersion.IntraSheetFormulas)
+            {
+                _allFormulas.Add((t.ReturnCode, f));
+            }
+        }
+
+        _loading = false;
+    }
+}

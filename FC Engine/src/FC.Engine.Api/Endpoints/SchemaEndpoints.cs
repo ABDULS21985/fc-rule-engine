@@ -40,6 +40,27 @@ public static class SchemaEndpoints
         .WithName("SeedTemplates")
         .WithSummary("Seed templates from schema.sql file (run once)");
 
+        group.MapPost("/seed-formulas", async (
+            FormulaSeedService formulaSeedService,
+            CrossSheetRuleSeedService crossSheetSeedService,
+            IConfiguration config,
+            CancellationToken ct) =>
+        {
+            var schemaPath = config["Seeding:SchemaFilePath"] ?? "/app/schema.sql";
+            var formulaResult = await formulaSeedService.SeedFormulasFromSchema(schemaPath, "system", ct);
+            var crossSheetCount = await crossSheetSeedService.SeedCrossSheetRules("system", ct);
+
+            return Results.Ok(new
+            {
+                formulaResult.TotalFormulasCreated,
+                TemplatesWithFormulas = formulaResult.TemplatesWithFormulas.Count,
+                CrossSheetRulesCreated = crossSheetCount,
+                formulaResult.Errors
+            });
+        })
+        .WithName("SeedFormulas")
+        .WithSummary("Seed intra-sheet formulas and cross-sheet rules");
+
         group.MapGet("/published", async (
             ITemplateMetadataCache cache,
             CancellationToken ct) =>
