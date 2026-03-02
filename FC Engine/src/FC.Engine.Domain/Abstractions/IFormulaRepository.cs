@@ -13,6 +13,10 @@ public interface IFormulaRepository
     Task AddIntraSheetFormula(IntraSheetFormula formula, CancellationToken ct = default);
     Task AddCrossSheetRule(CrossSheetRule rule, CancellationToken ct = default);
     Task AddBusinessRule(BusinessRule rule, CancellationToken ct = default);
+    Task<IntraSheetFormula?> GetIntraSheetFormulaById(int id, CancellationToken ct = default);
     Task UpdateIntraSheetFormula(IntraSheetFormula formula, CancellationToken ct = default);
+    Task DeleteIntraSheetFormula(int id, CancellationToken ct = default);
     Task UpdateCrossSheetRule(CrossSheetRule rule, CancellationToken ct = default);
+    Task DeleteCrossSheetRule(int id, CancellationToken ct = default);
+    Task<IReadOnlyList<IntraSheetFormula>> GetAllIntraSheetFormulas(CancellationToken ct = default);
 }

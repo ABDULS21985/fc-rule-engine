@@ -122,4 +122,66 @@ public class FormulaService
         await _formulaRepo.AddBusinessRule(rule, ct);
         await _audit.Log("BusinessRule", rule.Id, "Created", null, rule, createdBy, ct);
     }
+
+    public async Task<IReadOnlyList<FormulaDto>> GetAllFormulas(CancellationToken ct = default)
+    {
+        var formulas = await _formulaRepo.GetAllIntraSheetFormulas(ct);
+        return formulas.Select(MapToDto).ToList();
+    }
+
+    public async Task UpdateIntraSheetFormula(
+        int formulaId, string ruleName, FormulaType formulaType,
+        string targetFieldName, string? targetLineCode, string operandFields,
+        string? customExpression, decimal toleranceAmount,
+        ValidationSeverity severity, string updatedBy,
+        CancellationToken ct = default)
+    {
+        var formula = await _formulaRepo.GetIntraSheetFormulaById(formulaId, ct)
+            ?? throw new InvalidOperationException($"Formula {formulaId} not found");
+
+        var oldState = MapToDto(formula);
+
+        formula.RuleName = ruleName;
+        formula.FormulaType = formulaType;
+        formula.TargetFieldName = targetFieldName;
+        formula.TargetLineCode = targetLineCode;
+        formula.OperandFields = operandFields;
+        formula.CustomExpression = customExpression;
+        formula.ToleranceAmount = toleranceAmount;
+        formula.Severity = severity;
+
+        await _formulaRepo.UpdateIntraSheetFormula(formula, ct);
+        await _audit.Log("IntraSheetFormula", formula.Id, "Updated", oldState, formula, updatedBy, ct);
+    }
+
+    public async Task DeleteIntraSheetFormula(int formulaId, string deletedBy, CancellationToken ct = default)
+    {
+        var formula = await _formulaRepo.GetIntraSheetFormulaById(formulaId, ct)
+            ?? throw new InvalidOperationException($"Formula {formulaId} not found");
+
+        await _formulaRepo.DeleteIntraSheetFormula(formulaId, ct);
+        await _audit.Log("IntraSheetFormula", formulaId, "Deleted", formula, null, deletedBy, ct);
+    }
+
+    public async Task DeleteCrossSheetRule(int ruleId, string deletedBy, CancellationToken ct = default)
+    {
+        await _formulaRepo.DeleteCrossSheetRule(ruleId, ct);
+        await _audit.Log("CrossSheetRule", ruleId, "Deleted", null, null, deletedBy, ct);
+    }
+
+    private static FormulaDto MapToDto(IntraSheetFormula f) => new()
+    {
+        Id = f.Id,
+        RuleCode = f.RuleCode,
+        RuleName = f.RuleName,
+        FormulaType = f.FormulaType.ToString(),
+        TargetFieldName = f.TargetFieldName,
+        TargetLineCode = f.TargetLineCode,
+        OperandFields = f.OperandFields,
+        CustomExpression = f.CustomExpression,
+        ToleranceAmount = f.ToleranceAmount,
+        TolerancePercent = f.TolerancePercent,
+        Severity = f.Severity.ToString(),
+        IsActive = f.IsActive
+    };
 }

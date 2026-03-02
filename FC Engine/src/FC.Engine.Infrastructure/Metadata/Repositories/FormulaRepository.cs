@@ -80,9 +80,43 @@ public class FormulaRepository : IFormulaRepository
         await _db.SaveChangesAsync(ct);
     }
 
+    public async Task<IntraSheetFormula?> GetIntraSheetFormulaById(int id, CancellationToken ct = default)
+    {
+        return await _db.IntraSheetFormulas.FindAsync(new object[] { id }, ct);
+    }
+
     public async Task UpdateCrossSheetRule(CrossSheetRule rule, CancellationToken ct = default)
     {
         _db.CrossSheetRules.Update(rule);
         await _db.SaveChangesAsync(ct);
+    }
+
+    public async Task DeleteIntraSheetFormula(int id, CancellationToken ct = default)
+    {
+        var formula = await _db.IntraSheetFormulas.FindAsync(new object[] { id }, ct);
+        if (formula != null)
+        {
+            formula.IsActive = false;
+            await _db.SaveChangesAsync(ct);
+        }
+    }
+
+    public async Task DeleteCrossSheetRule(int id, CancellationToken ct = default)
+    {
+        var rule = await _db.CrossSheetRules.FindAsync(new object[] { id }, ct);
+        if (rule != null)
+        {
+            rule.IsActive = false;
+            await _db.SaveChangesAsync(ct);
+        }
+    }
+
+    public async Task<IReadOnlyList<IntraSheetFormula>> GetAllIntraSheetFormulas(CancellationToken ct = default)
+    {
+        return await _db.IntraSheetFormulas
+            .Where(f => f.IsActive)
+            .OrderBy(f => f.TemplateVersionId)
+            .ThenBy(f => f.SortOrder)
+            .ToListAsync(ct);
     }
 }
