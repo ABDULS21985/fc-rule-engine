@@ -246,15 +246,13 @@
             _createRequest.StructuralCategory = _createCategory;
             _createRequest.CreatedBy = "system";
             var result = await TemplateService.CreateTemplate(_createRequest);
-            _message = $"Template '{result.ReturnCode}' created! Navigate to it to add fields.";
-            _messageIsError = false;
+            Toast.Success($"Template '{result.ReturnCode}' created successfully.", "Template Created");
             _showCreateForm = false;
             Nav.NavigateTo($"/templates/{result.ReturnCode}");
         }
         catch (Exception ex)
         {
-            _message = ex.Message;
-            _messageIsError = true;
+            Toast.Error(ex.Message, "Create Failed");
         }
     }
 

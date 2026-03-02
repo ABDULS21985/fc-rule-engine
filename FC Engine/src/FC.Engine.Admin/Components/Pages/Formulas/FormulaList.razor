@@ -9,6 +9,8 @@
 @inject ITemplateMetadataCache Cache
 @inject FormulaService FormulaService
 @inject ITemplateRepository TemplateRepo
+@inject ToastService Toast
+@inject DialogService Dialog
 
 <div class="list-page">
     <div class="list-page-header">
@@ -23,11 +25,6 @@
             <p>View and manage validation formulas across all templates. Formulas define how computed fields are validated.</p>
         </div>
     </div>
-
-    @if (!string.IsNullOrEmpty(_message))
-    {
-        <div class="alert @(_messageIsError ? "alert-error" : "alert-success")">@_message</div>
-    }
 
     <div class="list-card">
         <div class="list-toolbar">
@@ -281,8 +278,6 @@
 @code {
     private bool _loading = true;
     private string _search = "", _typeFilter = "", _templateFilter = "";
-    private string? _message;
-    private bool _messageIsError;
     private List<string> _returnCodes = new();
     private List<(string ReturnCode, IntraSheetFormula Formula)> _allFormulas = new();
     private int _currentPage = 1;
@@ -338,7 +333,6 @@
     {
         ResetForm();
         _showAddForm = true;
-        _message = null;
     }
 
     private void CancelForm()
@@ -392,7 +386,6 @@
         _addExpression = formula.CustomExpression ?? "";
         _addTolerance = formula.ToleranceAmount;
         _addSeverity = formula.Severity;
-        _message = null;
 
         try
         {
@@ -420,8 +413,7 @@
                 _addFormulaType == FormulaType.Custom ? _addExpression : null,
                 _addTolerance, _addSeverity, "admin");
 
-            _message = $"Formula '{_addRuleCode}' added successfully.";
-            _messageIsError = false;
+            Toast.Success($"Formula '{_addRuleCode}' added successfully.", "Formula Added");
             _showAddForm = false;
             _editFormulaId = null;
 
@@ -430,8 +422,7 @@
         }
         catch (Exception ex)
         {
-            _message = ex.Message;
-            _messageIsError = true;
+            Toast.Error(ex.Message, "Add Failed");
         }
     }
 
@@ -450,8 +441,7 @@
                 _addFormulaType == FormulaType.Custom ? _addExpression : null,
                 _addTolerance, _addSeverity, "admin");
 
-            _message = $"Formula '{_addRuleCode}' updated successfully.";
-            _messageIsError = false;
+            Toast.Success($"Formula '{_addRuleCode}' updated successfully.", "Formula Updated");
             _showAddForm = false;
             _editFormulaId = null;
 
@@ -460,8 +450,7 @@
         }
         catch (Exception ex)
         {
-            _message = ex.Message;
-            _messageIsError = true;
+            Toast.Error(ex.Message, "Update Failed");
         }
     }
 
