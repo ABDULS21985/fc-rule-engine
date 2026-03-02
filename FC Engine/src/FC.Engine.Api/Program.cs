@@ -1,6 +1,8 @@
 using FC.Engine.Api.Endpoints;
+using FC.Engine.Api.Middleware;
 using FC.Engine.Application.Services;
 using FC.Engine.Infrastructure;
+using Microsoft.OpenApi.Models;
 using Serilog;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -29,6 +31,23 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
 {
     options.SwaggerDoc("v1", new() { Title = "FC Engine API", Version = "v1" });
+    options.AddSecurityDefinition("ApiKey", new OpenApiSecurityScheme
+    {
+        In = ParameterLocation.Header,
+        Name = "X-Api-Key",
+        Type = SecuritySchemeType.ApiKey,
+        Description = "API key for authentication"
+    });
+    options.AddSecurityRequirement(new OpenApiSecurityRequirement
+    {
+        {
+            new OpenApiSecurityScheme
+            {
+                Reference = new OpenApiReference { Type = ReferenceType.SecurityScheme, Id = "ApiKey" }
+            },
+            Array.Empty<string>()
+        }
+    });
 });
 
 var app = builder.Build();
@@ -41,6 +60,12 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseSerilogRequestLogging();
+
+// API key authentication (skips /health and /swagger)
+if (!string.IsNullOrEmpty(builder.Configuration["ApiKey"]))
+{
+    app.UseApiKeyAuth();
+}
 
 // Map endpoints
 app.MapSubmissionEndpoints();

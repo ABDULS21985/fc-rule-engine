@@ -23,9 +23,13 @@ public static class DependencyInjection
         var connectionString = configuration.GetConnectionString("FcEngine")
             ?? throw new InvalidOperationException("Connection string 'FcEngine' not found");
 
-        // EF Core for metadata + operational tables
-        services.AddDbContext<MetadataDbContext>(options =>
-            options.UseSqlServer(connectionString));
+        // EF Core for metadata + operational tables (pooled for performance)
+        services.AddDbContextPool<MetadataDbContext>(options =>
+            options.UseSqlServer(connectionString, sql =>
+            {
+                sql.CommandTimeout(30);
+                sql.EnableRetryOnFailure(3);
+            }));
 
         // Dapper connection for dynamic data tables
         services.AddScoped<IDbConnection>(_ => new SqlConnection(connectionString));
@@ -51,6 +55,7 @@ public static class DependencyInjection
 
         // Caching — singleton so the in-memory ConcurrentDictionary lives across requests
         services.AddSingleton<ITemplateMetadataCache, TemplateMetadataCache>();
+        services.AddHostedService<CacheWarmupService>();
 
         // Audit
         services.AddScoped<IAuditLogger, AuditLogger>();

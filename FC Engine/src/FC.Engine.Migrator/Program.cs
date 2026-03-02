@@ -1,4 +1,6 @@
 using FC.Engine.Application.Services;
+using FC.Engine.Domain.Abstractions;
+using FC.Engine.Domain.Enums;
 using FC.Engine.Infrastructure;
 using FC.Engine.Infrastructure.Metadata;
 using Microsoft.EntityFrameworkCore;
@@ -12,6 +14,7 @@ builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddScoped<SeedService>();
 builder.Services.AddScoped<FormulaSeedService>();
 builder.Services.AddScoped<CrossSheetRuleSeedService>();
+builder.Services.AddScoped<AuthService>();
 
 var host = builder.Build();
 var logger = host.Services.GetRequiredService<ILogger<Program>>();
@@ -73,6 +76,19 @@ try
         var crossSheetSeedService = scope.ServiceProvider.GetRequiredService<CrossSheetRuleSeedService>();
         var crossSheetCount = await crossSheetSeedService.SeedCrossSheetRules("migrator");
         logger.LogInformation("Cross-sheet rules seeded: {Count}", crossSheetCount);
+    }
+
+    // Step 6: Seed default admin user (if no users exist)
+    var userRepo = scope.ServiceProvider.GetRequiredService<IPortalUserRepository>();
+    var existingUsers = await userRepo.GetAll();
+    if (existingUsers.Count == 0)
+    {
+        logger.LogInformation("Seeding default admin user...");
+        var authService = scope.ServiceProvider.GetRequiredService<AuthService>();
+        var defaultPassword = builder.Configuration["DefaultAdmin:Password"] ?? "Admin@123";
+        await authService.CreateUser("admin", "System Administrator", "admin@fcengine.local",
+            defaultPassword, PortalRole.Admin);
+        logger.LogInformation("Default admin user created (username: admin)");
     }
 
     logger.LogInformation("FC Engine Migrator completed successfully");
