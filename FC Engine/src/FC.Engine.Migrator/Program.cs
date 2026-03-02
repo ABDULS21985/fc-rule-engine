@@ -38,11 +38,50 @@ try
     {
         logger.LogInformation("Executing metadata schema script: {Path}", schemaScriptPath);
         var schemaSql = await File.ReadAllTextAsync(schemaScriptPath);
-        await db.Database.ExecuteSqlRawAsync(schemaSql);
+        // Split by GO batch separators (not supported by ExecuteSqlRawAsync)
+        var batches = System.Text.RegularExpressions.Regex
+            .Split(schemaSql, @"^\s*GO\s*$", System.Text.RegularExpressions.RegexOptions.Multiline | System.Text.RegularExpressions.RegexOptions.IgnoreCase)
+            .Where(b => !string.IsNullOrWhiteSpace(b));
+        foreach (var batch in batches)
+        {
+            try
+            {
+                await db.Database.ExecuteSqlRawAsync(batch);
+            }
+            catch (Microsoft.Data.SqlClient.SqlException ex) when (ex.Number is 2714 or 1913 or 1779 or 2601 or 2627)
+            {
+                // 2714=Object already exists, 1913=Index already exists, 1779=Table already has PK
+                // 2601/2627=Duplicate key (for INSERT of seed data)
+                logger.LogWarning("Schema object already exists, skipping: {Message}", ex.Message);
+            }
+        }
         logger.LogInformation("Metadata schema script executed successfully");
     }
 
-    // Step 3: Seed templates from schema.sql (if configured)
+    // Step 3: Seed reference data (institutions, return periods)
+    var referenceDataPath = builder.Configuration["Seeding:ReferenceDataPath"];
+    if (!string.IsNullOrEmpty(referenceDataPath) && File.Exists(referenceDataPath))
+    {
+        logger.LogInformation("Seeding reference data from: {Path}", referenceDataPath);
+        var refSql = await File.ReadAllTextAsync(referenceDataPath);
+        var refBatches = System.Text.RegularExpressions.Regex
+            .Split(refSql, @"^\s*GO\s*$", System.Text.RegularExpressions.RegexOptions.Multiline | System.Text.RegularExpressions.RegexOptions.IgnoreCase)
+            .Where(b => !string.IsNullOrWhiteSpace(b));
+        foreach (var batch in refBatches)
+        {
+            try
+            {
+                await db.Database.ExecuteSqlRawAsync(batch);
+            }
+            catch (Microsoft.Data.SqlClient.SqlException ex) when (ex.Number is 2601 or 2627)
+            {
+                logger.LogWarning("Reference data already exists, skipping: {Message}", ex.Message);
+            }
+        }
+        logger.LogInformation("Reference data seeded successfully");
+    }
+
+    // Step 4: Seed templates from schema.sql (if configured)
     var seedSchemaPath = builder.Configuration["Seeding:SchemaFilePath"];
     var autoSeed = builder.Configuration.GetValue<bool>("Seeding:AutoSeed");
 

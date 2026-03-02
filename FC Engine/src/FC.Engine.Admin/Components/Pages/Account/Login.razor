@@ -1,12 +1,5 @@
 @page "/login"
 @layout FC.Engine.Admin.Components.Layout.LoginLayout
-@using FC.Engine.Application.Services
-@using System.Security.Claims
-@using Microsoft.AspNetCore.Authentication
-@using Microsoft.AspNetCore.Authentication.Cookies
-@inject AuthService AuthService
-@inject NavigationManager Nav
-@inject IHttpContextAccessor HttpContextAccessor
 
 <div class="login-container">
     <div class="login-card">
@@ -15,85 +8,30 @@
             <span>Admin Portal</span>
         </div>
 
-        @if (!string.IsNullOrEmpty(_error))
+        @if (_hasError)
         {
-            <div class="alert alert-error">@_error</div>
+            <div class="alert alert-error">Invalid username or password</div>
         }
 
-        <EditForm Model="_model" OnValidSubmit="HandleLogin" FormName="login">
+        <form method="post" action="/account/login">
             <div class="form-group">
                 <label for="username">Username</label>
-                <InputText id="username" @bind-Value="_model.Username" class="form-control" placeholder="Enter username" />
+                <input id="username" name="username" class="form-control" placeholder="Enter username" required />
             </div>
             <div class="form-group">
                 <label for="password">Password</label>
-                <InputText id="password" @bind-Value="_model.Password" class="form-control" type="password" placeholder="Enter password" />
+                <input id="password" name="password" class="form-control" type="password" placeholder="Enter password" required />
             </div>
-            <button type="submit" class="btn btn-primary btn-block" disabled="@_loading">
-                @if (_loading) { <span>Signing in...</span> } else { <span>Sign In</span> }
+            <button type="submit" class="btn btn-primary btn-block">
+                <span>Sign In</span>
             </button>
-        </EditForm>
+        </form>
     </div>
 </div>
 
 @code {
-    [SupplyParameterFromForm]
-    private LoginModel _model { get; set; } = new();
-    private string? _error;
-    private bool _loading;
+    [SupplyParameterFromQuery(Name = "error")]
+    private string? Error { get; set; }
 
-    private async Task HandleLogin()
-    {
-        _error = null;
-        _loading = true;
-
-        try
-        {
-            var user = await AuthService.ValidateLogin(_model.Username, _model.Password);
-            if (user is null)
-            {
-                _error = "Invalid username or password";
-                _loading = false;
-                return;
-            }
-
-            var claims = new List<Claim>
-            {
-                new(ClaimTypes.NameIdentifier, user.Id.ToString()),
-                new(ClaimTypes.Name, user.Username),
-                new("DisplayName", user.DisplayName),
-                new(ClaimTypes.Email, user.Email),
-                new(ClaimTypes.Role, user.Role.ToString())
-            };
-
-            var identity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
-            var principal = new ClaimsPrincipal(identity);
-
-            var httpContext = HttpContextAccessor.HttpContext;
-            if (httpContext is not null)
-            {
-                await httpContext.SignInAsync(
-                    CookieAuthenticationDefaults.AuthenticationScheme,
-                    principal,
-                    new AuthenticationProperties
-                    {
-                        IsPersistent = true,
-                        ExpiresUtc = DateTimeOffset.UtcNow.AddHours(8)
-                    });
-            }
-
-            Nav.NavigateTo("/", forceLoad: true);
-        }
-        catch (Exception)
-        {
-            _error = "An error occurred during sign in";
-            _loading = false;
-        }
-    }
-
-    private sealed class LoginModel
-    {
-        public string Username { get; set; } = string.Empty;
-        public string Password { get; set; } = string.Empty;
-    }
+    private bool _hasError => !string.IsNullOrEmpty(Error);
 }

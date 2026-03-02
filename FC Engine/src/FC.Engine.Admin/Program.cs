@@ -1,5 +1,7 @@
+using System.Security.Claims;
 using FC.Engine.Application.Services;
 using FC.Engine.Infrastructure;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Serilog;
 
@@ -66,6 +68,50 @@ app.UseStaticFiles();
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseAntiforgery();
+
+// Login endpoint — handles cookie auth outside of Blazor's interactive (SignalR) pipeline
+app.MapPost("/account/login", async (HttpContext context, AuthService authService) =>
+{
+    var form = await context.Request.ReadFormAsync();
+    var username = form["username"].ToString();
+    var password = form["password"].ToString();
+
+    var user = await authService.ValidateLogin(username, password);
+    if (user is null)
+    {
+        context.Response.Redirect("/login?error=invalid");
+        return;
+    }
+
+    var claims = new List<Claim>
+    {
+        new(ClaimTypes.NameIdentifier, user.Id.ToString()),
+        new(ClaimTypes.Name, user.Username),
+        new("DisplayName", user.DisplayName),
+        new(ClaimTypes.Email, user.Email),
+        new(ClaimTypes.Role, user.Role.ToString())
+    };
+
+    var identity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
+    var principal = new ClaimsPrincipal(identity);
+
+    await context.SignInAsync(
+        CookieAuthenticationDefaults.AuthenticationScheme,
+        principal,
+        new AuthenticationProperties
+        {
+            IsPersistent = true,
+            ExpiresUtc = DateTimeOffset.UtcNow.AddHours(8)
+        });
+
+    context.Response.Redirect("/");
+});
+
+app.MapGet("/account/logout", async (HttpContext context) =>
+{
+    await context.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+    context.Response.Redirect("/login");
+});
 
 app.MapRazorComponents<FC.Engine.Admin.Components.App>()
     .AddInteractiveServerRenderMode();
