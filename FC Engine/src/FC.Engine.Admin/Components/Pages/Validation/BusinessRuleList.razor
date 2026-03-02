@@ -7,6 +7,7 @@
 @using FC.Engine.Application.Services
 @inject IFormulaRepository FormulaRepo
 @inject FormulaService FormulaService
+@inject ToastService Toast
 
 <div class="list-page">
     <div class="list-page-header">
@@ -21,11 +22,6 @@
             <p>Expression-based validation rules with template applicability</p>
         </div>
     </div>
-
-    @if (!string.IsNullOrEmpty(_message))
-    {
-        <div class="alert @(_messageIsError ? "alert-error" : "alert-success")">@_message</div>
-    }
 
     <div class="list-card">
         <div class="list-toolbar">
@@ -188,8 +184,6 @@
 @code {
     private bool _loading = true;
     private IReadOnlyList<BusinessRule> _rules = Array.Empty<BusinessRule>();
-    private string? _message;
-    private bool _messageIsError;
     private string _search = "", _typeFilter = "", _severityFilter = "";
 
     // Add form
@@ -224,15 +218,13 @@
                 string.IsNullOrWhiteSpace(_addAppliesToTemplates) ? null : _addAppliesToTemplates,
                 _addSeverity, "system");
 
-            _message = $"Business rule '{_addCode}' created.";
-            _messageIsError = false;
+            Toast.Success($"Business rule '{_addCode}' created.", "Rule Created");
             _showAddForm = false;
             _rules = await FormulaRepo.GetActiveBusinessRules();
         }
         catch (Exception ex)
         {
-            _message = ex.Message;
-            _messageIsError = true;
+            Toast.Error(ex.Message, "Create Failed");
         }
     }
 }

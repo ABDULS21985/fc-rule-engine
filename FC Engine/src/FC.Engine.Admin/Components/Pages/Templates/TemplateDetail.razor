@@ -14,6 +14,8 @@
 @inject TemplateVersioningService VersioningService
 @inject IFormulaRepository FormulaRepo
 @inject NavigationManager Nav
+@inject ToastService Toast
+@inject DialogService Dialog
 
 <div class="detail-page">
 
@@ -39,19 +41,9 @@
     }
     else
     {
-        @if (!string.IsNullOrEmpty(_message))
+        @if (!string.IsNullOrEmpty(_errorMessage))
         {
-            <div class="detail-alert @(_messageIsError ? "detail-alert-error" : "detail-alert-success")">
-                @if (_messageIsError)
-                {
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
-                }
-                else
-                {
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16" aria-hidden="true"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-                }
-                @_message
-            </div>
+            <AppAlert Variant="AppAlert.AlertVariant.Error" Message="@_errorMessage" Dismissible="true" OnDismiss="() => _errorMessage = null" />
         }
 
         <!-- Hero Header -->
@@ -702,8 +694,7 @@
     private bool _loading = true;
     private TemplateDetailDto? _detail;
     private TemplateVersionDto? _activeVersion;
-    private string? _message;
-    private bool _messageIsError;
+    private string? _errorMessage;
     private string _activeTab = "overview";
 
     // Formulas
@@ -774,8 +765,7 @@
         try
         {
             await VersioningService.CreateNewDraftVersion(_detail!.Id, CurrentUser);
-            _message = "Draft version created. You can now add/modify fields.";
-            _messageIsError = false;
+            Toast.Success("Draft version created. You can now add/modify fields.", "Version Created");
             await LoadTemplate();
         }
         catch (Exception ex) { SetError(ex.Message); }

@@ -456,19 +456,20 @@
 
     private async Task DeleteFormula(IntraSheetFormula formula)
     {
+        var confirmed = await Dialog.ConfirmDelete("Formula");
+        if (!confirmed) return;
+
         try
         {
             await FormulaService.DeleteIntraSheetFormula(formula.Id, "admin");
-            _message = $"Formula '{formula.RuleCode}' deleted.";
-            _messageIsError = false;
+            Toast.Success($"Formula '{formula.RuleCode}' deleted.", "Formula Deleted");
 
             Cache.InvalidateAll();
             await LoadFormulas();
         }
         catch (Exception ex)
         {
-            _message = ex.Message;
-            _messageIsError = true;
+            Toast.Error(ex.Message, "Delete Failed");
         }
     }
 

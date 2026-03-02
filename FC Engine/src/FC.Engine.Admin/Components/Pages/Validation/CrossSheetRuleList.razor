@@ -8,6 +8,7 @@
 @inject IFormulaRepository FormulaRepo
 @inject FormulaService FormulaService
 @inject ITemplateMetadataCache Cache
+@inject ToastService Toast
 
 <div class="list-page">
     <div class="list-page-header">
@@ -22,11 +23,6 @@
             <p>Rules that validate relationships between different return templates</p>
         </div>
     </div>
-
-    @if (!string.IsNullOrEmpty(_message))
-    {
-        <div class="alert @(_messageIsError ? "alert-error" : "alert-success")">@_message</div>
-    }
 
     <div class="list-card">
         <div class="list-toolbar">
@@ -233,8 +229,6 @@
 @code {
     private bool _loading = true;
     private IReadOnlyList<CrossSheetRule> _rules = Array.Empty<CrossSheetRule>();
-    private string? _message;
-    private bool _messageIsError;
     private string _search = "", _severityFilter = "", _statusFilter = "";
 
     // Add form
@@ -303,15 +297,13 @@
                 _addCode, _addName, _addDescription,
                 operands, expression, _addSeverity, "system");
 
-            _message = $"Rule '{_addCode}' created successfully.";
-            _messageIsError = false;
+            Toast.Success($"Rule '{_addCode}' created successfully.", "Rule Created");
             _showAddForm = false;
             _rules = await FormulaRepo.GetAllActiveCrossSheetRules();
         }
         catch (Exception ex)
         {
-            _message = ex.Message;
-            _messageIsError = true;
+            Toast.Error(ex.Message, "Create Failed");
         }
     }
 
