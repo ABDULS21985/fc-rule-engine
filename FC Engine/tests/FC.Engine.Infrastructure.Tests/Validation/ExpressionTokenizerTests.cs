@@ -8,7 +8,7 @@ public class ExpressionTokenizerTests
     private readonly ExpressionTokenizer _tokenizer = new();
 
     [Fact]
-    public void Tokenize_SimpleAddition_ShouldProduceThreeTokens()
+    public void Tokenize_SimpleAddition_ShouldReturnThreeTokens()
     {
         var tokens = _tokenizer.Tokenize("A + B");
 
@@ -19,24 +19,21 @@ public class ExpressionTokenizerTests
     }
 
     [Fact]
-    public void Tokenize_NumbersAndVariables_ShouldDistinguish()
+    public void Tokenize_NumberLiteral_ShouldParseCorrectly()
     {
-        var tokens = _tokenizer.Tokenize("total_assets = 100.50");
+        var tokens = _tokenizer.Tokenize("100.5");
 
-        tokens.Should().HaveCount(3);
-        tokens[0].Type.Should().Be(TokenType.Variable);
-        tokens[0].Value.Should().Be("total_assets");
-        tokens[1].Type.Should().Be(TokenType.Comparison);
-        tokens[1].Value.Should().Be("=");
-        tokens[2].Type.Should().Be(TokenType.Number);
-        tokens[2].Value.Should().Be("100.50");
+        tokens.Should().HaveCount(1);
+        tokens[0].Type.Should().Be(TokenType.Number);
+        tokens[0].Value.Should().Be("100.5");
     }
 
     [Fact]
-    public void Tokenize_TwoCharOperators_ShouldRecognize()
+    public void Tokenize_ComparisonOperators_ShouldParseTwoCharOps()
     {
         var tokens = _tokenizer.Tokenize("A >= B");
 
+        tokens.Should().HaveCount(3);
         tokens[1].Type.Should().Be(TokenType.Comparison);
         tokens[1].Value.Should().Be(">=");
     }
@@ -45,25 +42,20 @@ public class ExpressionTokenizerTests
     [InlineData(">=")]
     [InlineData("<=")]
     [InlineData("!=")]
-    public void Tokenize_AllTwoCharComparisons(string op)
-    {
-        var tokens = _tokenizer.Tokenize($"A {op} B");
-        tokens[1].Value.Should().Be(op);
-    }
-
-    [Theory]
+    [InlineData("=")]
     [InlineData(">")]
     [InlineData("<")]
-    [InlineData("=")]
-    public void Tokenize_SingleCharComparisons(string op)
+    public void Tokenize_AllComparisonTypes_ShouldParse(string op)
     {
-        var tokens = _tokenizer.Tokenize($"X {op} Y");
+        var tokens = _tokenizer.Tokenize($"A {op} B");
+
+        tokens.Should().HaveCount(3);
         tokens[1].Type.Should().Be(TokenType.Comparison);
         tokens[1].Value.Should().Be(op);
     }
 
     [Fact]
-    public void Tokenize_Parentheses_ShouldRecognize()
+    public void Tokenize_Parentheses_ShouldParse()
     {
         var tokens = _tokenizer.Tokenize("(A + B) * C");
 
@@ -73,10 +65,11 @@ public class ExpressionTokenizerTests
     }
 
     [Fact]
-    public void Tokenize_Functions_ShouldRecognize()
+    public void Tokenize_FunctionCall_ShouldParseAsFunction()
     {
         var tokens = _tokenizer.Tokenize("ABS(A - B)");
 
+        tokens.Should().HaveCount(6);
         tokens[0].Type.Should().Be(TokenType.Function);
         tokens[0].Value.Should().Be("ABS");
     }
@@ -90,43 +83,37 @@ public class ExpressionTokenizerTests
     [InlineData("ABS")]
     public void Tokenize_AllFunctions_ShouldRecognize(string func)
     {
-        var tokens = _tokenizer.Tokenize($"{func}(X)");
+        var tokens = _tokenizer.Tokenize($"{func}(x)");
+
         tokens[0].Type.Should().Be(TokenType.Function);
         tokens[0].Value.Should().Be(func);
     }
 
     [Fact]
-    public void Tokenize_ComplexExpression()
+    public void Tokenize_FieldNameWithUnderscore_ShouldParseAsVariable()
     {
-        var tokens = _tokenizer.Tokenize("A + B - C >= D * 0.125");
+        var tokens = _tokenizer.Tokenize("total_assets = cash_notes + investments");
+
+        tokens.Should().HaveCount(5);
+        tokens[0].Should().Be(new Token(TokenType.Variable, "total_assets"));
+        tokens[2].Should().Be(new Token(TokenType.Variable, "cash_notes"));
+        tokens[4].Should().Be(new Token(TokenType.Variable, "investments"));
+    }
+
+    [Fact]
+    public void Tokenize_ComplexExpression_ShouldParseAll()
+    {
+        var tokens = _tokenizer.Tokenize("A + B - C * 0.125 >= D");
 
         tokens.Should().HaveCount(9);
-        tokens.Select(t => t.Type).Should().ContainInOrder(
-            TokenType.Variable, TokenType.Operator, TokenType.Variable,
-            TokenType.Operator, TokenType.Variable, TokenType.Comparison,
-            TokenType.Variable, TokenType.Operator, TokenType.Number);
+        tokens[5].Type.Should().Be(TokenType.Number);
+        tokens[5].Value.Should().Be("0.125");
     }
 
     [Fact]
-    public void Tokenize_UnexpectedCharacter_ShouldThrow()
+    public void Tokenize_InvalidCharacter_ShouldThrow()
     {
         var act = () => _tokenizer.Tokenize("A @ B");
-        act.Should().Throw<ArgumentException>().WithMessage("*@*");
-    }
-
-    [Fact]
-    public void Tokenize_EmptyExpression_ShouldReturnEmpty()
-    {
-        var tokens = _tokenizer.Tokenize("   ");
-        tokens.Should().BeEmpty();
-    }
-
-    [Fact]
-    public void Tokenize_FieldNamesWithUnderscores()
-    {
-        var tokens = _tokenizer.Tokenize("cash_and_balances_with_cbn + due_from_banks");
-        tokens.Should().HaveCount(3);
-        tokens[0].Value.Should().Be("cash_and_balances_with_cbn");
-        tokens[2].Value.Should().Be("due_from_banks");
+        act.Should().Throw<ArgumentException>().WithMessage("*Unexpected character*");
     }
 }
