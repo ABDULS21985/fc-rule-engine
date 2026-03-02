@@ -1,7 +1,6 @@
 using FC.Engine.Domain.Abstractions;
 using FC.Engine.Domain.Enums;
 using FC.Engine.Domain.Metadata;
-using FC.Engine.Infrastructure.DynamicSchema;
 
 namespace FC.Engine.Application.Services;
 
@@ -9,7 +8,7 @@ public class TemplateVersioningService
 {
     private readonly ITemplateRepository _templateRepo;
     private readonly IDdlEngine _ddlEngine;
-    private readonly DdlMigrationExecutor _migrationExecutor;
+    private readonly IDdlMigrationExecutor _migrationExecutor;
     private readonly ITemplateMetadataCache _cache;
     private readonly IXsdGenerator _xsdGenerator;
     private readonly IAuditLogger _audit;
@@ -17,7 +16,7 @@ public class TemplateVersioningService
     public TemplateVersioningService(
         ITemplateRepository templateRepo,
         IDdlEngine ddlEngine,
-        DdlMigrationExecutor migrationExecutor,
+        IDdlMigrationExecutor migrationExecutor,
         ITemplateMetadataCache cache,
         IXsdGenerator xsdGenerator,
         IAuditLogger audit)
@@ -109,15 +108,16 @@ public class TemplateVersioningService
         }
 
         // Execute DDL
-        await _migrationExecutor.Execute(
+        var migrationResult = await _migrationExecutor.Execute(
             templateId,
             previousVersion?.VersionNumber,
             version.VersionNumber,
-            migrationType,
-            ddl.ForwardSql,
-            ddl.RollbackSql,
+            ddl,
             approvedBy,
             ct);
+
+        if (!migrationResult.Success)
+            throw new InvalidOperationException($"DDL execution failed: {migrationResult.Error}");
 
         // Store DDL on version
         version.SetDdlScript(ddl.ForwardSql, ddl.RollbackSql);

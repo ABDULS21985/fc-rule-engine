@@ -2,7 +2,6 @@ using System.Text.RegularExpressions;
 using FC.Engine.Domain.Abstractions;
 using FC.Engine.Domain.Enums;
 using FC.Engine.Domain.Metadata;
-using FC.Engine.Infrastructure.DynamicSchema;
 
 namespace FC.Engine.Application.Services;
 
@@ -13,8 +12,6 @@ namespace FC.Engine.Application.Services;
 public class SeedService
 {
     private readonly ITemplateRepository _templateRepo;
-    private readonly IDdlEngine _ddlEngine;
-    private readonly SqlTypeMapper _sqlTypeMapper;
 
     // Tables to skip (not return templates)
     private static readonly HashSet<string> SkipTables = new(StringComparer.OrdinalIgnoreCase)
@@ -30,14 +27,9 @@ public class SeedService
         "id", "submission_id", "created_at", "updated_at", "serial_no", "item_code"
     };
 
-    public SeedService(
-        ITemplateRepository templateRepo,
-        IDdlEngine ddlEngine,
-        SqlTypeMapper sqlTypeMapper)
+    public SeedService(ITemplateRepository templateRepo)
     {
         _templateRepo = templateRepo;
-        _ddlEngine = ddlEngine;
-        _sqlTypeMapper = sqlTypeMapper;
     }
 
     public async Task<SeedResult> SeedFromSchema(string schemaFilePath, string performedBy, CancellationToken ct = default)

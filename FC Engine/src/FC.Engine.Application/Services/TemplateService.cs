@@ -2,7 +2,6 @@ using FC.Engine.Application.DTOs;
 using FC.Engine.Domain.Abstractions;
 using FC.Engine.Domain.Enums;
 using FC.Engine.Domain.Metadata;
-using FC.Engine.Infrastructure.DynamicSchema;
 
 namespace FC.Engine.Application.Services;
 
@@ -11,15 +10,18 @@ public class TemplateService
     private readonly ITemplateRepository _templateRepo;
     private readonly IAuditLogger _audit;
     private readonly ITemplateMetadataCache _cache;
+    private readonly ISqlTypeMapper _sqlTypeMapper;
 
     public TemplateService(
         ITemplateRepository templateRepo,
         IAuditLogger audit,
-        ITemplateMetadataCache cache)
+        ITemplateMetadataCache cache,
+        ISqlTypeMapper sqlTypeMapper)
     {
         _templateRepo = templateRepo;
         _audit = audit;
         _cache = cache;
+        _sqlTypeMapper = sqlTypeMapper;
     }
 
     public async Task<TemplateDto> CreateTemplate(CreateTemplateRequest request, CancellationToken ct = default)
@@ -27,7 +29,7 @@ public class TemplateService
         if (await _templateRepo.ExistsByReturnCode(request.ReturnCode, ct))
             throw new InvalidOperationException($"Template '{request.ReturnCode}' already exists");
 
-        var returnCode = new Domain.ValueObjects.ReturnCode(request.ReturnCode);
+        var returnCode = Domain.ValueObjects.ReturnCode.Parse(request.ReturnCode);
 
         var template = new ReturnTemplate
         {
@@ -76,8 +78,6 @@ public class TemplateService
         if (version.Status != TemplateStatus.Draft)
             throw new InvalidOperationException("Fields can only be added to Draft versions");
 
-        var sqlMapper = new SqlTypeMapper();
-
         var field = new TemplateField
         {
             FieldName = request.FieldName,
@@ -87,7 +87,7 @@ public class TemplateService
             SectionName = request.SectionName,
             FieldOrder = request.FieldOrder,
             DataType = request.DataType,
-            SqlType = sqlMapper.MapToSqlType(request.DataType),
+            SqlType = _sqlTypeMapper.MapToSqlType(request.DataType),
             IsRequired = request.IsRequired,
             IsKeyField = request.IsKeyField,
             MinValue = request.MinValue,
@@ -175,7 +175,7 @@ public class TemplateService
             {
                 Id = ic.Id,
                 ItemCode = ic.ItemCode,
-                ItemName = ic.ItemName,
+                ItemName = ic.ItemDescription,
                 SortOrder = ic.SortOrder
             }).ToList()
         }).ToList();

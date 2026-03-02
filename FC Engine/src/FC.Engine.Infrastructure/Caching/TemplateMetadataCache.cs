@@ -3,6 +3,7 @@ using FC.Engine.Domain.Abstractions;
 using FC.Engine.Domain.Enums;
 using FC.Engine.Domain.Metadata;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using FC.Engine.Infrastructure.Metadata;
 
 namespace FC.Engine.Infrastructure.Caching;

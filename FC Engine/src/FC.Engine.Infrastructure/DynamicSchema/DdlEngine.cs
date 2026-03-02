@@ -7,9 +7,9 @@ namespace FC.Engine.Infrastructure.DynamicSchema;
 
 public partial class DdlEngine : IDdlEngine
 {
-    private readonly SqlTypeMapper _typeMapper;
+    private readonly ISqlTypeMapper _typeMapper;
 
-    public DdlEngine(SqlTypeMapper typeMapper)
+    public DdlEngine(ISqlTypeMapper typeMapper)
     {
         _typeMapper = typeMapper;
     }
@@ -26,7 +26,7 @@ public partial class DdlEngine : IDdlEngine
 
         foreach (var field in fields.OrderBy(f => f.FieldOrder))
         {
-            var sqlType = _typeMapper.ToSqlType(field.DataType, field.SqlType);
+            var sqlType = _typeMapper.MapToSqlType(field.DataType, field.SqlType);
             var nullable = field.IsRequired ? " NOT NULL" : "";
             var defaultVal = !string.IsNullOrEmpty(field.DefaultValue)
                 ? $" DEFAULT {field.DefaultValue}" : "";
@@ -60,7 +60,7 @@ public partial class DdlEngine : IDdlEngine
         {
             if (!oldFields.ContainsKey(name))
             {
-                var sqlType = _typeMapper.ToSqlType(field.DataType, field.SqlType);
+                var sqlType = _typeMapper.MapToSqlType(field.DataType, field.SqlType);
                 var colName = ValidateColumnName(name);
                 sb.AppendLine($"ALTER TABLE dbo.[{tableName}] ADD [{colName}] {sqlType};");
                 rollback.AppendLine($"ALTER TABLE dbo.[{tableName}] DROP COLUMN [{colName}];");
@@ -74,8 +74,8 @@ public partial class DdlEngine : IDdlEngine
             {
                 if (oldField.SqlType != newField.SqlType)
                 {
-                    var newSqlType = _typeMapper.ToSqlType(newField.DataType, newField.SqlType);
-                    var oldSqlType = _typeMapper.ToSqlType(oldField.DataType, oldField.SqlType);
+                    var newSqlType = _typeMapper.MapToSqlType(newField.DataType, newField.SqlType);
+                    var oldSqlType = _typeMapper.MapToSqlType(oldField.DataType, oldField.SqlType);
                     var colName = ValidateColumnName(name);
 
                     if (IsWideningConversion(oldSqlType, newSqlType))
