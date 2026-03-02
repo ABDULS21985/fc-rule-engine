@@ -2,13 +2,22 @@
 @using Microsoft.AspNetCore.Authorization
 @attribute [Authorize]
 @using FC.Engine.Domain.Abstractions
+@using FC.Engine.Domain.Enums
 @using FC.Engine.Domain.Validation
+@using FC.Engine.Application.Services
 @inject IFormulaRepository FormulaRepo
+@inject FormulaService FormulaService
+@inject ITemplateMetadataCache Cache
 
 <div class="page-header">
     <h1>Cross-Sheet Validation Rules</h1>
     <p>Rules that validate relationships between different return templates</p>
 </div>
+
+@if (!string.IsNullOrEmpty(_message))
+{
+    <div class="alert @(_messageIsError ? "alert-error" : "alert-success")">@_message</div>
+}
 
 @if (_loading)
 {
@@ -28,16 +37,101 @@ else
     </div>
 
     <div class="card">
+        <div class="card-header">
+            <h2>Rules</h2>
+            <AuthorizeView Roles="Admin">
+                <Authorized Context="addAuth">
+                    <button class="btn btn-primary btn-sm" @onclick="ShowAddRule">Add Rule</button>
+                </Authorized>
+            </AuthorizeView>
+        </div>
+
+        @if (_showAddForm)
+        {
+            <div style="padding:1rem;background:#f9f9f9;border-bottom:1px solid #eee;">
+                <h3>Add Cross-Sheet Rule</h3>
+                <div class="grid-2">
+                    <div class="form-group">
+                        <label>Rule Code</label>
+                        <input class="form-control" @bind="_addCode" placeholder="e.g. XS-100" />
+                    </div>
+                    <div class="form-group">
+                        <label>Rule Name</label>
+                        <input class="form-control" @bind="_addName" placeholder="e.g. Loan Reconciliation" />
+                    </div>
+                    <div class="form-group" style="grid-column:1/-1;">
+                        <label>Description</label>
+                        <input class="form-control" @bind="_addDescription" placeholder="Description of the validation rule" />
+                    </div>
+                </div>
+                <h4 style="margin-top:1rem;">Operands</h4>
+                @for (int i = 0; i < _addOperands.Count; i++)
+                {
+                    var idx = i;
+                    <div class="grid-2" style="margin-bottom:0.5rem;padding:0.5rem;background:#fff;border:1px solid #eee;border-radius:4px;">
+                        <div class="form-group">
+                            <label>Alias</label>
+                            <input class="form-control" @bind="_addOperands[idx].Alias" placeholder="A, B, C..." />
+                        </div>
+                        <div class="form-group">
+                            <label>Template Return Code</label>
+                            <input class="form-control" @bind="_addOperands[idx].ReturnCode" placeholder="e.g. MFCR 300" />
+                        </div>
+                        <div class="form-group">
+                            <label>Field Name</label>
+                            <input class="form-control" @bind="_addOperands[idx].FieldName" placeholder="e.g. total_assets" />
+                        </div>
+                        <div class="form-group">
+                            <label>Aggregate (optional)</label>
+                            <select class="form-control" @bind="_addOperands[idx].Aggregate">
+                                <option value="">None</option>
+                                <option value="SUM">SUM</option>
+                                <option value="COUNT">COUNT</option>
+                                <option value="MAX">MAX</option>
+                                <option value="MIN">MIN</option>
+                                <option value="AVG">AVG</option>
+                            </select>
+                        </div>
+                    </div>
+                }
+                <button class="btn btn-outline btn-sm" @onclick="AddOperandRow">+ Add Operand</button>
+
+                <h4 style="margin-top:1rem;">Expression</h4>
+                <div class="grid-2">
+                    <div class="form-group">
+                        <label>Expression</label>
+                        <input class="form-control" @bind="_addExpression" placeholder="e.g. A = B + C" />
+                    </div>
+                    <div class="form-group">
+                        <label>Tolerance</label>
+                        <input type="number" step="0.01" class="form-control" @bind="_addTolerance" />
+                    </div>
+                    <div class="form-group">
+                        <label>Severity</label>
+                        <select class="form-control" @bind="_addSeverity">
+                            @foreach (var s in Enum.GetValues<ValidationSeverity>())
+                            {
+                                <option value="@s">@s</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Error Message</label>
+                        <input class="form-control" @bind="_addErrorMessage" placeholder="e.g. Balance sheet does not balance" />
+                    </div>
+                </div>
+                <div style="display:flex;gap:0.5rem;margin-top:0.5rem;">
+                    <button class="btn btn-primary btn-sm" @onclick="AddRule">Create Rule</button>
+                    <button class="btn btn-outline btn-sm" @onclick="() => _showAddForm = false">Cancel</button>
+                </div>
+            </div>
+        }
+
         <table class="data-table">
             <thead>
                 <tr>
-                    <th>Rule Code</th>
-                    <th>Name</th>
-                    <th>Description</th>
-                    <th>Operands</th>
-                    <th>Expression</th>
-                    <th>Severity</th>
-                    <th>Active</th>
+                    <th>Rule Code</th><th>Name</th><th>Description</th>
+                    <th>Operands</th><th>Expression</th><th>Severity</th><th>Active</th>
                 </tr>
             </thead>
             <tbody>
@@ -68,10 +162,80 @@ else
 @code {
     private bool _loading = true;
     private IReadOnlyList<CrossSheetRule> _rules = Array.Empty<CrossSheetRule>();
+    private string? _message;
+    private bool _messageIsError;
+
+    // Add form
+    private bool _showAddForm;
+    private string _addCode = "", _addName = "", _addDescription = "";
+    private string _addExpression = "", _addErrorMessage = "";
+    private decimal _addTolerance = 0.01m;
+    private ValidationSeverity _addSeverity = ValidationSeverity.Error;
+    private List<OperandModel> _addOperands = new();
 
     protected override async Task OnInitializedAsync()
     {
         _rules = await FormulaRepo.GetAllActiveCrossSheetRules();
         _loading = false;
+    }
+
+    private void ShowAddRule()
+    {
+        _showAddForm = true;
+        _addOperands = new List<OperandModel>
+        {
+            new() { Alias = "A" },
+            new() { Alias = "B" }
+        };
+    }
+
+    private void AddOperandRow()
+    {
+        var nextAlias = ((char)('A' + _addOperands.Count)).ToString();
+        _addOperands.Add(new OperandModel { Alias = nextAlias });
+    }
+
+    private async Task AddRule()
+    {
+        try
+        {
+            var operands = _addOperands.Select((o, i) => new CrossSheetRuleOperand
+            {
+                OperandAlias = o.Alias,
+                TemplateReturnCode = o.ReturnCode,
+                FieldName = o.FieldName,
+                AggregateFunction = string.IsNullOrEmpty(o.Aggregate) ? null : o.Aggregate,
+                SortOrder = i + 1
+            }).ToList();
+
+            var expression = new CrossSheetRuleExpression
+            {
+                Expression = _addExpression,
+                ToleranceAmount = _addTolerance,
+                ErrorMessage = _addErrorMessage
+            };
+
+            await FormulaService.AddCrossSheetRule(
+                _addCode, _addName, _addDescription,
+                operands, expression, _addSeverity, "system");
+
+            _message = $"Rule '{_addCode}' created successfully.";
+            _messageIsError = false;
+            _showAddForm = false;
+            _rules = await FormulaRepo.GetAllActiveCrossSheetRules();
+        }
+        catch (Exception ex)
+        {
+            _message = ex.Message;
+            _messageIsError = true;
+        }
+    }
+
+    private class OperandModel
+    {
+        public string Alias { get; set; } = "";
+        public string ReturnCode { get; set; } = "";
+        public string FieldName { get; set; } = "";
+        public string Aggregate { get; set; } = "";
     }
 }

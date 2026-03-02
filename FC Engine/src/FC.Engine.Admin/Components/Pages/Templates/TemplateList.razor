@@ -3,7 +3,10 @@
 @attribute [Authorize]
 @using FC.Engine.Domain.Abstractions
 @using FC.Engine.Domain.Enums
+@using FC.Engine.Application.DTOs
+@using FC.Engine.Application.Services
 @inject ITemplateMetadataCache Cache
+@inject TemplateService TemplateService
 @inject NavigationManager Nav
 
 <div class="page-header">
@@ -11,23 +14,78 @@
     <p>Manage all @_templates.Count published return templates</p>
 </div>
 
+@if (!string.IsNullOrEmpty(_message))
+{
+    <div class="alert @(_messageIsError ? "alert-error" : "alert-success")">@_message</div>
+}
+
 <div class="card">
-    <div class="filter-bar">
-        <input class="form-control" placeholder="Search templates..." @bind="_searchTerm" @bind:event="oninput" />
-        <select class="form-control" @bind="_frequencyFilter">
-            <option value="">All Frequencies</option>
-            <option value="Monthly">Monthly</option>
-            <option value="Quarterly">Quarterly</option>
-            <option value="Semi-Annual">Semi-Annual</option>
-            <option value="Computed">Computed</option>
-        </select>
-        <select class="form-control" @bind="_categoryFilter">
-            <option value="">All Categories</option>
-            <option value="FixedRow">FixedRow</option>
-            <option value="MultiRow">MultiRow</option>
-            <option value="ItemCoded">ItemCoded</option>
-        </select>
+    <div class="card-header">
+        <div class="filter-bar" style="flex:1;">
+            <input class="form-control" placeholder="Search templates..." @bind="_searchTerm" @bind:event="oninput" />
+            <select class="form-control" @bind="_frequencyFilter">
+                <option value="">All Frequencies</option>
+                <option value="Monthly">Monthly</option>
+                <option value="Quarterly">Quarterly</option>
+                <option value="Semi-Annual">Semi-Annual</option>
+                <option value="Computed">Computed</option>
+            </select>
+            <select class="form-control" @bind="_categoryFilter">
+                <option value="">All Categories</option>
+                <option value="FixedRow">FixedRow</option>
+                <option value="MultiRow">MultiRow</option>
+                <option value="ItemCoded">ItemCoded</option>
+            </select>
+        </div>
+        <AuthorizeView Roles="Admin,Approver">
+            <Authorized Context="createAuth">
+                <button class="btn btn-primary btn-sm" @onclick="ShowCreateForm">New Template</button>
+            </Authorized>
+        </AuthorizeView>
     </div>
+
+    @if (_showCreateForm)
+    {
+        <div style="padding:1rem;background:#f9f9f9;border-bottom:1px solid #eee;">
+            <h3>Create New Template</h3>
+            <div class="grid-2">
+                <div class="form-group">
+                    <label>Return Code</label>
+                    <input class="form-control" @bind="_createRequest.ReturnCode" placeholder="e.g. MFCR 999" />
+                </div>
+                <div class="form-group">
+                    <label>Name</label>
+                    <input class="form-control" @bind="_createRequest.Name" placeholder="e.g. New Return Template" />
+                </div>
+                <div class="form-group">
+                    <label>Frequency</label>
+                    <select class="form-control" @bind="_createFrequency">
+                        @foreach (var f in Enum.GetValues<ReturnFrequency>())
+                        {
+                            <option value="@f">@f</option>
+                        }
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Structural Category</label>
+                    <select class="form-control" @bind="_createCategory">
+                        @foreach (var c in Enum.GetValues<StructuralCategory>())
+                        {
+                            <option value="@c">@c</option>
+                        }
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Description</label>
+                    <input class="form-control" @bind="_createRequest.Description" placeholder="Optional description" />
+                </div>
+            </div>
+            <div style="display:flex;gap:0.5rem;margin-top:0.5rem;">
+                <button class="btn btn-primary btn-sm" @onclick="CreateTemplate">Create</button>
+                <button class="btn btn-outline btn-sm" @onclick="() => _showCreateForm = false">Cancel</button>
+            </div>
+        </div>
+    }
 
     @if (_loading)
     {
@@ -83,6 +141,14 @@
     private string _searchTerm = "";
     private string _frequencyFilter = "";
     private string _categoryFilter = "";
+    private string? _message;
+    private bool _messageIsError;
+
+    // Create form
+    private bool _showCreateForm;
+    private CreateTemplateRequest _createRequest = new();
+    private ReturnFrequency _createFrequency = ReturnFrequency.Monthly;
+    private StructuralCategory _createCategory = StructuralCategory.FixedRow;
 
     private IEnumerable<CachedTemplate> FilteredTemplates => _templates
         .Where(t => string.IsNullOrEmpty(_searchTerm) ||
@@ -99,6 +165,32 @@
     }
 
     private void ViewTemplate(string returnCode) => Nav.NavigateTo($"/templates/{returnCode}");
+
+    private void ShowCreateForm()
+    {
+        _showCreateForm = true;
+        _createRequest = new CreateTemplateRequest { CreatedBy = "system" };
+    }
+
+    private async Task CreateTemplate()
+    {
+        try
+        {
+            _createRequest.Frequency = _createFrequency;
+            _createRequest.StructuralCategory = _createCategory;
+            _createRequest.CreatedBy = "system";
+            var result = await TemplateService.CreateTemplate(_createRequest);
+            _message = $"Template '{result.ReturnCode}' created! Navigate to it to add fields.";
+            _messageIsError = false;
+            _showCreateForm = false;
+            Nav.NavigateTo($"/templates/{result.ReturnCode}");
+        }
+        catch (Exception ex)
+        {
+            _message = ex.Message;
+            _messageIsError = true;
+        }
+    }
 
     private static string GetFrequency(string rc) =>
         rc.StartsWith("MFCR") ? "Monthly" :

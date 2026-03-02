@@ -1,0 +1,150 @@
+@page "/business-rules"
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize]
+@using FC.Engine.Domain.Abstractions
+@using FC.Engine.Domain.Enums
+@using FC.Engine.Domain.Validation
+@using FC.Engine.Application.Services
+@inject IFormulaRepository FormulaRepo
+@inject FormulaService FormulaService
+
+<div class="page-header">
+    <h1>Business Rules</h1>
+    <p>Expression-based validation rules with template applicability</p>
+</div>
+
+@if (!string.IsNullOrEmpty(_message))
+{
+    <div class="alert @(_messageIsError ? "alert-error" : "alert-success")">@_message</div>
+}
+
+@if (_loading)
+{
+    <div class="text-center"><span class="spinner"></span></div>
+}
+else
+{
+    <div class="card">
+        <div class="card-header">
+            <h2>Business Rules (@_rules.Count)</h2>
+            <AuthorizeView Roles="Admin,Approver">
+                <Authorized Context="addAuth">
+                    <button class="btn btn-primary btn-sm" @onclick="ShowAddRule">Add Rule</button>
+                </Authorized>
+            </AuthorizeView>
+        </div>
+
+        @if (_showAddForm)
+        {
+            <div style="padding:1rem;background:#f9f9f9;border-bottom:1px solid #eee;">
+                <h3>Add Business Rule</h3>
+                <div class="grid-2">
+                    <div class="form-group">
+                        <label>Rule Code</label>
+                        <input class="form-control" @bind="_addCode" placeholder="e.g. BR-001" />
+                    </div>
+                    <div class="form-group">
+                        <label>Rule Name</label>
+                        <input class="form-control" @bind="_addName" placeholder="e.g. Date Validity Check" />
+                    </div>
+                    <div class="form-group">
+                        <label>Rule Type</label>
+                        <select class="form-control" @bind="_addRuleType">
+                            <option value="Completeness">Completeness</option>
+                            <option value="DateCheck">DateCheck</option>
+                            <option value="ThresholdCheck">ThresholdCheck</option>
+                            <option value="Custom">Custom</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Severity</label>
+                        <select class="form-control" @bind="_addSeverity">
+                            @foreach (var s in Enum.GetValues<ValidationSeverity>())
+                            {
+                                <option value="@s">@s</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Expression (optional)</label>
+                        <input class="form-control" @bind="_addExpression" placeholder="e.g. total_assets > 0" />
+                    </div>
+                    <div class="form-group">
+                        <label>Applies To Templates (comma-separated, blank=all)</label>
+                        <input class="form-control" @bind="_addAppliesToTemplates" placeholder="e.g. MFCR 300,MFCR 301" />
+                    </div>
+                </div>
+                <div style="display:flex;gap:0.5rem;margin-top:0.5rem;">
+                    <button class="btn btn-primary btn-sm" @onclick="AddRule">Create</button>
+                    <button class="btn btn-outline btn-sm" @onclick="() => _showAddForm = false">Cancel</button>
+                </div>
+            </div>
+        }
+
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Rule Code</th><th>Name</th><th>Type</th>
+                    <th>Expression</th><th>Applies To</th><th>Severity</th><th>Active</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var rule in _rules)
+                {
+                    <tr>
+                        <td><code>@rule.RuleCode</code></td>
+                        <td><strong>@rule.RuleName</strong></td>
+                        <td><span class="badge badge-review">@rule.RuleType</span></td>
+                        <td><code>@rule.Expression</code></td>
+                        <td>@rule.AppliesToTemplates</td>
+                        <td>@rule.Severity</td>
+                        <td>@(rule.IsActive ? "Yes" : "No")</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+
+@code {
+    private bool _loading = true;
+    private IReadOnlyList<BusinessRule> _rules = Array.Empty<BusinessRule>();
+    private string? _message;
+    private bool _messageIsError;
+
+    // Add form
+    private bool _showAddForm;
+    private string _addCode = "", _addName = "", _addRuleType = "Completeness";
+    private string _addExpression = "", _addAppliesToTemplates = "";
+    private ValidationSeverity _addSeverity = ValidationSeverity.Error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _rules = await FormulaRepo.GetActiveBusinessRules();
+        _loading = false;
+    }
+
+    private void ShowAddRule() => _showAddForm = true;
+
+    private async Task AddRule()
+    {
+        try
+        {
+            await FormulaService.AddBusinessRule(
+                _addCode, _addName, _addRuleType,
+                string.IsNullOrWhiteSpace(_addExpression) ? null : _addExpression,
+                string.IsNullOrWhiteSpace(_addAppliesToTemplates) ? null : _addAppliesToTemplates,
+                _addSeverity, "system");
+
+            _message = $"Business rule '{_addCode}' created.";
+            _messageIsError = false;
+            _showAddForm = false;
+            _rules = await FormulaRepo.GetActiveBusinessRules();
+        }
+        catch (Exception ex)
+        {
+            _message = ex.Message;
+            _messageIsError = true;
+        }
+    }
+}

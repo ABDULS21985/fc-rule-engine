@@ -4,170 +4,247 @@
 @using FC.Engine.Domain.Abstractions
 @using FC.Engine.Domain.Enums
 @using FC.Engine.Domain.Metadata
+@using FC.Engine.Application.DTOs
+@using FC.Engine.Application.Services
 @inject ITemplateMetadataCache Cache
 @inject IXsdGenerator XsdGenerator
+@inject TemplateService TemplateService
+@inject TemplateVersioningService VersioningService
 @inject NavigationManager Nav
 
 <div class="page-header">
     <h1>@ReturnCode</h1>
-    <p>@_template?.Name</p>
+    <p>@_detail?.Name</p>
 </div>
 
 @if (_loading)
 {
     <div class="text-center"><span class="spinner"></span></div>
 }
-else if (_template == null)
+else if (_detail == null)
 {
-    <div class="alert alert-danger">Template not found: @ReturnCode</div>
+    <div class="alert alert-error">Template not found: @ReturnCode</div>
 }
 else
 {
+    @if (!string.IsNullOrEmpty(_message))
+    {
+        <div class="alert @(_messageIsError ? "alert-error" : "alert-success")">@_message</div>
+    }
+
+    <!-- Stats -->
     <div class="stats-grid">
         <div class="stat-card">
-            <div class="stat-value">@_template.CurrentVersion.Fields.Count</div>
+            <div class="stat-value">@_activeVersion?.FieldCount</div>
             <div class="stat-label">Fields</div>
         </div>
         <div class="stat-card">
-            <div class="stat-value">@_template.CurrentVersion.IntraSheetFormulas.Count</div>
+            <div class="stat-value">@_activeVersion?.FormulaCount</div>
             <div class="stat-label">Formulas</div>
         </div>
         <div class="stat-card">
             <div class="stat-value">
-                <span class="badge badge-@_template.StructuralCategory.ToLowerInvariant()">
-                    @_template.StructuralCategory
-                </span>
+                <span class="badge badge-@_detail.StructuralCategory.ToLowerInvariant()">@_detail.StructuralCategory</span>
             </div>
             <div class="stat-label">Category</div>
         </div>
         <div class="stat-card">
-            <div class="stat-value">v@(_template.CurrentVersion.VersionNumber)</div>
-            <div class="stat-label">Version</div>
+            <div class="stat-value">v@(_activeVersion?.VersionNumber)</div>
+            <div class="stat-label">
+                <span class="badge badge-@_activeVersion?.Status.ToLowerInvariant()">@_activeVersion?.Status</span>
+            </div>
         </div>
     </div>
 
+    <!-- Version Management -->
     <div class="card">
         <div class="card-header">
-            <h2>Template Info</h2>
+            <h2>Version Management</h2>
+            <div style="display:flex;gap:0.5rem;">
+                @if (_activeVersion?.Status == "Published")
+                {
+                    <AuthorizeView Roles="Admin,Approver" Context="versionAuth">
+                        <Authorized Context="vAuth">
+                            <button class="btn btn-primary btn-sm" @onclick="CreateDraftVersion">New Draft</button>
+                        </Authorized>
+                    </AuthorizeView>
+                }
+                @if (_activeVersion?.Status == "Draft")
+                {
+                    <AuthorizeView Roles="Admin,Approver" Context="submitAuth">
+                        <Authorized Context="sAuth">
+                            <button class="btn btn-outline btn-sm" @onclick="SubmitForReview">Submit for Review</button>
+                        </Authorized>
+                    </AuthorizeView>
+                }
+                @if (_activeVersion?.Status == "Review")
+                {
+                    <AuthorizeView Roles="Admin" Context="publishAuth">
+                        <Authorized Context="pAuth">
+                            <button class="btn btn-outline btn-sm" @onclick="PreviewDdl">Preview DDL</button>
+                            <button class="btn btn-primary btn-sm" @onclick="PublishVersion">Publish</button>
+                        </Authorized>
+                    </AuthorizeView>
+                }
+            </div>
         </div>
+
+        <!-- Version selector -->
+        <div style="padding:0.75rem;display:flex;gap:0.5rem;flex-wrap:wrap;">
+            @foreach (var v in _detail.Versions.OrderByDescending(v => v.VersionNumber))
+            {
+                <button class="btn @(v.Id == _activeVersion?.Id ? "btn-primary" : "btn-outline") btn-sm"
+                        @onclick="() => SelectVersion(v)">
+                    v@(v.VersionNumber) <span class="badge badge-@v.Status.ToLowerInvariant()">@v.Status</span>
+                </button>
+            }
+        </div>
+
+        @if (_showDdlPreview)
+        {
+            <div style="padding:1rem;">
+                <h3>DDL Preview</h3>
+                <pre style="background:#f5f5f5;padding:1rem;border-radius:6px;overflow-x:auto;font-size:0.8rem;max-height:300px;">@_ddlPreview</pre>
+            </div>
+        }
+    </div>
+
+    <!-- Template Info -->
+    <div class="card">
+        <div class="card-header"><h2>Template Info</h2></div>
         <div class="grid-2">
+            <div class="form-group"><label>Physical Table</label><code>@_detail.PhysicalTableName</code></div>
+            <div class="form-group"><label>XML Root</label><code>@_detail.XmlRootElement</code></div>
+            <div class="form-group"><label>XML Namespace</label><code>@_detail.XmlNamespace</code></div>
             <div class="form-group">
-                <label>Physical Table</label>
-                <code>@_template.PhysicalTableName</code>
-            </div>
-            <div class="form-group">
-                <label>XML Root</label>
-                <code>@_template.XmlRootElement</code>
-            </div>
-            <div class="form-group">
-                <label>XML Namespace</label>
-                <code>@_template.XmlNamespace</code>
-            </div>
-            <div class="form-group">
-                <label>Version ID</label>
-                <span>@_template.CurrentVersion.Id</span>
+                <label>XSD Schema</label>
+                <button class="btn btn-outline btn-sm" @onclick="ToggleXsd">@(_showXsd ? "Hide" : "Show") XSD</button>
             </div>
         </div>
-    </div>
-
-    <div class="card">
-        <div class="card-header">
-            <h2>Fields (@_template.CurrentVersion.Fields.Count)</h2>
-            <button class="btn btn-outline btn-sm" @onclick="ToggleXsd">
-                @(_showXsd ? "Hide" : "Show") XSD
-            </button>
-        </div>
-
         @if (_showXsd && !string.IsNullOrEmpty(_xsdContent))
         {
             <pre style="background:#f5f5f5;padding:1rem;border-radius:6px;overflow-x:auto;font-size:0.8rem;max-height:400px;">@_xsdContent</pre>
+        }
+    </div>
+
+    <!-- Fields -->
+    <div class="card">
+        <div class="card-header">
+            <h2>Fields (@(_activeVersion?.Fields.Count ?? 0))</h2>
+            @if (_activeVersion?.Status == "Draft")
+            {
+                <button class="btn btn-primary btn-sm" @onclick="ShowAddField">Add Field</button>
+            }
+        </div>
+
+        @if (_showAddField && _activeVersion?.Status == "Draft")
+        {
+            <div style="padding:1rem;background:#f9f9f9;border-bottom:1px solid #eee;">
+                <h3>Add Field</h3>
+                <div class="grid-2">
+                    <div class="form-group">
+                        <label>Field Name</label>
+                        <input class="form-control" @bind="_newField.FieldName" placeholder="e.g. total_assets" />
+                    </div>
+                    <div class="form-group">
+                        <label>Display Name</label>
+                        <input class="form-control" @bind="_newField.DisplayName" placeholder="e.g. Total Assets" />
+                    </div>
+                    <div class="form-group">
+                        <label>XML Element</label>
+                        <input class="form-control" @bind="_newField.XmlElementName" placeholder="e.g. TotalAssets" />
+                    </div>
+                    <div class="form-group">
+                        <label>Line Code</label>
+                        <input class="form-control" @bind="_newField.LineCode" placeholder="e.g. 1.00" />
+                    </div>
+                    <div class="form-group">
+                        <label>Data Type</label>
+                        <select class="form-control" @bind="_newFieldDataType">
+                            @foreach (var dt in Enum.GetValues<FieldDataType>())
+                            {
+                                <option value="@dt">@dt</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Field Order</label>
+                        <input type="number" class="form-control" @bind="_newField.FieldOrder" />
+                    </div>
+                    <div class="form-group">
+                        <label>Section</label>
+                        <input class="form-control" @bind="_newField.SectionName" placeholder="Optional section" />
+                    </div>
+                    <div class="form-group">
+                        <label>Required</label>
+                        <select class="form-control" @bind="_newFieldRequired">
+                            <option value="false">No</option>
+                            <option value="true">Yes</option>
+                        </select>
+                    </div>
+                </div>
+                <div style="display:flex;gap:0.5rem;margin-top:0.5rem;">
+                    <button class="btn btn-primary btn-sm" @onclick="AddField">Add</button>
+                    <button class="btn btn-outline btn-sm" @onclick="() => _showAddField = false">Cancel</button>
+                </div>
+            </div>
         }
 
         <table class="data-table">
             <thead>
                 <tr>
-                    <th>#</th>
-                    <th>Field Name</th>
-                    <th>Display Name</th>
-                    <th>Line Code</th>
-                    <th>Data Type</th>
-                    <th>SQL Type</th>
-                    <th>Required</th>
-                    <th>Flags</th>
+                    <th>#</th><th>Field Name</th><th>Display Name</th><th>Line Code</th>
+                    <th>Data Type</th><th>SQL Type</th><th>Required</th><th>Flags</th>
                 </tr>
             </thead>
             <tbody>
-                @foreach (var f in _template.CurrentVersion.Fields)
+                @if (_activeVersion != null)
                 {
-                    <tr>
-                        <td>@f.FieldOrder</td>
-                        <td><code>@f.FieldName</code></td>
-                        <td>@f.DisplayName</td>
-                        <td>@f.LineCode</td>
-                        <td>@f.DataType</td>
-                        <td><code>@f.SqlType</code></td>
-                        <td>@(f.IsRequired ? "Yes" : "")</td>
-                        <td>
-                            @if (f.IsKeyField) { <span class="badge badge-published">Key</span> }
-                            @if (f.IsComputed) { <span class="badge badge-review">Computed</span> }
-                            @if (f.IsYtdField) { <span class="badge badge-draft">YTD</span> }
-                        </td>
-                    </tr>
+                    @foreach (var f in _activeVersion.Fields)
+                    {
+                        <tr>
+                            <td>@f.FieldOrder</td>
+                            <td><code>@f.FieldName</code></td>
+                            <td>@f.DisplayName</td>
+                            <td>@f.LineCode</td>
+                            <td>@f.DataType</td>
+                            <td><code>@f.SqlType</code></td>
+                            <td>@(f.IsRequired ? "Yes" : "")</td>
+                            <td>
+                                @if (f.IsKeyField) { <span class="badge badge-published">Key</span> }
+                                @if (f.IsComputed) { <span class="badge badge-review">Computed</span> }
+                            </td>
+                        </tr>
+                    }
                 }
             </tbody>
         </table>
     </div>
 
-    @if (_template.CurrentVersion.IntraSheetFormulas.Any())
+    <!-- Formulas -->
+    @if (_activeVersion?.FormulaCount > 0)
     {
         <div class="card">
             <div class="card-header">
-                <h2>Intra-Sheet Formulas (@_template.CurrentVersion.IntraSheetFormulas.Count)</h2>
+                <h2>Intra-Sheet Formulas (@_activeVersion.FormulaCount)</h2>
             </div>
-            <table class="data-table">
-                <thead>
-                    <tr>
-                        <th>Rule Code</th>
-                        <th>Type</th>
-                        <th>Target</th>
-                        <th>Operands</th>
-                        <th>Tolerance</th>
-                        <th>Severity</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @foreach (var f in _template.CurrentVersion.IntraSheetFormulas)
-                    {
-                        <tr>
-                            <td><code>@f.RuleCode</code></td>
-                            <td><span class="badge badge-review">@f.FormulaType</span></td>
-                            <td><code>@f.TargetFieldName</code></td>
-                            <td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;">@f.OperandFields</td>
-                            <td>@f.ToleranceAmount</td>
-                            <td>@f.Severity</td>
-                        </tr>
-                    }
-                </tbody>
-            </table>
+            <p style="padding:0.75rem;color:#666;">Formulas are managed from the <a href="/formulas">Formulas</a> page.</p>
         </div>
     }
 
-    @if (_template.CurrentVersion.ItemCodes.Any())
+    <!-- Item Codes -->
+    @if (_activeVersion?.ItemCodes.Any() == true)
     {
         <div class="card">
-            <div class="card-header">
-                <h2>Item Codes (@_template.CurrentVersion.ItemCodes.Count)</h2>
-            </div>
+            <div class="card-header"><h2>Item Codes (@_activeVersion.ItemCodes.Count)</h2></div>
             <table class="data-table">
-                <thead>
-                    <tr><th>Code</th><th>Description</th><th>Order</th></tr>
-                </thead>
+                <thead><tr><th>Code</th><th>Description</th><th>Order</th></tr></thead>
                 <tbody>
-                    @foreach (var ic in _template.CurrentVersion.ItemCodes)
+                    @foreach (var ic in _activeVersion.ItemCodes)
                     {
                         <tr>
                             <td><code>@ic.ItemCode</code></td>
-                            <td>@ic.ItemDescription</td>
+                            <td>@ic.ItemName</td>
                             <td>@ic.SortOrder</td>
                         </tr>
                     }
@@ -181,18 +258,124 @@ else
     [Parameter] public string ReturnCode { get; set; } = "";
 
     private bool _loading = true;
+    private TemplateDetailDto? _detail;
+    private TemplateVersionDto? _activeVersion;
+    private string? _message;
+    private bool _messageIsError;
+
+    // XSD
     private bool _showXsd;
     private string? _xsdContent;
-    private CachedTemplate? _template;
+
+    // DDL
+    private bool _showDdlPreview;
+    private string? _ddlPreview;
+
+    // Add field
+    private bool _showAddField;
+    private AddFieldRequest _newField = new();
+    private FieldDataType _newFieldDataType = FieldDataType.Money;
+    private string _newFieldRequired = "false";
+
+    private string CurrentUser => "system"; // TODO: get from auth state
 
     protected override async Task OnInitializedAsync()
     {
+        await LoadTemplate();
+    }
+
+    private async Task LoadTemplate()
+    {
+        _loading = true;
+        _detail = await TemplateService.GetTemplateDetail(ReturnCode);
+        if (_detail != null)
+        {
+            // Default to the most relevant version: Draft > Review > Published
+            _activeVersion = _detail.Versions
+                .OrderByDescending(v => v.Status == "Draft" ? 3 : v.Status == "Review" ? 2 : v.Status == "Published" ? 1 : 0)
+                .ThenByDescending(v => v.VersionNumber)
+                .FirstOrDefault();
+        }
+        _loading = false;
+    }
+
+    private void SelectVersion(TemplateVersionDto v) => _activeVersion = v;
+
+    private async Task CreateDraftVersion()
+    {
         try
         {
-            _template = await Cache.GetPublishedTemplate(ReturnCode);
+            await VersioningService.CreateNewDraftVersion(_detail!.Id, CurrentUser);
+            _message = "Draft version created. You can now add/modify fields.";
+            _messageIsError = false;
+            await LoadTemplate();
         }
-        catch { _template = null; }
-        _loading = false;
+        catch (Exception ex) { SetError(ex.Message); }
+    }
+
+    private async Task SubmitForReview()
+    {
+        try
+        {
+            await VersioningService.SubmitForReview(_detail!.Id, _activeVersion!.Id, CurrentUser);
+            _message = "Version submitted for review.";
+            _messageIsError = false;
+            await LoadTemplate();
+        }
+        catch (Exception ex) { SetError(ex.Message); }
+    }
+
+    private async Task PreviewDdl()
+    {
+        try
+        {
+            var ddl = await VersioningService.PreviewDdl(_detail!.Id, _activeVersion!.Id);
+            _ddlPreview = ddl.ForwardSql;
+            _showDdlPreview = true;
+        }
+        catch (Exception ex) { SetError(ex.Message); }
+    }
+
+    private async Task PublishVersion()
+    {
+        try
+        {
+            await VersioningService.Publish(_detail!.Id, _activeVersion!.Id, CurrentUser);
+            _message = "Version published successfully! Physical table created/updated.";
+            _messageIsError = false;
+            _showDdlPreview = false;
+            await LoadTemplate();
+        }
+        catch (Exception ex) { SetError(ex.Message); }
+    }
+
+    private void ShowAddField()
+    {
+        _showAddField = true;
+        _newField = new AddFieldRequest
+        {
+            FieldOrder = (_activeVersion?.Fields.Count ?? 0) + 1
+        };
+        _newFieldDataType = FieldDataType.Money;
+        _newFieldRequired = "false";
+    }
+
+    private async Task AddField()
+    {
+        try
+        {
+            _newField.DataType = _newFieldDataType;
+            _newField.IsRequired = _newFieldRequired == "true";
+            if (string.IsNullOrWhiteSpace(_newField.XmlElementName))
+                _newField.XmlElementName = _newField.FieldName;
+
+            await TemplateService.AddFieldToVersion(_detail!.Id, _activeVersion!.Id, _newField, CurrentUser);
+            _message = $"Field '{_newField.FieldName}' added successfully.";
+            _messageIsError = false;
+            _showAddField = false;
+            await LoadTemplate();
+        }
+        catch (Exception ex) { SetError(ex.Message); }
     }
 
     private async Task ToggleXsd()
@@ -200,7 +383,14 @@ else
         _showXsd = !_showXsd;
         if (_showXsd && _xsdContent == null)
         {
-            _xsdContent = await XsdGenerator.GenerateSchemaXml(ReturnCode);
+            try { _xsdContent = await XsdGenerator.GenerateSchemaXml(ReturnCode); }
+            catch { _xsdContent = "XSD generation not available for this template."; }
         }
+    }
+
+    private void SetError(string msg)
+    {
+        _message = msg;
+        _messageIsError = true;
     }
 }
