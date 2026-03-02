@@ -1,5 +1,6 @@
 using FC.Engine.Domain.Abstractions;
 using FC.Engine.Domain.Entities;
+using FC.Engine.Domain.Enums;
 using FC.Engine.Infrastructure.Metadata;
 using Microsoft.EntityFrameworkCore;
 
@@ -37,6 +38,27 @@ public class SubmissionRepository : ISubmissionRepository
             .Include(s => s.ValidationReport)
             .OrderByDescending(s => s.SubmittedAt)
             .ToListAsync(ct);
+    }
+
+    public async Task<IReadOnlyList<Submission>> GetRecent(int count = 10, CancellationToken ct = default)
+    {
+        return await _db.Submissions
+            .Include(s => s.Institution)
+            .Include(s => s.ReturnPeriod)
+            .Include(s => s.ValidationReport)
+            .OrderByDescending(s => s.SubmittedAt)
+            .Take(count)
+            .ToListAsync(ct);
+    }
+
+    public async Task<int> GetCountByStatus(SubmissionStatus status, CancellationToken ct = default)
+    {
+        return await _db.Submissions.CountAsync(s => s.Status == status, ct);
+    }
+
+    public async Task<int> GetTotalCount(CancellationToken ct = default)
+    {
+        return await _db.Submissions.CountAsync(ct);
     }
 
     public async Task Add(Submission submission, CancellationToken ct = default)
