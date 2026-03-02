@@ -3,79 +3,194 @@
 @attribute [Authorize]
 @using FC.Engine.Domain.Abstractions
 @using FC.Engine.Domain.Entities
+@using FC.Engine.Domain.Enums
 @inject ISubmissionRepository SubmissionRepo
+@inject NavigationManager Nav
 
-<div class="page-header">
-    <h1>Submissions</h1>
-    <p>View all return submissions and their validation results</p>
-</div>
-
-<div class="card">
-    <div class="filter-bar">
-        <input class="form-control" type="number" placeholder="Institution ID" @bind="_institutionId" />
-        <button class="btn btn-primary" @onclick="Search">Search</button>
+<div class="list-page">
+    <div class="list-page-header">
+        <div class="list-page-header-text">
+            <h1>
+                Submissions
+                @if (_submissions.Any())
+                {
+                    <span class="list-count-chip">@_submissions.Count</span>
+                }
+            </h1>
+            <p>View all return submissions and their validation results</p>
+        </div>
     </div>
 
-    @if (_error != null)
-    {
-        <div class="alert alert-danger">@_error</div>
-    }
-
-    @if (_submissions.Any())
-    {
-        <table class="data-table">
-            <thead>
-                <tr>
-                    <th>ID</th>
-                    <th>Return Code</th>
-                    <th>Institution</th>
-                    <th>Period</th>
-                    <th>Status</th>
-                    <th>Submitted</th>
-                    <th>Errors</th>
-                </tr>
-            </thead>
-            <tbody>
-                @foreach (var s in _submissions)
+    <div class="list-card">
+        <div class="list-toolbar">
+            <div class="list-toolbar-filters">
+                <div class="list-search-wrap">
+                    <svg class="list-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+                    <input class="list-search-input" placeholder="Search by return code or institution..." @bind="_searchTerm" @bind:event="oninput" />
+                </div>
+                <input class="list-filter-select" type="number" placeholder="Institution ID" @bind="_institutionId" style="max-width:160px;" />
+                <select class="list-filter-select" @bind="_statusFilter">
+                    <option value="">All Statuses</option>
+                    @foreach (var s in Enum.GetValues<SubmissionStatus>())
+                    {
+                        <option value="@s">@FormatStatus(s)</option>
+                    }
+                </select>
+                <button class="btn btn-primary btn-sm" @onclick="Search">Search</button>
+            </div>
+            <div class="list-toolbar-actions">
+                @if (_submissions.Any())
                 {
-                    <tr>
-                        <td><a href="/submissions/@s.Id">@s.Id</a></td>
-                        <td><a href="/templates/@s.ReturnCode">@s.ReturnCode</a></td>
-                        <td>@s.Institution?.InstitutionName</td>
-                        <td>@s.ReturnPeriod?.ReportingDate.ToString("yyyy-MM-dd")</td>
-                        <td>
-                            <span class="badge @GetStatusBadge(s.Status.ToString())">
-                                @s.Status
-                            </span>
-                        </td>
-                        <td>@s.CreatedAt.ToString("yyyy-MM-dd HH:mm")</td>
-                        <td>@(s.ValidationReport?.Errors.Count ?? 0)</td>
-                    </tr>
+                    <button class="btn btn-outline btn-sm" @onclick="ClearResults">Clear</button>
                 }
-            </tbody>
-        </table>
-    }
-    else if (_searched)
-    {
-        <div class="text-center text-muted">No submissions found</div>
-    }
+            </div>
+        </div>
+
+        @if (_error != null)
+        {
+            <div class="alert alert-error" style="margin:var(--space-4) var(--space-5);border-radius:var(--radius-sm);">@_error</div>
+        }
+
+        @if (_loading)
+        {
+            <div class="list-skeleton">
+                @for (var i = 0; i < 6; i++)
+                {
+                    <div class="list-skeleton-row">
+                        <div class="list-skeleton-cell" style="width:40px;"></div>
+                        <div class="list-skeleton-cell" style="width:80px;"></div>
+                        <div class="list-skeleton-cell" style="flex:1;"></div>
+                        <div class="list-skeleton-cell" style="width:100px;"></div>
+                        <div class="list-skeleton-cell" style="width:70px;"></div>
+                        <div class="list-skeleton-cell" style="width:120px;"></div>
+                    </div>
+                }
+            </div>
+        }
+        else if (!_searched)
+        {
+            <div class="list-empty">
+                <svg class="list-empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+                <h3 class="list-empty-title">Search for submissions</h3>
+                <p class="list-empty-text">Enter an Institution ID and click Search to view submission records and validation results.</p>
+            </div>
+        }
+        else if (!FilteredSubmissions.Any())
+        {
+            <div class="list-empty">
+                <svg class="list-empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/></svg>
+                <h3 class="list-empty-title">No submissions found</h3>
+                <p class="list-empty-text">No submissions match your search criteria. Try a different Institution ID or adjust filters.</p>
+            </div>
+        }
+        else
+        {
+            <div class="list-table-wrap">
+                <table class="list-table" role="table">
+                    <thead>
+                        <tr>
+                            <th scope="col">ID</th>
+                            <th scope="col">Return Code</th>
+                            <th scope="col">Institution</th>
+                            <th scope="col">Period</th>
+                            <th scope="col">Status</th>
+                            <th scope="col">Submitted</th>
+                            <th scope="col">Errors</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var s in PagedSubmissions)
+                        {
+                            <tr class="list-row-clickable" @onclick="() => ViewSubmission(s.Id)">
+                                <td><a class="list-cell-link" href="/submissions/@s.Id">@s.Id</a></td>
+                                <td><a class="list-cell-link" href="/templates/@s.ReturnCode">@s.ReturnCode</a></td>
+                                <td class="list-cell-strong">@(s.Institution?.InstitutionName ?? "—")</td>
+                                <td class="list-cell-muted">@(s.ReturnPeriod?.ReportingDate.ToString("yyyy-MM-dd") ?? "—")</td>
+                                <td>
+                                    <span class="list-badge list-badge-@GetStatusClass(s.Status)">
+                                        @FormatStatus(s.Status)
+                                    </span>
+                                </td>
+                                <td class="list-cell-muted">@s.CreatedAt.ToString("yyyy-MM-dd HH:mm")</td>
+                                <td>
+                                    @{
+                                        var errCount = s.ValidationReport?.Errors.Count ?? 0;
+                                    }
+                                    @if (errCount > 0)
+                                    {
+                                        <span class="list-badge list-badge-error">@errCount</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="list-cell-muted">0</span>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="list-footer">
+                <div class="list-footer-summary">
+                    Showing <strong>@PagedSubmissions.Count()</strong> of <strong>@FilteredSubmissions.Count()</strong> submissions
+                    @if (TotalPages > 1)
+                    {
+                        <span> &mdash; Page @_currentPage of @TotalPages</span>
+                    }
+                </div>
+                @if (TotalPages > 1)
+                {
+                    <div class="list-pagination">
+                        <button class="list-page-btn" disabled="@(_currentPage <= 1)" @onclick="() => _currentPage--">&laquo;</button>
+                        @for (var p = Math.Max(1, _currentPage - 2); p <= Math.Min(TotalPages, _currentPage + 2); p++)
+                        {
+                            var page = p;
+                            <button class="list-page-btn @(page == _currentPage ? "list-page-btn-active" : "")" @onclick="() => _currentPage = page">@(page)</button>
+                        }
+                        <button class="list-page-btn" disabled="@(_currentPage >= TotalPages)" @onclick="() => _currentPage++">&raquo;</button>
+                    </div>
+                }
+            </div>
+        }
+    </div>
 </div>
 
 @code {
     private int _institutionId;
     private bool _searched;
+    private bool _loading;
     private string? _error;
+    private string _searchTerm = "";
+    private string _statusFilter = "";
+    private int _currentPage = 1;
+    private const int PageSize = 20;
     private List<Submission> _submissions = new();
+
+    private IEnumerable<Submission> FilteredSubmissions => _submissions
+        .Where(s => string.IsNullOrEmpty(_searchTerm) ||
+                    s.ReturnCode.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase) ||
+                    (s.Institution?.InstitutionName?.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase) ?? false))
+        .Where(s => string.IsNullOrEmpty(_statusFilter) || s.Status.ToString() == _statusFilter);
+
+    private IEnumerable<Submission> PagedSubmissions => FilteredSubmissions
+        .Skip((_currentPage - 1) * PageSize)
+        .Take(PageSize);
+
+    private int TotalPages => Math.Max(1, (int)Math.Ceiling(FilteredSubmissions.Count() / (double)PageSize));
 
     private async Task Search()
     {
         _error = null;
         _searched = true;
+        _currentPage = 1;
+        _loading = true;
         try
         {
             if (_institutionId <= 0)
             {
                 _error = "Please enter a valid Institution ID";
+                _loading = false;
                 return;
             }
             _submissions = (await SubmissionRepo.GetByInstitution(_institutionId)).ToList();
@@ -84,14 +199,38 @@
         {
             _error = ex.Message;
         }
+        _loading = false;
     }
 
-    private static string GetStatusBadge(string status) => status switch
+    private void ClearResults()
     {
-        "Validated" => "badge-published",
-        "ValidationFailed" => "badge-deprecated",
-        "Processing" => "badge-review",
-        "Draft" => "badge-draft",
-        _ => "badge-draft"
+        _submissions.Clear();
+        _searched = false;
+        _error = null;
+        _searchTerm = "";
+        _statusFilter = "";
+        _currentPage = 1;
+    }
+
+    private void ViewSubmission(int id) => Nav.NavigateTo($"/submissions/{id}");
+
+    private static string FormatStatus(SubmissionStatus status) => status switch
+    {
+        SubmissionStatus.Accepted => "Accepted",
+        SubmissionStatus.AcceptedWithWarnings => "Warnings",
+        SubmissionStatus.Rejected => "Rejected",
+        SubmissionStatus.Validating => "Validating",
+        SubmissionStatus.Parsing => "Parsing",
+        _ => "Draft"
+    };
+
+    private static string GetStatusClass(SubmissionStatus status) => status switch
+    {
+        SubmissionStatus.Accepted => "accepted",
+        SubmissionStatus.AcceptedWithWarnings => "acceptedwithwarnings",
+        SubmissionStatus.Rejected => "rejected",
+        SubmissionStatus.Validating => "validating",
+        SubmissionStatus.Parsing => "parsing",
+        _ => "draft"
     };
 }

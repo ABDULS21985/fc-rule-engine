@@ -9,46 +9,60 @@
 @inject FormulaService FormulaService
 @inject ITemplateMetadataCache Cache
 
-<div class="page-header">
-    <h1>Cross-Sheet Validation Rules</h1>
-    <p>Rules that validate relationships between different return templates</p>
-</div>
-
-@if (!string.IsNullOrEmpty(_message))
-{
-    <div class="alert @(_messageIsError ? "alert-error" : "alert-success")">@_message</div>
-}
-
-@if (_loading)
-{
-    <div class="text-center"><span class="spinner"></span></div>
-}
-else
-{
-    <div class="stats-grid">
-        <div class="stat-card">
-            <div class="stat-value">@_rules.Count</div>
-            <div class="stat-label">Total Rules</div>
-        </div>
-        <div class="stat-card">
-            <div class="stat-value">@_rules.Count(r => r.IsActive)</div>
-            <div class="stat-label">Active Rules</div>
+<div class="list-page">
+    <div class="list-page-header">
+        <div class="list-page-header-text">
+            <h1>
+                Cross-Sheet Validation Rules
+                @if (!_loading)
+                {
+                    <span class="list-count-chip">@_rules.Count</span>
+                }
+            </h1>
+            <p>Rules that validate relationships between different return templates</p>
         </div>
     </div>
 
-    <div class="card">
-        <div class="card-header">
-            <h2>Rules</h2>
-            <AuthorizeView Roles="Admin">
-                <Authorized Context="addAuth">
-                    <button class="btn btn-primary btn-sm" @onclick="ShowAddRule">Add Rule</button>
-                </Authorized>
-            </AuthorizeView>
+    @if (!string.IsNullOrEmpty(_message))
+    {
+        <div class="alert @(_messageIsError ? "alert-error" : "alert-success")">@_message</div>
+    }
+
+    <div class="list-card">
+        <div class="list-toolbar">
+            <div class="list-toolbar-filters">
+                <div class="list-search-wrap">
+                    <svg class="list-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+                    <input class="list-search-input" placeholder="Search by rule code, name, or description..." @bind="_search" @bind:event="oninput" />
+                </div>
+                <select class="list-filter-select" @bind="_severityFilter">
+                    <option value="">All Severities</option>
+                    @foreach (var s in Enum.GetValues<ValidationSeverity>())
+                    {
+                        <option value="@s">@s</option>
+                    }
+                </select>
+                <select class="list-filter-select" @bind="_statusFilter">
+                    <option value="">All Statuses</option>
+                    <option value="Active">Active</option>
+                    <option value="Inactive">Inactive</option>
+                </select>
+            </div>
+            <div class="list-toolbar-actions">
+                <AuthorizeView Roles="Admin">
+                    <Authorized Context="addAuth">
+                        <button class="btn-gold" @onclick="ShowAddRule">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
+                            New Cross-Sheet Rule
+                        </button>
+                    </Authorized>
+                </AuthorizeView>
+            </div>
         </div>
 
         @if (_showAddForm)
         {
-            <div style="padding:1rem;background:#f9f9f9;border-bottom:1px solid #eee;">
+            <div class="list-inline-form">
                 <h3>Add Cross-Sheet Rule</h3>
                 <div class="grid-2">
                     <div class="form-group">
@@ -64,11 +78,12 @@ else
                         <input class="form-control" @bind="_addDescription" placeholder="Description of the validation rule" />
                     </div>
                 </div>
-                <h4 style="margin-top:1rem;">Operands</h4>
+
+                <h4 style="margin-top:var(--space-4);font-size:var(--text-h4);font-weight:var(--font-weight-semibold);color:var(--cbn-text);">Operands</h4>
                 @for (int i = 0; i < _addOperands.Count; i++)
                 {
                     var idx = i;
-                    <div class="grid-2" style="margin-bottom:0.5rem;padding:0.5rem;background:#fff;border:1px solid #eee;border-radius:4px;">
+                    <div class="grid-2" style="margin-bottom:var(--space-2);padding:var(--space-3);background:var(--cbn-surface-elevated);border:1px solid var(--cbn-border);border-radius:var(--radius-sm);">
                         <div class="form-group">
                             <label>Alias</label>
                             <input class="form-control" @bind="_addOperands[idx].Alias" placeholder="A, B, C..." />
@@ -94,9 +109,9 @@ else
                         </div>
                     </div>
                 }
-                <button class="btn btn-outline btn-sm" @onclick="AddOperandRow">+ Add Operand</button>
+                <button class="btn btn-outline btn-sm" @onclick="AddOperandRow" style="margin-top:var(--space-2);">+ Add Operand</button>
 
-                <h4 style="margin-top:1rem;">Expression</h4>
+                <h4 style="margin-top:var(--space-4);font-size:var(--text-h4);font-weight:var(--font-weight-semibold);color:var(--cbn-text);">Expression</h4>
                 <div class="grid-2">
                     <div class="form-group">
                         <label>Expression</label>
@@ -120,50 +135,107 @@ else
                         <input class="form-control" @bind="_addErrorMessage" placeholder="e.g. Balance sheet does not balance" />
                     </div>
                 </div>
-                <div style="display:flex;gap:0.5rem;margin-top:0.5rem;">
+                <div class="list-form-actions">
                     <button class="btn btn-primary btn-sm" @onclick="AddRule">Create Rule</button>
-                    <button class="btn btn-outline btn-sm" @onclick="() => _showAddForm = false">Cancel</button>
+                    <button class="btn btn-outline btn-sm" @onclick="CancelAdd">Cancel</button>
                 </div>
             </div>
         }
 
-        <table class="data-table">
-            <thead>
-                <tr>
-                    <th>Rule Code</th><th>Name</th><th>Description</th>
-                    <th>Operands</th><th>Expression</th><th>Severity</th><th>Active</th>
-                </tr>
-            </thead>
-            <tbody>
-                @foreach (var rule in _rules)
+        @if (_loading)
+        {
+            <div class="list-skeleton">
+                @for (var i = 0; i < 5; i++)
                 {
-                    <tr>
-                        <td><code>@rule.RuleCode</code></td>
-                        <td><strong>@rule.RuleName</strong></td>
-                        <td style="max-width:250px;">@rule.Description</td>
-                        <td>
-                            @foreach (var op in rule.Operands)
-                            {
-                                <div><code>@op.OperandAlias</code> = @op.TemplateReturnCode.@op.FieldName
-                                    @if (!string.IsNullOrEmpty(op.AggregateFunction)) { <span class="badge badge-review">@op.AggregateFunction</span> }
-                                </div>
-                            }
-                        </td>
-                        <td><code>@rule.Expression?.Expression</code></td>
-                        <td>@rule.Severity</td>
-                        <td>@(rule.IsActive ? "Yes" : "No")</td>
-                    </tr>
+                    <div class="list-skeleton-row">
+                        <div class="list-skeleton-cell" style="width:80px;"></div>
+                        <div class="list-skeleton-cell" style="flex:1;"></div>
+                        <div class="list-skeleton-cell" style="width:200px;"></div>
+                        <div class="list-skeleton-cell" style="width:120px;"></div>
+                        <div class="list-skeleton-cell" style="width:60px;"></div>
+                    </div>
                 }
-            </tbody>
-        </table>
+            </div>
+        }
+        else if (!FilteredRules.Any())
+        {
+            <div class="list-empty">
+                <svg class="list-empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M16 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V8Z"/><path d="M15 3v4a2 2 0 0 0 2 2h4"/></svg>
+                <h3 class="list-empty-title">No cross-sheet rules found</h3>
+                <p class="list-empty-text">No rules match your current filters. Try adjusting your search or create a new cross-sheet validation rule.</p>
+            </div>
+        }
+        else
+        {
+            <div class="list-table-wrap">
+                <table class="list-table" role="table">
+                    <thead>
+                        <tr>
+                            <th scope="col">Rule Code</th>
+                            <th scope="col">Name</th>
+                            <th scope="col">Description</th>
+                            <th scope="col">Operands</th>
+                            <th scope="col">Expression</th>
+                            <th scope="col">Severity</th>
+                            <th scope="col">Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var rule in FilteredRules)
+                        {
+                            <tr>
+                                <td class="list-cell-code">@rule.RuleCode</td>
+                                <td class="list-cell-strong">@rule.RuleName</td>
+                                <td class="list-cell-truncate list-cell-muted" title="@rule.Description">@(rule.Description ?? "—")</td>
+                                <td>
+                                    @foreach (var op in rule.Operands)
+                                    {
+                                        <div style="font-size:var(--text-body-sm);margin-bottom:2px;">
+                                            <span class="list-cell-code">@op.OperandAlias</span>
+                                            <span class="list-cell-muted"> = @op.TemplateReturnCode.@op.FieldName</span>
+                                            @if (!string.IsNullOrEmpty(op.AggregateFunction))
+                                            {
+                                                <span class="list-badge list-badge-info" style="font-size:10px;padding:1px 6px;margin-left:4px;">@op.AggregateFunction</span>
+                                            }
+                                        </div>
+                                    }
+                                </td>
+                                <td class="list-cell-code">@rule.Expression?.Expression</td>
+                                <td>
+                                    <span class="list-badge list-badge-@rule.Severity.ToString().ToLowerInvariant()">@rule.Severity</span>
+                                </td>
+                                <td>
+                                    @if (rule.IsActive)
+                                    {
+                                        <span class="list-badge list-badge-active">Active</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="list-badge list-badge-disabled">Inactive</span>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="list-footer">
+                <div class="list-footer-summary">
+                    Showing <strong>@FilteredRules.Count()</strong> of <strong>@_rules.Count</strong> cross-sheet rules
+                    &mdash; <strong>@_rules.Count(r => r.IsActive)</strong> active
+                </div>
+            </div>
+        }
     </div>
-}
+</div>
 
 @code {
     private bool _loading = true;
     private IReadOnlyList<CrossSheetRule> _rules = Array.Empty<CrossSheetRule>();
     private string? _message;
     private bool _messageIsError;
+    private string _search = "", _severityFilter = "", _statusFilter = "";
 
     // Add form
     private bool _showAddForm;
@@ -172,6 +244,16 @@ else
     private decimal _addTolerance = 0.01m;
     private ValidationSeverity _addSeverity = ValidationSeverity.Error;
     private List<OperandModel> _addOperands = new();
+
+    private IEnumerable<CrossSheetRule> FilteredRules => _rules
+        .Where(r => string.IsNullOrEmpty(_search) ||
+                    r.RuleCode.Contains(_search, StringComparison.OrdinalIgnoreCase) ||
+                    r.RuleName.Contains(_search, StringComparison.OrdinalIgnoreCase) ||
+                    (r.Description?.Contains(_search, StringComparison.OrdinalIgnoreCase) ?? false))
+        .Where(r => string.IsNullOrEmpty(_severityFilter) || r.Severity.ToString() == _severityFilter)
+        .Where(r => string.IsNullOrEmpty(_statusFilter) ||
+                    (_statusFilter == "Active" && r.IsActive) ||
+                    (_statusFilter == "Inactive" && !r.IsActive));
 
     protected override async Task OnInitializedAsync()
     {
@@ -188,6 +270,8 @@ else
             new() { Alias = "B" }
         };
     }
+
+    private void CancelAdd() => _showAddForm = false;
 
     private void AddOperandRow()
     {

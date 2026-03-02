@@ -8,35 +8,62 @@
 @inject IFormulaRepository FormulaRepo
 @inject FormulaService FormulaService
 
-<div class="page-header">
-    <h1>Business Rules</h1>
-    <p>Expression-based validation rules with template applicability</p>
-</div>
+<div class="list-page">
+    <div class="list-page-header">
+        <div class="list-page-header-text">
+            <h1>
+                Business Rules
+                @if (!_loading)
+                {
+                    <span class="list-count-chip">@_rules.Count</span>
+                }
+            </h1>
+            <p>Expression-based validation rules with template applicability</p>
+        </div>
+    </div>
 
-@if (!string.IsNullOrEmpty(_message))
-{
-    <div class="alert @(_messageIsError ? "alert-error" : "alert-success")">@_message</div>
-}
+    @if (!string.IsNullOrEmpty(_message))
+    {
+        <div class="alert @(_messageIsError ? "alert-error" : "alert-success")">@_message</div>
+    }
 
-@if (_loading)
-{
-    <div class="text-center"><span class="spinner"></span></div>
-}
-else
-{
-    <div class="card">
-        <div class="card-header">
-            <h2>Business Rules (@_rules.Count)</h2>
-            <AuthorizeView Roles="Admin,Approver">
-                <Authorized Context="addAuth">
-                    <button class="btn btn-primary btn-sm" @onclick="ShowAddRule">Add Rule</button>
-                </Authorized>
-            </AuthorizeView>
+    <div class="list-card">
+        <div class="list-toolbar">
+            <div class="list-toolbar-filters">
+                <div class="list-search-wrap">
+                    <svg class="list-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+                    <input class="list-search-input" placeholder="Search by rule code or name..." @bind="_search" @bind:event="oninput" />
+                </div>
+                <select class="list-filter-select" @bind="_typeFilter">
+                    <option value="">All Types</option>
+                    <option value="Completeness">Completeness</option>
+                    <option value="DateCheck">DateCheck</option>
+                    <option value="ThresholdCheck">ThresholdCheck</option>
+                    <option value="Custom">Custom</option>
+                </select>
+                <select class="list-filter-select" @bind="_severityFilter">
+                    <option value="">All Severities</option>
+                    @foreach (var s in Enum.GetValues<ValidationSeverity>())
+                    {
+                        <option value="@s">@s</option>
+                    }
+                </select>
+            </div>
+            <div class="list-toolbar-actions">
+                <AuthorizeView Roles="Admin,Approver">
+                    <Authorized Context="addAuth">
+                        <button class="btn-gold" @onclick="ShowAddRule">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
+                            New Business Rule
+                        </button>
+                    </Authorized>
+                </AuthorizeView>
+            </div>
         </div>
 
         @if (_showAddForm)
         {
-            <div style="padding:1rem;background:#f9f9f9;border-bottom:1px solid #eee;">
+            <div class="list-inline-form">
                 <h3>Add Business Rule</h3>
                 <div class="grid-2">
                     <div class="form-group">
@@ -74,49 +101,109 @@ else
                         <input class="form-control" @bind="_addAppliesToTemplates" placeholder="e.g. MFCR 300,MFCR 301" />
                     </div>
                 </div>
-                <div style="display:flex;gap:0.5rem;margin-top:0.5rem;">
+                <div class="list-form-actions">
                     <button class="btn btn-primary btn-sm" @onclick="AddRule">Create</button>
-                    <button class="btn btn-outline btn-sm" @onclick="() => _showAddForm = false">Cancel</button>
+                    <button class="btn btn-outline btn-sm" @onclick="CancelAdd">Cancel</button>
                 </div>
             </div>
         }
 
-        <table class="data-table">
-            <thead>
-                <tr>
-                    <th>Rule Code</th><th>Name</th><th>Type</th>
-                    <th>Expression</th><th>Applies To</th><th>Severity</th><th>Active</th>
-                </tr>
-            </thead>
-            <tbody>
-                @foreach (var rule in _rules)
+        @if (_loading)
+        {
+            <div class="list-skeleton">
+                @for (var i = 0; i < 5; i++)
                 {
-                    <tr>
-                        <td><code>@rule.RuleCode</code></td>
-                        <td><strong>@rule.RuleName</strong></td>
-                        <td><span class="badge badge-review">@rule.RuleType</span></td>
-                        <td><code>@rule.Expression</code></td>
-                        <td>@rule.AppliesToTemplates</td>
-                        <td>@rule.Severity</td>
-                        <td>@(rule.IsActive ? "Yes" : "No")</td>
-                    </tr>
+                    <div class="list-skeleton-row">
+                        <div class="list-skeleton-cell" style="width:80px;"></div>
+                        <div class="list-skeleton-cell" style="flex:1;"></div>
+                        <div class="list-skeleton-cell" style="width:80px;"></div>
+                        <div class="list-skeleton-cell" style="width:120px;"></div>
+                        <div class="list-skeleton-cell" style="width:60px;"></div>
+                    </div>
                 }
-            </tbody>
-        </table>
+            </div>
+        }
+        else if (!FilteredRules.Any())
+        {
+            <div class="list-empty">
+                <svg class="list-empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 12h6"/><path d="M12 9v6"/><circle cx="12" cy="12" r="10"/></svg>
+                <h3 class="list-empty-title">No business rules found</h3>
+                <p class="list-empty-text">No rules match your current filters. Try adjusting your search or create a new business rule.</p>
+            </div>
+        }
+        else
+        {
+            <div class="list-table-wrap">
+                <table class="list-table" role="table">
+                    <thead>
+                        <tr>
+                            <th scope="col">Rule Code</th>
+                            <th scope="col">Name</th>
+                            <th scope="col">Type</th>
+                            <th scope="col">Expression</th>
+                            <th scope="col">Applies To</th>
+                            <th scope="col">Severity</th>
+                            <th scope="col">Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var rule in FilteredRules)
+                        {
+                            <tr>
+                                <td class="list-cell-code">@rule.RuleCode</td>
+                                <td class="list-cell-strong">@rule.RuleName</td>
+                                <td>
+                                    <span class="list-badge list-badge-review">@rule.RuleType</span>
+                                </td>
+                                <td class="list-cell-code list-cell-truncate" title="@rule.Expression">@(rule.Expression ?? "—")</td>
+                                <td class="list-cell-muted list-cell-truncate" title="@rule.AppliesToTemplates">@(rule.AppliesToTemplates ?? "All")</td>
+                                <td>
+                                    <span class="list-badge list-badge-@rule.Severity.ToString().ToLowerInvariant()">@rule.Severity</span>
+                                </td>
+                                <td>
+                                    @if (rule.IsActive)
+                                    {
+                                        <span class="list-badge list-badge-active">Active</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="list-badge list-badge-disabled">Disabled</span>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="list-footer">
+                <div class="list-footer-summary">
+                    Showing <strong>@FilteredRules.Count()</strong> of <strong>@_rules.Count</strong> business rules
+                </div>
+            </div>
+        }
     </div>
-}
+</div>
 
 @code {
     private bool _loading = true;
     private IReadOnlyList<BusinessRule> _rules = Array.Empty<BusinessRule>();
     private string? _message;
     private bool _messageIsError;
+    private string _search = "", _typeFilter = "", _severityFilter = "";
 
     // Add form
     private bool _showAddForm;
     private string _addCode = "", _addName = "", _addRuleType = "Completeness";
     private string _addExpression = "", _addAppliesToTemplates = "";
     private ValidationSeverity _addSeverity = ValidationSeverity.Error;
+
+    private IEnumerable<BusinessRule> FilteredRules => _rules
+        .Where(r => string.IsNullOrEmpty(_search) ||
+                    r.RuleCode.Contains(_search, StringComparison.OrdinalIgnoreCase) ||
+                    r.RuleName.Contains(_search, StringComparison.OrdinalIgnoreCase))
+        .Where(r => string.IsNullOrEmpty(_typeFilter) || r.RuleType == _typeFilter)
+        .Where(r => string.IsNullOrEmpty(_severityFilter) || r.Severity.ToString() == _severityFilter);
 
     protected override async Task OnInitializedAsync()
     {
@@ -125,6 +212,7 @@ else
     }
 
     private void ShowAddRule() => _showAddForm = true;
+    private void CancelAdd() => _showAddForm = false;
 
     private async Task AddRule()
     {
