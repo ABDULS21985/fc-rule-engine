@@ -3,31 +3,122 @@
 
 <div class="login-container">
     <div class="login-card">
-        <div class="login-header">
-            <h2>FC Engine</h2>
-            <span>Admin Portal</span>
+        <div class="login-card-accent"></div>
+
+        <div class="login-card-body">
+            <!-- Header -->
+            <div class="login-card-header">
+                <h2 class="login-title">Welcome Back</h2>
+                <p class="login-subtitle">Sign in to access the Financial Returns Collection &amp; Analysis System</p>
+            </div>
+
+            <!-- Error Alert -->
+            @if (_hasError)
+            {
+                <div class="login-alert login-alert-error" role="alert">
+                    <svg class="login-alert-icon" viewBox="0 0 20 20" fill="currentColor" width="18" height="18" aria-hidden="true">
+                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"/>
+                    </svg>
+                    <span>Invalid username or password. Please try again.</span>
+                </div>
+            }
+
+            <!-- Login Form -->
+            <form id="loginForm" method="post" action="/account/login">
+                <div class="floating-field">
+                    <input
+                        id="username"
+                        name="username"
+                        type="text"
+                        class="floating-input"
+                        placeholder=" "
+                        required
+                        autocomplete="username"
+                        aria-label="Username" />
+                    <label for="username" class="floating-label">
+                        <svg class="field-icon" viewBox="0 0 20 20" fill="currentColor" width="16" height="16" aria-hidden="true">
+                            <path fill-rule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clip-rule="evenodd"/>
+                        </svg>
+                        <span>Username</span>
+                    </label>
+                </div>
+
+                <div class="floating-field">
+                    <input
+                        id="password"
+                        name="password"
+                        type="password"
+                        class="floating-input"
+                        placeholder=" "
+                        required
+                        autocomplete="current-password"
+                        aria-label="Password" />
+                    <label for="password" class="floating-label">
+                        <svg class="field-icon" viewBox="0 0 20 20" fill="currentColor" width="16" height="16" aria-hidden="true">
+                            <path fill-rule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clip-rule="evenodd"/>
+                        </svg>
+                        <span>Password</span>
+                    </label>
+                    <button type="button" class="password-toggle" id="pwdToggle" aria-label="Toggle password visibility" tabindex="-1">
+                        <svg class="eye-open" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="18" height="18">
+                            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                            <circle cx="12" cy="12" r="3"/>
+                        </svg>
+                        <svg class="eye-closed" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="18" height="18">
+                            <path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24"/>
+                            <line x1="1" y1="1" x2="23" y2="23"/>
+                        </svg>
+                    </button>
+                </div>
+
+                <button type="submit" class="btn-gold-submit" id="submitBtn">
+                    <span class="btn-label">
+                        <svg viewBox="0 0 20 20" fill="currentColor" width="18" height="18" aria-hidden="true">
+                            <path fill-rule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clip-rule="evenodd"/>
+                        </svg>
+                        <span>Secure Login</span>
+                    </span>
+                    <span class="btn-loading">
+                        <svg class="loading-spinner" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+                            <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="2.5" stroke-dasharray="31.4 31.4" stroke-linecap="round"/>
+                        </svg>
+                        <span>Authenticating...</span>
+                    </span>
+                </button>
+            </form>
+
+            <!-- Footer -->
+            <div class="login-card-footer">
+                <span>Powered by <strong>FC Engine</strong></span>
+            </div>
         </div>
-
-        @if (_hasError)
-        {
-            <div class="alert alert-error">Invalid username or password</div>
-        }
-
-        <form method="post" action="/account/login">
-            <div class="form-group">
-                <label for="username">Username</label>
-                <input id="username" name="username" class="form-control" placeholder="Enter username" required />
-            </div>
-            <div class="form-group">
-                <label for="password">Password</label>
-                <input id="password" name="password" class="form-control" type="password" placeholder="Enter password" required />
-            </div>
-            <button type="submit" class="btn btn-primary btn-block">
-                <span>Sign In</span>
-            </button>
-        </form>
     </div>
 </div>
+
+<script>
+    (function () {
+        // Password visibility toggle
+        const pwdInput = document.getElementById('password');
+        const toggle = document.getElementById('pwdToggle');
+        if (toggle && pwdInput) {
+            toggle.addEventListener('click', function () {
+                const isPassword = pwdInput.type === 'password';
+                pwdInput.type = isPassword ? 'text' : 'password';
+                toggle.classList.toggle('active', isPassword);
+            });
+        }
+
+        // Loading state on form submit
+        const form = document.getElementById('loginForm');
+        const btn = document.getElementById('submitBtn');
+        if (form && btn) {
+            form.addEventListener('submit', function () {
+                btn.disabled = true;
+                btn.classList.add('is-loading');
+            });
+        }
+    })();
+</script>
 
 @code {
     [SupplyParameterFromQuery(Name = "error")]
