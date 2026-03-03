@@ -153,7 +153,7 @@ public class DashboardService
                 DaysRemaining = daysRemaining,
                 Status = status,
                 SubmissionId = existingSubmission?.Id ?? draftSubmission?.Id,
-                Frequency = template.StructuralCategory
+                Frequency = template.Frequency.ToString()
             });
         }
 

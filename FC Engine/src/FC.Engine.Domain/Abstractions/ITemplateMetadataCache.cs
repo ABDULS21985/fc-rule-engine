@@ -1,3 +1,4 @@
+using FC.Engine.Domain.Enums;
 using FC.Engine.Domain.Metadata;
 
 namespace FC.Engine.Domain.Abstractions;
@@ -18,6 +19,7 @@ public class CachedTemplate
     public int TemplateId { get; set; }
     public string ReturnCode { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
+    public ReturnFrequency Frequency { get; set; }
     public string StructuralCategory { get; set; } = string.Empty;
     public string PhysicalTableName { get; set; } = string.Empty;
     public string XmlRootElement { get; set; } = string.Empty;

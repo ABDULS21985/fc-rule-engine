@@ -102,6 +102,7 @@ public class TemplateMetadataCache : ITemplateMetadataCache
             TemplateId = template.Id,
             ReturnCode = template.ReturnCode,
             Name = template.Name,
+            Frequency = template.Frequency,
             StructuralCategory = template.StructuralCategory.ToString(),
             PhysicalTableName = template.PhysicalTableName,
             XmlRootElement = template.XmlRootElement,
