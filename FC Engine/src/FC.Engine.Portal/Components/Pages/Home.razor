@@ -1,20 +1,509 @@
 @page "/"
 @attribute [Authorize]
+@inject DashboardService DashboardService
 
 <PageTitle>Dashboard — FC Engine Portal</PageTitle>
 
-<div class="portal-page-header">
-    <h1 class="portal-page-title">Dashboard</h1>
-    <p class="portal-page-subtitle">Financial Institution Reporting Portal</p>
-</div>
+@if (isLoading)
+{
+    <!-- Loading Skeleton -->
+    <div class="portal-dashboard">
+        <div class="portal-dash-welcome">
+            <div class="portal-skeleton portal-skeleton-text portal-skeleton-lg"></div>
+            <div class="portal-skeleton portal-skeleton-text portal-skeleton-sm"></div>
+        </div>
+        <div class="portal-dash-stats">
+            @for (int i = 0; i < 4; i++)
+            {
+                <div class="portal-stat-card portal-skeleton-card">
+                    <div class="portal-skeleton portal-skeleton-text"></div>
+                    <div class="portal-skeleton portal-skeleton-text portal-skeleton-lg"></div>
+                </div>
+            }
+        </div>
+    </div>
+}
+else if (data is not null)
+{
+    <div class="portal-dashboard">
 
-<div class="portal-placeholder">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" width="48" height="48" style="color: #9ca3af; margin-bottom: 1rem;" aria-hidden="true">
-        <rect x="3" y="3" width="7" height="7"/>
-        <rect x="14" y="3" width="7" height="7"/>
-        <rect x="14" y="14" width="7" height="7"/>
-        <rect x="3" y="14" width="7" height="7"/>
-    </svg>
-    <p style="font-size: 1rem; font-weight: 600; color: #374151;">Welcome to the FC Engine Portal</p>
-    <p>Your institution dashboard with compliance overview, submission status, and upcoming deadlines will be here.</p>
-</div>
+        <!-- ═══════════════════════════════════════════════════════════
+             SECTION 1: Welcome Header
+             ═══════════════════════════════════════════════════════════ -->
+        <section class="portal-dash-welcome" aria-label="Welcome">
+            <div class="portal-dash-welcome-text">
+                <h1 class="portal-dash-greeting">@greeting, @displayName</h1>
+                <p class="portal-dash-institution">@data.InstitutionName · @data.InstitutionCode</p>
+                <p class="portal-dash-date">@DateTime.Now.ToString("dddd, d MMMM yyyy")</p>
+            </div>
+            <div class="portal-dash-welcome-actions">
+                <a href="/submit" class="portal-btn portal-btn-primary">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                        <polyline points="17 8 12 3 7 8"/>
+                        <line x1="12" y1="3" x2="12" y2="15"/>
+                    </svg>
+                    Submit Return
+                </a>
+                <a href="/calendar" class="portal-btn portal-btn-outline">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+                        <line x1="16" y1="2" x2="16" y2="6"/>
+                        <line x1="8" y1="2" x2="8" y2="6"/>
+                        <line x1="3" y1="10" x2="21" y2="10"/>
+                    </svg>
+                    View Calendar
+                </a>
+            </div>
+        </section>
+
+        <!-- ═══════════════════════════════════════════════════════════
+             SECTION 2: Compliance Score (Hero Metric)
+             ═══════════════════════════════════════════════════════════ -->
+        <section class="portal-dash-compliance" aria-label="Compliance score">
+            <div class="portal-compliance-card">
+                <div class="portal-compliance-ring-container">
+                    <div class="portal-ring-chart"
+                         style="--ring-percent: @data.CompliancePercentage; --ring-color: @GetComplianceColor(data.CompliancePercentage);"
+                         role="img"
+                         aria-label="Compliance score: @data.CompliancePercentage percent">
+                        <svg viewBox="0 0 120 120" class="portal-ring-svg">
+                            <circle cx="60" cy="60" r="52" class="portal-ring-bg" />
+                            <circle cx="60" cy="60" r="52"
+                                    class="portal-ring-fill"
+                                    stroke-dasharray="@(Math.Round(326.7m * data.CompliancePercentage / 100, 1)) 326.7"
+                                    stroke-dashoffset="0" />
+                        </svg>
+                        <div class="portal-ring-label">
+                            <span class="portal-ring-value">@data.CompliancePercentage<span class="portal-ring-unit">%</span></span>
+                        </div>
+                    </div>
+                </div>
+                <div class="portal-compliance-details">
+                    <h2 class="portal-compliance-title">Compliance Score</h2>
+                    <p class="portal-compliance-subtitle">
+                        @data.TotalReturnsSubmitted of @data.TotalReturnsDue returns submitted this period
+                    </p>
+                    <div class="portal-compliance-trend">
+                        @if (data.CompliancePercentage >= data.PreviousPeriodCompliancePercentage)
+                        {
+                            <span class="portal-trend portal-trend-up" aria-label="Trending up">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
+                                    <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/>
+                                    <polyline points="17 6 23 6 23 12"/>
+                                </svg>
+                                +@(data.CompliancePercentage - data.PreviousPeriodCompliancePercentage)% vs last period
+                            </span>
+                        }
+                        else
+                        {
+                            <span class="portal-trend portal-trend-down" aria-label="Trending down">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
+                                    <polyline points="23 18 13.5 8.5 8.5 13.5 1 6"/>
+                                    <polyline points="17 18 23 18 23 12"/>
+                                </svg>
+                                -@(data.PreviousPeriodCompliancePercentage - data.CompliancePercentage)% vs last period
+                            </span>
+                        }
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ═══════════════════════════════════════════════════════════
+             SECTION 3: Stat Cards
+             ═══════════════════════════════════════════════════════════ -->
+        <section class="portal-dash-stats" aria-label="Key metrics">
+            <!-- Due This Month -->
+            <div class="portal-stat-card portal-stat-due">
+                <div class="portal-stat-header">
+                    <span class="portal-stat-icon portal-stat-icon-blue" aria-hidden="true">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+                            <line x1="16" y1="2" x2="16" y2="6"/>
+                            <line x1="8" y1="2" x2="8" y2="6"/>
+                            <line x1="3" y1="10" x2="21" y2="10"/>
+                        </svg>
+                    </span>
+                    <span class="portal-stat-label">Due This Month</span>
+                </div>
+                <div class="portal-stat-value">@data.DueThisMonth</div>
+                @if (data.OverdueCount > 0)
+                {
+                    <div class="portal-stat-detail portal-stat-detail-danger">
+                        @data.OverdueCount overdue
+                    </div>
+                }
+                else
+                {
+                    <div class="portal-stat-detail portal-stat-detail-success">
+                        All on track
+                    </div>
+                }
+            </div>
+
+            <!-- Submitted -->
+            <div class="portal-stat-card portal-stat-submitted">
+                <div class="portal-stat-header">
+                    <span class="portal-stat-icon portal-stat-icon-green" aria-hidden="true">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="20 6 9 17 4 12"/>
+                        </svg>
+                    </span>
+                    <span class="portal-stat-label">Submitted</span>
+                </div>
+                <div class="portal-stat-value">@data.SubmittedThisPeriod</div>
+                <div class="portal-stat-detail">
+                    <span class="portal-stat-detail-success">@data.AcceptedCount accepted</span>
+                    @if (data.RejectedCount > 0)
+                    {
+                        <span class="portal-stat-detail-danger"> · @data.RejectedCount rejected</span>
+                    }
+                </div>
+            </div>
+
+            <!-- Pending Review -->
+            <div class="portal-stat-card portal-stat-pending">
+                <div class="portal-stat-header">
+                    <span class="portal-stat-icon portal-stat-icon-amber" aria-hidden="true">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"/>
+                            <polyline points="12 6 12 12 16 14"/>
+                        </svg>
+                    </span>
+                    <span class="portal-stat-label">Pending Review</span>
+                </div>
+                <div class="portal-stat-value">@data.PendingReviewCount</div>
+                <div class="portal-stat-detail">
+                    Awaiting checker approval
+                </div>
+            </div>
+
+            <!-- Validation Score -->
+            <div class="portal-stat-card portal-stat-validation">
+                <div class="portal-stat-header">
+                    <span class="portal-stat-icon portal-stat-icon-purple" aria-hidden="true">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                            <polyline points="22 4 12 14.01 9 11.01"/>
+                        </svg>
+                    </span>
+                    <span class="portal-stat-label">Validation Score</span>
+                </div>
+                <div class="portal-stat-value">@data.AverageValidationScore<span class="portal-stat-unit">%</span></div>
+                <div class="portal-stat-detail">
+                    Average pass rate
+                </div>
+            </div>
+        </section>
+
+        <!-- ═══════════════════════════════════════════════════════════
+             SECTION 4: Upcoming Deadlines
+             ═══════════════════════════════════════════════════════════ -->
+        <section class="portal-dash-section" aria-label="Upcoming deadlines">
+            <div class="portal-dash-section-header">
+                <h2 class="portal-dash-section-title">Upcoming Deadlines</h2>
+                <a href="/calendar" class="portal-dash-section-link">View Calendar</a>
+            </div>
+
+            @if (data.UpcomingDeadlines.Any())
+            {
+                <div class="portal-deadline-list">
+                    @foreach (var deadline in data.UpcomingDeadlines)
+                    {
+                        <div class="portal-deadline-item portal-deadline-@deadline.Status.ToString().ToLowerInvariant()">
+                            <div class="portal-deadline-code">
+                                <span class="portal-deadline-return-code">@deadline.ReturnCode</span>
+                                <span class="portal-deadline-return-name">@deadline.ReturnName</span>
+                            </div>
+                            <div class="portal-deadline-freq">
+                                <span class="portal-badge portal-badge-neutral">@deadline.Frequency</span>
+                            </div>
+                            <div class="portal-deadline-due">
+                                <span class="portal-deadline-date">@deadline.DueDate.ToString("d MMM yyyy")</span>
+                                <span class="portal-deadline-days @GetDaysClass(deadline.DaysRemaining)">
+                                    @FormatDaysRemaining(deadline.DaysRemaining)
+                                </span>
+                            </div>
+                            <div class="portal-deadline-status">
+                                <span class="portal-badge @GetDeadlineBadgeClass(deadline.Status)">
+                                    @GetDeadlineStatusLabel(deadline.Status)
+                                </span>
+                            </div>
+                            <div class="portal-deadline-action">
+                                @if (deadline.Status == DeadlineStatus.Submitted)
+                                {
+                                    <a href="/submissions/@deadline.SubmissionId" class="portal-btn portal-btn-xs portal-btn-ghost-green">
+                                        View
+                                    </a>
+                                }
+                                else
+                                {
+                                    <a href="/submit" class="portal-btn portal-btn-xs portal-btn-primary">
+                                        Submit
+                                    </a>
+                                }
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+            else
+            {
+                <div class="portal-empty-state">
+                    <p>No upcoming deadlines. You're all caught up!</p>
+                </div>
+            }
+        </section>
+
+        <!-- ═══════════════════════════════════════════════════════════
+             SECTION 5: Recent Submissions
+             ═══════════════════════════════════════════════════════════ -->
+        <section class="portal-dash-section" aria-label="Recent submissions">
+            <div class="portal-dash-section-header">
+                <h2 class="portal-dash-section-title">Recent Submissions</h2>
+                <a href="/submissions" class="portal-dash-section-link">View All</a>
+            </div>
+
+            @if (data.RecentSubmissions.Any())
+            {
+                <div class="portal-table-container">
+                    <table class="portal-table" aria-label="Recent submissions">
+                        <thead>
+                            <tr>
+                                <th>Return Code</th>
+                                <th>Period</th>
+                                <th>Submitted</th>
+                                <th>Status</th>
+                                <th>Errors</th>
+                                <th>Warnings</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var sub in data.RecentSubmissions)
+                            {
+                                <tr class="portal-table-row-clickable" @onclick="() => NavigateToSubmission(sub.SubmissionId)">
+                                    <td>
+                                        <span class="portal-table-primary">@sub.ReturnCode</span>
+                                    </td>
+                                    <td>@sub.Period</td>
+                                    <td>@sub.SubmittedDate.ToString("d MMM yyyy HH:mm")</td>
+                                    <td>
+                                        <span class="portal-badge @GetStatusBadgeClass(sub.Status)">
+                                            @GetStatusLabel(sub.Status)
+                                        </span>
+                                    </td>
+                                    <td>
+                                        @if (sub.ErrorCount > 0)
+                                        {
+                                            <span class="portal-count-error">@sub.ErrorCount</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="portal-count-zero">0</span>
+                                        }
+                                    </td>
+                                    <td>
+                                        @if (sub.WarningCount > 0)
+                                        {
+                                            <span class="portal-count-warning">@sub.WarningCount</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="portal-count-zero">0</span>
+                                        }
+                                    </td>
+                                    <td>
+                                        <a href="/submissions/@sub.SubmissionId" class="portal-table-link" aria-label="View submission @sub.ReturnCode">
+                                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                                                <polyline points="9 18 15 12 9 6"/>
+                                            </svg>
+                                        </a>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+            else
+            {
+                <div class="portal-empty-state">
+                    <p>No submissions yet.</p>
+                    <a href="/submit" class="portal-btn portal-btn-primary">Submit Your First Return</a>
+                </div>
+            }
+        </section>
+
+        <!-- ═══════════════════════════════════════════════════════════
+             SECTION 6: Compliance Trend (CSS-only bar chart)
+             ═══════════════════════════════════════════════════════════ -->
+        <section class="portal-dash-section" aria-label="Compliance trend">
+            <div class="portal-dash-section-header">
+                <h2 class="portal-dash-section-title">Compliance Trend</h2>
+                <span class="portal-dash-section-meta">Last 6 months</span>
+            </div>
+
+            <div class="portal-trend-chart" role="img" aria-label="Compliance trend over the last 6 months">
+                @foreach (var month in data.ComplianceTrend)
+                {
+                    <div class="portal-trend-bar-group">
+                        <div class="portal-trend-bar-track">
+                            <div class="portal-trend-bar-fill"
+                                 style="width: @month.CompliancePercent%;"
+                                 title="@month.CompliancePercent% — @month.Submitted of @month.Total">
+                            </div>
+                        </div>
+                        <span class="portal-trend-bar-label">@month.MonthLabel</span>
+                        <span class="portal-trend-bar-value">@month.CompliancePercent%</span>
+                    </div>
+                }
+            </div>
+        </section>
+
+    </div>
+}
+else
+{
+    <!-- Error State -->
+    <div class="portal-dashboard">
+        <div class="portal-empty-state portal-empty-state-error">
+            <p>Unable to load dashboard data. Please try refreshing the page.</p>
+            <button class="portal-btn portal-btn-outline" @onclick="LoadDashboard">Retry</button>
+        </div>
+    </div>
+}
+
+@code {
+    [CascadingParameter]
+    private Task<AuthenticationState>? AuthState { get; set; }
+
+    [Inject]
+    private NavigationManager Navigation { get; set; } = default!;
+
+    private DashboardData? data;
+    private bool isLoading = true;
+    private string displayName = "";
+    private string greeting = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadDashboard();
+    }
+
+    private async Task LoadDashboard()
+    {
+        isLoading = true;
+        StateHasChanged();
+
+        try
+        {
+            var state = await AuthState!;
+            var user = state.User;
+
+            displayName = user.FindFirst("DisplayName")?.Value
+                       ?? user.Identity?.Name
+                       ?? "User";
+
+            var hour = DateTime.Now.Hour;
+            if (hour <= 11)
+                greeting = "Good morning";
+            else if (hour <= 16)
+                greeting = "Good afternoon";
+            else
+                greeting = "Good evening";
+
+            var institutionIdStr = user.FindFirst("InstitutionId")?.Value;
+            var institutionName = user.FindFirst("InstitutionName")?.Value ?? "Unknown Institution";
+            var institutionCode = institutionIdStr ?? "";
+
+            if (int.TryParse(institutionIdStr, out var institutionId))
+            {
+                data = await DashboardService.GetDashboardDataAsync(institutionId, institutionName, institutionCode);
+            }
+            else
+            {
+                data = null;
+            }
+        }
+        catch
+        {
+            data = null;
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private void NavigateToSubmission(int submissionId)
+    {
+        Navigation.NavigateTo($"/submissions/{submissionId}");
+    }
+
+    // ── Helper Methods ──────────────────────────────────────────
+
+    private static string GetComplianceColor(decimal percent) => percent switch
+    {
+        >= 90 => "#006B3F",
+        >= 70 => "#f59e0b",
+        _ => "#ef4444"
+    };
+
+    private static string GetDaysClass(int days)
+    {
+        if (days <= -1) return "portal-days-overdue";
+        if (days <= 3) return "portal-days-urgent";
+        if (days <= 7) return "portal-days-warning";
+        return "portal-days-ok";
+    }
+
+    private static string FormatDaysRemaining(int days)
+    {
+        if (days <= -1) return $"{Math.Abs(days)} days overdue";
+        if (days == 0) return "Due today";
+        if (days == 1) return "Due tomorrow";
+        return $"{days} days left";
+    }
+
+    private static string GetDeadlineBadgeClass(DeadlineStatus status) => status switch
+    {
+        DeadlineStatus.Submitted => "portal-badge-success",
+        DeadlineStatus.Overdue => "portal-badge-danger",
+        DeadlineStatus.Draft => "portal-badge-warning",
+        _ => "portal-badge-neutral"
+    };
+
+    private static string GetDeadlineStatusLabel(DeadlineStatus status) => status switch
+    {
+        DeadlineStatus.Submitted => "Submitted",
+        DeadlineStatus.Overdue => "Overdue",
+        DeadlineStatus.Draft => "Draft",
+        _ => "Not Started"
+    };
+
+    private static string GetStatusBadgeClass(SubmissionStatus status) => status switch
+    {
+        SubmissionStatus.Accepted => "portal-badge-success",
+        SubmissionStatus.AcceptedWithWarnings => "portal-badge-warning",
+        SubmissionStatus.Rejected => "portal-badge-danger",
+        SubmissionStatus.PendingApproval => "portal-badge-info",
+        SubmissionStatus.ApprovalRejected => "portal-badge-danger",
+        _ => "portal-badge-neutral"
+    };
+
+    private static string GetStatusLabel(SubmissionStatus status) => status switch
+    {
+        SubmissionStatus.Accepted => "Accepted",
+        SubmissionStatus.AcceptedWithWarnings => "Accepted (Warnings)",
+        SubmissionStatus.Rejected => "Rejected",
+        SubmissionStatus.PendingApproval => "Pending Review",
+        SubmissionStatus.ApprovalRejected => "Returned",
+        SubmissionStatus.Draft => "Draft",
+        SubmissionStatus.Parsing => "Processing",
+        SubmissionStatus.Validating => "Validating",
+        _ => status.ToString()
+    };
+}

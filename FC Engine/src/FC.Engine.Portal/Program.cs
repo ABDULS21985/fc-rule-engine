@@ -25,6 +25,11 @@ builder.Services.AddScoped<InstitutionAuthService>();
 // UI services
 builder.Services.AddScoped<FC.Engine.Portal.Services.ToastService>();
 builder.Services.AddScoped<FC.Engine.Portal.Services.DialogService>();
+builder.Services.AddScoped<FC.Engine.Portal.Services.DashboardService>();
+builder.Services.AddScoped<FC.Engine.Portal.Services.SubmissionService>();
+
+// Caching
+builder.Services.AddMemoryCache();
 
 // Authentication — cookie-based for Blazor Server (separate cookie from Admin)
 builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)

@@ -1,0 +1,938 @@
+@page "/submit"
+@attribute [Authorize(Policy = "InstitutionMaker")]
+@inject SubmissionService SubmissionService
+@inject NavigationManager Navigation
+
+<PageTitle>Submit Return — FC Engine Portal</PageTitle>
+
+<div class="portal-submit-page">
+    <div class="portal-page-header">
+        <h1 class="portal-page-title">Submit Return</h1>
+        <p class="portal-page-subtitle">Upload your XML return file for validation and submission</p>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════════════
+         STEP INDICATOR
+         ═══════════════════════════════════════════════════════════════ -->
+    <div class="portal-wizard-steps" role="navigation" aria-label="Submission steps">
+        @for (int i = 0; i < steps.Length; i++)
+        {
+            var stepNum = i;
+            <div class="portal-wizard-step @GetStepClass(stepNum)" aria-current="@(currentStep == stepNum ? "step" : "false")">
+                <div class="portal-wizard-step-circle">
+                    @if (stepNum < currentStep)
+                    {
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true">
+                            <polyline points="20 6 9 17 4 12"/>
+                        </svg>
+                    }
+                    else
+                    {
+                        <span>@(stepNum + 1)</span>
+                    }
+                </div>
+                <span class="portal-wizard-step-label">@steps[stepNum]</span>
+            </div>
+            @if (i < steps.Length - 1)
+            {
+                <div class="portal-wizard-step-connector @(stepNum < currentStep ? "portal-wizard-step-connector-done" : "")"></div>
+            }
+        }
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════════════
+         STEP 1: SELECT RETURN TEMPLATE
+         ═══════════════════════════════════════════════════════════════ -->
+    @if (currentStep == 0)
+    {
+        <section class="portal-wizard-panel" aria-label="Select return template">
+            <h2 class="portal-wizard-panel-title">Select Return Template</h2>
+            <p class="portal-wizard-panel-desc">Choose the return you want to submit from the templates assigned to your institution.</p>
+
+            <div class="portal-form-group">
+                <div class="portal-input-wrapper">
+                    <span class="portal-input-icon" aria-hidden="true">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                        </svg>
+                    </span>
+                    <input type="text"
+                           class="portal-form-input portal-form-input-icon"
+                           placeholder="Search templates by code or name..."
+                           @bind="templateSearch"
+                           @bind:event="oninput"
+                           aria-label="Search templates" />
+                </div>
+            </div>
+
+            @if (isLoadingTemplates)
+            {
+                <div class="portal-skeleton portal-skeleton-card" style="height: 200px;"></div>
+            }
+            else
+            {
+                @foreach (var group in FilteredTemplateGroups)
+                {
+                    <div class="portal-template-group">
+                        <h3 class="portal-template-group-label">
+                            <span class="portal-badge portal-badge-neutral">@group.Key</span>
+                            <span class="portal-template-group-count">@group.Count() templates</span>
+                        </h3>
+                        <div class="portal-template-list">
+                            @foreach (var template in group)
+                            {
+                                <button class="portal-template-card @(selectedReturnCode == template.ReturnCode ? "portal-template-card-selected" : "")"
+                                        @onclick="() => SelectTemplate(template)"
+                                        aria-pressed="@(selectedReturnCode == template.ReturnCode)">
+                                    <div class="portal-template-card-header">
+                                        <span class="portal-template-card-code">@template.ReturnCode</span>
+                                        <span class="portal-badge @GetFrequencyBadgeClass(template.Frequency)">@template.Frequency</span>
+                                    </div>
+                                    <span class="portal-template-card-name">@template.TemplateName</span>
+                                    @if (template.AlreadySubmitted)
+                                    {
+                                        <span class="portal-template-card-status">Already submitted for current period</span>
+                                    }
+                                </button>
+                            }
+                        </div>
+                    </div>
+                }
+
+                @if (!FilteredTemplateGroups.Any())
+                {
+                    <div class="portal-empty-state">
+                        <p>No templates match your search.</p>
+                    </div>
+                }
+            }
+
+            <div class="portal-wizard-actions">
+                <div></div>
+                <button class="portal-btn portal-btn-primary"
+                        disabled="@(string.IsNullOrEmpty(selectedReturnCode))"
+                        @onclick="GoToStep2">
+                    Continue
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                        <line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/>
+                    </svg>
+                </button>
+            </div>
+        </section>
+    }
+
+    <!-- ═══════════════════════════════════════════════════════════════
+         STEP 2: SELECT REPORTING PERIOD
+         ═══════════════════════════════════════════════════════════════ -->
+    @if (currentStep == 1)
+    {
+        <section class="portal-wizard-panel" aria-label="Select reporting period">
+            <h2 class="portal-wizard-panel-title">Select Reporting Period</h2>
+            <p class="portal-wizard-panel-desc">Choose the reporting period for <strong>@selectedReturnCode</strong> — @selectedTemplateName</p>
+
+            @if (isLoadingPeriods)
+            {
+                <div class="portal-skeleton portal-skeleton-card" style="height: 150px;"></div>
+            }
+            else
+            {
+                <div class="portal-period-list">
+                    @if (availablePeriods.Any())
+                    {
+                        @foreach (var period in availablePeriods)
+                        {
+                            <button class="portal-period-card @(selectedReturnPeriodId == period.ReturnPeriodId ? "portal-period-card-selected" : "")"
+                                    @onclick="() => SelectPeriod(period)"
+                                    aria-pressed="@(selectedReturnPeriodId == period.ReturnPeriodId)">
+                                <div class="portal-period-card-main">
+                                    <span class="portal-period-card-label">@period.Label</span>
+                                    <span class="portal-period-card-detail">Reporting Date: @period.ReportingDate.ToString("d MMM yyyy")</span>
+                                </div>
+                                @if (period.HasExistingSubmission)
+                                {
+                                    <span class="portal-badge portal-badge-warning">Re-submission</span>
+                                }
+                                else
+                                {
+                                    <span class="portal-badge portal-badge-info">Open</span>
+                                }
+                            </button>
+                        }
+                    }
+                    else
+                    {
+                        <div class="portal-empty-state">
+                            <p>No open reporting periods available for this template.</p>
+                        </div>
+                    }
+                </div>
+            }
+
+            <div class="portal-wizard-actions">
+                <button class="portal-btn portal-btn-outline" @onclick="GoBack">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                        <line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/>
+                    </svg>
+                    Back
+                </button>
+                <button class="portal-btn portal-btn-primary"
+                        disabled="@(selectedReturnPeriodId == 0)"
+                        @onclick="GoToStep3">
+                    Continue
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                        <line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/>
+                    </svg>
+                </button>
+            </div>
+        </section>
+    }
+
+    <!-- ═══════════════════════════════════════════════════════════════
+         STEP 3: UPLOAD XML FILE
+         ═══════════════════════════════════════════════════════════════ -->
+    @if (currentStep == 2)
+    {
+        <section class="portal-wizard-panel" aria-label="Upload XML file">
+            <h2 class="portal-wizard-panel-title">Upload XML File</h2>
+            <p class="portal-wizard-panel-desc">Upload your <strong>@selectedReturnCode</strong> return file for <strong>@selectedPeriodLabel</strong></p>
+
+            @if (uploadedFile is null && string.IsNullOrEmpty(pastedXml))
+            {
+                <div class="portal-upload-zone @(isDragOver ? "portal-upload-zone-active" : "")"
+                     @ondragover="HandleDragOver"
+                     @ondragover:preventDefault
+                     @ondragleave="HandleDragLeave"
+                     @ondrop:preventDefault
+                     role="button"
+                     tabindex="0"
+                     aria-label="Drag and drop XML file here or click to browse">
+
+                    <div class="portal-upload-zone-content">
+                        <svg class="portal-upload-zone-icon" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                            <polyline points="17 8 12 3 7 8"/>
+                            <line x1="12" y1="3" x2="12" y2="15"/>
+                        </svg>
+                        <p class="portal-upload-zone-text">
+                            <strong>Drag your XML file here</strong> or click to browse
+                        </p>
+                        <p class="portal-upload-zone-hint">Only .xml files up to 10 MB</p>
+                    </div>
+
+                    <InputFile OnChange="HandleFileUpload"
+                               accept=".xml"
+                               class="portal-upload-input"
+                               aria-label="Choose XML file" />
+                </div>
+
+                @if (!string.IsNullOrEmpty(fileError))
+                {
+                    <div class="portal-validation-banner portal-validation-banner-error" style="margin-top: 0.75rem;" role="alert">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                            <circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>
+                        </svg>
+                        <span>@fileError</span>
+                    </div>
+                }
+
+                <div class="portal-upload-alt">
+                    <span class="portal-upload-alt-divider">OR</span>
+                    <button class="portal-btn portal-btn-outline portal-btn-sm" @onclick="TogglePasteMode">
+                        Paste XML Content
+                    </button>
+                </div>
+
+                @if (showPasteMode)
+                {
+                    <div class="portal-paste-area">
+                        <label for="pasteXml" class="portal-form-label">Paste your XML content below:</label>
+                        <textarea id="pasteXml"
+                                  @bind="pastedXml"
+                                  class="portal-form-textarea"
+                                  rows="12"
+                                  placeholder="&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;"
+                                  aria-label="Paste XML content"></textarea>
+                        <div class="portal-paste-actions">
+                            <button class="portal-btn portal-btn-outline portal-btn-sm" @onclick="CancelPaste">Cancel</button>
+                            <button class="portal-btn portal-btn-primary portal-btn-sm"
+                                    disabled="@(string.IsNullOrWhiteSpace(pastedXml))"
+                                    @onclick="UsePastedXml">
+                                Use This XML
+                            </button>
+                        </div>
+                    </div>
+                }
+            }
+            else
+            {
+                <div class="portal-file-selected">
+                    <div class="portal-file-info">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#006B3F" stroke-width="2" aria-hidden="true">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                            <polyline points="14 2 14 8 20 8"/>
+                        </svg>
+                        <div class="portal-file-details">
+                            <span class="portal-file-name">@displayFileName</span>
+                            <span class="portal-file-size">@displayFileSize</span>
+                        </div>
+                    </div>
+                    <button class="portal-btn portal-btn-ghost portal-btn-sm portal-btn-danger-text" @onclick="RemoveFile" aria-label="Remove file">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                        </svg>
+                        Remove
+                    </button>
+                </div>
+            }
+
+            <div class="portal-wizard-actions">
+                <button class="portal-btn portal-btn-outline" @onclick="GoBack">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                        <line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/>
+                    </svg>
+                    Back
+                </button>
+                <button class="portal-btn portal-btn-primary"
+                        disabled="@(uploadedFile is null && string.IsNullOrEmpty(pastedXml))"
+                        @onclick="StartValidation">
+                    Validate &amp; Submit
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                        <line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/>
+                    </svg>
+                </button>
+            </div>
+        </section>
+    }
+
+    <!-- ═══════════════════════════════════════════════════════════════
+         STEP 4: VALIDATION & RESULTS
+         ═══════════════════════════════════════════════════════════════ -->
+    @if (currentStep == 3)
+    {
+        <section class="portal-wizard-panel" aria-label="Validation results">
+
+            @if (isValidating)
+            {
+                <div class="portal-validation-progress" role="status" aria-live="polite">
+                    <h2 class="portal-wizard-panel-title">Validating Your Return</h2>
+                    <p class="portal-wizard-panel-desc">Please wait while we validate <strong>@selectedReturnCode</strong>...</p>
+
+                    <div class="portal-validation-phases">
+                        @for (int i = 0; i < validationPhases.Length; i++)
+                        {
+                            var phaseIdx = i;
+                            <div class="portal-validation-phase @GetPhaseClass(phaseIdx)">
+                                <div class="portal-validation-phase-icon" aria-hidden="true">
+                                    @if (phaseIdx < currentPhase)
+                                    {
+                                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="3">
+                                            <polyline points="20 6 9 17 4 12"/>
+                                        </svg>
+                                    }
+                                    else if (phaseIdx == currentPhase)
+                                    {
+                                        <div class="portal-phase-spinner"></div>
+                                    }
+                                    else
+                                    {
+                                        <div class="portal-phase-pending"></div>
+                                    }
+                                </div>
+                                <span class="portal-validation-phase-label">@validationPhases[phaseIdx]</span>
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
+            else if (!string.IsNullOrEmpty(validationError))
+            {
+                <div class="portal-validation-banner portal-validation-banner-error" role="alert">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                        <circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>
+                    </svg>
+                    <div>
+                        <strong>Processing Error</strong> — @validationError
+                    </div>
+                </div>
+
+                <div class="portal-wizard-actions">
+                    <button class="portal-btn portal-btn-outline" @onclick="GoBackToUpload">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                            <line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/>
+                        </svg>
+                        Back to Upload
+                    </button>
+                </div>
+            }
+            else if (validationResult is not null)
+            {
+                <h2 class="portal-wizard-panel-title">Validation Results</h2>
+
+                @if (validationPassed)
+                {
+                    <div class="portal-validation-banner portal-validation-banner-success" role="alert">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                            <polyline points="22 4 12 14.01 9 11.01"/>
+                        </svg>
+                        <div>
+                            <strong>Validation Passed</strong> — Your return has been accepted.
+                            @if (warningCount > 0)
+                            {
+                                <span class="portal-validation-banner-note">@warningCount warning(s) found but submission was accepted.</span>
+                            }
+                        </div>
+                    </div>
+                }
+                else
+                {
+                    <div class="portal-validation-banner portal-validation-banner-error" role="alert">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                            <circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>
+                        </svg>
+                        <div>
+                            <strong>Validation Failed</strong> — @errorCount error(s) found. Please fix and re-upload.
+                        </div>
+                    </div>
+                }
+
+                <!-- Summary Cards -->
+                <div class="portal-validation-summary">
+                    <div class="portal-validation-summary-card portal-validation-summary-errors">
+                        <span class="portal-validation-summary-count">@errorCount</span>
+                        <span class="portal-validation-summary-label">Errors</span>
+                    </div>
+                    <div class="portal-validation-summary-card portal-validation-summary-warnings">
+                        <span class="portal-validation-summary-count">@warningCount</span>
+                        <span class="portal-validation-summary-label">Warnings</span>
+                    </div>
+                    @if (validationResult.ProcessingDurationMs.HasValue)
+                    {
+                        <div class="portal-validation-summary-card portal-validation-summary-duration">
+                            <span class="portal-validation-summary-count">@validationResult.ProcessingDurationMs<span class="portal-validation-summary-unit">ms</span></span>
+                            <span class="portal-validation-summary-label">Processing Time</span>
+                        </div>
+                    }
+                </div>
+
+                <!-- Error/Warning Categories -->
+                @if (errorsByCategory.Any())
+                {
+                    <div class="portal-validation-categories">
+                        <h3 class="portal-validation-section-title">Issues by Category</h3>
+                        @foreach (var category in errorsByCategory)
+                        {
+                            <div class="portal-validation-category">
+                                <button class="portal-validation-category-header"
+                                        @onclick="() => ToggleCategory(category.Key)"
+                                        aria-expanded="@(expandedCategories.Contains(category.Key))">
+                                    <span class="portal-validation-category-name">@category.Key</span>
+                                    <span class="portal-badge @(category.Value.Any(e => e.IsError) ? "portal-badge-danger" : "portal-badge-warning")">
+                                        @category.Value.Count
+                                    </span>
+                                    <svg class="portal-validation-category-chevron @(expandedCategories.Contains(category.Key) ? "portal-chevron-open" : "")"
+                                         width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                                        <polyline points="6 9 12 15 18 9"/>
+                                    </svg>
+                                </button>
+
+                                @if (expandedCategories.Contains(category.Key))
+                                {
+                                    <div class="portal-validation-category-body">
+                                        <div class="portal-table-container">
+                                            <table class="portal-table portal-validation-table" aria-label="@category.Key validation issues">
+                                                <thead>
+                                                    <tr>
+                                                        <th>Severity</th>
+                                                        <th>Rule</th>
+                                                        <th>Field</th>
+                                                        <th>Message</th>
+                                                        <th>Expected</th>
+                                                        <th>Actual</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    @foreach (var error in category.Value)
+                                                    {
+                                                        <tr>
+                                                            <td>
+                                                                <span class="portal-badge @(error.IsError ? "portal-badge-danger" : "portal-badge-warning")">
+                                                                    @(error.IsError ? "Error" : "Warning")
+                                                                </span>
+                                                            </td>
+                                                            <td class="portal-table-mono">@error.RuleId</td>
+                                                            <td class="portal-table-mono">@error.Field</td>
+                                                            <td>@error.Message</td>
+                                                            <td class="portal-table-mono">@(error.ExpectedValue ?? "—")</td>
+                                                            <td class="portal-table-mono">@(error.ActualValue ?? "—")</td>
+                                                        </tr>
+                                                    }
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                }
+                            </div>
+                        }
+                    </div>
+                }
+
+                <!-- Actions -->
+                <div class="portal-wizard-actions portal-wizard-actions-multi">
+                    @if (validationPassed)
+                    {
+                        <button class="portal-btn portal-btn-outline" @onclick="GoBackToUpload">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                                <line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/>
+                            </svg>
+                            Submit Another
+                        </button>
+                        <button class="portal-btn portal-btn-primary" @onclick="GoToSuccess">
+                            View Submission Details
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                                <line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/>
+                            </svg>
+                        </button>
+                    }
+                    else
+                    {
+                        <button class="portal-btn portal-btn-outline" @onclick="GoBackToUpload">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                                <line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/>
+                            </svg>
+                            Fix &amp; Re-upload
+                        </button>
+                    }
+                </div>
+            }
+        </section>
+    }
+
+    <!-- ═══════════════════════════════════════════════════════════════
+         STEP 5: SUBMISSION COMPLETE
+         ═══════════════════════════════════════════════════════════════ -->
+    @if (currentStep == 4)
+    {
+        <section class="portal-wizard-panel portal-wizard-panel-success" aria-label="Submission complete">
+            <div class="portal-submit-success">
+                <div class="portal-submit-success-icon" aria-hidden="true">
+                    <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="#006B3F" stroke-width="1.5">
+                        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                        <polyline points="22 4 12 14.01 9 11.01"/>
+                    </svg>
+                </div>
+                <h2 class="portal-submit-success-title">
+                    @if (requiresApproval)
+                    {
+                        <text>Submitted for Approval</text>
+                    }
+                    else
+                    {
+                        <text>Return Submitted Successfully</text>
+                    }
+                </h2>
+                <p class="portal-submit-success-detail">
+                    <strong>@selectedReturnCode</strong> for <strong>@selectedPeriodLabel</strong>
+                    has been @(requiresApproval ? "submitted for checker approval" : "accepted and recorded").
+                </p>
+                @if (submittedSubmissionId > 0)
+                {
+                    <p class="portal-submit-success-id">Submission ID: <strong>#@submittedSubmissionId</strong></p>
+                }
+                @if (warningCount > 0)
+                {
+                    <p class="portal-submit-success-warnings">
+                        <span class="portal-badge portal-badge-warning">@warningCount warning(s)</span>
+                        — accepted with warnings
+                    </p>
+                }
+                <div class="portal-submit-success-actions">
+                    <a href="/submit" class="portal-btn portal-btn-outline" @onclick="ResetWizard" @onclick:preventDefault>
+                        Submit Another Return
+                    </a>
+                    <a href="/" class="portal-btn portal-btn-ghost">
+                        Back to Dashboard
+                    </a>
+                </div>
+            </div>
+        </section>
+    }
+</div>
+
+@code {
+    // ── Step Management ──────────────────────────────────────────
+    private readonly string[] steps = { "Select Return", "Select Period", "Upload File", "Validate", "Complete" };
+    private int currentStep;
+
+    // ── Auth ─────────────────────────────────────────────────────
+    [CascadingParameter]
+    private Task<AuthenticationState>? AuthState { get; set; }
+    private int institutionId;
+    private int? userId;
+    private bool requiresApproval;
+
+    // ── Step 1: Template Selection ───────────────────────────────
+    private List<TemplateSelectItem> templates = new();
+    private string templateSearch = "";
+    private string selectedReturnCode = "";
+    private string selectedTemplateName = "";
+    private string selectedFrequency = "";
+    private bool isLoadingTemplates = true;
+
+    // ── Step 2: Period Selection ─────────────────────────────────
+    private List<PeriodSelectItem> availablePeriods = new();
+    private int selectedReturnPeriodId;
+    private string selectedPeriodLabel = "";
+    private bool isLoadingPeriods;
+
+    // ── Step 3: File Upload ──────────────────────────────────────
+    private IBrowserFile? uploadedFile;
+    private string pastedXml = "";
+    private bool showPasteMode;
+    private bool isDragOver;
+    private string displayFileName = "";
+    private string displayFileSize = "";
+    private string? fileError;
+
+    // ── Step 4: Validation ───────────────────────────────────────
+    private bool isValidating;
+    private int currentPhase;
+    private readonly string[] validationPhases =
+    {
+        "Parsing XML",
+        "Validating schema",
+        "Checking field types & ranges",
+        "Evaluating formulas",
+        "Cross-sheet validation",
+        "Business rule checks"
+    };
+
+    private SubmissionResultDto? validationResult;
+    private bool validationPassed;
+    private int errorCount;
+    private int warningCount;
+    private Dictionary<string, List<ValidationDisplayError>> errorsByCategory = new();
+    private HashSet<string> expandedCategories = new();
+    private string? validationError;
+
+    // ── Step 5: Submission ───────────────────────────────────────
+    private int submittedSubmissionId;
+
+    // ── Computed Properties ──────────────────────────────────────
+    private IEnumerable<IGrouping<string, TemplateSelectItem>> FilteredTemplateGroups =>
+        templates
+            .Where(t => string.IsNullOrWhiteSpace(templateSearch)
+                     || t.ReturnCode.Contains(templateSearch, StringComparison.OrdinalIgnoreCase)
+                     || t.TemplateName.Contains(templateSearch, StringComparison.OrdinalIgnoreCase))
+            .GroupBy(t => t.Frequency);
+
+    // ── Lifecycle ────────────────────────────────────────────────
+    protected override async Task OnInitializedAsync()
+    {
+        var state = await AuthState!;
+        var user = state.User;
+
+        var instIdStr = user.FindFirst("InstitutionId")?.Value;
+        int.TryParse(instIdStr, out institutionId);
+
+        var userIdStr = user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        if (int.TryParse(userIdStr, out var uid)) userId = uid;
+
+        var role = user.FindFirst(ClaimTypes.Role)?.Value ?? "";
+        requiresApproval = role.Equals("Maker", StringComparison.OrdinalIgnoreCase);
+
+        await LoadTemplates();
+    }
+
+    // ── Step 1: Template Loading & Selection ─────────────────────
+    private async Task LoadTemplates()
+    {
+        isLoadingTemplates = true;
+        try
+        {
+            templates = await SubmissionService.GetTemplatesForInstitution(institutionId);
+        }
+        catch
+        {
+            templates = new();
+        }
+        finally
+        {
+            isLoadingTemplates = false;
+        }
+    }
+
+    private void SelectTemplate(TemplateSelectItem template)
+    {
+        selectedReturnCode = template.ReturnCode;
+        selectedTemplateName = template.TemplateName;
+        selectedFrequency = template.Frequency;
+    }
+
+    // ── Step 2: Period Loading & Selection ────────────────────────
+    private async Task GoToStep2()
+    {
+        currentStep = 1;
+        isLoadingPeriods = true;
+        selectedReturnPeriodId = 0;
+        selectedPeriodLabel = "";
+        StateHasChanged();
+
+        try
+        {
+            availablePeriods = await SubmissionService.GetOpenPeriods(institutionId, selectedReturnCode);
+        }
+        catch
+        {
+            availablePeriods = new();
+        }
+        finally
+        {
+            isLoadingPeriods = false;
+            StateHasChanged();
+        }
+    }
+
+    private void SelectPeriod(PeriodSelectItem period)
+    {
+        selectedReturnPeriodId = period.ReturnPeriodId;
+        selectedPeriodLabel = period.Label;
+    }
+
+    private void GoToStep3()
+    {
+        currentStep = 2;
+    }
+
+    private void GoBack()
+    {
+        if (currentStep > 0)
+            currentStep--;
+    }
+
+    // ── Step 3: File Upload ──────────────────────────────────────
+    private async Task HandleFileUpload(InputFileChangeEventArgs e)
+    {
+        var file = e.File;
+        fileError = null;
+
+        if (!file.Name.EndsWith(".xml", StringComparison.OrdinalIgnoreCase))
+        {
+            fileError = "Only XML files are accepted.";
+            return;
+        }
+
+        if (file.Size > 10 * 1024 * 1024)
+        {
+            fileError = "File size must not exceed 10 MB.";
+            return;
+        }
+
+        uploadedFile = file;
+        pastedXml = "";
+        displayFileName = file.Name;
+        displayFileSize = FormatFileSize(file.Size);
+    }
+
+    private void HandleDragOver() => isDragOver = true;
+    private void HandleDragLeave() => isDragOver = false;
+    private void TogglePasteMode() => showPasteMode = !showPasteMode;
+
+    private void UsePastedXml()
+    {
+        if (!string.IsNullOrWhiteSpace(pastedXml))
+        {
+            uploadedFile = null;
+            displayFileName = "Pasted XML Content";
+            displayFileSize = FormatFileSize(System.Text.Encoding.UTF8.GetByteCount(pastedXml));
+            showPasteMode = false;
+        }
+    }
+
+    private void CancelPaste()
+    {
+        pastedXml = "";
+        showPasteMode = false;
+    }
+
+    private void RemoveFile()
+    {
+        uploadedFile = null;
+        pastedXml = "";
+        displayFileName = "";
+        displayFileSize = "";
+        fileError = null;
+    }
+
+    // ── Step 4: Validation ───────────────────────────────────────
+    private async Task StartValidation()
+    {
+        currentStep = 3;
+        isValidating = true;
+        currentPhase = 0;
+        validationError = null;
+        validationResult = null;
+        errorsByCategory = new();
+        expandedCategories = new();
+        StateHasChanged();
+
+        try
+        {
+            // Prepare XML stream
+            Stream xmlStream;
+            if (uploadedFile is not null)
+            {
+                var ms = new MemoryStream();
+                await using var fileStream = uploadedFile.OpenReadStream(maxAllowedSize: 10 * 1024 * 1024);
+                await fileStream.CopyToAsync(ms);
+                ms.Position = 0;
+                xmlStream = ms;
+            }
+            else
+            {
+                xmlStream = new MemoryStream(System.Text.Encoding.UTF8.GetBytes(pastedXml));
+            }
+
+            // Animate phases while orchestrator processes
+            for (int phase = 0; phase <= validationPhases.Length - 2; phase++)
+            {
+                currentPhase = phase;
+                StateHasChanged();
+                await Task.Delay(400);
+            }
+
+            // Final phase — actual orchestrator call
+            currentPhase = validationPhases.Length - 1;
+            StateHasChanged();
+
+            var result = await SubmissionService.ProcessSubmission(
+                xmlStream, selectedReturnCode, institutionId, selectedReturnPeriodId);
+
+            // All phases done
+            currentPhase = validationPhases.Length;
+            StateHasChanged();
+            await Task.Delay(300);
+
+            // Map result
+            validationResult = result;
+            submittedSubmissionId = result.SubmissionId;
+
+            if (result.ValidationReport is not null)
+            {
+                errorCount = result.ValidationReport.ErrorCount;
+                warningCount = result.ValidationReport.WarningCount;
+                validationPassed = result.ValidationReport.IsValid;
+
+                errorsByCategory = result.ValidationReport.Errors
+                    .GroupBy(e => e.Category)
+                    .ToDictionary(
+                        g => g.Key,
+                        g => g.Select(e => new ValidationDisplayError
+                        {
+                            RuleId = e.RuleId,
+                            Field = e.Field,
+                            Message = e.Message,
+                            IsError = e.Severity == "Error",
+                            ExpectedValue = e.ExpectedValue,
+                            ActualValue = e.ActualValue
+                        }).ToList()
+                    );
+
+                if (errorsByCategory.Any())
+                    expandedCategories.Add(errorsByCategory.Keys.First());
+            }
+            else
+            {
+                validationPassed = result.Status == "Accepted" || result.Status == "AcceptedWithWarnings";
+            }
+        }
+        catch (Exception ex)
+        {
+            validationError = ex.Message;
+        }
+        finally
+        {
+            isValidating = false;
+            StateHasChanged();
+        }
+    }
+
+    private void GoBackToUpload()
+    {
+        // Reset upload and validation state
+        uploadedFile = null;
+        pastedXml = "";
+        displayFileName = "";
+        displayFileSize = "";
+        fileError = null;
+        validationResult = null;
+        validationError = null;
+        currentStep = 2;
+    }
+
+    // ── Step 5: Success ──────────────────────────────────────────
+    private void GoToSuccess()
+    {
+        currentStep = 4;
+    }
+
+    private void ResetWizard()
+    {
+        currentStep = 0;
+        selectedReturnCode = "";
+        selectedTemplateName = "";
+        selectedFrequency = "";
+        selectedReturnPeriodId = 0;
+        selectedPeriodLabel = "";
+        uploadedFile = null;
+        pastedXml = "";
+        displayFileName = "";
+        displayFileSize = "";
+        fileError = null;
+        validationResult = null;
+        validationError = null;
+        submittedSubmissionId = 0;
+        errorsByCategory = new();
+        expandedCategories = new();
+    }
+
+    // ── Category Accordion ───────────────────────────────────────
+    private void ToggleCategory(string category)
+    {
+        if (!expandedCategories.Remove(category))
+            expandedCategories.Add(category);
+    }
+
+    // ── Helper Methods ───────────────────────────────────────────
+    private string GetStepClass(int step)
+    {
+        if (step == currentStep) return "portal-wizard-step-active";
+        if (step < currentStep) return "portal-wizard-step-done";
+        return "portal-wizard-step-pending";
+    }
+
+    private string GetPhaseClass(int phase)
+    {
+        if (phase < currentPhase) return "portal-validation-phase-done";
+        if (phase == currentPhase) return "portal-validation-phase-active";
+        return "portal-validation-phase-pending";
+    }
+
+    private static string GetFrequencyBadgeClass(string frequency)
+    {
+        if (frequency.Equals("Monthly", StringComparison.OrdinalIgnoreCase))
+            return "portal-badge-info";
+        if (frequency.Equals("Quarterly", StringComparison.OrdinalIgnoreCase))
+            return "portal-badge-warning";
+        if (frequency.Equals("SemiAnnual", StringComparison.OrdinalIgnoreCase))
+            return "portal-badge-neutral";
+        return "portal-badge-neutral";
+    }
+
+    private static string FormatFileSize(long bytes)
+    {
+        if (bytes >= 1048576) return $"{bytes / 1048576.0:F1} MB";
+        if (bytes >= 1024) return $"{bytes / 1024.0:F1} KB";
+        return $"{bytes} bytes";
+    }
+}
