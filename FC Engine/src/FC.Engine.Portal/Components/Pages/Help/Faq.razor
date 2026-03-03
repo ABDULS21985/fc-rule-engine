@@ -1,0 +1,284 @@
+@page "/help/faq"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Policy = "InstitutionUser")]
+
+<PageTitle>FAQ — Help Center — FC Engine Portal</PageTitle>
+
+<HelpLayout>
+    <div class="help-article">
+        <h2 class="help-article-title">Frequently Asked Questions</h2>
+        <p class="help-article-intro">
+            Find answers to commonly asked questions about the FC Engine FI Portal.
+        </p>
+
+        <!-- Account & Access -->
+        <section id="account">
+            <h3 class="help-faq-category">Account &amp; Access</h3>
+
+            <AccordionPanel Title="How do I change my password?">
+                <p>
+                    Click on your profile avatar in the sidebar, then select <strong>Settings</strong>,
+                    or navigate directly to <a href="/settings">Account Settings</a>.
+                    Enter your current password, then your new password twice to confirm.
+                </p>
+                <p>Password requirements:</p>
+                <ul>
+                    <li>Minimum 8 characters</li>
+                    <li>At least one uppercase letter</li>
+                    <li>At least one lowercase letter</li>
+                    <li>At least one number</li>
+                    <li>At least one special character</li>
+                </ul>
+            </AccordionPanel>
+
+            <AccordionPanel Title="I forgot my password. How do I reset it?">
+                <p>
+                    On the login page, click <strong>"Forgot password?"</strong>. Enter the email address
+                    associated with your account. You'll receive a password reset link via email.
+                    If you don't receive the email, contact your institution administrator.
+                </p>
+            </AccordionPanel>
+
+            <AccordionPanel Title="What are the different user roles?">
+                <p>The portal supports four roles:</p>
+                <ul>
+                    <li><strong>Admin</strong> — Full access. Can manage users, institution settings, and all portal features.</li>
+                    <li><strong>Maker</strong> — Can create, prepare, and submit returns. Cannot approve their own submissions when Maker-Checker is enabled.</li>
+                    <li><strong>Checker</strong> — Can review and approve/reject submissions made by Makers. Can also submit returns.</li>
+                    <li><strong>Viewer</strong> — Read-only access. Can view submissions, reports, and templates but cannot submit or approve.</li>
+                </ul>
+            </AccordionPanel>
+
+            <AccordionPanel Title="How do I add new users to my institution?">
+                <p>
+                    Only institution Admins can manage users. Navigate to
+                    <a href="/institution/team">Team Members</a> from the Account section in the sidebar.
+                    Click <strong>Add User</strong>, fill in the user details, and assign a role.
+                    The new user will receive a temporary password that must be changed on first login.
+                </p>
+            </AccordionPanel>
+        </section>
+
+        <!-- Submission -->
+        <section id="submission">
+            <h3 class="help-faq-category">Submissions</h3>
+
+            <AccordionPanel Title="How do I submit a return?">
+                <p>
+                    Navigate to <a href="/submit">Submit Return</a>, select a template and reporting period,
+                    then either upload your XML file or fill in the online form.
+                    See the <a href="/help/submission-guide">Submission Guide</a> for detailed instructions.
+                </p>
+            </AccordionPanel>
+
+            <AccordionPanel Title="Can I submit the same return twice for the same period?">
+                <p>
+                    You can only have one active submission per template per reporting period.
+                    If you need to correct a previously submitted return, you must re-submit it,
+                    which will replace the previous submission.
+                </p>
+                <p>
+                    If a submission was rejected (by validation or by a Checker), you can re-submit
+                    from the submission details page, and the new submission will be linked to the original.
+                </p>
+            </AccordionPanel>
+
+            <AccordionPanel Title="What file formats are accepted?">
+                <p>
+                    The portal accepts XML files only. Your XML must conform to the XSD schema
+                    for the specific return template. Download schemas from the
+                    <a href="/schemas">Download Schemas</a> page.
+                </p>
+                <p>
+                    Alternatively, you can use the <strong>online form</strong> to enter data directly
+                    without preparing an XML file.
+                </p>
+            </AccordionPanel>
+
+            <AccordionPanel Title="How do I check the status of my submissions?">
+                <p>
+                    Go to <a href="/submissions">My Submissions</a> to see all your submissions
+                    with their current status:
+                </p>
+                <ul>
+                    <li><strong>Accepted</strong> — Successfully validated and stored</li>
+                    <li><strong>Accepted with Warnings</strong> — Stored but has warnings to review</li>
+                    <li><strong>Rejected</strong> — Failed validation, needs correction</li>
+                    <li><strong>Pending Approval</strong> — Awaiting Checker approval</li>
+                    <li><strong>Approval Rejected</strong> — Rejected by Checker, needs re-submission</li>
+                </ul>
+            </AccordionPanel>
+
+            <AccordionPanel Title="What is the maximum file size for XML uploads?">
+                <p>
+                    The maximum file size for XML uploads is <strong>10 MB</strong>.
+                    Most returns are well under this limit. If your file exceeds this size,
+                    check for unnecessary whitespace or formatting in your XML.
+                </p>
+            </AccordionPanel>
+        </section>
+
+        <!-- Validation -->
+        <section id="validation">
+            <h3 class="help-faq-category">Validation</h3>
+
+            <AccordionPanel Title="My submission was rejected with validation errors. What do I do?">
+                <p>
+                    Open the submission details to view the full validation report. Each error will show:
+                </p>
+                <ul>
+                    <li>The validation category (Schema, TypeRange, IntraSheet, etc.)</li>
+                    <li>The specific field(s) involved</li>
+                    <li>The expected vs actual values</li>
+                    <li>A description of the issue</li>
+                </ul>
+                <p>
+                    Fix the issues in your XML file and re-submit.
+                    See the <a href="/help/validation-errors">Validation Error Guide</a> for detailed explanations.
+                </p>
+            </AccordionPanel>
+
+            <AccordionPanel Title="What is the difference between an error and a warning?">
+                <p>
+                    <strong>Errors</strong> prevent your submission from being accepted. You must fix all errors.
+                </p>
+                <p>
+                    <strong>Warnings</strong> are informational — they flag potential issues but don't prevent acceptance.
+                    Your submission will be accepted with an "Accepted with Warnings" status.
+                    You should review warnings but don't necessarily need to re-submit.
+                </p>
+            </AccordionPanel>
+
+            <AccordionPanel Title="Why does my sum formula fail even though my numbers look correct?">
+                <p>
+                    Formula validation uses a tolerance mechanism. Most sum formulas allow a small
+                    tolerance (e.g., ±0.01 or ±0.5%) to account for rounding differences.
+                    If your difference exceeds the tolerance, it will be flagged.
+                </p>
+                <p>Common causes:</p>
+                <ul>
+                    <li>Rounding errors — ensure all amounts are rounded consistently</li>
+                    <li>Missing component — check that all items in the sum are included</li>
+                    <li>Sign errors — verify negative values use the minus sign correctly</li>
+                </ul>
+            </AccordionPanel>
+        </section>
+
+        <!-- Approvals -->
+        <section id="approvals">
+            <h3 class="help-faq-category">Approvals (Maker-Checker)</h3>
+
+            <AccordionPanel Title="What is Maker-Checker?">
+                <p>
+                    Maker-Checker is a dual-approval workflow where one user (the Maker) prepares and submits
+                    a return, and another user (the Checker) reviews and approves or rejects it.
+                    This provides an additional layer of quality control.
+                </p>
+                <p>
+                    Your institution Admin can enable or disable Maker-Checker in
+                    <a href="/institution/settings">Institution Settings</a>.
+                </p>
+            </AccordionPanel>
+
+            <AccordionPanel Title="Can I approve my own submission?">
+                <p>
+                    No. The Maker and Checker must be different users. If you submitted a return,
+                    someone else with the Checker or Admin role must approve it.
+                    This is a security control that cannot be overridden.
+                </p>
+            </AccordionPanel>
+
+            <AccordionPanel Title="How do I approve a pending submission?">
+                <p>
+                    If you have the Checker or Admin role, navigate to
+                    <a href="/approvals">Pending Approvals</a> from the sidebar.
+                    You'll see all submissions awaiting approval. Click on a submission to review
+                    the validation report and data, then click <strong>Approve</strong> or <strong>Reject</strong>.
+                </p>
+                <p>
+                    Rejections require a comment explaining the reason, so the Maker knows what to fix.
+                </p>
+            </AccordionPanel>
+
+            <AccordionPanel Title="What happens when a submission is rejected by a Checker?">
+                <p>
+                    The submission status changes to <strong>Approval Rejected</strong>.
+                    The Maker receives a notification with the Checker's comments.
+                    The Maker can then re-submit a corrected return, which will be linked to the
+                    original submission for audit trail purposes.
+                </p>
+            </AccordionPanel>
+        </section>
+
+        <!-- Technical -->
+        <section id="technical">
+            <h3 class="help-faq-category">Technical</h3>
+
+            <AccordionPanel Title="Which browsers are supported?">
+                <p>The FC Engine Portal supports the following browsers:</p>
+                <ul>
+                    <li>Google Chrome (latest 2 versions)</li>
+                    <li>Microsoft Edge (latest 2 versions)</li>
+                    <li>Mozilla Firefox (latest 2 versions)</li>
+                    <li>Safari (latest 2 versions)</li>
+                </ul>
+                <p>JavaScript must be enabled for the portal to function properly.</p>
+            </AccordionPanel>
+
+            <AccordionPanel Title="How do I generate XML from my spreadsheet?">
+                <p>
+                    If you maintain your return data in Excel or another spreadsheet:
+                </p>
+                <ol>
+                    <li>Download the XSD schema for your template from the <a href="/schemas">Schemas</a> page</li>
+                    <li>Map your spreadsheet columns to the XML element names defined in the schema</li>
+                    <li>Use a tool like Excel XML mapping, Python, or any XML generation library to produce the XML</li>
+                    <li>Validate the generated XML against the XSD before uploading</li>
+                </ol>
+                <p>
+                    Alternatively, use the <strong>online form</strong> to enter data directly from your spreadsheet
+                    without generating XML.
+                </p>
+            </AccordionPanel>
+
+            <AccordionPanel Title="Is there an API for automated submissions?">
+                <p>
+                    Yes, the FC Engine provides a REST API for automated XML submissions.
+                    Contact your CBN representative for API access credentials and documentation.
+                    The API endpoint accepts XML files and returns validation results in JSON format.
+                </p>
+            </AccordionPanel>
+        </section>
+
+        <!-- Compliance -->
+        <section id="compliance">
+            <h3 class="help-faq-category">Compliance &amp; Deadlines</h3>
+
+            <AccordionPanel Title="What are the submission deadlines?">
+                <p>
+                    Submission deadlines vary by return template and frequency (Monthly, Quarterly, Annually).
+                    Check the <a href="/calendar">Reporting Calendar</a> for upcoming deadlines.
+                </p>
+                <p>
+                    You'll also receive notifications when deadlines are approaching (if enabled in your institution settings).
+                </p>
+            </AccordionPanel>
+
+            <AccordionPanel Title="What happens if I miss a deadline?">
+                <p>
+                    Late submissions may be flagged by CBN and could result in regulatory consequences.
+                    If you're unable to submit on time, contact CBN support as soon as possible.
+                    The portal still allows submissions after the deadline unless the reporting period
+                    has been explicitly closed.
+                </p>
+            </AccordionPanel>
+
+            <AccordionPanel Title="How long are submissions retained?">
+                <p>
+                    All submissions and their validation reports are retained indefinitely for regulatory
+                    audit purposes. You can view historical submissions in
+                    <a href="/submissions">My Submissions</a>.
+                </p>
+            </AccordionPanel>
+        </section>
+    </div>
+</HelpLayout>

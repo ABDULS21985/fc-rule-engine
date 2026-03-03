@@ -1,0 +1,206 @@
+@page "/help/support"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Policy = "InstitutionUser")]
+@using Microsoft.AspNetCore.Components.Authorization
+@using System.Security.Claims
+
+<PageTitle>Contact Support — Help Center — FC Engine Portal</PageTitle>
+
+<HelpLayout>
+    <div class="help-article">
+        <h2 class="help-article-title">Contact Support</h2>
+        <p class="help-article-intro">
+            Need help? Reach out to the CBN Financial Returns support team through any of the channels below.
+        </p>
+
+        <!-- Contact Cards -->
+        <div class="help-contact-grid">
+            <div class="help-contact-card">
+                <div class="help-contact-icon" aria-hidden="true">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
+                        <polyline points="22,6 12,13 2,6"/>
+                    </svg>
+                </div>
+                <h3>Email Support</h3>
+                <p>For general inquiries and technical support</p>
+                <a href="mailto:fc-support@cbn.gov.ng" class="help-contact-link">fc-support&#64;cbn.gov.ng</a>
+                <p class="help-contact-note">Response within 24 business hours</p>
+            </div>
+
+            <div class="help-contact-card">
+                <div class="help-contact-icon" aria-hidden="true">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72 12.84 12.84 0 00.7 2.81 2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45 12.84 12.84 0 002.81.7A2 2 0 0122 16.92z"/>
+                    </svg>
+                </div>
+                <h3>Phone Support</h3>
+                <p>For urgent issues during business hours</p>
+                <a href="tel:+23412600100" class="help-contact-link">+234 1 260 0100</a>
+                <p class="help-contact-note">Monday — Friday, 8:00 AM — 5:00 PM WAT</p>
+            </div>
+
+            <div class="help-contact-card">
+                <div class="help-contact-icon" aria-hidden="true">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/>
+                        <circle cx="12" cy="10" r="3"/>
+                    </svg>
+                </div>
+                <h3>Office Address</h3>
+                <p>CBN Head Office, Financial Policy &amp; Regulation Department</p>
+                <p class="help-contact-link">Plot 33, Abubakar Tafawa Balewa Way<br/>Central Business District, Abuja</p>
+                <p class="help-contact-note">Visits by appointment only</p>
+            </div>
+        </div>
+
+        <!-- Support Ticket Form -->
+        <section class="help-ticket-section">
+            <h3 class="help-section-heading">Submit a Support Request</h3>
+            <p>
+                Use the form below to submit a detailed support request. Our team will respond via email.
+            </p>
+
+            @if (isSubmitted)
+            {
+                <div class="help-ticket-success">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                        <path d="M22 11.08V12a10 10 0 11-5.93-9.14"/>
+                        <polyline points="22 4 12 14.01 9 11.01"/>
+                    </svg>
+                    <div>
+                        <h4>Support request submitted</h4>
+                        <p>Thank you for your request. Our support team will review it and respond to your email within 24 business hours.</p>
+                        <button class="portal-btn portal-btn-outline portal-btn-sm" style="margin-top: 0.75rem" @onclick="ResetForm">
+                            Submit another request
+                        </button>
+                    </div>
+                </div>
+            }
+            else
+            {
+                <form class="help-ticket-form" @onsubmit="HandleSubmit" @onsubmit:preventDefault>
+                    <div class="help-form-row">
+                        <div class="help-form-group">
+                            <label for="ticket-name">Your Name</label>
+                            <input id="ticket-name" type="text" class="help-form-input" @bind="ticketName"
+                                   placeholder="Enter your name" required />
+                        </div>
+                        <div class="help-form-group">
+                            <label for="ticket-email">Email Address</label>
+                            <input id="ticket-email" type="email" class="help-form-input" @bind="ticketEmail"
+                                   placeholder="Enter your email" required />
+                        </div>
+                    </div>
+
+                    <div class="help-form-group">
+                        <label for="ticket-category">Category</label>
+                        <select id="ticket-category" class="help-form-input" @bind="ticketCategory" required>
+                            <option value="">Select a category...</option>
+                            <option value="account">Account &amp; Access</option>
+                            <option value="submission">Submission Issues</option>
+                            <option value="validation">Validation Errors</option>
+                            <option value="technical">Technical Problem</option>
+                            <option value="compliance">Compliance &amp; Deadlines</option>
+                            <option value="other">Other</option>
+                        </select>
+                    </div>
+
+                    <div class="help-form-group">
+                        <label for="ticket-subject">Subject</label>
+                        <input id="ticket-subject" type="text" class="help-form-input" @bind="ticketSubject"
+                               placeholder="Brief description of your issue" required />
+                    </div>
+
+                    <div class="help-form-group">
+                        <label for="ticket-description">Description</label>
+                        <textarea id="ticket-description" class="help-form-input help-form-textarea"
+                                  @bind="ticketDescription" rows="5"
+                                  placeholder="Please describe your issue in detail. Include any error messages, return codes, or submission IDs if applicable."
+                                  required></textarea>
+                    </div>
+
+                    <div class="help-form-group">
+                        <label for="ticket-attachment">Attachment (optional)</label>
+                        <div class="help-form-file-note">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                                <circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>
+                            </svg>
+                            File upload will be available in a future update. For now, please attach files by emailing
+                            <a href="mailto:fc-support@cbn.gov.ng">fc-support&#64;cbn.gov.ng</a> and referencing your support request.
+                        </div>
+                    </div>
+
+                    <div class="help-form-actions">
+                        <button type="submit" class="portal-btn portal-btn-primary" disabled="@isSubmitting">
+                            @if (isSubmitting)
+                            {
+                                <span class="portal-btn-spinner" aria-hidden="true"></span>
+                            }
+                            Submit Request
+                        </button>
+                    </div>
+                </form>
+            }
+        </section>
+
+        <!-- Before contacting support -->
+        <section>
+            <h3 class="help-section-heading">Before Contacting Support</h3>
+            <p>You may find answers in our documentation:</p>
+            <ul>
+                <li><a href="/help/faq">Frequently Asked Questions</a></li>
+                <li><a href="/help/validation-errors">Validation Error Guide</a> — if you're having validation issues</li>
+                <li><a href="/help/submission-guide">Submission Guide</a> — for step-by-step submission instructions</li>
+                <li><a href="/help/getting-started">Getting Started Guide</a> — for first-time users</li>
+            </ul>
+        </section>
+    </div>
+</HelpLayout>
+
+@code {
+    private string ticketName = "";
+    private string ticketEmail = "";
+    private string ticketCategory = "";
+    private string ticketSubject = "";
+    private string ticketDescription = "";
+    private bool isSubmitting;
+    private bool isSubmitted;
+
+    [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var state = await AuthState!;
+            ticketName = state.User.FindFirst("DisplayName")?.Value ?? "";
+            ticketEmail = state.User.FindFirst(ClaimTypes.Email)?.Value ?? "";
+        }
+        catch { }
+    }
+
+    private async Task HandleSubmit()
+    {
+        if (string.IsNullOrWhiteSpace(ticketName) || string.IsNullOrWhiteSpace(ticketEmail)
+            || string.IsNullOrWhiteSpace(ticketCategory) || string.IsNullOrWhiteSpace(ticketDescription))
+            return;
+
+        isSubmitting = true;
+        StateHasChanged();
+
+        // Placeholder — in production this would send to a ticketing system
+        await Task.Delay(800);
+
+        isSubmitting = false;
+        isSubmitted = true;
+        StateHasChanged();
+    }
+
+    private void ResetForm()
+    {
+        ticketCategory = "";
+        ticketSubject = "";
+        ticketDescription = "";
+        isSubmitted = false;
+    }
+}

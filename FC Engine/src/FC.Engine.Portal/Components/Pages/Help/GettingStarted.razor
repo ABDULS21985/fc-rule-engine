@@ -1,0 +1,176 @@
+@page "/help/getting-started"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Policy = "InstitutionUser")]
+
+<PageTitle>Getting Started — Help Center — FC Engine Portal</PageTitle>
+
+<HelpLayout>
+    <div class="help-article">
+        <h2 class="help-article-title">Getting Started with FC Engine Portal</h2>
+        <p class="help-article-intro">
+            Welcome to the FC Engine FI Portal. This guide walks you through everything you need to know
+            to start submitting your regulatory returns to the Central Bank of Nigeria.
+        </p>
+
+        <!-- Step-by-step guide -->
+        <div class="help-steps">
+            <div class="help-step">
+                <div class="help-step-number" aria-hidden="true">1</div>
+                <div class="help-step-content">
+                    <h3 class="help-step-title">Set Up Your Account</h3>
+                    <p>
+                        Your institution administrator will create your user account and assign you a role.
+                        There are four roles in the portal:
+                    </p>
+                    <ul>
+                        <li><strong>Admin</strong> — Full access including user management and institution settings</li>
+                        <li><strong>Maker</strong> — Can prepare and submit returns for approval</li>
+                        <li><strong>Checker</strong> — Reviews and approves/rejects submitted returns</li>
+                        <li><strong>Viewer</strong> — Read-only access to submissions and reports</li>
+                    </ul>
+                    <p>
+                        On first login, you'll be prompted to change your temporary password.
+                        Choose a strong password with at least 8 characters including uppercase, lowercase, numbers, and symbols.
+                    </p>
+                </div>
+            </div>
+
+            <div class="help-step">
+                <div class="help-step-number" aria-hidden="true">2</div>
+                <div class="help-step-content">
+                    <h3 class="help-step-title">Download the XML Schema</h3>
+                    <p>
+                        Before preparing your return data, download the XSD schema for the return template you need to submit.
+                    </p>
+                    <ol>
+                        <li>Navigate to <a href="/schemas">Download Schemas</a> from the sidebar</li>
+                        <li>Find the return template (e.g., MFCR 300 — Statement of Assets and Liabilities)</li>
+                        <li>Click <strong>Download XSD</strong> to get the schema file</li>
+                        <li>Use this schema to validate your XML before submission</li>
+                    </ol>
+                    <div class="help-tip">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                            <circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>
+                        </svg>
+                        <span><strong>Tip:</strong> You can also browse template structures in the <a href="/templates">Template Browser</a> to understand the required fields and data types.</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="help-step">
+                <div class="help-step-number" aria-hidden="true">3</div>
+                <div class="help-step-content">
+                    <h3 class="help-step-title">Prepare Your XML File</h3>
+                    <p>
+                        Your return data must be formatted as an XML file that conforms to the template's XSD schema.
+                        The XML structure depends on the return's structural category:
+                    </p>
+                    <div class="help-code-block">
+                        <div class="help-code-header">FixedRow Template — Single row of data</div>
+                        <pre><code>&lt;Return xmlns="urn:cbn:dfis:fc:MFCR300"&gt;
+  &lt;Row&gt;
+    &lt;CashInHand&gt;1500000.00&lt;/CashInHand&gt;
+    &lt;BalWithCBN&gt;3200000.00&lt;/BalWithCBN&gt;
+    &lt;!-- ... more fields --&gt;
+  &lt;/Row&gt;
+&lt;/Return&gt;</code></pre>
+                    </div>
+                    <div class="help-code-block">
+                        <div class="help-code-header">MultiRow Template — Multiple rows with serial numbers</div>
+                        <pre><code>&lt;Return xmlns="urn:cbn:dfis:fc:MFCR900"&gt;
+  &lt;Row&gt;
+    &lt;SerialNo&gt;1&lt;/SerialNo&gt;
+    &lt;BorrowerName&gt;Example Corp&lt;/BorrowerName&gt;
+    &lt;LoanAmount&gt;5000000.00&lt;/LoanAmount&gt;
+  &lt;/Row&gt;
+  &lt;Row&gt;
+    &lt;SerialNo&gt;2&lt;/SerialNo&gt;
+    &lt;BorrowerName&gt;Another Ltd&lt;/BorrowerName&gt;
+    &lt;LoanAmount&gt;3000000.00&lt;/LoanAmount&gt;
+  &lt;/Row&gt;
+&lt;/Return&gt;</code></pre>
+                    </div>
+                    <div class="help-code-block">
+                        <div class="help-code-header">ItemCoded Template — Rows identified by item codes</div>
+                        <pre><code>&lt;Return xmlns="urn:cbn:dfis:fc:MFCR350"&gt;
+  &lt;Row&gt;
+    &lt;ItemCode&gt;CASH_001&lt;/ItemCode&gt;
+    &lt;CurrentMonth&gt;2500000.00&lt;/CurrentMonth&gt;
+    &lt;PreviousMonth&gt;2300000.00&lt;/PreviousMonth&gt;
+  &lt;/Row&gt;
+&lt;/Return&gt;</code></pre>
+                    </div>
+                    <p>See the <a href="/help/submission-guide">Submission Guide</a> for detailed format requirements.</p>
+                </div>
+            </div>
+
+            <div class="help-step">
+                <div class="help-step-number" aria-hidden="true">4</div>
+                <div class="help-step-content">
+                    <h3 class="help-step-title">Upload Your Return</h3>
+                    <ol>
+                        <li>Go to <a href="/submit">Submit Return</a></li>
+                        <li>Select the return template from the list</li>
+                        <li>Choose the reporting period</li>
+                        <li>Upload your XML file or fill in the online form</li>
+                        <li>Review the pre-submission preview</li>
+                        <li>Click <strong>Submit</strong></li>
+                    </ol>
+                </div>
+            </div>
+
+            <div class="help-step">
+                <div class="help-step-number" aria-hidden="true">5</div>
+                <div class="help-step-content">
+                    <h3 class="help-step-title">Review Validation Results</h3>
+                    <p>
+                        After submission, the system automatically validates your data through multiple stages:
+                    </p>
+                    <ol>
+                        <li><strong>Schema Validation</strong> — Checks XML structure against the XSD</li>
+                        <li><strong>Type &amp; Range Checks</strong> — Verifies data types and value ranges</li>
+                        <li><strong>Intra-Sheet Formulas</strong> — Validates arithmetic relationships within the return</li>
+                        <li><strong>Cross-Sheet Rules</strong> — Checks consistency across related returns</li>
+                        <li><strong>Business Rules</strong> — Applies regulatory business logic</li>
+                    </ol>
+                    <p>
+                        If validation passes (no errors), your return is accepted. Warnings don't prevent acceptance but should be reviewed.
+                        If there are errors, you'll need to correct and re-submit.
+                    </p>
+                    <p>See <a href="/help/validation-errors">Validation Error Guide</a> for details on each error type.</p>
+                </div>
+            </div>
+
+            <div class="help-step">
+                <div class="help-step-number" aria-hidden="true">6</div>
+                <div class="help-step-content">
+                    <h3 class="help-step-title">Approval Process (if applicable)</h3>
+                    <p>
+                        If your institution has <strong>Maker-Checker</strong> enabled, submitted returns require approval
+                        from a Checker or Admin before being finalized.
+                    </p>
+                    <ul>
+                        <li>After submission, the return enters <strong>Pending Approval</strong> status</li>
+                        <li>Checkers receive a notification and can review the submission</li>
+                        <li>The Checker can <strong>Approve</strong> (finalizes submission) or <strong>Reject</strong> (with comments)</li>
+                        <li>If rejected, you can correct and re-submit as a linked re-submission</li>
+                    </ul>
+                    <div class="help-tip">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                            <circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>
+                        </svg>
+                        <span><strong>Note:</strong> A user cannot approve their own submission. The Maker and Checker must be different people.</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="help-next-links">
+            <h3>Next Steps</h3>
+            <ul>
+                <li><a href="/help/submission-guide">Detailed Submission Guide</a></li>
+                <li><a href="/help/validation-errors">Understanding Validation Errors</a></li>
+                <li><a href="/help/faq">Frequently Asked Questions</a></li>
+            </ul>
+        </div>
+    </div>
+</HelpLayout>

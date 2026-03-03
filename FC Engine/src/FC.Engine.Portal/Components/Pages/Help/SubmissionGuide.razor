@@ -1,0 +1,281 @@
+@page "/help/submission-guide"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Policy = "InstitutionUser")]
+
+<PageTitle>Submission Guide — Help Center — FC Engine Portal</PageTitle>
+
+<HelpLayout>
+    <div class="help-article">
+        <h2 class="help-article-title">Submission Guide</h2>
+        <p class="help-article-intro">
+            A detailed walkthrough of how to prepare and submit your regulatory returns to the
+            Central Bank of Nigeria through the FC Engine Portal.
+        </p>
+
+        <!-- Table of Contents -->
+        <div class="help-toc">
+            <h3 class="help-toc-title">On this page</h3>
+            <ul>
+                <li><a href="#overview">Submission Overview</a></li>
+                <li><a href="#xml-format">XML Format Requirements</a></li>
+                <li><a href="#structural-categories">Structural Categories</a></li>
+                <li><a href="#common-errors">Common XML Errors</a></li>
+                <li><a href="#online-form">Using the Online Form</a></li>
+                <li><a href="#resubmission">Re-submission Process</a></li>
+            </ul>
+        </div>
+
+        <!-- Submission Overview -->
+        <section id="overview">
+            <h3 class="help-section-heading">Submission Overview</h3>
+            <p>The submission workflow consists of these stages:</p>
+            <div class="help-flow">
+                <div class="help-flow-step">
+                    <span class="help-flow-label">Select Template</span>
+                </div>
+                <div class="help-flow-arrow" aria-hidden="true">&rarr;</div>
+                <div class="help-flow-step">
+                    <span class="help-flow-label">Choose Period</span>
+                </div>
+                <div class="help-flow-arrow" aria-hidden="true">&rarr;</div>
+                <div class="help-flow-step">
+                    <span class="help-flow-label">Upload XML</span>
+                </div>
+                <div class="help-flow-arrow" aria-hidden="true">&rarr;</div>
+                <div class="help-flow-step">
+                    <span class="help-flow-label">Validation</span>
+                </div>
+                <div class="help-flow-arrow" aria-hidden="true">&rarr;</div>
+                <div class="help-flow-step">
+                    <span class="help-flow-label">Result</span>
+                </div>
+            </div>
+
+            <p>After validation:</p>
+            <ul>
+                <li><strong>Accepted</strong> — No errors, return is stored successfully</li>
+                <li><strong>Accepted with Warnings</strong> — No errors but some warnings to review</li>
+                <li><strong>Rejected</strong> — Validation errors found, must correct and re-submit</li>
+                <li><strong>Pending Approval</strong> — Validation passed, awaiting Checker approval (if Maker-Checker is enabled)</li>
+            </ul>
+        </section>
+
+        <!-- XML Format Requirements -->
+        <section id="xml-format">
+            <h3 class="help-section-heading">XML Format Requirements</h3>
+
+            <h4>General Rules</h4>
+            <ul>
+                <li>Files must be well-formed XML (UTF-8 encoding recommended)</li>
+                <li>The root element must be <code>&lt;Return&gt;</code></li>
+                <li>The root element must include the correct XML namespace (<code>xmlns</code>) for the return template</li>
+                <li>Each data row is wrapped in a <code>&lt;Row&gt;</code> element</li>
+                <li>Numeric values must use period (<code>.</code>) as decimal separator — no commas or currency symbols</li>
+                <li>Date values must be in <code>YYYY-MM-DD</code> format</li>
+                <li>Text values are case-sensitive where specified by the template</li>
+            </ul>
+
+            <h4>Namespace Format</h4>
+            <p>Each return template has a unique namespace following this pattern:</p>
+            <div class="help-code-block">
+                <div class="help-code-header">Namespace Format</div>
+                <pre><code>urn:cbn:dfis:fc:{ReturnCode}
+
+Examples:
+  urn:cbn:dfis:fc:MFCR300
+  urn:cbn:dfis:fc:MFCR900
+  urn:cbn:dfis:fc:MFCR350</code></pre>
+            </div>
+
+            <h4>Numeric Formatting</h4>
+            <table class="help-table">
+                <thead>
+                    <tr><th>Correct</th><th>Incorrect</th><th>Reason</th></tr>
+                </thead>
+                <tbody>
+                    <tr><td><code>1500000.00</code></td><td><code>1,500,000.00</code></td><td>No thousands separators</td></tr>
+                    <tr><td><code>0.05</code></td><td><code>5%</code></td><td>No percentage symbols</td></tr>
+                    <tr><td><code>-250000.00</code></td><td><code>(250000.00)</code></td><td>Use minus sign for negatives</td></tr>
+                    <tr><td><code>0</code></td><td><code></code> (empty)</td><td>Use 0 for zero values, not empty</td></tr>
+                </tbody>
+            </table>
+        </section>
+
+        <!-- Structural Categories -->
+        <section id="structural-categories">
+            <h3 class="help-section-heading">Structural Categories</h3>
+            <p>Return templates are organized into three structural categories:</p>
+
+            <div class="help-category-card">
+                <h4>FixedRow</h4>
+                <p>Templates with a single, fixed row of data. Most common for summary statements.</p>
+                <div class="help-code-block">
+                    <div class="help-code-header">Example: MFCR 300 — Statement of Assets and Liabilities</div>
+                    <pre><code>&lt;Return xmlns="urn:cbn:dfis:fc:MFCR300"&gt;
+  &lt;Row&gt;
+    &lt;CashInHand&gt;1500000.00&lt;/CashInHand&gt;
+    &lt;BalWithCBN&gt;3200000.00&lt;/BalWithCBN&gt;
+    &lt;BalWithOtherBanksInNigeria&gt;800000.00&lt;/BalWithOtherBanksInNigeria&gt;
+    &lt;!-- All fields for this template --&gt;
+    &lt;TotalAssets&gt;125000000.00&lt;/TotalAssets&gt;
+  &lt;/Row&gt;
+&lt;/Return&gt;</code></pre>
+                </div>
+                <p><strong>Key Points:</strong></p>
+                <ul>
+                    <li>Exactly <strong>one</strong> <code>&lt;Row&gt;</code> element</li>
+                    <li>All fields defined in the template must be present</li>
+                    <li>Fields not applicable should contain <code>0</code></li>
+                </ul>
+            </div>
+
+            <div class="help-category-card">
+                <h4>MultiRow</h4>
+                <p>Templates with multiple rows, each identified by a sequential serial number.</p>
+                <div class="help-code-block">
+                    <div class="help-code-header">Example: MFCR 900 — Large Exposures</div>
+                    <pre><code>&lt;Return xmlns="urn:cbn:dfis:fc:MFCR900"&gt;
+  &lt;Row&gt;
+    &lt;SerialNo&gt;1&lt;/SerialNo&gt;
+    &lt;BorrowerName&gt;ABC Manufacturing Ltd&lt;/BorrowerName&gt;
+    &lt;SectorCode&gt;MFG&lt;/SectorCode&gt;
+    &lt;LoanAmount&gt;5000000.00&lt;/LoanAmount&gt;
+  &lt;/Row&gt;
+  &lt;Row&gt;
+    &lt;SerialNo&gt;2&lt;/SerialNo&gt;
+    &lt;BorrowerName&gt;XYZ Trading Co&lt;/BorrowerName&gt;
+    &lt;SectorCode&gt;TRD&lt;/SectorCode&gt;
+    &lt;LoanAmount&gt;3500000.00&lt;/LoanAmount&gt;
+  &lt;/Row&gt;
+&lt;/Return&gt;</code></pre>
+                </div>
+                <p><strong>Key Points:</strong></p>
+                <ul>
+                    <li>Each row must have a <code>&lt;SerialNo&gt;</code> field</li>
+                    <li>Serial numbers must be sequential starting from 1</li>
+                    <li>No duplicate serial numbers</li>
+                    <li>Number of rows varies based on your data</li>
+                </ul>
+            </div>
+
+            <div class="help-category-card">
+                <h4>ItemCoded</h4>
+                <p>Templates with rows identified by predefined item codes from a catalog.</p>
+                <div class="help-code-block">
+                    <div class="help-code-header">Example: MFCR 350 — Detailed Assets</div>
+                    <pre><code>&lt;Return xmlns="urn:cbn:dfis:fc:MFCR350"&gt;
+  &lt;Row&gt;
+    &lt;ItemCode&gt;CASH_001&lt;/ItemCode&gt;
+    &lt;CurrentMonth&gt;2500000.00&lt;/CurrentMonth&gt;
+    &lt;PreviousMonth&gt;2300000.00&lt;/PreviousMonth&gt;
+  &lt;/Row&gt;
+  &lt;Row&gt;
+    &lt;ItemCode&gt;CASH_002&lt;/ItemCode&gt;
+    &lt;CurrentMonth&gt;1800000.00&lt;/CurrentMonth&gt;
+    &lt;PreviousMonth&gt;1750000.00&lt;/PreviousMonth&gt;
+  &lt;/Row&gt;
+&lt;/Return&gt;</code></pre>
+                </div>
+                <p><strong>Key Points:</strong></p>
+                <ul>
+                    <li>Each row must have an <code>&lt;ItemCode&gt;</code> field</li>
+                    <li>Item codes must match the predefined catalog for the template</li>
+                    <li>Browse available item codes in the <a href="/templates">Template Browser</a></li>
+                    <li>No duplicate item codes allowed</li>
+                </ul>
+            </div>
+        </section>
+
+        <!-- Common XML Errors -->
+        <section id="common-errors">
+            <h3 class="help-section-heading">Common XML Errors and Fixes</h3>
+
+            <div class="help-error-list">
+                <div class="help-error-item">
+                    <h4>Missing or incorrect namespace</h4>
+                    <p class="help-error-cause">The <code>xmlns</code> attribute on the <code>&lt;Return&gt;</code> element is missing or doesn't match the template.</p>
+                    <div class="help-code-block help-code-error">
+                        <div class="help-code-header">Wrong</div>
+                        <pre><code>&lt;Return&gt;  &lt;!-- Missing xmlns --&gt;</code></pre>
+                    </div>
+                    <div class="help-code-block help-code-success">
+                        <div class="help-code-header">Correct</div>
+                        <pre><code>&lt;Return xmlns="urn:cbn:dfis:fc:MFCR300"&gt;</code></pre>
+                    </div>
+                </div>
+
+                <div class="help-error-item">
+                    <h4>Invalid numeric format</h4>
+                    <p class="help-error-cause">Numbers contain commas, currency symbols, or other non-numeric characters.</p>
+                    <div class="help-code-block help-code-error">
+                        <div class="help-code-header">Wrong</div>
+                        <pre><code>&lt;TotalAssets&gt;N1,500,000.00&lt;/TotalAssets&gt;</code></pre>
+                    </div>
+                    <div class="help-code-block help-code-success">
+                        <div class="help-code-header">Correct</div>
+                        <pre><code>&lt;TotalAssets&gt;1500000.00&lt;/TotalAssets&gt;</code></pre>
+                    </div>
+                </div>
+
+                <div class="help-error-item">
+                    <h4>Missing required fields</h4>
+                    <p class="help-error-cause">Required fields are omitted from the XML. Check the template's XSD to see which fields are mandatory.</p>
+                    <p><strong>Fix:</strong> Include all required fields. Use <code>0</code> for numeric fields that don't apply.</p>
+                </div>
+
+                <div class="help-error-item">
+                    <h4>Incorrect element names</h4>
+                    <p class="help-error-cause">XML element names are case-sensitive. <code>&lt;cashinhand&gt;</code> is not the same as <code>&lt;CashInHand&gt;</code>.</p>
+                    <p><strong>Fix:</strong> Ensure element names exactly match the template definition. Use the <a href="/schemas">XSD schema</a> as reference.</p>
+                </div>
+
+                <div class="help-error-item">
+                    <h4>Duplicate serial numbers or item codes</h4>
+                    <p class="help-error-cause">MultiRow returns have duplicate <code>&lt;SerialNo&gt;</code> values, or ItemCoded returns have duplicate <code>&lt;ItemCode&gt;</code> values.</p>
+                    <p><strong>Fix:</strong> Ensure each row has a unique identifier.</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Online Form -->
+        <section id="online-form">
+            <h3 class="help-section-heading">Using the Online Form</h3>
+            <p>
+                As an alternative to uploading XML, you can use the online form to fill in your return data directly:
+            </p>
+            <ol>
+                <li>Select a template and reporting period on the <a href="/submit">Submit Return</a> page</li>
+                <li>Choose <strong>"Fill Online Form"</strong> instead of XML upload</li>
+                <li>Enter values for each field in the form</li>
+                <li>The form will convert your input to XML and submit it for validation</li>
+            </ol>
+            <div class="help-tip">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                    <circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>
+                </svg>
+                <span><strong>Tip:</strong> The online form is recommended for FixedRow templates. For MultiRow and ItemCoded templates with many rows, XML upload is more efficient.</span>
+            </div>
+        </section>
+
+        <!-- Re-submission -->
+        <section id="resubmission">
+            <h3 class="help-section-heading">Re-submission Process</h3>
+            <p>If your submission is rejected (either by validation or by a Checker), you can re-submit:</p>
+            <ol>
+                <li>Go to <a href="/submissions">My Submissions</a></li>
+                <li>Find the rejected submission</li>
+                <li>Click <strong>View Details</strong> to see the rejection reason</li>
+                <li>Click <strong>Re-submit</strong> to start a new submission linked to the original</li>
+                <li>The re-submission will reference the original for audit trail purposes</li>
+            </ol>
+        </section>
+
+        <div class="help-next-links">
+            <h3>Related Topics</h3>
+            <ul>
+                <li><a href="/help/validation-errors">Validation Error Guide</a></li>
+                <li><a href="/help/faq">Frequently Asked Questions</a></li>
+                <li><a href="/templates">Template Browser</a></li>
+            </ul>
+        </div>
+    </div>
+</HelpLayout>

@@ -1,0 +1,248 @@
+@page "/help/validation-errors"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Policy = "InstitutionUser")]
+
+<PageTitle>Validation Error Guide — Help Center — FC Engine Portal</PageTitle>
+
+<HelpLayout>
+    <div class="help-article">
+        <h2 class="help-article-title">Validation Error Guide</h2>
+        <p class="help-article-intro">
+            When you submit a return, it goes through multiple validation stages. This guide explains
+            each error type, what causes it, and how to fix it.
+        </p>
+
+        <div class="help-toc">
+            <h3 class="help-toc-title">Validation Categories</h3>
+            <ul>
+                <li><a href="#schema">Schema Validation</a></li>
+                <li><a href="#typerange">Type &amp; Range Checks</a></li>
+                <li><a href="#intrasheet">Intra-Sheet Formula Validation</a></li>
+                <li><a href="#crosssheet">Cross-Sheet Validation</a></li>
+                <li><a href="#business">Business Rule Validation</a></li>
+                <li><a href="#severity">Error vs Warning</a></li>
+            </ul>
+        </div>
+
+        <!-- Severity explanation -->
+        <section id="severity">
+            <h3 class="help-section-heading">Error vs Warning</h3>
+            <div class="help-severity-grid">
+                <div class="help-severity-card help-severity-error">
+                    <h4>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                            <circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>
+                        </svg>
+                        Error
+                    </h4>
+                    <p>
+                        Errors <strong>prevent acceptance</strong> of the submission. You must fix all errors before the return can be accepted.
+                        The submission will have a <strong>Rejected</strong> status.
+                    </p>
+                </div>
+                <div class="help-severity-card help-severity-warning">
+                    <h4>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                            <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+                            <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+                        </svg>
+                        Warning
+                    </h4>
+                    <p>
+                        Warnings <strong>do not prevent acceptance</strong> but indicate potential data issues that should be reviewed.
+                        The submission will have an <strong>Accepted with Warnings</strong> status.
+                    </p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Schema Validation -->
+        <section id="schema">
+            <h3 class="help-section-heading">
+                <span class="help-validation-badge help-badge-schema">Stage 1</span>
+                Schema Validation
+            </h3>
+            <p>
+                Schema validation checks that your XML file is well-formed and conforms to the template's XSD schema.
+                These are always errors (never warnings).
+            </p>
+
+            <div class="help-error-catalog">
+                <div class="help-error-entry">
+                    <h4>Invalid XML Structure</h4>
+                    <p><strong>What it means:</strong> The XML file is not well-formed — missing closing tags, invalid characters, or malformed elements.</p>
+                    <p><strong>Common causes:</strong></p>
+                    <ul>
+                        <li>Missing closing tags (e.g., <code>&lt;CashInHand&gt;</code> without <code>&lt;/CashInHand&gt;</code>)</li>
+                        <li>Special characters in text values not properly escaped (<code>&amp;</code> should be <code>&amp;amp;</code>)</li>
+                        <li>File encoding issues — ensure UTF-8 encoding</li>
+                    </ul>
+                    <p><strong>How to fix:</strong> Validate your XML with any XML validator tool before submission. Most XML editors highlight structural issues.</p>
+                </div>
+
+                <div class="help-error-entry">
+                    <h4>Namespace Mismatch</h4>
+                    <p><strong>What it means:</strong> The <code>xmlns</code> attribute on the root element doesn't match the expected namespace for the selected template.</p>
+                    <p><strong>How to fix:</strong> Ensure the namespace matches the pattern <code>urn:cbn:dfis:fc:{ReturnCode}</code>. Download the XSD from the <a href="/schemas">Schemas</a> page for reference.</p>
+                </div>
+
+                <div class="help-error-entry">
+                    <h4>Unknown Element</h4>
+                    <p><strong>What it means:</strong> The XML contains elements not defined in the template schema.</p>
+                    <p><strong>Common causes:</strong></p>
+                    <ul>
+                        <li>Typos in element names (XML is case-sensitive)</li>
+                        <li>Using elements from a different template version</li>
+                        <li>Extra elements not part of the template definition</li>
+                    </ul>
+                    <p><strong>How to fix:</strong> Check the <a href="/templates">Template Browser</a> for the correct field names.</p>
+                </div>
+
+                <div class="help-error-entry">
+                    <h4>Missing Required Element</h4>
+                    <p><strong>What it means:</strong> A field marked as required in the template is missing from your XML.</p>
+                    <p><strong>How to fix:</strong> Add the missing element. Use <code>0</code> for numeric fields with no applicable value.</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Type & Range -->
+        <section id="typerange">
+            <h3 class="help-section-heading">
+                <span class="help-validation-badge help-badge-typerange">Stage 2</span>
+                Type &amp; Range Checks
+            </h3>
+            <p>
+                These checks verify that each value is the correct data type and falls within acceptable ranges.
+            </p>
+
+            <div class="help-error-catalog">
+                <div class="help-error-entry">
+                    <h4>Invalid Data Type</h4>
+                    <p><strong>What it means:</strong> A value doesn't match the expected type (e.g., text in a numeric field).</p>
+                    <p><strong>Example:</strong> <code>&lt;LoanAmount&gt;five million&lt;/LoanAmount&gt;</code> — expected a number.</p>
+                    <p><strong>How to fix:</strong> Ensure values match the field's data type (Decimal, Integer, Text, Date).</p>
+                </div>
+
+                <div class="help-error-entry">
+                    <h4>Value Out of Range</h4>
+                    <p><strong>What it means:</strong> A value exceeds the defined minimum or maximum for the field.</p>
+                    <p><strong>Example:</strong> An interest rate of <code>150.0</code> when the maximum is <code>100.0</code>.</p>
+                    <p><strong>How to fix:</strong> Check the field definition in the <a href="/templates">Template Browser</a> for min/max constraints.</p>
+                </div>
+
+                <div class="help-error-entry">
+                    <h4>Invalid Item Code</h4>
+                    <p><strong>What it means:</strong> For ItemCoded templates, the <code>&lt;ItemCode&gt;</code> value is not in the predefined catalog.</p>
+                    <p><strong>How to fix:</strong> Use only item codes defined for this template. Browse available codes in the <a href="/templates">Template Browser</a>.</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Intra-Sheet -->
+        <section id="intrasheet">
+            <h3 class="help-section-heading">
+                <span class="help-validation-badge help-badge-intrasheet">Stage 3</span>
+                Intra-Sheet Formula Validation
+            </h3>
+            <p>
+                These rules validate arithmetic and logical relationships between fields within the same return.
+                Formulas are defined by the template designer.
+            </p>
+
+            <div class="help-error-catalog">
+                <div class="help-error-entry">
+                    <h4>Sum Mismatch</h4>
+                    <p><strong>What it means:</strong> A total field doesn't equal the sum of its component fields.</p>
+                    <p><strong>Example:</strong> <code>TotalAssets</code> should equal <code>CashInHand + BalWithCBN + BalWithOtherBanks + ...</code> but the values don't add up.</p>
+                    <p><strong>How to fix:</strong> Recalculate the total field to ensure it equals the sum of all component fields. Some formulas allow a small tolerance.</p>
+                </div>
+
+                <div class="help-error-entry">
+                    <h4>Equals / Difference Check Failed</h4>
+                    <p><strong>What it means:</strong> Two fields that should be equal (or differ by a specific amount) don't satisfy the condition.</p>
+                    <p><strong>Example:</strong> <code>TotalAssets</code> must equal <code>TotalLiabilities</code> (balance sheet must balance).</p>
+                    <p><strong>How to fix:</strong> Review both sides of the equation and correct the discrepancy.</p>
+                </div>
+
+                <div class="help-error-entry">
+                    <h4>Ratio Check Failed</h4>
+                    <p><strong>What it means:</strong> A computed ratio doesn't match the reported ratio value.</p>
+                    <p><strong>How to fix:</strong> Verify the calculation. The system checks that the ratio field equals the formula result within tolerance.</p>
+                </div>
+
+                <div class="help-error-entry">
+                    <h4>Threshold Breach</h4>
+                    <p><strong>What it means:</strong> A value exceeds a regulatory threshold defined by the formula.</p>
+                    <p><strong>How to fix:</strong> Verify the data is correct. If it genuinely exceeds the threshold, the issue may be flagged as a warning rather than an error.</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Cross-Sheet -->
+        <section id="crosssheet">
+            <h3 class="help-section-heading">
+                <span class="help-validation-badge help-badge-crosssheet">Stage 4</span>
+                Cross-Sheet Validation
+            </h3>
+            <p>
+                Cross-sheet rules validate consistency between different return templates. For example,
+                a value reported in one return must match a corresponding value in another return.
+            </p>
+
+            <div class="help-error-catalog">
+                <div class="help-error-entry">
+                    <h4>Cross-Template Mismatch</h4>
+                    <p><strong>What it means:</strong> A value in this return doesn't match the corresponding value in a related return that was previously submitted.</p>
+                    <p><strong>Example:</strong> Total deposits in MFCR 300 should match the sum of deposits in MFCR 310.</p>
+                    <p><strong>How to fix:</strong> Review both returns and ensure consistent values. You may need to correct and re-submit one or both returns.</p>
+                </div>
+
+                <div class="help-error-entry">
+                    <h4>Missing Related Submission</h4>
+                    <p><strong>What it means:</strong> A cross-sheet rule references another template that hasn't been submitted for the same period.</p>
+                    <p><strong>How to fix:</strong> Submit the related return for the same reporting period first, then re-submit this return.</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Business Rules -->
+        <section id="business">
+            <h3 class="help-section-heading">
+                <span class="help-validation-badge help-badge-business">Stage 5</span>
+                Business Rule Validation
+            </h3>
+            <p>
+                Business rules enforce regulatory requirements and data quality standards defined by CBN.
+            </p>
+
+            <div class="help-error-catalog">
+                <div class="help-error-entry">
+                    <h4>Completeness Check Failed</h4>
+                    <p><strong>What it means:</strong> Required sections of the return are incomplete.</p>
+                    <p><strong>How to fix:</strong> Ensure all required fields have non-zero, non-empty values as applicable.</p>
+                </div>
+
+                <div class="help-error-entry">
+                    <h4>Date Check Failed</h4>
+                    <p><strong>What it means:</strong> Date values fall outside the expected range for the reporting period.</p>
+                    <p><strong>How to fix:</strong> Ensure dates are within the reporting period and in <code>YYYY-MM-DD</code> format.</p>
+                </div>
+
+                <div class="help-error-entry">
+                    <h4>Regulatory Threshold Exceeded</h4>
+                    <p><strong>What it means:</strong> A reported metric exceeds CBN regulatory limits.</p>
+                    <p><strong>How to fix:</strong> Verify the data. If correct, the issue may require regulatory disclosure or explanation.</p>
+                </div>
+            </div>
+        </section>
+
+        <div class="help-next-links">
+            <h3>Related Topics</h3>
+            <ul>
+                <li><a href="/help/submission-guide">Submission Guide</a></li>
+                <li><a href="/help/faq">Frequently Asked Questions</a></li>
+                <li><a href="/help/support">Contact Support</a></li>
+            </ul>
+        </div>
+    </div>
+</HelpLayout>
