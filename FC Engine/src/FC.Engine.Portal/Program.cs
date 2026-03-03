@@ -34,6 +34,7 @@ builder.Services.AddScoped<FC.Engine.Portal.Services.UserSettingsService>();
 builder.Services.AddScoped<FC.Engine.Portal.Services.ApprovalService>();
 builder.Services.AddScoped<FC.Engine.Portal.Services.InstitutionManagementService>();
 builder.Services.AddScoped<FC.Engine.Portal.Services.NotificationService>();
+builder.Services.AddScoped<FC.Engine.Portal.Services.CrossSheetDashboardService>();
 
 // Caching
 builder.Services.AddMemoryCache();
