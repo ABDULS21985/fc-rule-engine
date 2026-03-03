@@ -121,11 +121,17 @@
 <ToastContainer />
 <ConfirmDialog />
 
+<!-- ARIA live region for screen reader announcements (page transitions) -->
+<div class="portal-live-region" aria-live="polite" aria-atomic="true" role="status">
+    @_liveAnnouncement
+</div>
+
 @code {
     private bool _sidebarOpen;
     private bool _navigating;
     private bool _progressComplete;
     private string _currentPageName = "Dashboard";
+    private string _liveAnnouncement = "";
 
     protected override void OnInitialized()
     {
@@ -139,6 +145,7 @@
         _progressComplete = false;
         UpdatePageName(e.Location);
         _sidebarOpen = false;
+        _liveAnnouncement = $"Navigated to {_currentPageName}";
         StateHasChanged();
 
         await Task.Delay(300);
@@ -178,6 +185,8 @@
             "reports/compliance" => "Compliance Report",
             "reports/audit" => "Audit Trail",
             "notifications" => "Notifications",
+            "approvals" => "Pending Approvals",
+            "settings" => "User Settings",
             _ => "Page"
         };
     }

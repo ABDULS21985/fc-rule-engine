@@ -109,8 +109,11 @@
                         Certificate
                     </a>
                 }
-                <div class="portal-export-dropdown-wrap">
-                    <button class="portal-btn portal-btn-outline portal-btn-sm" @onclick="ToggleExportMenu">
+                <div class="portal-export-dropdown-wrap" @onkeydown="HandleExportKeyDown">
+                    <button class="portal-btn portal-btn-outline portal-btn-sm"
+                            @onclick="ToggleExportMenu"
+                            aria-expanded="@showExportMenu"
+                            aria-haspopup="true">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
                             <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
                         </svg>
@@ -119,11 +122,12 @@
                     </button>
                     @if (showExportMenu)
                     {
-                        <div class="portal-export-dropdown">
-                            <button class="portal-export-dropdown-item" @onclick="ExportErrorsCsv">Export Errors CSV</button>
+                        <div class="portal-export-backdrop" @onclick="() => showExportMenu = false" role="presentation" aria-hidden="true"></div>
+                        <div class="portal-export-dropdown" role="menu">
+                            <button class="portal-export-dropdown-item" role="menuitem" @onclick="ExportErrorsCsv">Export Errors CSV</button>
                             @if (!string.IsNullOrEmpty(submission.RawXml))
                             {
-                                <button class="portal-export-dropdown-item" @onclick="DownloadXml">Download Original XML</button>
+                                <button class="portal-export-dropdown-item" role="menuitem" @onclick="DownloadXml">Download Original XML</button>
                             }
                         </div>
                     }
@@ -770,6 +774,12 @@
     // ── Export Helpers ──────────────────────────────────────
 
     private void ToggleExportMenu() => showExportMenu = !showExportMenu;
+
+    private void HandleExportKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Escape" && showExportMenu)
+            showExportMenu = false;
+    }
 
     private async Task ExportErrorsCsv()
     {

@@ -17,6 +17,7 @@ builder.Services.AddScoped<FormulaCatalogSeeder>();
 builder.Services.AddScoped<CrossSheetRuleSeedService>();
 builder.Services.AddScoped<BusinessRuleSeedService>();
 builder.Services.AddScoped<AuthService>();
+builder.Services.AddScoped<InstitutionAuthService>();
 
 var host = builder.Build();
 var logger = host.Services.GetRequiredService<ILogger<Program>>();
@@ -180,6 +181,44 @@ try
         await authService.CreateUser("admin", "System Administrator", "admin@fcengine.local",
             defaultPassword, PortalRole.Admin);
         logger.LogInformation("Default admin user created (username: admin)");
+    }
+
+    // Step 7b: Seed default institution users for FC001 (if none exist)
+    var fc001 = await db.Institutions.FirstOrDefaultAsync(i => i.InstitutionCode == "FC001");
+    if (fc001 != null)
+    {
+        var instUserRepo = scope.ServiceProvider.GetRequiredService<IInstitutionUserRepository>();
+        var existingInstUsers = await instUserRepo.GetByInstitution(fc001.Id);
+        if (existingInstUsers.Count == 0)
+        {
+            logger.LogInformation("Seeding default institution users for FC001...");
+            var instAuthService = scope.ServiceProvider.GetRequiredService<InstitutionAuthService>();
+            var instPassword = builder.Configuration["DefaultAdmin:Password"] ?? "Admin@123";
+
+            await instAuthService.CreateUser(fc001.Id, "admin", "admin@fc001.com", "Admin User", instPassword, InstitutionRole.Admin);
+            await instAuthService.CreateUser(fc001.Id, "maker1", "maker1@fc001.com", "John Maker", instPassword, InstitutionRole.Maker);
+            await instAuthService.CreateUser(fc001.Id, "checker1", "checker1@fc001.com", "Jane Checker", instPassword, InstitutionRole.Checker);
+            await instAuthService.CreateUser(fc001.Id, "viewer1", "viewer1@fc001.com", "Bob Viewer", instPassword, InstitutionRole.Viewer);
+
+            logger.LogInformation("Institution users seeded: admin, maker1, checker1, viewer1");
+        }
+        else
+        {
+            // Fix password hashes for existing users (in case they were seeded incorrectly)
+            var instPassword = builder.Configuration["DefaultAdmin:Password"] ?? "Admin@123";
+            var fixedCount = 0;
+            foreach (var instUser in existingInstUsers)
+            {
+                instUser.PasswordHash = InstitutionAuthService.HashPassword(instPassword);
+                instUser.MustChangePassword = false;
+                instUser.FailedLoginAttempts = 0;
+                instUser.LockedUntil = null;
+                await instUserRepo.Update(instUser);
+                fixedCount++;
+            }
+            if (fixedCount > 0)
+                logger.LogInformation("Reset passwords for {Count} existing institution users", fixedCount);
+        }
     }
 
     // Step 8: Seed default business rules

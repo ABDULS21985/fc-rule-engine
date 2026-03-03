@@ -72,10 +72,17 @@ public class BusinessRuleEvaluator : IBusinessRuleEvaluator
 
         if (!targetFields.Any()) yield break;
 
+        // Only check fields that exist in the template schema (present in at least one row)
+        var knownFields = record.Rows
+            .SelectMany(r => r.AllFields.Keys)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
         foreach (var row in record.Rows)
         {
             foreach (var fieldName in targetFields)
             {
+                if (!knownFields.Contains(fieldName)) continue;
+
                 var value = row.GetValue(fieldName);
                 if (value == null || string.IsNullOrWhiteSpace(value.ToString()))
                 {

@@ -3,11 +3,12 @@
 @inject NotificationService NotificationSvc
 @inject NavigationManager Navigation
 
-<div class="portal-notif-bell-wrapper">
+<div class="portal-notif-bell-wrapper" @onkeydown="HandleKeyDown">
     <button class="portal-topbar-notification"
             @onclick="ToggleDropdown"
             aria-label="Notifications (@unreadCount unread)"
-            aria-expanded="@isOpen">
+            aria-expanded="@isOpen"
+            aria-haspopup="true">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
              stroke-linecap="round" stroke-linejoin="round" width="18" height="18" aria-hidden="true">
             <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/>
@@ -23,6 +24,7 @@
 
     @if (isOpen)
     {
+        <div class="portal-notif-backdrop" @onclick="CloseDropdown" role="presentation" aria-hidden="true"></div>
         <div class="portal-notif-dropdown" role="region" aria-label="Recent notifications">
             <div class="portal-notif-dropdown-header">
                 <span class="portal-notif-dropdown-title">Notifications</span>
@@ -154,6 +156,12 @@
     }
 
     private void CloseDropdown() => isOpen = false;
+
+    private void HandleKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Escape" && isOpen)
+            isOpen = false;
+    }
 
     private async Task HandleNotifClick(NotificationModel notif)
     {

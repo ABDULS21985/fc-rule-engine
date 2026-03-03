@@ -103,3 +103,42 @@ window.portalUpdateFormulaTotals = function (formulaResults) {
         }
     });
 };
+
+// ═══════════════════════════════════════════════════════════════════════
+// Accessibility — Focus Trap for Modals
+// ═══════════════════════════════════════════════════════════════════════
+
+window.portalTrapFocus = function (elementId) {
+    var container = document.getElementById(elementId);
+    if (!container) return;
+    var focusable = container.querySelectorAll(
+        'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])'
+    );
+    if (focusable.length === 0) return;
+    var first = focusable[0];
+    var last = focusable[focusable.length - 1];
+    first.focus();
+    container.addEventListener("keydown", function trapHandler(e) {
+        if (e.key !== "Tab") return;
+        if (e.shiftKey) {
+            if (document.activeElement === first) {
+                e.preventDefault();
+                last.focus();
+            }
+        } else {
+            if (document.activeElement === last) {
+                e.preventDefault();
+                first.focus();
+            }
+        }
+    });
+};
+
+// Announce text to screen readers via live region
+window.portalAnnounce = function (message) {
+    var region = document.querySelector("[aria-live='polite'][role='status']");
+    if (region) {
+        region.textContent = "";
+        setTimeout(function () { region.textContent = message; }, 100);
+    }
+};

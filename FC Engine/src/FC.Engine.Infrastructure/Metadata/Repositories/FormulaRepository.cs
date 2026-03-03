@@ -39,6 +39,14 @@ public class FormulaRepository : IFormulaRepository
             .ToListAsync(ct);
     }
 
+    public async Task<CrossSheetRule?> GetCrossSheetRuleById(int id, CancellationToken ct = default)
+    {
+        return await _db.CrossSheetRules
+            .Include(r => r.Operands)
+            .Include(r => r.Expression)
+            .FirstOrDefaultAsync(r => r.Id == id, ct);
+    }
+
     public async Task<IReadOnlyList<BusinessRule>> GetActiveBusinessRules(CancellationToken ct = default)
     {
         return await _db.BusinessRules

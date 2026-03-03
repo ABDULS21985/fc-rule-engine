@@ -52,7 +52,7 @@ public class ReturnDataRecord
             int i => i,
             long l => l,
             string s when decimal.TryParse(s, out var d) => d,
-            _ => Convert.ToDecimal(val)
+            _ => null
         };
     }
 }
@@ -88,7 +88,7 @@ public class ReturnDataRow
             int i => i,
             long l => l,
             string s when decimal.TryParse(s, out var d) => d,
-            _ => Convert.ToDecimal(val)
+            _ => null
         };
     }
 

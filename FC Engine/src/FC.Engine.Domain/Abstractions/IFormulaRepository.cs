@@ -8,6 +8,7 @@ public interface IFormulaRepository
     Task<IReadOnlyList<IntraSheetFormula>> GetIntraSheetFormulas(int templateVersionId, CancellationToken ct = default);
     Task<IReadOnlyList<CrossSheetRule>> GetCrossSheetRulesForTemplate(string returnCode, CancellationToken ct = default);
     Task<IReadOnlyList<CrossSheetRule>> GetAllActiveCrossSheetRules(CancellationToken ct = default);
+    Task<CrossSheetRule?> GetCrossSheetRuleById(int id, CancellationToken ct = default);
     Task<IReadOnlyList<BusinessRule>> GetActiveBusinessRules(CancellationToken ct = default);
     Task<IReadOnlyList<BusinessRule>> GetBusinessRulesForTemplate(string returnCode, CancellationToken ct = default);
     Task AddIntraSheetFormula(IntraSheetFormula formula, CancellationToken ct = default);
