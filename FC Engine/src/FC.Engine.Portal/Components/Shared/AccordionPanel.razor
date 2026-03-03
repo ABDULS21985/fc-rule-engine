@@ -1,0 +1,34 @@
+@* Reusable collapsible accordion panel *@
+
+<div class="portal-accordion @(_expanded ? "portal-accordion-open" : "")">
+    <button class="portal-accordion-header"
+            @onclick="Toggle"
+            aria-expanded="@_expanded"
+            aria-controls="@_panelId"
+            id="@_headerId">
+        <span class="portal-accordion-title">@Title</span>
+        <svg class="portal-accordion-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <polyline points="6 9 12 15 18 9"/>
+        </svg>
+    </button>
+    <div class="portal-accordion-body" id="@_panelId" role="region" aria-labelledby="@_headerId">
+        <div class="portal-accordion-content">
+            @ChildContent
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public string Title { get; set; } = "";
+    [Parameter] public bool InitiallyOpen { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    private bool _expanded;
+    private string _panelId = $"acc-p-{Guid.NewGuid():N}"[..14];
+    private string _headerId = $"acc-h-{Guid.NewGuid():N}"[..14];
+
+    protected override void OnInitialized() => _expanded = InitiallyOpen;
+
+    private void Toggle() => _expanded = !_expanded;
+}

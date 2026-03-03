@@ -1,0 +1,94 @@
+@* Shared layout wrapper for all help pages — provides sidebar navigation *@
+@inject NavigationManager Navigation
+
+<div class="portal-page">
+    <div class="portal-page-header">
+        <div class="portal-page-header-main">
+            <h1 class="portal-page-title">Help Center</h1>
+            <p class="portal-page-subtitle">Documentation, guides, and support for the FI Portal</p>
+        </div>
+    </div>
+
+    <div class="help-layout">
+        <aside class="help-sidebar">
+            <nav aria-label="Help navigation">
+                <ul class="help-sidebar-nav">
+                    <li>
+                        <a href="/help" class="help-sidebar-link @IsActive("/help")">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                                <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/>
+                                <polyline points="9 22 9 12 15 12 15 22"/>
+                            </svg>
+                            Help Home
+                        </a>
+                    </li>
+                    <li>
+                        <a href="/help/getting-started" class="help-sidebar-link @IsActive("/help/getting-started")">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                                <circle cx="12" cy="12" r="10"/>
+                                <polygon points="10 8 16 12 10 16 10 8"/>
+                            </svg>
+                            Getting Started
+                        </a>
+                    </li>
+                    <li>
+                        <a href="/help/submission-guide" class="help-sidebar-link @IsActive("/help/submission-guide")">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                                <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
+                                <polyline points="14 2 14 8 20 8"/>
+                            </svg>
+                            Submission Guide
+                        </a>
+                    </li>
+                    <li>
+                        <a href="/help/validation-errors" class="help-sidebar-link @IsActive("/help/validation-errors")">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                                <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+                                <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+                            </svg>
+                            Validation Errors
+                        </a>
+                    </li>
+                    <li>
+                        <a href="/help/faq" class="help-sidebar-link @IsActive("/help/faq")">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                                <circle cx="12" cy="12" r="10"/>
+                                <path d="M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3"/>
+                                <line x1="12" y1="17" x2="12.01" y2="17"/>
+                            </svg>
+                            FAQ
+                        </a>
+                    </li>
+                    <li>
+                        <a href="/help/support" class="help-sidebar-link @IsActive("/help/support")">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                                <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
+                            </svg>
+                            Contact Support
+                        </a>
+                    </li>
+                </ul>
+            </nav>
+        </aside>
+
+        <div class="help-content">
+            @ChildContent
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    private string IsActive(string href)
+    {
+        var uri = Navigation.ToAbsoluteUri(Navigation.Uri);
+        var path = uri.AbsolutePath.TrimEnd('/');
+        var target = href.TrimEnd('/');
+
+        if (target == "/help")
+            return path == "/help" || path == "" ? "active" : "";
+
+        return path.Equals(target, StringComparison.OrdinalIgnoreCase) ? "active" : "";
+    }
+}
