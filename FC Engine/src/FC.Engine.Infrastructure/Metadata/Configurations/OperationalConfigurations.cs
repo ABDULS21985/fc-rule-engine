@@ -17,6 +17,11 @@ public class SubmissionConfiguration : IEntityTypeConfiguration<Submission>
         builder.HasOne(s => s.Institution).WithMany().HasForeignKey(s => s.InstitutionId);
         builder.HasOne(s => s.ReturnPeriod).WithMany().HasForeignKey(s => s.ReturnPeriodId);
         builder.HasOne(s => s.ValidationReport).WithOne().HasForeignKey<ValidationReport>(r => r.SubmissionId);
+
+        // ── FI Portal Extensions ──
+        builder.Property(s => s.SubmittedByUserId);
+        builder.Property(s => s.ApprovalRequired).HasDefaultValue(false);
+        // Navigation to Approval is configured in SubmissionApprovalConfiguration
     }
 }
 
@@ -29,6 +34,14 @@ public class InstitutionConfiguration : IEntityTypeConfiguration<Institution>
         builder.Property(i => i.InstitutionCode).HasMaxLength(20).IsRequired();
         builder.Property(i => i.InstitutionName).HasMaxLength(255).IsRequired();
         builder.Property(i => i.LicenseType).HasMaxLength(100);
+
+        // ── FI Portal Extensions ──
+        builder.Property(i => i.ContactEmail).HasMaxLength(256);
+        builder.Property(i => i.ContactPhone).HasMaxLength(50);
+        builder.Property(i => i.Address).HasMaxLength(500);
+        builder.Property(i => i.MaxUsersAllowed).HasDefaultValue(10);
+        builder.Property(i => i.SubscriptionTier).HasMaxLength(50).HasDefaultValue("Basic");
+        // Navigation to InstitutionUsers is configured in InstitutionUserConfiguration
     }
 }
 

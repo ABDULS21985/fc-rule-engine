@@ -7,5 +7,11 @@ public enum SubmissionStatus
     Validating,
     Accepted,
     AcceptedWithWarnings,
-    Rejected
+    Rejected,
+
+    /// <summary>Awaiting checker approval in maker-checker workflow.</summary>
+    PendingApproval,
+
+    /// <summary>Rejected by checker — returned to maker for correction.</summary>
+    ApprovalRejected
 }

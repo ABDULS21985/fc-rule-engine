@@ -20,6 +20,7 @@ builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddScoped<IngestionOrchestrator>();
 builder.Services.AddScoped<ValidationOrchestrator>();
 builder.Services.AddScoped<TemplateService>();
+builder.Services.AddScoped<InstitutionAuthService>();
 
 // UI services
 builder.Services.AddScoped<FC.Engine.Portal.Services.ToastService>();
@@ -76,22 +77,64 @@ app.UseAuthorization();
 app.UseAntiforgery();
 
 // Login POST endpoint — authenticates institution users
-app.MapPost("/account/login", async (HttpContext context) =>
+app.MapPost("/account/login", async (HttpContext context, InstitutionAuthService authService) =>
 {
     var form = await context.Request.ReadFormAsync();
-    var username = form["username"].ToString();
+    var username = form["username"].ToString().Trim();
     var password = form["password"].ToString();
+    var returnUrl = form["returnUrl"].ToString();
 
-    // TODO: Replace with InstitutionAuthService in Prompt 2
-    // For now, placeholder that follows the Admin cookie-auth pattern
     if (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(password))
     {
         context.Response.Redirect("/login?error=invalid");
         return;
     }
 
-    // Placeholder — will be replaced with InstitutionAuthService.ValidateLogin()
-    context.Response.Redirect("/login?error=not-configured");
+    var (user, errorCode) = await authService.ValidateLogin(username, password);
+
+    if (user is null)
+    {
+        context.Response.Redirect($"/login?error={errorCode}");
+        return;
+    }
+
+    // Record login
+    var ipAddress = context.Connection.RemoteIpAddress?.ToString();
+    await authService.RecordLogin(user.Id, ipAddress);
+
+    // Build claims
+    var claims = new List<Claim>
+    {
+        new(ClaimTypes.NameIdentifier, user.Id.ToString()),
+        new(ClaimTypes.Name, user.Username),
+        new(ClaimTypes.Email, user.Email),
+        new("DisplayName", user.DisplayName),
+        new(ClaimTypes.Role, user.Role.ToString()),
+        new("InstitutionId", user.InstitutionId.ToString()),
+        new("InstitutionName", user.Institution?.InstitutionName ?? "Unknown"),
+    };
+
+    var identity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
+    var principal = new ClaimsPrincipal(identity);
+
+    await context.SignInAsync(
+        CookieAuthenticationDefaults.AuthenticationScheme,
+        principal,
+        new AuthenticationProperties
+        {
+            IsPersistent = true,
+            ExpiresUtc = DateTimeOffset.UtcNow.AddHours(4),
+        });
+
+    // Check if must change password
+    if (user.MustChangePassword)
+    {
+        context.Response.Redirect("/change-password");
+        return;
+    }
+
+    var redirect = string.IsNullOrWhiteSpace(returnUrl) ? "/" : returnUrl;
+    context.Response.Redirect(redirect);
 });
 
 app.MapGet("/account/logout", async (HttpContext context) =>

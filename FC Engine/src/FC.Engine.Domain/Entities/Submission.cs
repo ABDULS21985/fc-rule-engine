@@ -16,9 +16,21 @@ public class Submission
     public int? ProcessingDurationMs { get; set; }
     public DateTime CreatedAt { get; set; }
 
+    // ── FI Portal Extensions ──
+
+    /// <summary>Which institution user submitted this return (null for API submissions).</summary>
+    public int? SubmittedByUserId { get; set; }
+
+    /// <summary>Whether this submission requires checker approval before finalizing.</summary>
+    public bool ApprovalRequired { get; set; }
+
+    // Navigation
     public Institution? Institution { get; set; }
     public ReturnPeriod? ReturnPeriod { get; set; }
     public ValidationReport? ValidationReport { get; set; }
+
+    /// <summary>Maker-checker approval record, if applicable.</summary>
+    public SubmissionApproval? Approval { get; set; }
 
     public static Submission Create(int institutionId, int returnPeriodId, string returnCode)
     {
