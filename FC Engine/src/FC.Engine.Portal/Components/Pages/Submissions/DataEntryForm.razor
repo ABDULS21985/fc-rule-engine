@@ -389,6 +389,7 @@
 
     // Auth
     private int institutionId;
+    private int? userId;
     private string institutionCode = "";
     private bool requiresApproval;
 
@@ -426,6 +427,9 @@
 
             var instIdStr = user.FindFirst("InstitutionId")?.Value;
             int.TryParse(instIdStr, out institutionId);
+
+            var userIdStr = user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (int.TryParse(userIdStr, out var uid)) userId = uid;
 
             institutionCode = user.FindFirst("InstitutionName")?.Value ?? "INST001";
 
@@ -686,7 +690,8 @@
                 ReturnCode, institutionCode, reportingDate, formRows);
 
             var result = await SubmissionSvc.ProcessSubmission(
-                xmlStream, ReturnCode, institutionId, selectedPeriodId);
+                xmlStream, ReturnCode, institutionId, selectedPeriodId,
+                submittedByUserId: userId);
 
             submissionResult = result;
             submittedId = result.SubmissionId;

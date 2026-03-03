@@ -1,4 +1,6 @@
 @using Microsoft.AspNetCore.Components.Authorization
+@using System.Security.Claims
+@inject FC.Engine.Portal.Services.ApprovalService ApprovalSvc
 
 <AuthorizeView>
     <Authorized Context="navAuth">
@@ -38,6 +40,22 @@
                             <span class="portal-nav-label">My Submissions</span>
                         </NavLink>
                     </li>
+                    @if (isCheckerOrAdmin)
+                    {
+                        <li>
+                            <NavLink href="/approvals" class="portal-nav-item">
+                                <svg class="portal-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="18" height="18" aria-hidden="true">
+                                    <path d="M9 11l3 3L22 4"/>
+                                    <path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/>
+                                </svg>
+                                <span class="portal-nav-label">Pending Approvals</span>
+                                @if (pendingApprovalCount > 0)
+                                {
+                                    <span class="portal-nav-badge">@pendingApprovalCount</span>
+                                }
+                            </NavLink>
+                        </li>
+                    }
                     <li>
                         <NavLink href="/calendar" class="portal-nav-item">
                             <svg class="portal-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="18" height="18" aria-hidden="true">
@@ -134,3 +152,34 @@
         </nav>
     </Authorized>
 </AuthorizeView>
+
+@code {
+    [CascadingParameter]
+    private Task<AuthenticationState>? AuthState { get; set; }
+
+    private bool isCheckerOrAdmin;
+    private int pendingApprovalCount;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var state = await AuthState!;
+            var role = state.User.FindFirst(ClaimTypes.Role)?.Value ?? "";
+            isCheckerOrAdmin = role == "Checker" || role == "Admin";
+
+            if (isCheckerOrAdmin)
+            {
+                var instIdStr = state.User.FindFirst("InstitutionId")?.Value;
+                if (int.TryParse(instIdStr, out var institutionId) && institutionId > 0)
+                {
+                    pendingApprovalCount = await ApprovalSvc.GetPendingCount(institutionId);
+                }
+            }
+        }
+        catch
+        {
+            // Silently handle — badge just won't show
+        }
+    }
+}
