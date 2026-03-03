@@ -1,0 +1,196 @@
+@page "/submissions/{SubmissionId:int}/report"
+@attribute [Authorize(Policy = "InstitutionUser")]
+@inject ExportService ExportSvc
+@inject IJSRuntime JS
+
+<PageTitle>Validation Report — FC Engine Portal</PageTitle>
+
+<div class="portal-page">
+    @if (isLoading)
+    {
+        <div class="portal-card" style="padding: 2rem;">
+            <div class="portal-skeleton portal-skeleton-block" style="height: 40px; margin-bottom: 1rem;"></div>
+            <div class="portal-skeleton portal-skeleton-block" style="height: 200px;"></div>
+        </div>
+    }
+    else if (report is null)
+    {
+        <div class="portal-alert portal-alert-error">Submission not found or access denied.</div>
+    }
+    else
+    {
+        <!-- Screen Controls -->
+        <div class="portal-report-controls no-print">
+            <a href="/submissions/@SubmissionId" class="portal-btn portal-btn-ghost portal-btn-sm">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>
+                Back to Submission
+            </a>
+            <div style="display: flex; gap: 0.5rem;">
+                <button class="portal-btn portal-btn-ghost portal-btn-sm" @onclick="PrintReport">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+                    Print
+                </button>
+                <button class="portal-btn portal-btn-ghost portal-btn-sm" @onclick="ExportErrorsCsv">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                    Export CSV
+                </button>
+            </div>
+        </div>
+
+        <!-- Printable Report -->
+        <div id="printable-report" class="portal-print-report">
+            <!-- CBN Header -->
+            <header class="portal-report-header">
+                <div class="portal-report-header-brand">
+                    <div class="portal-report-cbn-logo"><span>CBN</span></div>
+                    <div>
+                        <h1 class="portal-report-title">Validation Report</h1>
+                        <p class="portal-report-subtitle">FC Engine — Financial Condition Reporting System</p>
+                    </div>
+                </div>
+                <div class="portal-report-header-meta">
+                    <span>Report #@report.SubmissionId</span>
+                    <span>Generated: @report.GeneratedAt.ToString("dd MMM yyyy HH:mm") UTC</span>
+                </div>
+            </header>
+
+            <!-- Institution & Submission Info -->
+            <section class="portal-report-section">
+                <div class="portal-report-info-grid">
+                    <div class="portal-report-info-group">
+                        <h3>Institution</h3>
+                        <div class="portal-report-info-row"><span>Name</span><strong>@report.InstitutionName</strong></div>
+                        <div class="portal-report-info-row"><span>Code</span><strong>@report.InstitutionCode</strong></div>
+                        @if (!string.IsNullOrEmpty(report.InstitutionType))
+                        {
+                            <div class="portal-report-info-row"><span>Type</span><strong>@report.InstitutionType</strong></div>
+                        }
+                    </div>
+                    <div class="portal-report-info-group">
+                        <h3>Submission</h3>
+                        <div class="portal-report-info-row"><span>Return Code</span><strong>@report.ReturnCode</strong></div>
+                        <div class="portal-report-info-row"><span>Period</span><strong>@report.Period</strong></div>
+                        <div class="portal-report-info-row"><span>Submitted By</span><strong>@report.SubmittedBy</strong></div>
+                        <div class="portal-report-info-row"><span>Submitted At</span><strong>@report.SubmittedAt.ToString("dd MMM yyyy HH:mm")</strong></div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Validation Summary -->
+            <section class="portal-report-section">
+                <h2 class="portal-report-section-title">Validation Summary</h2>
+                <div class="portal-report-summary-cards">
+                    <div class="portal-report-summary-card portal-report-summary-@report.Status.ToString().ToLowerInvariant()">
+                        <span class="portal-report-summary-label">Status</span>
+                        <strong class="portal-report-summary-value" style="font-size: 0.875rem;">@FormatStatus(report.Status)</strong>
+                    </div>
+                    <div class="portal-report-summary-card @(report.ErrorCount > 0 ? "portal-report-summary-error" : "portal-report-summary-clear")">
+                        <span class="portal-report-summary-label">Errors</span>
+                        <strong class="portal-report-summary-value">@report.ErrorCount</strong>
+                    </div>
+                    <div class="portal-report-summary-card @(report.WarningCount > 0 ? "portal-report-summary-warn" : "portal-report-summary-clear")">
+                        <span class="portal-report-summary-label">Warnings</span>
+                        <strong class="portal-report-summary-value">@report.WarningCount</strong>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Error Listing -->
+            @if (report.Errors.Any())
+            {
+                <section class="portal-report-section">
+                    <h2 class="portal-report-section-title">Validation Issues (@report.Errors.Count)</h2>
+                    <div class="portal-report-table-scroll">
+                        <table class="portal-report-table">
+                            <thead>
+                                <tr>
+                                    <th style="width:90px;">Rule ID</th>
+                                    <th style="width:70px;">Severity</th>
+                                    <th style="width:90px;">Category</th>
+                                    <th>Message</th>
+                                    <th style="width:100px;">Field</th>
+                                    <th style="width:80px;">Expected</th>
+                                    <th style="width:80px;">Actual</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var err in report.Errors)
+                                {
+                                    <tr class="@(err.Severity == "Error" ? "portal-report-row-error" : err.Severity == "Warning" ? "portal-report-row-warning" : "")">
+                                        <td><code class="portal-report-code">@err.Code</code></td>
+                                        <td><span class="portal-badge portal-badge-sm @GetSeverityBadge(err.Severity)">@err.Severity</span></td>
+                                        <td style="font-size: 0.6875rem; color: #6b7280;">@FormatCategory(err.Category)</td>
+                                        <td><span style="font-size: 0.75rem;">@err.Message</span></td>
+                                        <td class="portal-td-mono" style="font-size: 0.6875rem;">@err.FieldName</td>
+                                        <td class="portal-td-mono" style="font-size: 0.6875rem;">@(err.ExpectedValue ?? "—")</td>
+                                        <td class="portal-td-mono" style="font-size: 0.6875rem;">@(err.ActualValue ?? "—")</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+            }
+
+            <!-- Footer -->
+            <footer class="portal-report-footer">
+                <div class="portal-report-footer-line"></div>
+                <p>Generated by <strong>FC Engine</strong> — Central Bank of Nigeria</p>
+                <p>This is a system-generated report. For official records, contact CBN's Financial Conditions Division.</p>
+            </footer>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public int SubmissionId { get; set; }
+    [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
+    private bool isLoading = true;
+    private int institutionId;
+    private ValidationReportModel? report;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var state = await AuthState!;
+            int.TryParse(state.User.FindFirst("InstitutionId")?.Value, out institutionId);
+            report = await ExportSvc.BuildValidationReportAsync(SubmissionId, institutionId);
+        }
+        catch { }
+        finally { isLoading = false; }
+    }
+
+    private async Task PrintReport() => await JS.InvokeVoidAsync("portalPrintElement", "printable-report");
+
+    private async Task ExportErrorsCsv()
+    {
+        var csv = await ExportSvc.ExportValidationErrorsCsvAsync(SubmissionId, institutionId);
+        if (!string.IsNullOrEmpty(csv))
+            await JS.InvokeVoidAsync("portalDownloadFile", csv, $"validation-errors-{SubmissionId}.csv", "text/csv");
+    }
+
+    private static string FormatStatus(SubmissionStatus s) => s switch
+    {
+        SubmissionStatus.Accepted => "Accepted",
+        SubmissionStatus.AcceptedWithWarnings => "Accepted with Warnings",
+        SubmissionStatus.Rejected => "Rejected",
+        SubmissionStatus.PendingApproval => "Pending Approval",
+        _ => s.ToString()
+    };
+
+    private static string GetSeverityBadge(string s) => s switch
+    {
+        "Error" => "portal-badge-danger",
+        "Warning" => "portal-badge-warning",
+        _ => "portal-badge-info"
+    };
+
+    private static string FormatCategory(string c) => c switch
+    {
+        "TypeRange" => "Type & Range",
+        "IntraSheet" => "Intra-Sheet",
+        "CrossSheet" => "Cross-Sheet",
+        _ => c
+    };
+}

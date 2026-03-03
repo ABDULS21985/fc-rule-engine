@@ -1,0 +1,166 @@
+@page "/reports/audit"
+@attribute [Authorize(Policy = "InstitutionAdmin")]
+@inject ExportService ExportSvc
+@inject IJSRuntime JS
+
+<PageTitle>Audit Trail — FC Engine Portal</PageTitle>
+
+<div class="portal-page">
+    <!-- Filter Bar -->
+    <div class="portal-report-filter-bar no-print">
+        <h2 class="portal-report-filter-title">Audit Trail</h2>
+        <div class="portal-report-filter-row">
+            <div class="portal-report-filter-field">
+                <label class="portal-form-label">From</label>
+                <input type="date" class="portal-form-input" @bind="filterStart" />
+            </div>
+            <div class="portal-report-filter-field">
+                <label class="portal-form-label">To</label>
+                <input type="date" class="portal-form-input" @bind="filterEnd" />
+            </div>
+            <button class="portal-btn portal-btn-primary portal-btn-sm" @onclick="GenerateReport" disabled="@isLoading">
+                @if (isLoading)
+                {
+                    <span class="portal-btn-spinner" aria-hidden="true"></span>
+                }
+                Generate
+            </button>
+            @if (trail is not null)
+            {
+                <button class="portal-btn portal-btn-ghost portal-btn-sm" @onclick="ExportCsv">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                    CSV
+                </button>
+                <button class="portal-btn portal-btn-ghost portal-btn-sm" @onclick="PrintReport">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+                    Print
+                </button>
+            }
+        </div>
+    </div>
+
+    @if (isLoading)
+    {
+        <div class="portal-card" style="padding: 2rem;">
+            <div class="portal-skeleton portal-skeleton-block" style="height: 80px; margin-bottom: 1rem;"></div>
+            <div class="portal-skeleton portal-skeleton-block" style="height: 300px;"></div>
+        </div>
+    }
+    else if (trail is not null)
+    {
+        <div id="printable-audit-trail">
+            <!-- Print-only header -->
+            <div class="portal-report-print-header print-only">
+                <strong>Audit Trail</strong> — @trail.InstitutionName (@trail.InstitutionCode)
+                <br/>@trail.StartDate.ToString("dd MMM yyyy") to @trail.EndDate.ToString("dd MMM yyyy")
+                <br/>Generated: @trail.GeneratedAt.ToString("dd MMM yyyy HH:mm") UTC
+            </div>
+
+            <!-- Summary -->
+            <div class="portal-report-summary-cards" style="margin-bottom: 1.5rem;">
+                <div class="portal-report-summary-card portal-report-summary-neutral">
+                    <span class="portal-report-summary-label">Total Entries</span>
+                    <strong class="portal-report-summary-value">@trail.TotalEntries</strong>
+                </div>
+                <div class="portal-report-summary-card portal-report-summary-neutral">
+                    <span class="portal-report-summary-label">Period</span>
+                    <strong class="portal-report-summary-value" style="font-size: 0.8125rem;">@trail.StartDate.ToString("dd MMM") — @trail.EndDate.ToString("dd MMM yyyy")</strong>
+                </div>
+            </div>
+
+            @if (trail.Entries.Any())
+            {
+                <div class="portal-card portal-card-flush">
+                    <div class="portal-report-table-scroll">
+                        <table class="portal-report-table">
+                            <thead>
+                                <tr>
+                                    <th>Date/Time</th>
+                                    <th>User</th>
+                                    <th>Action</th>
+                                    <th>Return Code</th>
+                                    <th>Period</th>
+                                    <th>Sub ID</th>
+                                    <th>Status</th>
+                                    <th>Details</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var entry in trail.Entries)
+                                {
+                                    <tr>
+                                        <td style="font-size: 0.75rem; white-space: nowrap;">@entry.Timestamp.ToString("dd MMM yyyy HH:mm")</td>
+                                        <td style="font-size: 0.75rem;">@entry.UserName</td>
+                                        <td><span class="portal-badge portal-badge-sm @GetActionBadge(entry.Action)">@entry.Action</span></td>
+                                        <td class="portal-td-mono">@entry.ReturnCode</td>
+                                        <td>@entry.Period</td>
+                                        <td><a href="/submissions/@entry.SubmissionId" class="portal-link">#@entry.SubmissionId</a></td>
+                                        <td><span class="portal-badge portal-badge-sm portal-badge-neutral">@entry.Status</span></td>
+                                        <td style="font-size: 0.6875rem; color: #6b7280; max-width: 200px; overflow: hidden; text-overflow: ellipsis;">@entry.Details</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            }
+            else
+            {
+                <div class="portal-card portal-empty-state" style="padding: 3rem;">
+                    <h3 class="portal-empty-state-title">No Activity Found</h3>
+                    <p class="portal-empty-state-desc">No audit trail entries were found in the selected date range.</p>
+                </div>
+            }
+
+            <!-- Print-only footer -->
+            <div class="portal-report-print-footer print-only">
+                Generated by FC Engine — Central Bank of Nigeria
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
+    private bool isLoading = true;
+    private int institutionId;
+    private DateTime filterStart = DateTime.UtcNow.AddMonths(-1).Date;
+    private DateTime filterEnd = DateTime.UtcNow.Date;
+    private AuditTrailModel? trail;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var state = await AuthState!;
+        int.TryParse(state.User.FindFirst("InstitutionId")?.Value, out institutionId);
+        await GenerateReport();
+    }
+
+    private async Task GenerateReport()
+    {
+        isLoading = true;
+        try
+        {
+            trail = await ExportSvc.BuildAuditTrailAsync(institutionId, filterStart, filterEnd.AddDays(1));
+        }
+        catch { }
+        finally { isLoading = false; }
+    }
+
+    private async Task ExportCsv()
+    {
+        if (trail is null) return;
+        var csv = ExportSvc.ExportAuditTrailCsv(trail);
+        await JS.InvokeVoidAsync("portalDownloadFile", csv, $"audit-trail-{filterStart:yyyyMMdd}-{filterEnd:yyyyMMdd}.csv", "text/csv");
+    }
+
+    private async Task PrintReport() => await JS.InvokeVoidAsync("portalPrintElement", "printable-audit-trail");
+
+    private static string GetActionBadge(string action) => action switch
+    {
+        "Submitted" => "portal-badge-info",
+        "Approved" => "portal-badge-success",
+        "Rejected" => "portal-badge-danger",
+        "Resubmitted" => "portal-badge-warning",
+        _ => "portal-badge-neutral"
+    };
+}

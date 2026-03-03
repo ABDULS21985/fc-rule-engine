@@ -1,0 +1,194 @@
+@page "/reports/compliance"
+@attribute [Authorize(Policy = "InstitutionUser")]
+@inject ExportService ExportSvc
+@inject IJSRuntime JS
+
+<PageTitle>Compliance Report — FC Engine Portal</PageTitle>
+
+<div class="portal-page">
+    <!-- Filter Bar -->
+    <div class="portal-report-filter-bar no-print">
+        <h2 class="portal-report-filter-title">Compliance Report</h2>
+        <div class="portal-report-filter-row">
+            <div class="portal-report-filter-field">
+                <label class="portal-form-label">From</label>
+                <input type="date" class="portal-form-input" @bind="filterStart" />
+            </div>
+            <div class="portal-report-filter-field">
+                <label class="portal-form-label">To</label>
+                <input type="date" class="portal-form-input" @bind="filterEnd" />
+            </div>
+            <button class="portal-btn portal-btn-primary portal-btn-sm" @onclick="GenerateReport" disabled="@isLoading">
+                @if (isLoading)
+                {
+                    <span class="portal-btn-spinner" aria-hidden="true"></span>
+                }
+                Generate
+            </button>
+            @if (report is not null)
+            {
+                <button class="portal-btn portal-btn-ghost portal-btn-sm" @onclick="ExportCsv">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                    CSV
+                </button>
+                <button class="portal-btn portal-btn-ghost portal-btn-sm" @onclick="PrintReport">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+                    Print
+                </button>
+            }
+        </div>
+    </div>
+
+    @if (isLoading)
+    {
+        <div class="portal-card" style="padding: 2rem;">
+            <div class="portal-skeleton portal-skeleton-block" style="height: 80px; margin-bottom: 1rem;"></div>
+            <div class="portal-skeleton portal-skeleton-block" style="height: 300px;"></div>
+        </div>
+    }
+    else if (report is not null)
+    {
+        <div id="printable-compliance-report">
+            <!-- Print-only header -->
+            <div class="portal-report-print-header print-only">
+                <strong>Compliance Report</strong> — @report.InstitutionName (@report.InstitutionCode)
+                <br/>@report.StartDate.ToString("dd MMM yyyy") to @report.EndDate.ToString("dd MMM yyyy")
+                <br/>Generated: @report.GeneratedAt.ToString("dd MMM yyyy HH:mm") UTC
+            </div>
+
+            <!-- Summary Cards -->
+            <div class="portal-report-summary-cards" style="margin-bottom: 1.5rem;">
+                <div class="portal-report-summary-card @GetComplianceClass(report.CompliancePercent)">
+                    <span class="portal-report-summary-label">Compliance Rate</span>
+                    <strong class="portal-report-summary-value">@report.CompliancePercent%</strong>
+                </div>
+                <div class="portal-report-summary-card portal-report-summary-neutral">
+                    <span class="portal-report-summary-label">Total</span>
+                    <strong class="portal-report-summary-value">@report.TotalSubmissions</strong>
+                </div>
+                <div class="portal-report-summary-card portal-report-summary-clear">
+                    <span class="portal-report-summary-label">Accepted</span>
+                    <strong class="portal-report-summary-value">@report.AcceptedCount</strong>
+                </div>
+                <div class="portal-report-summary-card portal-report-summary-error">
+                    <span class="portal-report-summary-label">Rejected</span>
+                    <strong class="portal-report-summary-value">@report.RejectedCount</strong>
+                </div>
+                <div class="portal-report-summary-card portal-report-summary-warn">
+                    <span class="portal-report-summary-label">Pending</span>
+                    <strong class="portal-report-summary-value">@report.PendingCount</strong>
+                </div>
+            </div>
+
+            <!-- Submissions Table -->
+            @if (report.Submissions.Any())
+            {
+                <div class="portal-card portal-card-flush">
+                    <div class="portal-report-table-scroll">
+                        <table class="portal-report-table">
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Return Code</th>
+                                    <th>Period</th>
+                                    <th>Status</th>
+                                    <th>Submitted</th>
+                                    <th>By</th>
+                                    <th>Errors</th>
+                                    <th>Warnings</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var item in report.Submissions)
+                                {
+                                    <tr>
+                                        <td><a href="/submissions/@item.SubmissionId" class="portal-link">#@item.SubmissionId</a></td>
+                                        <td class="portal-td-mono">@item.ReturnCode</td>
+                                        <td>@item.Period</td>
+                                        <td><span class="portal-badge portal-badge-sm @GetStatusBadge(item.Status)">@FormatStatus(item.Status)</span></td>
+                                        <td style="font-size: 0.75rem;">@item.SubmittedAt.ToString("dd MMM yyyy HH:mm")</td>
+                                        <td style="font-size: 0.75rem;">@item.SubmittedBy</td>
+                                        <td class="portal-td-mono">@item.ErrorCount</td>
+                                        <td class="portal-td-mono">@item.WarningCount</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            }
+            else
+            {
+                <div class="portal-card portal-empty-state" style="padding: 3rem;">
+                    <h3 class="portal-empty-state-title">No Submissions Found</h3>
+                    <p class="portal-empty-state-desc">No submissions were found in the selected date range.</p>
+                </div>
+            }
+
+            <!-- Print-only footer -->
+            <div class="portal-report-print-footer print-only">
+                Generated by FC Engine — Central Bank of Nigeria
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
+    private bool isLoading = true;
+    private int institutionId;
+    private DateTime filterStart = DateTime.UtcNow.AddMonths(-3).Date;
+    private DateTime filterEnd = DateTime.UtcNow.Date;
+    private ComplianceReportModel? report;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var state = await AuthState!;
+        int.TryParse(state.User.FindFirst("InstitutionId")?.Value, out institutionId);
+        await GenerateReport();
+    }
+
+    private async Task GenerateReport()
+    {
+        isLoading = true;
+        try
+        {
+            report = await ExportSvc.BuildComplianceReportAsync(institutionId, filterStart, filterEnd.AddDays(1));
+        }
+        catch { }
+        finally { isLoading = false; }
+    }
+
+    private async Task ExportCsv()
+    {
+        if (report is null) return;
+        var csv = ExportSvc.ExportComplianceReportCsv(report);
+        await JS.InvokeVoidAsync("portalDownloadFile", csv, $"compliance-report-{filterStart:yyyyMMdd}-{filterEnd:yyyyMMdd}.csv", "text/csv");
+    }
+
+    private async Task PrintReport() => await JS.InvokeVoidAsync("portalPrintElement", "printable-compliance-report");
+
+    private static string GetComplianceClass(double pct) => pct switch
+    {
+        >= 80 => "portal-report-summary-clear",
+        >= 50 => "portal-report-summary-warn",
+        _ => "portal-report-summary-error"
+    };
+
+    private static string GetStatusBadge(SubmissionStatus s) => s switch
+    {
+        SubmissionStatus.Accepted => "portal-badge-success",
+        SubmissionStatus.AcceptedWithWarnings => "portal-badge-warning",
+        SubmissionStatus.Rejected or SubmissionStatus.ApprovalRejected => "portal-badge-danger",
+        SubmissionStatus.PendingApproval => "portal-badge-info",
+        _ => "portal-badge-neutral"
+    };
+
+    private static string FormatStatus(SubmissionStatus s) => s switch
+    {
+        SubmissionStatus.AcceptedWithWarnings => "Warnings",
+        SubmissionStatus.PendingApproval => "Pending",
+        SubmissionStatus.ApprovalRejected => "Rejected",
+        _ => s.ToString()
+    };
+}

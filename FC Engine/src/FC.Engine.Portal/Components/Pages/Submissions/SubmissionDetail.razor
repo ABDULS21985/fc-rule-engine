@@ -6,6 +6,8 @@
 @inject IInstitutionUserRepository UserRepo
 @inject ISubmissionApprovalRepository ApprovalRepo
 @inject ApprovalService ApprovalSvc
+@inject ExportService ExportSvc
+@inject IJSRuntime JS
 @inject NavigationManager Navigation
 
 <PageTitle>Submission #@SubmissionId — FC Engine Portal</PageTitle>
@@ -92,7 +94,41 @@
                 </div>
             </div>
             <div class="portal-detail-hero-actions">
-                <a href="/submit" class="portal-btn portal-btn-outline portal-btn-sm">
+                <a href="/submissions/@SubmissionId/report" class="portal-btn portal-btn-outline portal-btn-sm">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                        <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/>
+                    </svg>
+                    Report
+                </a>
+                @if (submission!.Status is SubmissionStatus.Accepted or SubmissionStatus.AcceptedWithWarnings)
+                {
+                    <a href="/submissions/@SubmissionId/certificate" class="portal-btn portal-btn-outline portal-btn-sm">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                            <circle cx="12" cy="8" r="7"/><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"/>
+                        </svg>
+                        Certificate
+                    </a>
+                }
+                <div class="portal-export-dropdown-wrap">
+                    <button class="portal-btn portal-btn-outline portal-btn-sm" @onclick="ToggleExportMenu">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                            <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+                        </svg>
+                        Export
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" style="margin-left:2px;"><polyline points="6 9 12 15 18 9"/></svg>
+                    </button>
+                    @if (showExportMenu)
+                    {
+                        <div class="portal-export-dropdown">
+                            <button class="portal-export-dropdown-item" @onclick="ExportErrorsCsv">Export Errors CSV</button>
+                            @if (!string.IsNullOrEmpty(submission.RawXml))
+                            {
+                                <button class="portal-export-dropdown-item" @onclick="DownloadXml">Download Original XML</button>
+                            }
+                        </div>
+                    }
+                </div>
+                <a href="/submit" class="portal-btn portal-btn-ghost portal-btn-sm">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
                         <polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/>
                     </svg>
@@ -515,6 +551,7 @@
     private int errorCount;
     private int warningCount;
     private int totalIssues;
+    private bool showExportMenu;
 
     protected override async Task OnInitializedAsync()
     {
@@ -728,6 +765,26 @@
             processingApprovalAction = null;
             StateHasChanged();
         }
+    }
+
+    // ── Export Helpers ──────────────────────────────────────
+
+    private void ToggleExportMenu() => showExportMenu = !showExportMenu;
+
+    private async Task ExportErrorsCsv()
+    {
+        showExportMenu = false;
+        var csv = await ExportSvc.ExportValidationErrorsCsvAsync(SubmissionId, institutionId);
+        if (!string.IsNullOrEmpty(csv))
+            await JS.InvokeVoidAsync("portalDownloadFile", csv, $"validation-errors-{SubmissionId}.csv", "text/csv");
+    }
+
+    private async Task DownloadXml()
+    {
+        showExportMenu = false;
+        var xml = await ExportSvc.GetSubmissionXmlAsync(SubmissionId, institutionId);
+        if (!string.IsNullOrEmpty(xml))
+            await JS.InvokeVoidAsync("portalDownloadFile", xml, $"submission-{SubmissionId}.xml", "application/xml");
     }
 
     // ── Display Helpers ─────────────────────────────────────

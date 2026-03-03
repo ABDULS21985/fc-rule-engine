@@ -1,0 +1,605 @@
+@page "/validate"
+@attribute [Authorize(Policy = "InstitutionUser")]
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.AspNetCore.Components.Forms
+@using System.Security.Claims
+@inject FC.Engine.Portal.Services.DryRunValidationService DryRunSvc
+
+<PageTitle>Quick Validate — FC Engine Portal</PageTitle>
+
+<div class="portal-page">
+    <div class="portal-page-header">
+        <div class="portal-page-header-main">
+            <h1 class="portal-page-title">Quick Validate</h1>
+            <p class="portal-page-subtitle">
+                Check your file before submitting — no record is created, this is purely advisory
+            </p>
+        </div>
+    </div>
+
+    <div class="qv-layout">
+        <!-- ── Input Panel ───────────────────────────────────────── -->
+        <div class="portal-card qv-input-panel">
+            <h3 class="qv-section-title">1. Select Template & Upload</h3>
+
+            <div class="portal-form-group">
+                <label class="portal-form-label">Return Type</label>
+                @if (isLoadingTemplates)
+                {
+                    <div class="portal-skeleton portal-skeleton-block" style="height: 40px;"></div>
+                }
+                else
+                {
+                    <select class="portal-form-input" @bind="selectedReturnCode">
+                        <option value="">Select a return type...</option>
+                        @foreach (var tpl in templates)
+                        {
+                            <option value="@tpl.ReturnCode">@tpl.ReturnCode — @tpl.Name (@tpl.Frequency)</option>
+                        }
+                    </select>
+                }
+            </div>
+
+            <div class="portal-form-group">
+                <label class="portal-form-label">XML File</label>
+                <div class="qv-upload-zone @(isDragging ? "qv-upload-zone-active" : "")">
+                    <InputFile OnChange="HandleFileUpload" accept=".xml"
+                               @ondragenter="() => isDragging = true"
+                               @ondragleave="() => isDragging = false" />
+                    <div class="qv-upload-content">
+                        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true" style="color: var(--cbn-text-muted, #9ca3af);">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                            <polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
+                        </svg>
+                        @if (string.IsNullOrEmpty(fileName))
+                        {
+                            <span class="qv-upload-text">Drag & drop your XML file, or click to browse</span>
+                            <span class="qv-upload-hint">Maximum file size: 10MB</span>
+                        }
+                        else
+                        {
+                            <span class="qv-upload-text" style="color: var(--cbn-text, #111827); font-weight: 600;">@fileName</span>
+                            <span class="qv-upload-hint">@FormatFileSize(fileSize) — Ready to validate</span>
+                        }
+                    </div>
+                </div>
+            </div>
+
+            <!-- ── Validation Mode ───────────────────────────────── -->
+            <div class="portal-form-group">
+                <label class="portal-form-label">Validation Mode</label>
+                <div class="qv-mode-toggle">
+                    <button class="qv-mode-btn @(validationMode == "full" ? "qv-mode-active" : "")"
+                            @onclick='() => validationMode = "full"'>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                            <polyline points="22 4 12 14.01 9 11.01"/>
+                        </svg>
+                        Full Validation
+                    </button>
+                    <button class="qv-mode-btn @(validationMode == "schema" ? "qv-mode-active" : "")"
+                            @onclick='() => validationMode = "schema"'>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                            <polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/>
+                        </svg>
+                        Schema Only
+                    </button>
+                </div>
+                <span class="portal-form-hint">
+                    @(validationMode == "schema"
+                        ? "Checks XML structure only — fast, no data-level validation."
+                        : "Runs all validation phases — schema, data types, ranges, formulas, cross-sheet, business rules.")
+                </span>
+            </div>
+
+            <!-- ── Action Buttons ────────────────────────────────── -->
+            <div class="qv-actions">
+                <button class="portal-btn portal-btn-primary"
+                        @onclick="RunValidation"
+                        disabled="@(!CanValidate || isValidating)">
+                    @if (isValidating)
+                    {
+                        <span class="portal-spinner portal-spinner-sm"></span>
+                        <span>Validating...</span>
+                    }
+                    else
+                    {
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                            <polyline points="22 4 12 14.01 9 11.01"/>
+                        </svg>
+                        <span>Check My File</span>
+                    }
+                </button>
+
+                @if (dryRunResult is not null)
+                {
+                    <button class="portal-btn portal-btn-ghost" @onclick="ClearResults">
+                        Clear Results
+                    </button>
+                }
+            </div>
+
+            <div class="qv-info-callout">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                    <circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>
+                </svg>
+                <span><strong>No data is saved.</strong> This is a dry run — your file is validated and discarded. No submission record is created.</span>
+            </div>
+        </div>
+
+        <!-- ── Results Panel ─────────────────────────────────────── -->
+        <div class="qv-results-panel">
+            @if (isValidating)
+            {
+                <!-- Progress -->
+                <div class="portal-card qv-progress-card">
+                    <h3 class="qv-section-title">Validation in Progress</h3>
+                    <div class="qv-phase-list">
+                        @foreach (var phase in validationPhases)
+                        {
+                            <div class="qv-phase-item @GetPhaseClass(phase)">
+                                @if (phase.Status == "complete")
+                                {
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--cbn-success-text, #16a34a)" stroke-width="2.5" aria-hidden="true">
+                                        <polyline points="20 6 9 17 4 12"/>
+                                    </svg>
+                                }
+                                else if (phase.Status == "running")
+                                {
+                                    <span class="portal-spinner portal-spinner-xs"></span>
+                                }
+                                else
+                                {
+                                    <span class="qv-phase-pending-dot"></span>
+                                }
+                                <span>@phase.Name</span>
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
+            else if (dryRunResult is not null)
+            {
+                <!-- Summary Card -->
+                <div class="portal-card qv-summary qv-summary-@GetStatusCssClass(dryRunResult.SimulatedStatus)">
+                    <div class="qv-summary-icon">
+                        @if (dryRunResult.SimulatedStatus == "Accepted" || dryRunResult.SimulatedStatus == "Schema Valid")
+                        {
+                            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--cbn-success-text, #16a34a)" stroke-width="2" aria-hidden="true">
+                                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                                <polyline points="22 4 12 14.01 9 11.01"/>
+                            </svg>
+                        }
+                        else if (dryRunResult.SimulatedStatus == "AcceptedWithWarnings")
+                        {
+                            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--cbn-warning-text, #d97706)" stroke-width="2" aria-hidden="true">
+                                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                                <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+                            </svg>
+                        }
+                        else
+                        {
+                            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--cbn-danger-text, #dc2626)" stroke-width="2" aria-hidden="true">
+                                <circle cx="12" cy="12" r="10"/>
+                                <line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>
+                            </svg>
+                        }
+                    </div>
+                    <div class="qv-summary-content">
+                        <h3 class="qv-summary-status">
+                            @GetStatusLabel(dryRunResult.SimulatedStatus)
+                        </h3>
+                        <p class="qv-summary-detail">
+                            @if (dryRunResult.ErrorCount == 0 && dryRunResult.WarningCount == 0)
+                            {
+                                <span>No issues found. This file would be accepted if submitted.</span>
+                            }
+                            else
+                            {
+                                @if (dryRunResult.ErrorCount > 0)
+                                {
+                                    <span class="qv-count-error">@dryRunResult.ErrorCount error@(dryRunResult.ErrorCount != 1 ? "s" : "")</span>
+                                }
+                                @if (dryRunResult.ErrorCount > 0 && dryRunResult.WarningCount > 0)
+                                {
+                                    <span> and </span>
+                                }
+                                @if (dryRunResult.WarningCount > 0)
+                                {
+                                    <span class="qv-count-warning">@dryRunResult.WarningCount warning@(dryRunResult.WarningCount != 1 ? "s" : "")</span>
+                                }
+                                @if (dryRunResult.ErrorCount > 0)
+                                {
+                                    <span> — fix errors before submitting.</span>
+                                }
+                                else
+                                {
+                                    <span> — file would be accepted with warnings.</span>
+                                }
+                            }
+                        </p>
+                        <span class="qv-summary-meta">
+                            @dryRunResult.Mode
+                            @if (!string.IsNullOrEmpty(dryRunResult.TemplateName))
+                            {
+                                <span> · @dryRunResult.TemplateName</span>
+                            }
+                            · @dryRunResult.PhasesCompleted.Count phases completed
+                            · @dryRunResult.DurationMs ms
+                        </span>
+                    </div>
+                </div>
+
+                <!-- Error Listing -->
+                @if (dryRunResult.Errors.Any())
+                {
+                    <div class="portal-card qv-errors-card">
+                        <div class="qv-errors-header">
+                            <h3 class="qv-section-title" style="margin: 0;">
+                                Validation Issues (@dryRunResult.Errors.Count)
+                            </h3>
+                            <div class="qv-error-filters">
+                                <button class="qv-filter-btn @(errorFilter == "" ? "qv-filter-active" : "")"
+                                        @onclick='() => errorFilter = ""'>All</button>
+                                @if (dryRunResult.Errors.Any(e => e.Severity == "Error"))
+                                {
+                                    <button class="qv-filter-btn qv-filter-error @(errorFilter == "Error" ? "qv-filter-active" : "")"
+                                            @onclick='() => errorFilter = "Error"'>
+                                        Errors (@dryRunResult.Errors.Count(e => e.Severity == "Error"))
+                                    </button>
+                                }
+                                @if (dryRunResult.Errors.Any(e => e.Severity == "Warning"))
+                                {
+                                    <button class="qv-filter-btn qv-filter-warning @(errorFilter == "Warning" ? "qv-filter-active" : "")"
+                                            @onclick='() => errorFilter = "Warning"'>
+                                        Warnings (@dryRunResult.Errors.Count(e => e.Severity == "Warning"))
+                                    </button>
+                                }
+                            </div>
+                        </div>
+                        <div class="qv-error-list">
+                            @foreach (var err in GetFilteredErrors())
+                            {
+                                <div class="qv-error-item qv-error-@err.Severity.ToLower()">
+                                    <div class="qv-error-left">
+                                        <code class="qv-error-code">@err.Code</code>
+                                        <span class="qv-severity-badge qv-severity-@err.Severity.ToLower()">@err.Severity</span>
+                                    </div>
+                                    <div class="qv-error-body">
+                                        <span class="qv-error-message">@err.Message</span>
+                                        @if (!string.IsNullOrEmpty(err.FieldName) && err.FieldName != "XML")
+                                        {
+                                            <span class="qv-error-location">Field: @err.FieldName</span>
+                                        }
+                                        @if (!string.IsNullOrEmpty(err.ExpectedValue) || !string.IsNullOrEmpty(err.ActualValue))
+                                        {
+                                            <div class="qv-error-values">
+                                                @if (!string.IsNullOrEmpty(err.ExpectedValue))
+                                                {
+                                                    <span>Expected: <strong>@err.ExpectedValue</strong></span>
+                                                }
+                                                @if (!string.IsNullOrEmpty(err.ActualValue))
+                                                {
+                                                    <span>Actual: <strong>@err.ActualValue</strong></span>
+                                                }
+                                            </div>
+                                        }
+                                    </div>
+                                    <span class="qv-error-category">@err.Category</span>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                }
+
+                <!-- Data Preview -->
+                @if (dryRunResult.DataPreview.Any())
+                {
+                    <div class="portal-card" style="margin-top: 1rem;">
+                        <div class="qv-errors-header" style="cursor: pointer;" @onclick="() => showDataPreview = !showDataPreview">
+                            <h3 class="qv-section-title" style="margin: 0;">
+                                Data Preview (@dryRunResult.DataPreview.Count row@(dryRunResult.DataPreview.Count != 1 ? "s" : ""))
+                            </h3>
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                                 class="qv-chevron @(showDataPreview ? "qv-chevron-open" : "")" aria-hidden="true">
+                                <polyline points="6 9 12 15 18 9"/>
+                            </svg>
+                        </div>
+                        @if (showDataPreview)
+                        {
+                            <div class="qv-data-preview">
+                                @foreach (var row in dryRunResult.DataPreview)
+                                {
+                                    <div class="qv-preview-row">
+                                        @if (!string.IsNullOrEmpty(row.RowKey))
+                                        {
+                                            <span class="qv-preview-row-key">@row.RowKey</span>
+                                        }
+                                        <div class="qv-preview-fields">
+                                            @foreach (var (field, value) in row.Values.Take(12))
+                                            {
+                                                <div class="qv-preview-field">
+                                                    <span class="qv-preview-field-name">@field</span>
+                                                    <span class="qv-preview-field-value">@(value ?? "—")</span>
+                                                </div>
+                                            }
+                                            @if (row.Values.Count > 12)
+                                            {
+                                                <div class="qv-preview-field" style="opacity: 0.5;">
+                                                    <span class="qv-preview-field-name">...</span>
+                                                    <span class="qv-preview-field-value">+@(row.Values.Count - 12) more fields</span>
+                                                </div>
+                                            }
+                                        </div>
+                                    </div>
+                                }
+                            </div>
+                        }
+                    </div>
+                }
+
+                <!-- Phases Completed -->
+                <div class="portal-card" style="margin-top: 1rem; padding: 1rem 1.25rem;">
+                    <h3 class="qv-section-title" style="margin-bottom: 0.5rem;">Phases Completed</h3>
+                    <div class="qv-phase-chips">
+                        @foreach (var phase in dryRunResult.PhasesCompleted)
+                        {
+                            <span class="qv-phase-chip">
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--cbn-success-text, #16a34a)" stroke-width="3" aria-hidden="true">
+                                    <polyline points="20 6 9 17 4 12"/>
+                                </svg>
+                                @phase
+                            </span>
+                        }
+                        @if (!string.IsNullOrEmpty(dryRunResult.StoppedAtPhase))
+                        {
+                            <span class="qv-phase-chip qv-phase-chip-stopped">
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--cbn-danger-text, #dc2626)" stroke-width="3" aria-hidden="true">
+                                    <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                                </svg>
+                                Stopped at: @dryRunResult.StoppedAtPhase
+                            </span>
+                        }
+                    </div>
+                </div>
+
+                <!-- Go to Submit -->
+                @if (dryRunResult.ErrorCount == 0)
+                {
+                    <div class="qv-submit-cta">
+                        <a href="/submit" class="portal-btn portal-btn-primary">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                                <polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
+                            </svg>
+                            Proceed to Submit
+                        </a>
+                        <span class="qv-submit-cta-hint">Your file looks good — ready to create a formal submission.</span>
+                    </div>
+                }
+            }
+            else
+            {
+                <!-- Empty State -->
+                <div class="portal-card qv-empty-state">
+                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--cbn-text-muted, #9ca3af)" stroke-width="1.5" aria-hidden="true">
+                        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                        <polyline points="22 4 12 14.01 9 11.01"/>
+                    </svg>
+                    <h3 class="qv-empty-title">Ready to Validate</h3>
+                    <p class="qv-empty-desc">Select a return type, upload your XML file, and click "Check My File" to validate without creating a submission.</p>
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+@code {
+    [CascadingParameter]
+    private Task<AuthenticationState>? AuthState { get; set; }
+
+    // State
+    private bool isLoadingTemplates = true;
+    private bool isValidating;
+    private bool isDragging;
+    private bool showDataPreview;
+    private string validationMode = "full";
+    private string errorFilter = "";
+
+    // Data
+    private List<TemplateOption> templates = new();
+    private string selectedReturnCode = "";
+    private string fileName = "";
+    private long fileSize;
+    private byte[]? fileContent;
+    private int institutionId;
+
+    // Results
+    private DryRunResult? dryRunResult;
+    private List<ValidationPhase> validationPhases = new();
+
+    private bool CanValidate => !string.IsNullOrEmpty(selectedReturnCode) && fileContent is not null;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (AuthState is not null)
+        {
+            var state = await AuthState;
+            var instIdStr = state.User.FindFirst("InstitutionId")?.Value;
+            int.TryParse(instIdStr, out institutionId);
+        }
+
+        try
+        {
+            templates = await DryRunSvc.GetAvailableTemplatesAsync();
+        }
+        catch
+        {
+            templates = new();
+        }
+        finally
+        {
+            isLoadingTemplates = false;
+        }
+    }
+
+    private async Task HandleFileUpload(InputFileChangeEventArgs e)
+    {
+        var file = e.File;
+        if (file is null) return;
+
+        if (file.Size > 10 * 1024 * 1024)
+        {
+            fileName = "";
+            fileContent = null;
+            return;
+        }
+
+        fileName = file.Name;
+        fileSize = file.Size;
+        isDragging = false;
+
+        using var ms = new MemoryStream();
+        await file.OpenReadStream(maxAllowedSize: 10 * 1024 * 1024).CopyToAsync(ms);
+        fileContent = ms.ToArray();
+    }
+
+    private async Task RunValidation()
+    {
+        if (!CanValidate || isValidating) return;
+
+        isValidating = true;
+        dryRunResult = null;
+        errorFilter = "";
+        showDataPreview = false;
+
+        // Set up progress phases
+        if (validationMode == "schema")
+        {
+            validationPhases = new()
+            {
+                new("Schema Validation", "running")
+            };
+        }
+        else
+        {
+            validationPhases = new()
+            {
+                new("Schema Validation", "running"),
+                new("XML Parsing", "pending"),
+                new("Type & Range Checks", "pending"),
+                new("Formula Validation", "pending"),
+                new("Cross-Sheet Validation", "pending"),
+                new("Business Rules", "pending")
+            };
+        }
+
+        StateHasChanged();
+
+        try
+        {
+            using var stream = new MemoryStream(fileContent!);
+
+            if (validationMode == "schema")
+            {
+                dryRunResult = await DryRunSvc.ValidateSchemaOnlyAsync(stream, selectedReturnCode);
+            }
+            else
+            {
+                dryRunResult = await DryRunSvc.ValidateFullAsync(stream, selectedReturnCode, institutionId);
+            }
+
+            // Mark all phases as complete based on results
+            foreach (var phase in validationPhases)
+            {
+                if (dryRunResult.PhasesCompleted.Contains(phase.Name))
+                {
+                    phase.Status = "complete";
+                }
+                else if (phase.Name == dryRunResult.StoppedAtPhase)
+                {
+                    phase.Status = "failed";
+                }
+                else
+                {
+                    phase.Status = "skipped";
+                }
+            }
+        }
+        catch (Exception)
+        {
+            dryRunResult = new DryRunResult
+            {
+                ReturnCode = selectedReturnCode,
+                SimulatedStatus = "Error",
+                Errors = { new DryRunError { Code = "SYS-001", Severity = "Error", Category = "System", Message = "An unexpected error occurred." } }
+            };
+        }
+        finally
+        {
+            isValidating = false;
+        }
+    }
+
+    private void ClearResults()
+    {
+        dryRunResult = null;
+        errorFilter = "";
+        showDataPreview = false;
+        validationPhases.Clear();
+    }
+
+    private IEnumerable<DryRunError> GetFilteredErrors()
+    {
+        if (dryRunResult is null) return Enumerable.Empty<DryRunError>();
+        if (string.IsNullOrEmpty(errorFilter)) return dryRunResult.Errors;
+        return dryRunResult.Errors.Where(e => e.Severity == errorFilter);
+    }
+
+    private static string FormatFileSize(long bytes)
+    {
+        if (bytes < 1024) return $"{bytes} B";
+        if (bytes < 1024 * 1024) return $"{bytes / 1024.0:F1} KB";
+        return $"{bytes / (1024.0 * 1024.0):F1} MB";
+    }
+
+    private static string GetStatusLabel(string status) => status switch
+    {
+        "Accepted" => "File is Valid",
+        "AcceptedWithWarnings" => "Valid with Warnings",
+        "Rejected" => "Validation Failed",
+        "Schema Valid" => "Schema is Valid",
+        "Schema Invalid" => "Schema Validation Failed",
+        "Error" => "Processing Error",
+        _ => status
+    };
+
+    private static string GetStatusCssClass(string status) => status switch
+    {
+        "Accepted" or "Schema Valid" => "pass",
+        "AcceptedWithWarnings" => "warn",
+        _ => "fail"
+    };
+
+    private static string GetPhaseClass(ValidationPhase phase) => phase.Status switch
+    {
+        "complete" => "qv-phase-complete",
+        "running" => "qv-phase-running",
+        "failed" => "qv-phase-failed",
+        "skipped" => "qv-phase-skipped",
+        _ => "qv-phase-pending"
+    };
+
+    private class ValidationPhase
+    {
+        public string Name { get; set; }
+        public string Status { get; set; }
+        public ValidationPhase(string name, string status)
+        {
+            Name = name;
+            Status = status;
+        }
+    }
+}
