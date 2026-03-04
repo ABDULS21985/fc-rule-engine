@@ -1,3 +1,4 @@
+using FC.Engine.Application.Services;
 using FC.Engine.Domain.Abstractions;
 using FC.Engine.Infrastructure.Audit;
 using FC.Engine.Infrastructure.Caching;
@@ -71,6 +72,11 @@ public static class DependencyInjection
         // Caching — singleton so the in-memory ConcurrentDictionary lives across requests
         services.AddSingleton<ITemplateMetadataCache, TemplateMetadataCache>();
         services.AddHostedService<CacheWarmupService>();
+
+        // ── Entitlement & Onboarding (RG-02) ──
+        services.AddMemoryCache();
+        services.AddScoped<IEntitlementService, EntitlementService>();
+        services.AddScoped<ITenantOnboardingService, TenantOnboardingService>();
 
         // Audit
         services.AddScoped<IAuditLogger, AuditLogger>();

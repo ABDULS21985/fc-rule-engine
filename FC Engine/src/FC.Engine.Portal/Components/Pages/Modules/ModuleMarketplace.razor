@@ -1,0 +1,185 @@
+@page "/modules"
+@attribute [Authorize(Policy = "InstitutionUser")]
+@using FC.Engine.Domain.Abstractions
+@using FC.Engine.Domain.ValueObjects
+@inject IEntitlementService EntitlementSvc
+@inject ITenantContext TenantContext
+
+<PageTitle>Modules — FC Engine Portal</PageTitle>
+
+<div class="portal-page">
+    <div class="portal-page-header">
+        <div class="portal-page-header-main">
+            <h1 class="portal-page-title">Regulatory Modules</h1>
+            <p class="portal-page-subtitle">View all available regulatory modules and your entitlement status based on your licence types</p>
+        </div>
+    </div>
+
+    @if (_loading)
+    {
+        <div class="portal-loading">
+            <div class="portal-spinner" aria-hidden="true"></div>
+            <p>Loading modules...</p>
+        </div>
+    }
+    else if (_error != null)
+    {
+        <div class="portal-alert portal-alert-danger">
+            <p>@_error</p>
+        </div>
+    }
+    else
+    {
+        <!-- SUMMARY -->
+        <div class="portal-stats-row">
+            <div class="portal-stat-card">
+                <span class="portal-stat-value">@_allModules.Count</span>
+                <span class="portal-stat-label">Total Modules</span>
+            </div>
+            <div class="portal-stat-card portal-stat-card-success">
+                <span class="portal-stat-value">@_activeModules.Count</span>
+                <span class="portal-stat-label">Active</span>
+            </div>
+            <div class="portal-stat-card">
+                <span class="portal-stat-value">@(_eligibleModules.Count - _activeModules.Count)</span>
+                <span class="portal-stat-label">Eligible</span>
+            </div>
+            <div class="portal-stat-card portal-stat-card-muted">
+                <span class="portal-stat-value">@(_allModules.Count - _eligibleModules.Count)</span>
+                <span class="portal-stat-label">Not Available</span>
+            </div>
+        </div>
+
+        <!-- MODULE GRID -->
+        <div class="portal-card-grid">
+            @foreach (var module in _allModules)
+            {
+                var status = GetModuleStatus(module);
+                <div class="portal-card @GetCardClass(status)">
+                    <div class="portal-card-header">
+                        <div class="portal-card-title-row">
+                            <h3 class="portal-card-title">@module.ModuleName</h3>
+                            <span class="portal-badge @GetBadgeClass(status)">@status</span>
+                        </div>
+                        <span class="portal-card-code">@module.ModuleCode</span>
+                    </div>
+                    <div class="portal-card-body">
+                        <div class="portal-card-meta">
+                            <div class="portal-card-meta-item">
+                                <span class="portal-card-meta-label">Regulator</span>
+                                <span class="portal-card-meta-value">@module.RegulatorCode</span>
+                            </div>
+                            <div class="portal-card-meta-item">
+                                <span class="portal-card-meta-label">Sheets</span>
+                                <span class="portal-card-meta-value">@module.SheetCount</span>
+                            </div>
+                            @if (!string.IsNullOrEmpty(module.DefaultFrequency))
+                            {
+                                <div class="portal-card-meta-item">
+                                    <span class="portal-card-meta-label">Frequency</span>
+                                    <span class="portal-card-meta-value">@module.DefaultFrequency</span>
+                                </div>
+                            }
+                        </div>
+                        @if (IsRequired(module))
+                        {
+                            <span class="portal-badge portal-badge-outline">Required</span>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    private bool _loading = true;
+    private string? _error;
+    private List<ModuleViewModel> _allModules = new();
+    private HashSet<string> _eligibleModules = new(StringComparer.OrdinalIgnoreCase);
+    private HashSet<string> _activeModules = new(StringComparer.OrdinalIgnoreCase);
+    private HashSet<string> _requiredModules = new(StringComparer.OrdinalIgnoreCase);
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var tenantId = TenantContext.CurrentTenantId;
+            if (!tenantId.HasValue)
+            {
+                _error = "No tenant context available.";
+                _loading = false;
+                return;
+            }
+
+            var entitlement = await EntitlementSvc.ResolveEntitlements(tenantId.Value);
+
+            _eligibleModules = entitlement.EligibleModules
+                .Select(m => m.ModuleCode)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+            _activeModules = entitlement.ActiveModules
+                .Select(m => m.ModuleCode)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+            _requiredModules = entitlement.EligibleModules
+                .Where(m => m.IsRequired)
+                .Select(m => m.ModuleCode)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+            // Show all eligible modules (active + eligible), plus mark others as not available
+            _allModules = entitlement.EligibleModules
+                .Select(m => new ModuleViewModel
+                {
+                    ModuleCode = m.ModuleCode,
+                    ModuleName = m.ModuleName,
+                    RegulatorCode = m.RegulatorCode,
+                    SheetCount = m.SheetCount,
+                    DefaultFrequency = m.DefaultFrequency
+                })
+                .OrderBy(m => m.ModuleCode)
+                .ToList();
+        }
+        catch (Exception ex)
+        {
+            _error = $"Failed to load modules: {ex.Message}";
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private string GetModuleStatus(ModuleViewModel module)
+    {
+        if (_activeModules.Contains(module.ModuleCode)) return "Active";
+        if (_eligibleModules.Contains(module.ModuleCode)) return "Eligible";
+        return "Not Available";
+    }
+
+    private bool IsRequired(ModuleViewModel module) =>
+        _requiredModules.Contains(module.ModuleCode);
+
+    private static string GetCardClass(string status) => status switch
+    {
+        "Active" => "portal-card-active",
+        "Eligible" => "portal-card-eligible",
+        _ => "portal-card-disabled"
+    };
+
+    private static string GetBadgeClass(string status) => status switch
+    {
+        "Active" => "portal-badge-success",
+        "Eligible" => "portal-badge-info",
+        _ => "portal-badge-muted"
+    };
+
+    private class ModuleViewModel
+    {
+        public string ModuleCode { get; set; } = "";
+        public string ModuleName { get; set; } = "";
+        public string RegulatorCode { get; set; } = "";
+        public int SheetCount { get; set; }
+        public string? DefaultFrequency { get; set; }
+    }
+}
