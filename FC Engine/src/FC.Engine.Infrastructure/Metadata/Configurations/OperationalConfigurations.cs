@@ -10,6 +10,7 @@ public class SubmissionConfiguration : IEntityTypeConfiguration<Submission>
     {
         builder.ToTable("return_submissions");
         builder.HasKey(s => s.Id);
+        builder.Property(s => s.TenantId).IsRequired();
         builder.Property(s => s.ReturnCode).HasMaxLength(20).IsRequired();
         builder.Property(s => s.Status).HasMaxLength(30).IsRequired()
             .HasConversion<string>();
@@ -22,6 +23,8 @@ public class SubmissionConfiguration : IEntityTypeConfiguration<Submission>
         builder.Property(s => s.SubmittedByUserId);
         builder.Property(s => s.ApprovalRequired).HasDefaultValue(false);
         // Navigation to Approval is configured in SubmissionApprovalConfiguration
+
+        builder.HasIndex(s => s.TenantId);
     }
 }
 
@@ -31,6 +34,7 @@ public class InstitutionConfiguration : IEntityTypeConfiguration<Institution>
     {
         builder.ToTable("institutions");
         builder.HasKey(i => i.Id);
+        builder.Property(i => i.TenantId).IsRequired();
         builder.Property(i => i.InstitutionCode).HasMaxLength(20).IsRequired();
         builder.Property(i => i.InstitutionName).HasMaxLength(255).IsRequired();
         builder.Property(i => i.LicenseType).HasMaxLength(100);
@@ -44,6 +48,9 @@ public class InstitutionConfiguration : IEntityTypeConfiguration<Institution>
         builder.Property(i => i.MakerCheckerEnabled).HasDefaultValue(false);
         builder.Property(i => i.SettingsJson).HasColumnType("nvarchar(max)");
         // Navigation to InstitutionUsers is configured in InstitutionUserConfiguration
+        // Navigation to Tenant is configured in TenantConfiguration
+
+        builder.HasIndex(i => i.TenantId);
     }
 }
 
@@ -53,7 +60,10 @@ public class ReturnPeriodConfiguration : IEntityTypeConfiguration<ReturnPeriod>
     {
         builder.ToTable("return_periods");
         builder.HasKey(p => p.Id);
+        builder.Property(p => p.TenantId).IsRequired();
         builder.Property(p => p.Frequency).HasMaxLength(20).IsRequired();
+
+        builder.HasIndex(p => p.TenantId);
     }
 }
 
@@ -63,6 +73,7 @@ public class ValidationReportConfiguration : IEntityTypeConfiguration<Validation
     {
         builder.ToTable("validation_reports");
         builder.HasKey(r => r.Id);
+        builder.Property(r => r.TenantId).IsRequired();
         builder.Ignore(r => r.IsValid);
         builder.Ignore(r => r.HasWarnings);
         builder.Ignore(r => r.HasErrors);
@@ -70,6 +81,8 @@ public class ValidationReportConfiguration : IEntityTypeConfiguration<Validation
         builder.Ignore(r => r.WarningCount);
 
         builder.HasMany(r => r.Errors).WithOne().HasForeignKey(e => e.ValidationReportId);
+
+        builder.HasIndex(r => r.TenantId);
     }
 }
 
@@ -102,6 +115,8 @@ public class AuditLogConfiguration : IEntityTypeConfiguration<AuditLogEntry>
         builder.Property(a => a.Action).HasMaxLength(20).IsRequired();
         builder.Property(a => a.PerformedBy).HasMaxLength(100).IsRequired();
         builder.Property(a => a.IpAddress).HasMaxLength(45);
+
+        builder.HasIndex(a => a.TenantId);
     }
 }
 

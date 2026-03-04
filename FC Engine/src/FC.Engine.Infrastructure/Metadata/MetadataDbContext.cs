@@ -9,6 +9,9 @@ public class MetadataDbContext : DbContext
 {
     public MetadataDbContext(DbContextOptions<MetadataDbContext> options) : base(options) { }
 
+    // Multi-tenancy
+    public DbSet<Tenant> Tenants => Set<Tenant>();
+
     // Metadata tables
     public DbSet<ReturnTemplate> ReturnTemplates => Set<ReturnTemplate>();
     public DbSet<TemplateVersion> TemplateVersions => Set<TemplateVersion>();
@@ -54,6 +57,10 @@ public class MetadataDbContext : DbContext
 public class AuditLogEntry
 {
     public long Id { get; set; }
+
+    /// <summary>FK to Tenant for RLS.</summary>
+    public Guid? TenantId { get; set; }
+
     public string EntityType { get; set; } = string.Empty;
     public int EntityId { get; set; }
     public string Action { get; set; } = string.Empty;

@@ -10,6 +10,7 @@ public class SubmissionApprovalConfiguration : IEntityTypeConfiguration<Submissi
     {
         builder.ToTable("submission_approvals", "meta");
         builder.HasKey(e => e.Id);
+        builder.Property(e => e.TenantId).IsRequired();
 
         builder.Property(e => e.Status).HasMaxLength(20).IsRequired()
             .HasConversion<string>();
@@ -35,5 +36,6 @@ public class SubmissionApprovalConfiguration : IEntityTypeConfiguration<Submissi
         // Indexes
         builder.HasIndex(e => e.SubmissionId).IsUnique();
         builder.HasIndex(e => e.Status);
+        builder.HasIndex(e => e.TenantId);
     }
 }

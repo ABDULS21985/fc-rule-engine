@@ -5,6 +5,10 @@ namespace FC.Engine.Domain.Validation;
 public class BusinessRule
 {
     public int Id { get; set; }
+
+    /// <summary>FK to Tenant for RLS.</summary>
+    public Guid? TenantId { get; set; }
+
     public string RuleCode { get; set; } = string.Empty;
     public string RuleName { get; set; } = string.Empty;
     public string? Description { get; set; }

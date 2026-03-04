@@ -5,6 +5,10 @@ namespace FC.Engine.Domain.Metadata;
 public class ReturnTemplate
 {
     public int Id { get; set; }
+
+    /// <summary>FK to Tenant for RLS. Null for global/system templates.</summary>
+    public Guid? TenantId { get; set; }
+
     public string ReturnCode { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
     public string? Description { get; set; }

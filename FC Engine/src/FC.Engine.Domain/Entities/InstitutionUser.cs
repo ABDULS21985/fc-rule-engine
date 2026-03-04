@@ -10,6 +10,9 @@ public class InstitutionUser
 {
     public int Id { get; set; }
 
+    /// <summary>FK to Tenant for RLS.</summary>
+    public Guid TenantId { get; set; }
+
     /// <summary>FK to Institution.</summary>
     public int InstitutionId { get; set; }
 

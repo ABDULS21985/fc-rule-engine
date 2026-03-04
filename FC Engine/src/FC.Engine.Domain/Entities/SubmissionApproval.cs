@@ -9,6 +9,9 @@ public class SubmissionApproval
 {
     public int Id { get; set; }
 
+    /// <summary>FK to Tenant for RLS.</summary>
+    public Guid TenantId { get; set; }
+
     /// <summary>FK to Submission.</summary>
     public int SubmissionId { get; set; }
 

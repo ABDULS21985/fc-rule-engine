@@ -1,19 +1,18 @@
-using System.Data;
 using FC.Engine.Domain.Abstractions;
 using FC.Engine.Infrastructure.Audit;
 using FC.Engine.Infrastructure.Caching;
 using FC.Engine.Infrastructure.DynamicSchema;
 using FC.Engine.Infrastructure.Metadata;
 using FC.Engine.Infrastructure.Metadata.Repositories;
+using FC.Engine.Infrastructure.MultiTenancy;
 using FC.Engine.Infrastructure.Persistence;
+using FC.Engine.Infrastructure.Persistence.Interceptors;
 using FC.Engine.Infrastructure.Persistence.Repositories;
 using FC.Engine.Infrastructure.Validation;
 using FC.Engine.Infrastructure.Xml;
-using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
 
 namespace FC.Engine.Infrastructure;
 
@@ -24,16 +23,25 @@ public static class DependencyInjection
         var connectionString = configuration.GetConnectionString("FcEngine")
             ?? throw new InvalidOperationException("Connection string 'FcEngine' not found");
 
-        // EF Core for metadata + operational tables (pooled for performance)
-        services.AddDbContextPool<MetadataDbContext>(options =>
+        // ── Multi-Tenancy ──
+        services.AddScoped<ITenantContext, HttpTenantContext>();
+        services.AddScoped<IDbConnectionFactory, TenantAwareConnectionFactory>();
+        services.AddScoped<TenantSessionContextInterceptor>();
+
+        // EF Core for metadata + operational tables
+        // Using AddDbContext (not pool) to support per-request interceptor injection
+        services.AddDbContext<MetadataDbContext>((sp, options) =>
+        {
             options.UseSqlServer(connectionString, sql =>
             {
                 sql.CommandTimeout(30);
                 sql.EnableRetryOnFailure(3);
-            }));
+            });
 
-        // Dapper connection for dynamic data tables
-        services.AddScoped<IDbConnection>(_ => new SqlConnection(connectionString));
+            // Add tenant session context interceptor for RLS
+            var interceptor = sp.GetRequiredService<TenantSessionContextInterceptor>();
+            options.AddInterceptors(interceptor);
+        });
 
         // Repositories
         services.AddScoped<ITemplateRepository, TemplateRepository>();

@@ -5,6 +5,10 @@ namespace FC.Engine.Domain.Entities;
 public class Submission
 {
     public int Id { get; set; }
+
+    /// <summary>FK to Tenant for RLS.</summary>
+    public Guid TenantId { get; set; }
+
     public int InstitutionId { get; set; }
     public int ReturnPeriodId { get; set; }
     public string ReturnCode { get; set; } = string.Empty;

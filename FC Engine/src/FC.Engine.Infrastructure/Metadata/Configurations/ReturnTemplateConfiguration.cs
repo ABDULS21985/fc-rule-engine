@@ -27,6 +27,7 @@ public class ReturnTemplateConfiguration : IEntityTypeConfiguration<ReturnTempla
 
         builder.HasIndex(t => t.ReturnCode).IsUnique();
         builder.HasIndex(t => t.PhysicalTableName).IsUnique();
+        builder.HasIndex(t => t.TenantId);
 
         builder.HasMany(t => t.Versions)
             .WithOne()

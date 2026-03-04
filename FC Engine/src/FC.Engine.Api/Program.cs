@@ -2,6 +2,7 @@ using FC.Engine.Api.Endpoints;
 using FC.Engine.Api.Middleware;
 using FC.Engine.Application.Services;
 using FC.Engine.Infrastructure;
+using FC.Engine.Infrastructure.MultiTenancy;
 using Microsoft.OpenApi.Models;
 using Serilog;
 
@@ -28,6 +29,7 @@ builder.Services.AddScoped<CrossSheetRuleSeedService>();
 builder.Services.AddScoped<FormulaCatalogSeeder>();
 
 // Swagger
+builder.Services.AddHttpContextAccessor();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
 {
@@ -67,6 +69,9 @@ if (!string.IsNullOrEmpty(builder.Configuration["ApiKey"]))
 {
     app.UseApiKeyAuth();
 }
+
+// Tenant context resolution for API requests
+app.UseTenantContext();
 
 // Map endpoints
 app.MapSubmissionEndpoints();

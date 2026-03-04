@@ -3,6 +3,10 @@ namespace FC.Engine.Domain.Entities;
 public class Institution
 {
     public int Id { get; set; }
+
+    /// <summary>FK to Tenant. Every institution belongs to exactly one tenant.</summary>
+    public Guid TenantId { get; set; }
+
     public string InstitutionCode { get; set; } = string.Empty;
     public string InstitutionName { get; set; } = string.Empty;
     public string? LicenseType { get; set; }
@@ -39,4 +43,7 @@ public class Institution
 
     /// <summary>FI Portal users belonging to this institution.</summary>
     public List<InstitutionUser> Users { get; set; } = new();
+
+    /// <summary>The tenant that owns this institution.</summary>
+    public Tenant? Tenant { get; set; }
 }

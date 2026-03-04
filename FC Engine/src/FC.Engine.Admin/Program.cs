@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using FC.Engine.Application.Services;
 using FC.Engine.Infrastructure;
+using FC.Engine.Infrastructure.MultiTenancy;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Serilog;
@@ -32,6 +33,9 @@ builder.Services.AddScoped<AuthService>();
 builder.Services.AddScoped<FC.Engine.Admin.Services.ToastService>();
 builder.Services.AddScoped<FC.Engine.Admin.Services.DialogService>();
 
+// Platform Admin services
+builder.Services.AddScoped<FC.Engine.Admin.Services.TenantManagementService>();
+
 // Authentication — cookie-based for Blazor Server
 builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
     .AddCookie(options =>
@@ -51,6 +55,7 @@ builder.Services.AddAuthorization(options =>
     options.AddPolicy("AdminOnly", policy => policy.RequireRole("Admin"));
     options.AddPolicy("ApproverOrAdmin", policy => policy.RequireRole("Approver", "Admin"));
     options.AddPolicy("Authenticated", policy => policy.RequireAuthenticatedUser());
+    options.AddPolicy("PlatformAdmin", policy => policy.RequireRole("PlatformAdmin"));
 });
 
 builder.Services.AddHttpContextAccessor();
@@ -71,6 +76,7 @@ if (!app.Environment.IsDevelopment())
 app.UseStaticFiles();
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseTenantContext();
 app.UseAntiforgery();
 
 // Login endpoint — handles cookie auth outside of Blazor's interactive (SignalR) pipeline
@@ -97,6 +103,18 @@ app.MapPost("/account/login", async (HttpContext context, AuthService authServic
         new(ClaimTypes.Email, user.Email),
         new(ClaimTypes.Role, user.Role.ToString())
     };
+
+    // Add TenantId claim for multi-tenancy
+    if (user.TenantId.HasValue)
+    {
+        claims.Add(new Claim("TenantId", user.TenantId.Value.ToString()));
+    }
+    else
+    {
+        // PortalUser with no TenantId is a PlatformAdmin
+        claims.Add(new Claim("IsPlatformAdmin", "true"));
+        claims.Add(new Claim(ClaimTypes.Role, "PlatformAdmin"));
+    }
 
     var identity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
     var principal = new ClaimsPrincipal(identity);
@@ -180,6 +198,36 @@ app.MapPost("/account/reset-password", async (HttpContext context, AuthService a
     }
 
     context.Response.Redirect("/login?reset=success");
+});
+
+// PlatformAdmin impersonation endpoint
+app.MapGet("/platform/impersonate", (HttpContext context) =>
+{
+    // Only PlatformAdmin can impersonate
+    if (!context.User.IsInRole("PlatformAdmin") && !context.User.HasClaim("IsPlatformAdmin", "true"))
+    {
+        context.Response.StatusCode = 403;
+        return;
+    }
+
+    var tenantIdStr = context.Request.Query["tenantId"].ToString();
+    if (Guid.TryParse(tenantIdStr, out var tenantId))
+    {
+        context.Response.Cookies.Append("ImpersonateTenantId", tenantId.ToString(), new CookieOptions
+        {
+            HttpOnly = true,
+            SameSite = SameSiteMode.Strict,
+            Expires = DateTimeOffset.UtcNow.AddHours(2)
+        });
+    }
+    context.Response.Redirect("/");
+});
+
+// Stop impersonation
+app.MapGet("/platform/stop-impersonation", (HttpContext context) =>
+{
+    context.Response.Cookies.Delete("ImpersonateTenantId");
+    context.Response.Redirect("/platform/tenants");
 });
 
 app.MapRazorComponents<FC.Engine.Admin.Components.App>()

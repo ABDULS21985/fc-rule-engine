@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using FC.Engine.Application.Services;
 using FC.Engine.Infrastructure;
+using FC.Engine.Infrastructure.MultiTenancy;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Serilog;
@@ -89,6 +90,7 @@ if (!app.Environment.IsDevelopment())
 app.UseStaticFiles();
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseTenantContext();
 app.UseAntiforgery();
 
 // Login POST endpoint — authenticates institution users
@@ -127,6 +129,7 @@ app.MapPost("/account/login", async (HttpContext context, InstitutionAuthService
         new(ClaimTypes.Role, user.Role.ToString()),
         new("InstitutionId", user.InstitutionId.ToString()),
         new("InstitutionName", user.Institution?.InstitutionName ?? "Unknown"),
+        new("TenantId", user.TenantId.ToString()),
     };
 
     var identity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);

@@ -5,6 +5,10 @@ namespace FC.Engine.Domain.Entities;
 public class PortalUser
 {
     public int Id { get; set; }
+
+    /// <summary>FK to Tenant for RLS. Null for PlatformAdmin users.</summary>
+    public Guid? TenantId { get; set; }
+
     public string Username { get; set; } = string.Empty;
     public string DisplayName { get; set; } = string.Empty;
     public string Email { get; set; } = string.Empty;

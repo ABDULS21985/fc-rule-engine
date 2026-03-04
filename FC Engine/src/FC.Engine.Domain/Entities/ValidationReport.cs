@@ -5,6 +5,10 @@ namespace FC.Engine.Domain.Entities;
 public class ValidationReport
 {
     public int Id { get; set; }
+
+    /// <summary>FK to Tenant for RLS.</summary>
+    public Guid TenantId { get; set; }
+
     public int SubmissionId { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime? FinalizedAt { get; set; }

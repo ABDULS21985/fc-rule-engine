@@ -23,6 +23,7 @@ public partial class DdlEngine : IDdlEngine
         sb.AppendLine($"CREATE TABLE dbo.[{tableName}] (");
         sb.AppendLine("    id INT IDENTITY(1,1) PRIMARY KEY,");
         sb.AppendLine("    submission_id INT NOT NULL REFERENCES dbo.return_submissions(id),");
+        sb.AppendLine("    TenantId UNIQUEIDENTIFIER NOT NULL,");
 
         foreach (var field in fields.OrderBy(f => f.FieldOrder))
         {
@@ -37,6 +38,7 @@ public partial class DdlEngine : IDdlEngine
         sb.AppendLine(");");
         sb.AppendLine();
         sb.AppendLine($"CREATE INDEX IX_{tableName}_submission ON dbo.[{tableName}](submission_id);");
+        sb.AppendLine($"CREATE INDEX IX_{tableName}_tenant ON dbo.[{tableName}](TenantId);");
 
         var rollback = $"DROP TABLE IF EXISTS dbo.[{tableName}];";
 

@@ -44,6 +44,7 @@ public class CrossSheetRuleConfiguration : IEntityTypeConfiguration<CrossSheetRu
         builder.Property(r => r.CreatedBy).HasMaxLength(100).IsRequired();
 
         builder.HasIndex(r => r.RuleCode).IsUnique();
+        builder.HasIndex(r => r.TenantId);
 
         builder.HasMany(r => r.Operands)
             .WithOne()
@@ -103,5 +104,6 @@ public class BusinessRuleConfiguration : IEntityTypeConfiguration<BusinessRule>
         builder.Property(r => r.CreatedBy).HasMaxLength(100).IsRequired();
 
         builder.HasIndex(r => r.RuleCode).IsUnique();
+        builder.HasIndex(r => r.TenantId);
     }
 }

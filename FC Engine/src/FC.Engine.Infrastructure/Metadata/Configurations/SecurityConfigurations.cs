@@ -14,6 +14,7 @@ public class LoginAttemptConfiguration : IEntityTypeConfiguration<LoginAttempt>
         builder.Property(e => e.IpAddress).HasMaxLength(50);
         builder.Property(e => e.FailureReason).HasMaxLength(200);
         builder.HasIndex(e => new { e.Username, e.AttemptedAt });
+        builder.HasIndex(e => e.TenantId);
     }
 }
 

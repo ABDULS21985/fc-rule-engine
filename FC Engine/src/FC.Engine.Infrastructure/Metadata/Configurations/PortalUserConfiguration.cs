@@ -22,5 +22,6 @@ public class PortalUserConfiguration : IEntityTypeConfiguration<PortalUser>
 
         builder.HasIndex(u => u.Username).IsUnique();
         builder.HasIndex(u => u.Email).IsUnique();
+        builder.HasIndex(u => u.TenantId);
     }
 }

@@ -10,6 +10,7 @@ public class PortalNotificationConfiguration : IEntityTypeConfiguration<PortalNo
     {
         builder.ToTable("portal_notifications");
         builder.HasKey(n => n.Id);
+        builder.Property(n => n.TenantId).IsRequired();
 
         builder.Property(n => n.Title).HasMaxLength(200).IsRequired();
         builder.Property(n => n.Message).HasMaxLength(1000).IsRequired();
@@ -21,5 +22,7 @@ public class PortalNotificationConfiguration : IEntityTypeConfiguration<PortalNo
         // Primary query: user's notifications ordered by date
         builder.HasIndex(n => new { n.InstitutionId, n.UserId, n.IsRead, n.CreatedAt })
             .HasDatabaseName("IX_PortalNotification_UserQuery");
+
+        builder.HasIndex(n => n.TenantId);
     }
 }

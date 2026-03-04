@@ -8,6 +8,9 @@ public class PortalNotification
 {
     public int Id { get; set; }
 
+    /// <summary>FK to Tenant for RLS.</summary>
+    public Guid TenantId { get; set; }
+
     // ── Targeting ──
 
     /// <summary>The institution user this notification is for. Null = broadcast to all users of the institution.</summary>

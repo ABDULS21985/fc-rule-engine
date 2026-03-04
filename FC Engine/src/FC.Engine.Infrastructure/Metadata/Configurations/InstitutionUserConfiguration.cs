@@ -10,6 +10,7 @@ public class InstitutionUserConfiguration : IEntityTypeConfiguration<Institution
     {
         builder.ToTable("institution_users", "meta");
         builder.HasKey(e => e.Id);
+        builder.Property(e => e.TenantId).IsRequired();
 
         builder.Property(e => e.Username).HasMaxLength(100).IsRequired();
         builder.Property(e => e.Email).HasMaxLength(256).IsRequired();
@@ -24,6 +25,7 @@ public class InstitutionUserConfiguration : IEntityTypeConfiguration<Institution
         builder.HasIndex(e => e.Username).IsUnique();
         builder.HasIndex(e => e.Email);
         builder.HasIndex(e => e.InstitutionId);
+        builder.HasIndex(e => e.TenantId);
 
         // Relationships
         builder.HasOne(e => e.Institution)

@@ -8,16 +8,19 @@ namespace FC.Engine.Infrastructure.Persistence;
 
 public class GenericDataRepository : IGenericDataRepository
 {
-    private readonly IDbConnection _connection;
+    private readonly IDbConnectionFactory _connectionFactory;
+    private readonly ITenantContext _tenantContext;
     private readonly ITemplateMetadataCache _cache;
     private readonly DynamicSqlBuilder _sqlBuilder;
 
     public GenericDataRepository(
-        IDbConnection connection,
+        IDbConnectionFactory connectionFactory,
+        ITenantContext tenantContext,
         ITemplateMetadataCache cache,
         DynamicSqlBuilder sqlBuilder)
     {
-        _connection = connection;
+        _connectionFactory = connectionFactory;
+        _tenantContext = tenantContext;
         _cache = cache;
         _sqlBuilder = sqlBuilder;
     }
@@ -28,10 +31,11 @@ public class GenericDataRepository : IGenericDataRepository
         var tableName = template.PhysicalTableName;
         var fields = template.CurrentVersion.Fields;
 
+        using var connection = await CreateConnectionAsync(ct);
         foreach (var row in record.Rows)
         {
-            var (sql, parameters) = _sqlBuilder.BuildInsert(tableName, fields, row, submissionId);
-            await _connection.ExecuteAsync(new CommandDefinition(sql, parameters, cancellationToken: ct));
+            var (sql, parameters) = _sqlBuilder.BuildInsert(tableName, fields, row, submissionId, _tenantContext.CurrentTenantId);
+            await connection.ExecuteAsync(new CommandDefinition(sql, parameters, cancellationToken: ct));
         }
     }
 
@@ -44,7 +48,9 @@ public class GenericDataRepository : IGenericDataRepository
         var category = Enum.Parse<StructuralCategory>(template.StructuralCategory);
 
         var sql = _sqlBuilder.BuildSelect(tableName, fields);
-        var rows = await _connection.QueryAsync(
+
+        using var connection = await CreateConnectionAsync(ct);
+        var rows = await connection.QueryAsync(
             new CommandDefinition(sql, new { submissionId }, cancellationToken: ct));
 
         var rowList = rows.ToList();
@@ -82,7 +88,9 @@ public class GenericDataRepository : IGenericDataRepository
         var category = Enum.Parse<StructuralCategory>(template.StructuralCategory);
 
         var sql = _sqlBuilder.BuildSelectByInstitutionAndPeriod(tableName, fields);
-        var rows = await _connection.QueryAsync(
+
+        using var connection = await CreateConnectionAsync(ct);
+        var rows = await connection.QueryAsync(
             new CommandDefinition(sql, new { institutionId, returnPeriodId }, cancellationToken: ct));
 
         var rowList = rows.ToList();
@@ -115,7 +123,14 @@ public class GenericDataRepository : IGenericDataRepository
     {
         var template = await _cache.GetPublishedTemplate(returnCode, ct);
         var sql = $"DELETE FROM dbo.[{template.PhysicalTableName}] WHERE submission_id = @submissionId";
-        await _connection.ExecuteAsync(
+
+        using var connection = await CreateConnectionAsync(ct);
+        await connection.ExecuteAsync(
             new CommandDefinition(sql, new { submissionId }, cancellationToken: ct));
+    }
+
+    private async Task<IDbConnection> CreateConnectionAsync(CancellationToken ct)
+    {
+        return await _connectionFactory.CreateConnectionAsync(_tenantContext.CurrentTenantId, ct);
     }
 }

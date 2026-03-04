@@ -11,7 +11,8 @@ public partial class DynamicSqlBuilder
         string tableName,
         IReadOnlyList<TemplateField> fields,
         ReturnDataRow row,
-        int submissionId)
+        int submissionId,
+        Guid? tenantId = null)
     {
         ValidateName(tableName);
 
@@ -20,6 +21,14 @@ public partial class DynamicSqlBuilder
 
         var columns = new List<string> { "submission_id" };
         var paramNames = new List<string> { "@submission_id" };
+
+        // Include TenantId in INSERT for belt-and-suspenders with RLS
+        if (tenantId.HasValue)
+        {
+            columns.Add("TenantId");
+            paramNames.Add("@TenantId");
+            parameters.Add("@TenantId", tenantId.Value);
+        }
 
         foreach (var field in fields)
         {
@@ -51,6 +60,7 @@ public partial class DynamicSqlBuilder
             columns.Add($"[{f.FieldName}]");
         }
 
+        // RLS handles tenant filtering; submission_id WHERE is for data specificity
         return $"SELECT {string.Join(", ", columns)} FROM dbo.[{tableName}] " +
                "WHERE submission_id = @submissionId ORDER BY id";
     }
