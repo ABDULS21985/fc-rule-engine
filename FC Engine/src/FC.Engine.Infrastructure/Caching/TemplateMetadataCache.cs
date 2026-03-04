@@ -63,7 +63,7 @@ public class TemplateMetadataCache : ITemplateMetadataCache
     {
         var upperCode = returnCode.ToUpperInvariant();
         var keysToRemove = _cache.Keys
-            .Where(k => k.EndsWith(':' + upperCode, StringComparison.OrdinalIgnoreCase))
+            .Where(k => k.EndsWith(":" + upperCode, StringComparison.OrdinalIgnoreCase))
             .ToList();
 
         foreach (var key in keysToRemove)
@@ -172,7 +172,10 @@ public class TemplateMetadataCache : ITemplateMetadataCache
             template = await baseQuery.FirstOrDefaultAsync(t => t.ReturnCode == returnCode, ct);
         }
 
-        template ??= throw new InvalidOperationException($"No published template found for return code: {returnCode}");
+        if (template is null)
+        {
+            throw new InvalidOperationException($"No published template found for return code: {returnCode}");
+        }
 
         var publishedVersion = template.Versions
             .FirstOrDefault(v => v.Status == TemplateStatus.Published)

@@ -31,6 +31,10 @@ public class GenericDataRepository : IGenericDataRepository
         var tableName = template.PhysicalTableName;
         var fields = template.CurrentVersion.Fields;
         var tenantId = _tenantContext.CurrentTenantId;
+        if (!tenantId.HasValue)
+        {
+            throw new InvalidOperationException("Tenant context is required for dynamic table inserts.");
+        }
 
         using var connection = await CreateConnectionAsync(ct);
         foreach (var row in record.Rows)
@@ -50,7 +54,7 @@ public class GenericDataRepository : IGenericDataRepository
         var tenantId = _tenantContext.CurrentTenantId;
 
         var sql = _sqlBuilder.BuildSelect(tableName, fields, tenantId);
-        var queryParams = tenantId.HasValue
+        object queryParams = tenantId.HasValue
             ? new { submissionId, TenantId = tenantId.Value }
             : new { submissionId };
 
@@ -94,7 +98,7 @@ public class GenericDataRepository : IGenericDataRepository
         var tenantId = _tenantContext.CurrentTenantId;
 
         var sql = _sqlBuilder.BuildSelectByInstitutionAndPeriod(tableName, fields, tenantId);
-        var queryParams = tenantId.HasValue
+        object queryParams = tenantId.HasValue
             ? new { institutionId, returnPeriodId, TenantId = tenantId.Value }
             : new { institutionId, returnPeriodId };
 
@@ -133,7 +137,7 @@ public class GenericDataRepository : IGenericDataRepository
         var template = await _cache.GetPublishedTemplate(returnCode, ct);
         var tenantId = _tenantContext.CurrentTenantId;
         var sql = _sqlBuilder.BuildDeleteBySubmission(template.PhysicalTableName, tenantId);
-        var parameters = tenantId.HasValue
+        object parameters = tenantId.HasValue
             ? new { submissionId, TenantId = tenantId.Value }
             : new { submissionId };
 

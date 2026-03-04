@@ -1,4 +1,5 @@
 using FC.Engine.Domain.Abstractions;
+using FC.Engine.Domain.Enums;
 using FC.Engine.Infrastructure.Metadata;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -58,7 +59,7 @@ public class CacheWarmupService : BackgroundService
             {
                 var db = scope.ServiceProvider.GetRequiredService<MetadataDbContext>();
                 activeTenantIds = await db.Tenants
-                    .Where(t => t.TenantStatus == "Active")
+                    .Where(t => t.Status == TenantStatus.Active)
                     .Select(t => t.TenantId)
                     .ToListAsync(ct);
             }
