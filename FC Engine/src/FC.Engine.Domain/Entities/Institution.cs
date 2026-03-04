@@ -1,3 +1,5 @@
+using FC.Engine.Domain.Enums;
+
 namespace FC.Engine.Domain.Entities;
 
 public class Institution
@@ -12,6 +14,20 @@ public class Institution
     public string? LicenseType { get; set; }
     public bool IsActive { get; set; }
     public DateTime CreatedAt { get; set; }
+
+    // ── Hierarchy ──
+
+    /// <summary>Self-referencing FK for organisational hierarchy (HoldingGroup → Subsidiary → Branch).</summary>
+    public int? ParentInstitutionId { get; set; }
+
+    /// <summary>Entity type within the hierarchy.</summary>
+    public EntityType EntityType { get; set; } = EntityType.HeadOffice;
+
+    /// <summary>Branch code for branch-level entities.</summary>
+    public string? BranchCode { get; set; }
+
+    /// <summary>Physical location or region.</summary>
+    public string? Location { get; set; }
 
     // ── FI Portal Extensions ──
 
@@ -39,11 +55,17 @@ public class Institution
     /// <summary>JSON-serialized portal preferences for this institution.</summary>
     public string? SettingsJson { get; set; }
 
-    // ── Navigation (FI Portal) ──
+    // ── Navigation ──
 
     /// <summary>FI Portal users belonging to this institution.</summary>
     public List<InstitutionUser> Users { get; set; } = new();
 
     /// <summary>The tenant that owns this institution.</summary>
     public Tenant? Tenant { get; set; }
+
+    /// <summary>Parent institution in the hierarchy.</summary>
+    public Institution? ParentInstitution { get; set; }
+
+    /// <summary>Child institutions (subsidiaries, branches).</summary>
+    public List<Institution> ChildInstitutions { get; set; } = new();
 }

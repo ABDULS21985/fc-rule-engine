@@ -39,6 +39,18 @@ public class InstitutionConfiguration : IEntityTypeConfiguration<Institution>
         builder.Property(i => i.InstitutionName).HasMaxLength(255).IsRequired();
         builder.Property(i => i.LicenseType).HasMaxLength(100);
 
+        // ── Hierarchy ──
+        builder.Property(i => i.EntityType).HasMaxLength(30)
+            .HasConversion<string>()
+            .HasDefaultValue(Domain.Enums.EntityType.HeadOffice);
+        builder.Property(i => i.BranchCode).HasMaxLength(20);
+        builder.Property(i => i.Location).HasMaxLength(200);
+
+        builder.HasOne(i => i.ParentInstitution)
+            .WithMany(i => i.ChildInstitutions)
+            .HasForeignKey(i => i.ParentInstitutionId)
+            .OnDelete(DeleteBehavior.Restrict);
+
         // ── FI Portal Extensions ──
         builder.Property(i => i.ContactEmail).HasMaxLength(256);
         builder.Property(i => i.ContactPhone).HasMaxLength(50);

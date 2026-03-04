@@ -110,6 +110,7 @@ public class TemplateMetadataCache : ITemplateMetadataCache
         var db = scope.ServiceProvider.GetRequiredService<MetadataDbContext>();
 
         var template = await db.ReturnTemplates
+            .Include(t => t.Module)
             .Include(t => t.Versions.Where(v => v.Status == TemplateStatus.Published))
                 .ThenInclude(v => v.Fields)
             .Include(t => t.Versions.Where(v => v.Status == TemplateStatus.Published))
@@ -132,6 +133,7 @@ public class TemplateMetadataCache : ITemplateMetadataCache
         var db = scope.ServiceProvider.GetRequiredService<MetadataDbContext>();
 
         var templates = await db.ReturnTemplates
+            .Include(t => t.Module)
             .Include(t => t.Versions.Where(v => v.Status == TemplateStatus.Published))
                 .ThenInclude(v => v.Fields)
             .Include(t => t.Versions.Where(v => v.Status == TemplateStatus.Published))
@@ -164,6 +166,8 @@ public class TemplateMetadataCache : ITemplateMetadataCache
             PhysicalTableName = template.PhysicalTableName,
             XmlRootElement = template.XmlRootElement,
             XmlNamespace = template.XmlNamespace,
+            ModuleId = template.ModuleId,
+            ModuleCode = template.Module?.ModuleCode,
             CurrentVersion = new CachedTemplateVersion
             {
                 Id = version.Id,

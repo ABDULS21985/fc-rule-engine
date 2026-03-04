@@ -24,6 +24,8 @@ public class CachedTemplate
     public string PhysicalTableName { get; set; } = string.Empty;
     public string XmlRootElement { get; set; } = string.Empty;
     public string XmlNamespace { get; set; } = string.Empty;
+    public int? ModuleId { get; set; }
+    public string? ModuleCode { get; set; }
     public CachedTemplateVersion CurrentVersion { get; set; } = null!;
 }
 

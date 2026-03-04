@@ -12,6 +12,12 @@ public class MetadataDbContext : DbContext
     // Multi-tenancy
     public DbSet<Tenant> Tenants => Set<Tenant>();
 
+    // Licensing & modules
+    public DbSet<LicenceType> LicenceTypes => Set<LicenceType>();
+    public DbSet<Module> Modules => Set<Module>();
+    public DbSet<LicenceModuleMatrix> LicenceModuleMatrix => Set<LicenceModuleMatrix>();
+    public DbSet<TenantLicenceType> TenantLicenceTypes => Set<TenantLicenceType>();
+
     // Metadata tables
     public DbSet<ReturnTemplate> ReturnTemplates => Set<ReturnTemplate>();
     public DbSet<TemplateVersion> TemplateVersions => Set<TemplateVersion>();

@@ -29,6 +29,11 @@ public class ReturnTemplateConfiguration : IEntityTypeConfiguration<ReturnTempla
         builder.HasIndex(t => t.PhysicalTableName).IsUnique();
         builder.HasIndex(t => t.TenantId);
 
+        builder.HasOne(t => t.Module)
+            .WithMany()
+            .HasForeignKey(t => t.ModuleId)
+            .OnDelete(DeleteBehavior.SetNull);
+
         builder.HasMany(t => t.Versions)
             .WithOne()
             .HasForeignKey(v => v.TemplateId);

@@ -14,6 +14,8 @@ public class IngestionOrchestrator
     private readonly IGenericDataRepository _dataRepo;
     private readonly ISubmissionRepository _submissionRepo;
     private readonly ValidationOrchestrator _validationOrchestrator;
+    private readonly IEntitlementService? _entitlementService;
+    private readonly ITenantContext? _tenantContext;
 
     public IngestionOrchestrator(
         ITemplateMetadataCache cache,
@@ -21,7 +23,9 @@ public class IngestionOrchestrator
         IGenericXmlParser xmlParser,
         IGenericDataRepository dataRepo,
         ISubmissionRepository submissionRepo,
-        ValidationOrchestrator validationOrchestrator)
+        ValidationOrchestrator validationOrchestrator,
+        IEntitlementService? entitlementService = null,
+        ITenantContext? tenantContext = null)
     {
         _cache = cache;
         _xsdGenerator = xsdGenerator;
@@ -29,6 +33,8 @@ public class IngestionOrchestrator
         _dataRepo = dataRepo;
         _submissionRepo = submissionRepo;
         _validationOrchestrator = validationOrchestrator;
+        _entitlementService = entitlementService;
+        _tenantContext = tenantContext;
     }
 
     public async Task<SubmissionResultDto> Process(
@@ -46,6 +52,33 @@ public class IngestionOrchestrator
             // 2. Resolve template
             var template = await _cache.GetPublishedTemplate(returnCode, ct);
             submission.SetTemplateVersion(template.CurrentVersion.Id);
+
+            // 2b. Entitlement check — verify tenant has access to this module
+            if (_entitlementService != null && _tenantContext?.CurrentTenantId != null
+                && template.ModuleCode != null)
+            {
+                var hasAccess = await _entitlementService.HasModuleAccess(
+                    _tenantContext.CurrentTenantId.Value, template.ModuleCode, ct);
+                if (!hasAccess)
+                {
+                    var entitlementReport = ValidationReport.Create(submission.Id);
+                    entitlementReport.AddError(new ValidationError
+                    {
+                        RuleId = "MODULE_NOT_ENTITLED",
+                        Field = "N/A",
+                        Message = $"Tenant is not entitled to submit returns for module '{template.ModuleCode}'",
+                        Severity = ValidationSeverity.Error,
+                        Category = ValidationCategory.Schema
+                    });
+                    entitlementReport.FinalizeAt(DateTime.UtcNow);
+                    submission.AttachValidationReport(entitlementReport);
+                    submission.MarkRejected();
+                    submission.ProcessingDurationMs = (int)sw.ElapsedMilliseconds;
+                    await _submissionRepo.Update(submission, ct);
+                    return MapResult(submission);
+                }
+            }
+
             submission.MarkParsing();
             await _submissionRepo.Update(submission, ct);
 

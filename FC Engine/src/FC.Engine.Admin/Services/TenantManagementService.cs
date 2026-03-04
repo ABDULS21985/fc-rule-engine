@@ -1,19 +1,20 @@
+using FC.Engine.Domain.Abstractions;
 using FC.Engine.Domain.Entities;
+using FC.Engine.Domain.Enums;
 using FC.Engine.Infrastructure.Metadata;
 using Microsoft.EntityFrameworkCore;
 
 namespace FC.Engine.Admin.Services;
 
-/// <summary>
-/// Service for PlatformAdmin tenant management operations.
-/// </summary>
 public class TenantManagementService
 {
     private readonly MetadataDbContext _db;
+    private readonly ITenantOnboardingService _onboardingService;
 
-    public TenantManagementService(MetadataDbContext db)
+    public TenantManagementService(MetadataDbContext db, ITenantOnboardingService onboardingService)
     {
         _db = db;
+        _onboardingService = onboardingService;
     }
 
     public async Task<List<Tenant>> GetAllTenantsAsync(CancellationToken ct = default)
@@ -34,35 +35,22 @@ public class TenantManagementService
         return new TenantDashboardStats
         {
             TotalTenants = tenants.Count,
-            ActiveTenants = tenants.Count(t => t.TenantStatus == "Active"),
-            PendingTenants = tenants.Count(t => t.TenantStatus == "PendingActivation"),
-            SuspendedTenants = tenants.Count(t => t.TenantStatus == "Suspended")
+            ActiveTenants = tenants.Count(t => t.Status == TenantStatus.Active),
+            PendingTenants = tenants.Count(t => t.Status == TenantStatus.PendingActivation),
+            SuspendedTenants = tenants.Count(t => t.Status == TenantStatus.Suspended)
         };
     }
 
-    public async Task<Tenant> CreateTenantAsync(string name, string slug, string? contactEmail, CancellationToken ct = default)
+    public async Task<TenantOnboardingResult> OnboardTenantAsync(TenantOnboardingRequest request, CancellationToken ct = default)
     {
-        var tenant = new Tenant
-        {
-            TenantName = name,
-            TenantSlug = slug,
-            TenantStatus = "PendingActivation",
-            ContactEmail = contactEmail,
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow
-        };
-
-        _db.Tenants.Add(tenant);
-        await _db.SaveChangesAsync(ct);
-        return tenant;
+        return await _onboardingService.OnboardTenant(request, ct);
     }
 
     public async Task ActivateTenantAsync(Guid tenantId, CancellationToken ct = default)
     {
         var tenant = await _db.Tenants.FindAsync(new object[] { tenantId }, ct)
             ?? throw new InvalidOperationException("Tenant not found");
-        tenant.TenantStatus = "Active";
-        tenant.UpdatedAt = DateTime.UtcNow;
+        tenant.Activate();
         await _db.SaveChangesAsync(ct);
     }
 
@@ -70,9 +58,48 @@ public class TenantManagementService
     {
         var tenant = await _db.Tenants.FindAsync(new object[] { tenantId }, ct)
             ?? throw new InvalidOperationException("Tenant not found");
-        tenant.TenantStatus = "Suspended";
-        tenant.UpdatedAt = DateTime.UtcNow;
+        tenant.Suspend("Admin action");
         await _db.SaveChangesAsync(ct);
+    }
+
+    public async Task ReactivateTenantAsync(Guid tenantId, CancellationToken ct = default)
+    {
+        var tenant = await _db.Tenants.FindAsync(new object[] { tenantId }, ct)
+            ?? throw new InvalidOperationException("Tenant not found");
+        tenant.Reactivate();
+        await _db.SaveChangesAsync(ct);
+    }
+
+    public async Task DeactivateTenantAsync(Guid tenantId, CancellationToken ct = default)
+    {
+        var tenant = await _db.Tenants.FindAsync(new object[] { tenantId }, ct)
+            ?? throw new InvalidOperationException("Tenant not found");
+        tenant.Deactivate();
+        await _db.SaveChangesAsync(ct);
+    }
+
+    public async Task<List<TenantLicenceType>> GetTenantLicencesAsync(Guid tenantId, CancellationToken ct = default)
+    {
+        return await _db.TenantLicenceTypes
+            .Include(tlt => tlt.LicenceType)
+            .Where(tlt => tlt.TenantId == tenantId)
+            .ToListAsync(ct);
+    }
+
+    public async Task<List<LicenceType>> GetAllLicenceTypesAsync(CancellationToken ct = default)
+    {
+        return await _db.LicenceTypes
+            .Where(lt => lt.IsActive)
+            .OrderBy(lt => lt.DisplayOrder)
+            .ToListAsync(ct);
+    }
+
+    public async Task<List<Module>> GetAllModulesAsync(CancellationToken ct = default)
+    {
+        return await _db.Modules
+            .Where(m => m.IsActive)
+            .OrderBy(m => m.DisplayOrder)
+            .ToListAsync(ct);
     }
 }
 
