@@ -95,6 +95,9 @@ public class CrossSheetValidator : ICrossSheetValidator
         }
 
         // Evaluate the expression
+        if (rule.Expression is null)
+            return null;
+
         var result = _expressionParser.Evaluate(rule.Expression.Expression, variables);
 
         if (!result.Passes)

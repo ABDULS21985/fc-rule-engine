@@ -6,6 +6,7 @@ using FC.Engine.Domain.ValueObjects;
 using FC.Engine.Infrastructure.Metadata;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
@@ -21,6 +22,7 @@ public class TenantOnboardingServiceTests : IDisposable
     {
         var options = new DbContextOptionsBuilder<MetadataDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .ConfigureWarnings(w => w.Ignore(InMemoryEventId.TransactionIgnoredWarning))
             .Options;
 
         _db = new MetadataDbContext(options);
