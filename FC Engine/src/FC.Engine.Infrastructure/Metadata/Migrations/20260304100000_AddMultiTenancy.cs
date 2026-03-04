@@ -93,8 +93,39 @@ namespace FC.Engine.Infrastructure.Metadata.Migrations
 
             // -- Template/Rule metadata tables (nullable for global/system templates)
             AddTenantIdColumn(migrationBuilder, "return_templates", nullable: true, schema: "meta");
+            migrationBuilder.Sql(@"
+                IF EXISTS (
+                    SELECT 1
+                    FROM sys.indexes
+                    WHERE name = 'IX_return_templates_ReturnCode'
+                      AND object_id = OBJECT_ID(N'[meta].[return_templates]')
+                )
+                BEGIN
+                    DROP INDEX [IX_return_templates_ReturnCode] ON [meta].[return_templates];
+                END;
+
+                IF NOT EXISTS (
+                    SELECT 1
+                    FROM sys.indexes
+                    WHERE name = 'IX_return_templates_ReturnCode_TenantId'
+                      AND object_id = OBJECT_ID(N'[meta].[return_templates]')
+                )
+                BEGIN
+                    CREATE UNIQUE INDEX [IX_return_templates_ReturnCode_TenantId]
+                        ON [meta].[return_templates]([ReturnCode], [TenantId]);
+                END;
+            ");
+            AddTenantIdColumn(migrationBuilder, "template_versions", nullable: true, schema: "meta");
             AddTenantIdColumn(migrationBuilder, "cross_sheet_rules", nullable: true, schema: "meta");
             AddTenantIdColumn(migrationBuilder, "business_rules", nullable: true, schema: "meta");
+
+            // template_versions inherits tenant scope from its parent template.
+            migrationBuilder.Sql(@"
+                UPDATE tv
+                SET tv.TenantId = rt.TenantId
+                FROM [meta].[template_versions] tv
+                INNER JOIN [meta].[return_templates] rt ON rt.Id = tv.TemplateId;
+            ");
 
             // ═══════════════════════════════════════════════════════════
             // STEP 4: Add TenantId to ALL DdlEngine-managed dynamic tables
@@ -238,6 +269,29 @@ namespace FC.Engine.Infrastructure.Metadata.Migrations
             // Drop TenantId indexes and columns (reverse order of creation)
             RemoveTenantIdColumn(migrationBuilder, "business_rules", schema: "meta");
             RemoveTenantIdColumn(migrationBuilder, "cross_sheet_rules", schema: "meta");
+            RemoveTenantIdColumn(migrationBuilder, "template_versions", schema: "meta");
+            migrationBuilder.Sql(@"
+                IF EXISTS (
+                    SELECT 1
+                    FROM sys.indexes
+                    WHERE name = 'IX_return_templates_ReturnCode_TenantId'
+                      AND object_id = OBJECT_ID(N'[meta].[return_templates]')
+                )
+                BEGIN
+                    DROP INDEX [IX_return_templates_ReturnCode_TenantId] ON [meta].[return_templates];
+                END;
+
+                IF NOT EXISTS (
+                    SELECT 1
+                    FROM sys.indexes
+                    WHERE name = 'IX_return_templates_ReturnCode'
+                      AND object_id = OBJECT_ID(N'[meta].[return_templates]')
+                )
+                BEGIN
+                    CREATE UNIQUE INDEX [IX_return_templates_ReturnCode]
+                        ON [meta].[return_templates]([ReturnCode]);
+                END;
+            ");
             RemoveTenantIdColumn(migrationBuilder, "return_templates", schema: "meta");
             RemoveTenantIdColumn(migrationBuilder, "audit_log", schema: "meta");
             RemoveTenantIdColumn(migrationBuilder, "login_attempts", schema: "meta");

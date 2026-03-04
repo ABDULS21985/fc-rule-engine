@@ -43,6 +43,7 @@ public class ReturnTemplate
         var nextVersionNumber = _versions.Any() ? _versions.Max(v => v.VersionNumber) + 1 : 1;
         var version = new TemplateVersion
         {
+            TenantId = TenantId,
             TemplateId = Id,
             VersionNumber = nextVersionNumber,
             Status = TemplateStatus.Draft,

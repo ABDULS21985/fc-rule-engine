@@ -5,6 +5,7 @@ namespace FC.Engine.Domain.Metadata;
 public class TemplateVersion
 {
     public int Id { get; set; }
+    public Guid? TenantId { get; set; }
     public int TemplateId { get; set; }
     public int VersionNumber { get; set; }
     public TemplateStatus Status { get; set; }

@@ -25,7 +25,7 @@ public class ReturnTemplateConfiguration : IEntityTypeConfiguration<ReturnTempla
         builder.Property(t => t.CreatedBy).HasMaxLength(100).IsRequired();
         builder.Property(t => t.UpdatedBy).HasMaxLength(100).IsRequired();
 
-        builder.HasIndex(t => t.ReturnCode).IsUnique();
+        builder.HasIndex(t => new { t.ReturnCode, t.TenantId }).IsUnique();
         builder.HasIndex(t => t.PhysicalTableName).IsUnique();
         builder.HasIndex(t => t.TenantId);
 
@@ -46,6 +46,7 @@ public class TemplateVersionConfiguration : IEntityTypeConfiguration<TemplateVer
     {
         builder.ToTable("template_versions", "meta");
         builder.HasKey(v => v.Id);
+        builder.Property(v => v.TenantId);
         builder.Property(v => v.Status).HasMaxLength(20).IsRequired()
             .HasConversion<string>();
         builder.Property(v => v.ChangeSummary).HasMaxLength(1000);
@@ -53,6 +54,7 @@ public class TemplateVersionConfiguration : IEntityTypeConfiguration<TemplateVer
         builder.Property(v => v.CreatedBy).HasMaxLength(100).IsRequired();
 
         builder.HasIndex(v => new { v.TemplateId, v.VersionNumber }).IsUnique();
+        builder.HasIndex(v => v.TenantId);
 
         builder.HasMany(v => v.Fields)
             .WithOne()
