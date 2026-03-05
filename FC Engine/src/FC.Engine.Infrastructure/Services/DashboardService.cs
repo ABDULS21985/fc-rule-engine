@@ -65,6 +65,11 @@ public class DashboardService : IDashboardService
 
     public Task<ModuleDashboardData> GetModuleDashboard(Guid tenantId, string moduleCode, CancellationToken ct = default)
     {
+        if (string.IsNullOrWhiteSpace(moduleCode))
+        {
+            throw new ArgumentException("Module code is required.", nameof(moduleCode));
+        }
+
         var normalizedCode = moduleCode.Trim().ToUpperInvariant();
         return GetOrCreateCached($"dashboard:module:{tenantId}:{normalizedCode}", async () =>
         {
@@ -258,9 +263,22 @@ public class DashboardService : IDashboardService
 
     public Task<TrendData> GetSubmissionTrend(Guid tenantId, string moduleCode, int periods = 6, CancellationToken ct = default)
     {
+        if (string.IsNullOrWhiteSpace(moduleCode))
+        {
+            throw new ArgumentException("Module code is required.", nameof(moduleCode));
+        }
+
         var normalizedCode = moduleCode.Trim().ToUpperInvariant();
         return GetOrCreateCached($"dashboard:trend:submission:{tenantId}:{normalizedCode}:{periods}", async () =>
         {
+            var entitlement = await _entitlementService.ResolveEntitlements(tenantId, ct);
+            var hasAccess = entitlement.ActiveModules.Any(m =>
+                string.Equals(m.ModuleCode, normalizedCode, StringComparison.OrdinalIgnoreCase));
+            if (!hasAccess)
+            {
+                throw new InvalidOperationException($"Tenant {tenantId} is not entitled to module {normalizedCode}");
+            }
+
             var module = await _db.Modules
                 .AsNoTracking()
                 .FirstOrDefaultAsync(m => m.ModuleCode == normalizedCode, ct)
@@ -324,9 +342,22 @@ public class DashboardService : IDashboardService
 
     public Task<TrendData> GetValidationErrorTrend(Guid tenantId, string moduleCode, int periods = 6, CancellationToken ct = default)
     {
+        if (string.IsNullOrWhiteSpace(moduleCode))
+        {
+            throw new ArgumentException("Module code is required.", nameof(moduleCode));
+        }
+
         var normalizedCode = moduleCode.Trim().ToUpperInvariant();
         return GetOrCreateCached($"dashboard:trend:validation:{tenantId}:{normalizedCode}:{periods}", async () =>
         {
+            var entitlement = await _entitlementService.ResolveEntitlements(tenantId, ct);
+            var hasAccess = entitlement.ActiveModules.Any(m =>
+                string.Equals(m.ModuleCode, normalizedCode, StringComparison.OrdinalIgnoreCase));
+            if (!hasAccess)
+            {
+                throw new InvalidOperationException($"Tenant {tenantId} is not entitled to module {normalizedCode}");
+            }
+
             var module = await _db.Modules
                 .AsNoTracking()
                 .FirstOrDefaultAsync(m => m.ModuleCode == normalizedCode, ct)

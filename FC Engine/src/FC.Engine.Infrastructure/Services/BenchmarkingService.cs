@@ -30,6 +30,11 @@ public class BenchmarkingService : IBenchmarkingService
 
     public async Task<BenchmarkResult?> GetPeerBenchmark(Guid tenantId, string moduleCode, CancellationToken ct = default)
     {
+        if (string.IsNullOrWhiteSpace(moduleCode))
+        {
+            throw new ArgumentException("Module code is required.", nameof(moduleCode));
+        }
+
         var normalizedCode = moduleCode.Trim().ToUpperInvariant();
         var cacheKey = $"dashboard:benchmark:{tenantId}:{normalizedCode}";
 
@@ -77,15 +82,19 @@ public class BenchmarkingService : IBenchmarkingService
                     return null;
                 }
 
-                var peerValues = await _db.FilingSlaRecords
+                var peerRows = await _db.FilingSlaRecords
                     .AsNoTracking()
                     .Where(r => r.ModuleId == module.Id
                              && r.DaysToDeadline != null
                              && peerTenantIds.Contains(r.TenantId))
-                    .Select(r => r.DaysToDeadline!.Value)
+                    .Select(r => new
+                    {
+                        r.TenantId,
+                        Days = r.DaysToDeadline!.Value
+                    })
                     .ToListAsync(ct);
 
-                if (peerValues.Count == 0)
+                if (peerRows.Count == 0)
                 {
                     return new BenchmarkResult
                     {
@@ -97,6 +106,9 @@ public class BenchmarkingService : IBenchmarkingService
                         PeerCount = 0
                     };
                 }
+
+                var peerValues = peerRows.Select(x => x.Days).ToList();
+                var peerTenantsWithData = peerRows.Select(x => x.TenantId).Distinct().Count();
 
                 var tenantValues = await _db.FilingSlaRecords
                     .AsNoTracking()
@@ -118,7 +130,7 @@ public class BenchmarkingService : IBenchmarkingService
                     PeerP25Days = Percentile(orderedPeers, 25),
                     PeerP75Days = Percentile(orderedPeers, 75),
                     Percentile = percentile,
-                    PeerCount = peerTenantIds.Count
+                    PeerCount = peerTenantsWithData
                 };
             }
             catch (Exception ex)
