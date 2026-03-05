@@ -1,5 +1,6 @@
 using FC.Engine.Domain.Abstractions;
 using FC.Engine.Infrastructure.Audit;
+using FC.Engine.Infrastructure.BackgroundJobs;
 using FC.Engine.Infrastructure.Caching;
 using FC.Engine.Infrastructure.DynamicSchema;
 using FC.Engine.Infrastructure.Metadata;
@@ -78,6 +79,7 @@ public static class DependencyInjection
         // ── Entitlement & Onboarding (RG-02) ──
         services.AddMemoryCache();
         services.AddScoped<IEntitlementService, EntitlementService>();
+        services.AddScoped<ISubscriptionService, SubscriptionService>();
         services.AddScoped<ITenantOnboardingService, TenantOnboardingService>();
 
         // Audit
@@ -89,6 +91,10 @@ public static class DependencyInjection
         services.AddScoped<IFormulaEvaluator, FormulaEvaluator>();
         services.AddScoped<ICrossSheetValidator, CrossSheetValidator>();
         services.AddScoped<IBusinessRuleEvaluator, BusinessRuleEvaluator>();
+
+        // Billing & subscription background jobs
+        services.AddHostedService<UsageTrackingJob>();
+        services.AddHostedService<OverdueInvoiceJob>();
 
         return services;
     }

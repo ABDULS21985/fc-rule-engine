@@ -1,0 +1,132 @@
+@page "/subscription/invoices"
+@attribute [Authorize(Policy = "InstitutionUser")]
+@using FC.Engine.Domain.Abstractions
+@inject ISubscriptionService SubscriptionService
+@inject ITenantContext TenantContext
+
+<PageTitle>My Invoices</PageTitle>
+
+<h1>My Invoices</h1>
+
+@if (_loading)
+{
+    <p>Loading invoices...</p>
+}
+else if (_error is not null)
+{
+    <p class="text-danger">@_error</p>
+}
+else
+{
+    @if (!string.IsNullOrWhiteSpace(_message))
+    {
+        <p>@_message</p>
+    }
+
+    <button @onclick="GenerateInvoice">Generate Draft Invoice</button>
+
+    <table class="table" style="margin-top:1rem;">
+        <thead>
+            <tr>
+                <th>Invoice</th>
+                <th>Status</th>
+                <th>Period</th>
+                <th>Total (NGN)</th>
+                <th>Due</th>
+                <th>Action</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var invoice in _invoices)
+            {
+                <tr>
+                    <td>@invoice.InvoiceNumber</td>
+                    <td>@invoice.Status</td>
+                    <td>@invoice.PeriodStart.ToString("yyyy-MM-dd") - @invoice.PeriodEnd.ToString("yyyy-MM-dd")</td>
+                    <td>@invoice.TotalAmount.ToString("N2")</td>
+                    <td>@(invoice.DueDate?.ToString("yyyy-MM-dd") ?? "-")</td>
+                    <td>
+                        @if (invoice.Status == FC.Engine.Domain.Enums.InvoiceStatus.Draft)
+                        {
+                            <button @onclick="() => Issue(invoice.Id)">Issue</button>
+                        }
+                        else
+                        {
+                            <span>-</span>
+                        }
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    private bool _loading = true;
+    private string? _error;
+    private string? _message;
+    private Guid _tenantId;
+    private List<FC.Engine.Domain.Entities.Invoice> _invoices = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!TenantContext.CurrentTenantId.HasValue)
+        {
+            _error = "Tenant context not available.";
+            _loading = false;
+            return;
+        }
+
+        _tenantId = TenantContext.CurrentTenantId.Value;
+        await Load();
+    }
+
+    private async Task Load()
+    {
+        try
+        {
+            _invoices = await SubscriptionService.GetInvoices(_tenantId, 1, 50);
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _loading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task GenerateInvoice()
+    {
+        _error = null;
+        _message = null;
+        try
+        {
+            var invoice = await SubscriptionService.GenerateInvoice(_tenantId);
+            _message = $"Generated draft invoice {invoice.InvoiceNumber}.";
+            await Load();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+    }
+
+    private async Task Issue(int invoiceId)
+    {
+        _error = null;
+        _message = null;
+        try
+        {
+            var invoice = await SubscriptionService.IssueInvoice(invoiceId);
+            _message = $"Issued invoice {invoice.InvoiceNumber}.";
+            await Load();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+    }
+}

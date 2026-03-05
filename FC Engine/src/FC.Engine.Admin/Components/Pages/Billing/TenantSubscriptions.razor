@@ -1,0 +1,80 @@
+@page "/billing/subscriptions"
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize(Policy = "PlatformAdmin")]
+@using FC.Engine.Domain.Enums
+@using FC.Engine.Infrastructure.Metadata
+@using Microsoft.EntityFrameworkCore
+@inject MetadataDbContext Db
+
+<PageTitle>Tenant Subscriptions</PageTitle>
+
+<h1>Tenant Subscriptions</h1>
+
+@if (_loading)
+{
+    <p>Loading subscriptions...</p>
+}
+else
+{
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Tenant</th>
+                <th>Plan</th>
+                <th>Status</th>
+                <th>Frequency</th>
+                <th>Period Start</th>
+                <th>Period End</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var s in _subscriptions)
+            {
+                <tr>
+                    <td>@s.TenantName</td>
+                    <td>@s.PlanCode</td>
+                    <td>@s.Status</td>
+                    <td>@s.BillingFrequency</td>
+                    <td>@s.CurrentPeriodStart.ToString("yyyy-MM-dd")</td>
+                    <td>@s.CurrentPeriodEnd.ToString("yyyy-MM-dd")</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    private bool _loading = true;
+    private List<Row> _subscriptions = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        _subscriptions = await Db.Subscriptions
+            .AsNoTracking()
+            .Include(s => s.Tenant)
+            .Include(s => s.Plan)
+            .OrderByDescending(s => s.UpdatedAt)
+            .Select(s => new Row
+            {
+                TenantName = s.Tenant != null ? s.Tenant.TenantName : "Unknown",
+                PlanCode = s.Plan != null ? s.Plan.PlanCode : "N/A",
+                Status = s.Status,
+                BillingFrequency = s.BillingFrequency,
+                CurrentPeriodStart = s.CurrentPeriodStart,
+                CurrentPeriodEnd = s.CurrentPeriodEnd
+            })
+            .ToListAsync();
+
+        _loading = false;
+    }
+
+    private sealed class Row
+    {
+        public string TenantName { get; set; } = string.Empty;
+        public string PlanCode { get; set; } = string.Empty;
+        public SubscriptionStatus Status { get; set; }
+        public BillingFrequency BillingFrequency { get; set; }
+        public DateTime CurrentPeriodStart { get; set; }
+        public DateTime CurrentPeriodEnd { get; set; }
+    }
+}

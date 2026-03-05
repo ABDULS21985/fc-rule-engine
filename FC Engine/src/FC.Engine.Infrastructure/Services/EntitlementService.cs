@@ -131,12 +131,6 @@ public class EntitlementService : IEntitlementService
         IReadOnlyList<EntitledModule> eligibleModules,
         CancellationToken ct)
     {
-        // Keep unit-test compatibility for InMemory provider when subscription model isn't seeded.
-        if (!_db.Database.IsRelational())
-        {
-            return SubscriptionResolution.Fallback(eligibleModules, DefaultFeatures);
-        }
-
         var subscription = await _db.Subscriptions
             .Include(s => s.Plan)
             .Where(s => s.TenantId == tenantId)
@@ -193,16 +187,5 @@ public class EntitlementService : IEntitlementService
     private sealed record SubscriptionResolution(
         string PlanCode,
         IReadOnlyList<string> Features,
-        List<EntitledModule> ActiveModules)
-    {
-        public static SubscriptionResolution Fallback(
-            IReadOnlyList<EntitledModule> eligible,
-            IReadOnlyList<string> features)
-        {
-            return new SubscriptionResolution(
-                "DEFAULT",
-                features,
-                eligible.Select(ToActive).ToList());
-        }
-    }
+        List<EntitledModule> ActiveModules);
 }

@@ -1,0 +1,77 @@
+@page "/subscription/my-plan"
+@attribute [Authorize(Policy = "InstitutionUser")]
+@using FC.Engine.Domain.Abstractions
+@inject ISubscriptionService SubscriptionService
+@inject ITenantContext TenantContext
+
+<PageTitle>My Plan</PageTitle>
+
+<h1>My Plan</h1>
+
+@if (_loading)
+{
+    <p>Loading subscription...</p>
+}
+else if (_error is not null)
+{
+    <p class="text-danger">@_error</p>
+}
+else if (_subscription is not null && _usage is not null)
+{
+    <div style="display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:1rem; margin-bottom:1.5rem;">
+        <div class="card" style="padding:1rem;"><strong>Plan</strong><br />@_subscription.Plan?.PlanName (@_subscription.Plan?.PlanCode)</div>
+        <div class="card" style="padding:1rem;"><strong>Status</strong><br />@_subscription.Status</div>
+        <div class="card" style="padding:1rem;"><strong>Billing</strong><br />@_subscription.BillingFrequency</div>
+        <div class="card" style="padding:1rem;"><strong>Period End</strong><br />@_subscription.CurrentPeriodEnd.ToString("yyyy-MM-dd")</div>
+    </div>
+
+    <h3>Usage</h3>
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Metric</th>
+                <th>Current</th>
+                <th>Limit</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr><td>Users</td><td>@_usage.ActiveUsers</td><td>@_usage.ActiveUsersLimit</td></tr>
+            <tr><td>Entities</td><td>@_usage.ActiveEntities</td><td>@_usage.ActiveEntitiesLimit</td></tr>
+            <tr><td>Modules</td><td>@_usage.ActiveModules</td><td>@_usage.ActiveModulesLimit</td></tr>
+            <tr><td>API Calls (month)</td><td>@_usage.ApiCallCount</td><td>@_usage.ApiCallLimit</td></tr>
+            <tr><td>Storage (MB)</td><td>@_usage.StorageUsedMb</td><td>@_usage.StorageLimitMb</td></tr>
+        </tbody>
+    </table>
+}
+
+@code {
+    private bool _loading = true;
+    private string? _error;
+    private FC.Engine.Domain.Entities.Subscription? _subscription;
+    private UsageSummary? _usage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var tenantId = TenantContext.CurrentTenantId;
+        if (!tenantId.HasValue)
+        {
+            _error = "Tenant context not available.";
+            _loading = false;
+            return;
+        }
+
+        try
+        {
+            _subscription = await SubscriptionService.GetActiveSubscription(tenantId.Value);
+            _usage = await SubscriptionService.GetUsageSummary(tenantId.Value);
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+}

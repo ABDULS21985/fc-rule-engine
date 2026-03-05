@@ -1,0 +1,79 @@
+@page "/billing/invoices"
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize(Policy = "PlatformAdmin")]
+@using FC.Engine.Domain.Enums
+@using FC.Engine.Infrastructure.Metadata
+@using Microsoft.EntityFrameworkCore
+@inject MetadataDbContext Db
+
+<PageTitle>Invoices</PageTitle>
+
+<h1>Invoices</h1>
+
+@if (_loading)
+{
+    <p>Loading invoices...</p>
+}
+else
+{
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Invoice Number</th>
+                <th>Tenant</th>
+                <th>Status</th>
+                <th>Total (NGN)</th>
+                <th>Due Date</th>
+                <th>Issued At</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var invoice in _invoices)
+            {
+                <tr>
+                    <td>@invoice.InvoiceNumber</td>
+                    <td>@invoice.TenantName</td>
+                    <td>@invoice.Status</td>
+                    <td>@invoice.TotalAmount.ToString("N2")</td>
+                    <td>@(invoice.DueDate?.ToString("yyyy-MM-dd") ?? "-")</td>
+                    <td>@(invoice.IssuedAt?.ToString("yyyy-MM-dd HH:mm") ?? "-")</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    private bool _loading = true;
+    private List<Row> _invoices = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        _invoices = await Db.Invoices
+            .AsNoTracking()
+            .Join(Db.Tenants, i => i.TenantId, t => t.TenantId, (i, t) => new Row
+            {
+                InvoiceNumber = i.InvoiceNumber,
+                TenantName = t.TenantName,
+                Status = i.Status,
+                TotalAmount = i.TotalAmount,
+                DueDate = i.DueDate,
+                IssuedAt = i.IssuedAt
+            })
+            .OrderByDescending(i => i.IssuedAt)
+            .ThenByDescending(i => i.InvoiceNumber)
+            .ToListAsync();
+
+        _loading = false;
+    }
+
+    private sealed class Row
+    {
+        public string InvoiceNumber { get; set; } = string.Empty;
+        public string TenantName { get; set; } = string.Empty;
+        public InvoiceStatus Status { get; set; }
+        public decimal TotalAmount { get; set; }
+        public DateOnly? DueDate { get; set; }
+        public DateTime? IssuedAt { get; set; }
+    }
+}

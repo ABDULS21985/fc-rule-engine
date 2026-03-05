@@ -1,0 +1,58 @@
+@page "/billing/revenue"
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize(Policy = "PlatformAdmin")]
+@using FC.Engine.Domain.Enums
+@using FC.Engine.Infrastructure.Metadata
+@using Microsoft.EntityFrameworkCore
+@inject MetadataDbContext Db
+
+<PageTitle>Revenue Dashboard</PageTitle>
+
+<h1>Revenue Dashboard</h1>
+
+@if (_loading)
+{
+    <p>Loading revenue metrics...</p>
+}
+else
+{
+    <div style="display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:1rem; margin-bottom:1.5rem;">
+        <div class="card" style="padding:1rem;"><strong>MRR (NGN)</strong><br />@_mrr.ToString("N2")</div>
+        <div class="card" style="padding:1rem;"><strong>ARR (NGN)</strong><br />@_arr.ToString("N2")</div>
+        <div class="card" style="padding:1rem;"><strong>Paid This Month (NGN)</strong><br />@_paidThisMonth.ToString("N2")</div>
+        <div class="card" style="padding:1rem;"><strong>Overdue Invoices</strong><br />@_overdueCount</div>
+    </div>
+}
+
+@code {
+    private bool _loading = true;
+    private decimal _mrr;
+    private decimal _arr;
+    private decimal _paidThisMonth;
+    private int _overdueCount;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _mrr = await Db.Subscriptions
+            .AsNoTracking()
+            .Where(s => s.Status == SubscriptionStatus.Active)
+            .Join(Db.SubscriptionPlans, s => s.PlanId, p => p.Id, (s, p) => p.BasePriceMonthly)
+            .SumAsync();
+
+        _arr = _mrr * 12;
+
+        var monthStart = new DateTime(DateTime.UtcNow.Year, DateTime.UtcNow.Month, 1);
+        _paidThisMonth = await Db.Invoices
+            .AsNoTracking()
+            .Where(i => i.Status == InvoiceStatus.Paid && i.PaidAt.HasValue && i.PaidAt.Value >= monthStart)
+            .Select(i => i.TotalAmount)
+            .DefaultIfEmpty(0)
+            .SumAsync();
+
+        _overdueCount = await Db.Invoices
+            .AsNoTracking()
+            .CountAsync(i => i.Status == InvoiceStatus.Overdue);
+
+        _loading = false;
+    }
+}

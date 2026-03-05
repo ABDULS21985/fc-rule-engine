@@ -1,0 +1,134 @@
+@page "/subscription/modules"
+@attribute [Authorize(Policy = "InstitutionUser")]
+@using FC.Engine.Domain.Abstractions
+@inject ISubscriptionService SubscriptionService
+@inject ITenantContext TenantContext
+
+<PageTitle>Subscription Modules</PageTitle>
+
+<h1>Subscription Modules</h1>
+
+@if (_loading)
+{
+    <p>Loading modules...</p>
+}
+else if (_error is not null)
+{
+    <p class="text-danger">@_error</p>
+}
+else
+{
+    @if (!string.IsNullOrWhiteSpace(_message))
+    {
+        <p>@_message</p>
+    }
+
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Module</th>
+                <th>Eligibility</th>
+                <th>Plan Availability</th>
+                <th>Status</th>
+                <th>Monthly (NGN)</th>
+                <th>Action</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var module in _modules)
+            {
+                <tr>
+                    <td>@module.ModuleName (@module.ModuleCode)</td>
+                    <td>@(module.IsEligible ? "Eligible" : "Not Eligible")</td>
+                    <td>@(module.IsAvailableOnPlan ? "On Plan" : "Upgrade Required")</td>
+                    <td>@(module.IsActive ? "Active" : "Inactive")</td>
+                    <td>@(module.PriceMonthly?.ToString("N2") ?? "-")</td>
+                    <td>
+                        @if (module.IsActive)
+                        {
+                            <button @onclick="() => Deactivate(module.ModuleCode)">Deactivate</button>
+                        }
+                        else if (module.IsEligible && module.IsAvailableOnPlan)
+                        {
+                            <button @onclick="() => Activate(module.ModuleCode)">Activate</button>
+                        }
+                        else
+                        {
+                            <span>-</span>
+                        }
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    private bool _loading = true;
+    private string? _error;
+    private string? _message;
+    private Guid _tenantId;
+    private List<ModuleAvailability> _modules = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!TenantContext.CurrentTenantId.HasValue)
+        {
+            _error = "Tenant context not available.";
+            _loading = false;
+            return;
+        }
+
+        _tenantId = TenantContext.CurrentTenantId.Value;
+        await Load();
+    }
+
+    private async Task Load()
+    {
+        try
+        {
+            _modules = await SubscriptionService.GetAvailableModules(_tenantId);
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _loading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task Activate(string moduleCode)
+    {
+        _message = null;
+        _error = null;
+        try
+        {
+            await SubscriptionService.ActivateModule(_tenantId, moduleCode);
+            _message = $"Activated {moduleCode}.";
+            await Load();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+    }
+
+    private async Task Deactivate(string moduleCode)
+    {
+        _message = null;
+        _error = null;
+        try
+        {
+            await SubscriptionService.DeactivateModule(_tenantId, moduleCode);
+            _message = $"Deactivated {moduleCode}.";
+            await Load();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+    }
+}

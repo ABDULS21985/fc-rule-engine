@@ -37,10 +37,35 @@ public partial class AddSubscriptionBillingPlanManagement : Migration
                 ALTER TABLE dbo.subscription_plans ADD TrialDays INT NOT NULL CONSTRAINT DF_subscription_plans_TrialDays DEFAULT 14;
 
             IF COL_LENGTH('dbo.subscription_plans', 'Features') IS NOT NULL
-                ALTER TABLE dbo.subscription_plans ALTER COLUMN Features NVARCHAR(MAX) NULL;
+            BEGIN
+                DECLARE @featuresDefaultConstraint NVARCHAR(128);
+                SELECT @featuresDefaultConstraint = dc.name
+                FROM sys.default_constraints dc
+                INNER JOIN sys.columns c
+                    ON dc.parent_object_id = c.object_id
+                    AND dc.parent_column_id = c.column_id
+                WHERE dc.parent_object_id = OBJECT_ID('dbo.subscription_plans')
+                    AND c.name = 'Features';
 
-            UPDATE dbo.subscription_plans
-            SET MaxEntities = ISNULL(MaxEntities, ISNULL(MaxInstitutions, 1));
+                IF @featuresDefaultConstraint IS NOT NULL
+                    EXEC(N'ALTER TABLE dbo.subscription_plans DROP CONSTRAINT [' + @featuresDefaultConstraint + N'];');
+
+                ALTER TABLE dbo.subscription_plans ALTER COLUMN Features NVARCHAR(MAX) NULL;
+            END;
+
+            IF COL_LENGTH('dbo.subscription_plans', 'MaxEntities') IS NOT NULL
+            BEGIN
+                DECLARE @maxEntitiesBackfillSql NVARCHAR(MAX);
+                SET @maxEntitiesBackfillSql =
+                    N'UPDATE dbo.subscription_plans SET MaxEntities = ISNULL(MaxEntities, '
+                    + CASE
+                        WHEN COL_LENGTH('dbo.subscription_plans', 'MaxInstitutions') IS NOT NULL
+                            THEN N'ISNULL(MaxInstitutions, 1)'
+                        ELSE N'1'
+                      END
+                    + N');';
+                EXEC sp_executesql @maxEntitiesBackfillSql;
+            END;
         ");
 
         migrationBuilder.Sql(@"
@@ -53,32 +78,32 @@ public partial class AddSubscriptionBillingPlanManagement : Migration
                 ('STARTER', 'Starter',
                  'Basic dashboard, email notifications, starter module bundle.',
                  1, 2, 10, 1, 0, 500, 150000.00, 1500000.00, 14,
-                 '["dashboard_basic","email_notifications"]', 1, 1),
+                 '[""dashboard_basic"",""email_notifications""]', 1, 1),
 
                 ('PROFESSIONAL', 'Professional',
                  'API access, Excel bulk upload, SMS notifications, multi-module operations.',
                  2, 5, 25, 3, 100000, 1024, 350000.00, 3500000.00, 14,
-                 '["dashboard_basic","email_notifications","api_access","excel_bulk_upload","sms_notifications"]', 1, 2),
+                 '[""dashboard_basic"",""email_notifications"",""api_access"",""excel_bulk_upload"",""sms_notifications""]', 1, 2),
 
                 ('ENTERPRISE', 'Enterprise',
                  'SSO, custom domain, advanced report builder, enterprise support.',
                  3, 10, 50, 10, 500000, 5120, 750000.00, 7500000.00, 14,
-                 '["dashboard_basic","email_notifications","api_access","excel_bulk_upload","sms_notifications","sso","custom_domain","report_builder"]', 1, 3),
+                 '[""dashboard_basic"",""email_notifications"",""api_access"",""excel_bulk_upload"",""sms_notifications"",""sso"",""custom_domain"",""report_builder""]', 1, 3),
 
                 ('GROUP', 'Group',
                  'Consolidation, benchmarking, dedicated support for holding structures.',
                  4, 14, 100, 25, 1000000, 10240, 1500000.00, 15000000.00, 14,
-                 '["all_features","consolidation","benchmarking","dedicated_support"]', 1, 4),
+                 '[""all_features"",""consolidation"",""benchmarking"",""dedicated_support""]', 1, 4),
 
                 ('REGULATOR', 'Regulator',
                  'Regulator workspace with sector analytics and supervision tooling. Custom commercial terms apply.',
                  5, 1000, 5000, 1000, 0, 20480, 0.00, 0.00, 0,
-                 '["all_features","sector_analytics","examination_workspace"]', 1, 5),
+                 '[""all_features"",""sector_analytics"",""examination_workspace""]', 1, 5),
 
                 ('WHITE_LABEL', 'White Label',
                  'Full white-label partner management with custom commercial terms.',
                  6, 1000, 5000, 5000, 0, 51200, 0.00, 0.00, 0,
-                 '["all_features","white_label","partner_management","custom_branding"]', 1, 6);
+                 '[""all_features"",""white_label"",""partner_management"",""custom_branding""]', 1, 6);
         ");
 
         // ───────────────────────────────────────────────────────────

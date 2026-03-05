@@ -1,0 +1,73 @@
+@page "/subscription/payments"
+@attribute [Authorize(Policy = "InstitutionUser")]
+@using FC.Engine.Domain.Abstractions
+@inject ISubscriptionService SubscriptionService
+@inject ITenantContext TenantContext
+
+<PageTitle>Payment History</PageTitle>
+
+<h1>Payment History</h1>
+
+@if (_loading)
+{
+    <p>Loading payments...</p>
+}
+else if (_error is not null)
+{
+    <p class="text-danger">@_error</p>
+}
+else
+{
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Date</th>
+                <th>Method</th>
+                <th>Reference</th>
+                <th>Status</th>
+                <th>Amount (NGN)</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var payment in _payments)
+            {
+                <tr>
+                    <td>@payment.CreatedAt.ToString("yyyy-MM-dd HH:mm")</td>
+                    <td>@payment.PaymentMethod</td>
+                    <td>@(payment.PaymentReference ?? "-")</td>
+                    <td>@payment.Status</td>
+                    <td>@payment.Amount.ToString("N2")</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    private bool _loading = true;
+    private string? _error;
+    private List<FC.Engine.Domain.Entities.Payment> _payments = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!TenantContext.CurrentTenantId.HasValue)
+        {
+            _error = "Tenant context not available.";
+            _loading = false;
+            return;
+        }
+
+        try
+        {
+            _payments = await SubscriptionService.GetPayments(TenantContext.CurrentTenantId.Value, 1, 100);
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+}

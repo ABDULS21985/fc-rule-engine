@@ -1,0 +1,64 @@
+@page "/billing/plans"
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize(Policy = "PlatformAdmin")]
+@using FC.Engine.Infrastructure.Metadata
+@using Microsoft.EntityFrameworkCore
+@inject MetadataDbContext Db
+
+<PageTitle>Billing Plans</PageTitle>
+
+<h1>Subscription Plans</h1>
+
+@if (_loading)
+{
+    <p>Loading plans...</p>
+}
+else
+{
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Code</th>
+                <th>Name</th>
+                <th>Tier</th>
+                <th>Monthly (NGN)</th>
+                <th>Annual (NGN)</th>
+                <th>Max Modules</th>
+                <th>Max Users</th>
+                <th>Max Entities</th>
+                <th>Active</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var plan in _plans)
+            {
+                <tr>
+                    <td>@plan.PlanCode</td>
+                    <td>@plan.PlanName</td>
+                    <td>@plan.Tier</td>
+                    <td>@plan.BasePriceMonthly.ToString("N2")</td>
+                    <td>@plan.BasePriceAnnual.ToString("N2")</td>
+                    <td>@plan.MaxModules</td>
+                    <td>@plan.MaxUsersPerEntity</td>
+                    <td>@plan.MaxEntities</td>
+                    <td>@(plan.IsActive ? "Yes" : "No")</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    private bool _loading = true;
+    private List<FC.Engine.Domain.Entities.SubscriptionPlan> _plans = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        _plans = await Db.SubscriptionPlans
+            .AsNoTracking()
+            .OrderBy(p => p.DisplayOrder)
+            .ThenBy(p => p.PlanCode)
+            .ToListAsync();
+        _loading = false;
+    }
+}

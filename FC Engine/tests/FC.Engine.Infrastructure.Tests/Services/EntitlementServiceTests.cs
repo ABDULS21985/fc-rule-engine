@@ -99,6 +99,94 @@ public class EntitlementServiceTests : IDisposable
         _db.SaveChanges();
     }
 
+    private int SeedPlan(
+        string code = "STARTER",
+        string features = "[\"xml_submission\",\"validation\",\"reporting\"]",
+        int maxModules = 10)
+    {
+        var existing = _db.SubscriptionPlans.FirstOrDefault(p => p.PlanCode == code);
+        if (existing is not null)
+        {
+            return existing.Id;
+        }
+
+        var plan = new SubscriptionPlan
+        {
+            PlanCode = code,
+            PlanName = code,
+            Tier = 1,
+            MaxModules = maxModules,
+            MaxUsersPerEntity = 10,
+            MaxEntities = 1,
+            MaxApiCallsPerMonth = 0,
+            MaxStorageMb = 500,
+            BasePriceMonthly = 100000,
+            BasePriceAnnual = 1000000,
+            TrialDays = 14,
+            Features = features,
+            IsActive = true,
+            DisplayOrder = 1
+        };
+        _db.SubscriptionPlans.Add(plan);
+        _db.SaveChanges();
+        return plan.Id;
+    }
+
+    private int SeedSubscription(Guid tenantId, string planCode = "STARTER", SubscriptionStatus status = SubscriptionStatus.Active)
+    {
+        var planId = SeedPlan(planCode);
+
+        var sub = new Subscription
+        {
+            TenantId = tenantId,
+            PlanId = planId,
+            BillingFrequency = BillingFrequency.Monthly,
+            CurrentPeriodStart = DateTime.UtcNow,
+            CurrentPeriodEnd = DateTime.UtcNow.AddMonths(1),
+            TrialEndsAt = DateTime.UtcNow.AddDays(14),
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        };
+
+        if (status == SubscriptionStatus.Active)
+        {
+            sub.Activate();
+        }
+        else if (status == SubscriptionStatus.PastDue)
+        {
+            sub.Activate();
+            sub.MarkPastDue();
+        }
+        else if (status == SubscriptionStatus.Suspended)
+        {
+            sub.Activate();
+            sub.MarkPastDue();
+            sub.Suspend();
+        }
+        else if (status == SubscriptionStatus.Expired)
+        {
+            sub.Expire();
+        }
+
+        _db.Subscriptions.Add(sub);
+        _db.SaveChanges();
+        return sub.Id;
+    }
+
+    private void ActivateSubscriptionModule(int subscriptionId, string moduleCode)
+    {
+        var module = _db.Modules.First(m => m.ModuleCode == moduleCode);
+        _db.SubscriptionModules.Add(new SubscriptionModule
+        {
+            SubscriptionId = subscriptionId,
+            ModuleId = module.Id,
+            PriceMonthly = 1000,
+            PriceAnnual = 10000,
+            IsActive = true
+        });
+        _db.SaveChanges();
+    }
+
     // ── Tests ──
 
     [Fact]
@@ -107,6 +195,8 @@ public class EntitlementServiceTests : IDisposable
         SeedModule("FC_RETURNS", "FC Returns", "CBN", 103);
         var tenantId = SeedTenantWithLicences("FC");
         SeedMatrixEntry("FC", "FC_RETURNS", isRequired: true);
+        var subId = SeedSubscription(tenantId);
+        ActivateSubscriptionModule(subId, "FC_RETURNS");
 
         var result = await _sut.ResolveEntitlements(tenantId);
 
@@ -123,6 +213,9 @@ public class EntitlementServiceTests : IDisposable
         var tenantId = SeedTenantWithLicences("BDC");
         SeedMatrixEntry("BDC", "BDC_CBN", isRequired: true);
         SeedMatrixEntry("BDC", "NFIU_AML", isRequired: true);
+        var subId = SeedSubscription(tenantId);
+        ActivateSubscriptionModule(subId, "BDC_CBN");
+        ActivateSubscriptionModule(subId, "NFIU_AML");
 
         var result = await _sut.ResolveEntitlements(tenantId);
 
@@ -143,6 +236,10 @@ public class EntitlementServiceTests : IDisposable
         SeedMatrixEntry("FC", "NFIU_AML", isRequired: false);
         SeedMatrixEntry("BDC", "BDC_CBN", isRequired: true);
         SeedMatrixEntry("BDC", "NFIU_AML", isRequired: true);
+        var subId = SeedSubscription(tenantId);
+        ActivateSubscriptionModule(subId, "FC_RETURNS");
+        ActivateSubscriptionModule(subId, "BDC_CBN");
+        ActivateSubscriptionModule(subId, "NFIU_AML");
 
         var result = await _sut.ResolveEntitlements(tenantId);
 
@@ -158,6 +255,7 @@ public class EntitlementServiceTests : IDisposable
         tenant.Activate();
         _db.Tenants.Add(tenant);
         _db.SaveChanges();
+        SeedSubscription(tenant.TenantId);
 
         var result = await _sut.ResolveEntitlements(tenant.TenantId);
 
@@ -171,6 +269,8 @@ public class EntitlementServiceTests : IDisposable
         SeedModule("FC_RETURNS", "FC Returns", "CBN");
         var tenantId = SeedTenantWithLicences("FC");
         SeedMatrixEntry("FC", "FC_RETURNS");
+        var subId = SeedSubscription(tenantId);
+        ActivateSubscriptionModule(subId, "FC_RETURNS");
 
         var first = await _sut.ResolveEntitlements(tenantId);
         var second = await _sut.ResolveEntitlements(tenantId);
@@ -185,6 +285,8 @@ public class EntitlementServiceTests : IDisposable
         SeedModule("FC_RETURNS", "FC Returns", "CBN");
         var tenantId = SeedTenantWithLicences("FC");
         SeedMatrixEntry("FC", "FC_RETURNS");
+        var subId = SeedSubscription(tenantId);
+        ActivateSubscriptionModule(subId, "FC_RETURNS");
 
         var first = await _sut.ResolveEntitlements(tenantId);
         await _sut.InvalidateCache(tenantId);
@@ -200,6 +302,8 @@ public class EntitlementServiceTests : IDisposable
         SeedModule("FC_RETURNS", "FC Returns", "CBN");
         var tenantId = SeedTenantWithLicences("FC");
         SeedMatrixEntry("FC", "FC_RETURNS");
+        var subId = SeedSubscription(tenantId);
+        ActivateSubscriptionModule(subId, "FC_RETURNS");
 
         var result = await _sut.HasModuleAccess(tenantId, "FC_RETURNS");
 
@@ -213,6 +317,8 @@ public class EntitlementServiceTests : IDisposable
         SeedModule("BDC_CBN", "BDC Returns", "CBN");
         var tenantId = SeedTenantWithLicences("FC");
         SeedMatrixEntry("FC", "FC_RETURNS");
+        var subId = SeedSubscription(tenantId);
+        ActivateSubscriptionModule(subId, "FC_RETURNS");
 
         var result = await _sut.HasModuleAccess(tenantId, "BDC_CBN");
 
@@ -225,6 +331,8 @@ public class EntitlementServiceTests : IDisposable
         SeedModule("FC_RETURNS", "FC Returns", "CBN");
         var tenantId = SeedTenantWithLicences("FC");
         SeedMatrixEntry("FC", "FC_RETURNS");
+        var subId = SeedSubscription(tenantId);
+        ActivateSubscriptionModule(subId, "FC_RETURNS");
 
         var result = await _sut.HasModuleAccess(tenantId, "fc_returns");
 
@@ -232,22 +340,37 @@ public class EntitlementServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task HasFeatureAccess_ReturnsDefaultFeatures()
+    public async Task HasFeatureAccess_ReturnsPlanFeatures()
     {
         var tenant = Tenant.Create("Test", "test-feat", TenantType.Institution);
         tenant.Activate();
         _db.Tenants.Add(tenant);
         _db.SaveChanges();
+        SeedPlan("PROFESSIONAL", "[\"xml_submission\",\"api_access\",\"sso\"]");
+        SeedSubscription(tenant.TenantId, "PROFESSIONAL");
 
         var xmlSub = await _sut.HasFeatureAccess(tenant.TenantId, "xml_submission");
-        var validation = await _sut.HasFeatureAccess(tenant.TenantId, "validation");
-        var reporting = await _sut.HasFeatureAccess(tenant.TenantId, "reporting");
+        var api = await _sut.HasFeatureAccess(tenant.TenantId, "api_access");
+        var sso = await _sut.HasFeatureAccess(tenant.TenantId, "sso");
         var unknown = await _sut.HasFeatureAccess(tenant.TenantId, "unknown_feature");
 
         xmlSub.Should().BeTrue();
-        validation.Should().BeTrue();
-        reporting.Should().BeTrue();
+        api.Should().BeTrue();
+        sso.Should().BeTrue();
         unknown.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task ResolveEntitlements_NoSubscription_ReturnsNoActiveModules()
+    {
+        SeedModule("FC_RETURNS", "FC Returns", "CBN");
+        var tenantId = SeedTenantWithLicences("FC");
+        SeedMatrixEntry("FC", "FC_RETURNS");
+
+        var result = await _sut.ResolveEntitlements(tenantId);
+
+        result.EligibleModules.Should().ContainSingle();
+        result.ActiveModules.Should().BeEmpty();
     }
 
     [Fact]

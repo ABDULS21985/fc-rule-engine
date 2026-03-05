@@ -578,10 +578,12 @@ public class SubscriptionService : ISubscriptionService
             .Select(t => t.LicenceTypeId)
             .ToListAsync(ct);
 
-        return await _db.LicenceModuleMatrix
+        var requiredModuleIds = await _db.LicenceModuleMatrix
             .Where(m => licenceIds.Contains(m.LicenceTypeId) && m.IsRequired)
             .Select(m => m.ModuleId)
-            .ToHashSetAsync(ct);
+            .ToListAsync(ct);
+
+        return requiredModuleIds.ToHashSet();
     }
 
     private async Task<Dictionary<int, bool>> GetEligibilityMap(Guid tenantId, CancellationToken ct)

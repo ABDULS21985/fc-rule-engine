@@ -32,7 +32,12 @@ public class TenantOnboardingServiceTests : IDisposable
 
         var cache = new MemoryCache(new MemoryCacheOptions());
         var entitlementService = new EntitlementService(_db, cache, NullLogger<EntitlementService>.Instance);
-        _sut = new TenantOnboardingService(_db, entitlementService, NullLogger<TenantOnboardingService>.Instance);
+        var subscriptionService = new SubscriptionService(_db, entitlementService, NullLogger<SubscriptionService>.Instance);
+        _sut = new TenantOnboardingService(
+            _db,
+            entitlementService,
+            subscriptionService,
+            NullLogger<TenantOnboardingService>.Instance);
     }
 
     public void Dispose()
@@ -100,6 +105,44 @@ public class TenantOnboardingServiceTests : IDisposable
             IsRequired = true,
             IsOptional = false
         });
+
+        var starter = new SubscriptionPlan
+        {
+            PlanCode = "STARTER",
+            PlanName = "Starter",
+            Tier = 1,
+            MaxModules = 2,
+            MaxUsersPerEntity = 10,
+            MaxEntities = 1,
+            MaxApiCallsPerMonth = 0,
+            MaxStorageMb = 500,
+            BasePriceMonthly = 150000,
+            BasePriceAnnual = 1500000,
+            TrialDays = 14,
+            IsActive = true,
+            DisplayOrder = 1,
+            Features = "[\"dashboard_basic\"]"
+        };
+        _db.SubscriptionPlans.Add(starter);
+        _db.SaveChanges();
+
+        _db.PlanModulePricing.AddRange(
+            new PlanModulePricing
+            {
+                PlanId = starter.Id,
+                ModuleId = fcModule.Id,
+                PriceMonthly = 0,
+                PriceAnnual = 0,
+                IsIncludedInBase = true
+            },
+            new PlanModulePricing
+            {
+                PlanId = starter.Id,
+                ModuleId = bdcModule.Id,
+                PriceMonthly = 50000,
+                PriceAnnual = 500000,
+                IsIncludedInBase = false
+            });
         _db.SaveChanges();
     }
 

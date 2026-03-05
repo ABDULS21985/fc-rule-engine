@@ -43,7 +43,9 @@ public class EntitlementAndOnboardingTests : IAsyncLifetime
         await conn.ExecuteAsync(@"
             DELETE FROM dbo.portal_notifications WHERE TenantId IN @TenantIds;
             DELETE FROM dbo.return_periods WHERE TenantId IN @TenantIds;
-            DELETE FROM dbo.institution_users WHERE TenantId IN @TenantIds;
+            DELETE FROM meta.institution_users WHERE TenantId IN @TenantIds;
+            DELETE FROM dbo.subscription_modules WHERE SubscriptionId IN (SELECT Id FROM dbo.subscriptions WHERE TenantId IN @TenantIds);
+            DELETE FROM dbo.subscriptions WHERE TenantId IN @TenantIds;
             DELETE FROM dbo.institutions WHERE TenantId IN @TenantIds;
             DELETE FROM dbo.tenant_licence_types WHERE TenantId IN @TenantIds;
             DELETE FROM dbo.tenants WHERE TenantId IN @TenantIds;
@@ -55,6 +57,7 @@ public class EntitlementAndOnboardingTests : IAsyncLifetime
     {
         var tenantId = await CreateTenantAsync("rg02-int-bdc");
         await AssignLicenceAsync(tenantId, "BDC");
+        await CreateSubscriptionAndActivateRequiredModulesAsync(tenantId);
 
         await using var db = CreateDbContext();
         using var cache = new MemoryCache(new MemoryCacheOptions());
@@ -73,6 +76,7 @@ public class EntitlementAndOnboardingTests : IAsyncLifetime
     {
         var tenantId = await CreateTenantAsync("rg02-int-dmb");
         await AssignLicenceAsync(tenantId, "DMB");
+        await CreateSubscriptionAndActivateRequiredModulesAsync(tenantId);
 
         await using var db = CreateDbContext();
         using var cache = new MemoryCache(new MemoryCacheOptions());
@@ -91,6 +95,7 @@ public class EntitlementAndOnboardingTests : IAsyncLifetime
         var tenantId = await CreateTenantAsync("rg02-int-multi");
         await AssignLicenceAsync(tenantId, "BDC");
         await AssignLicenceAsync(tenantId, "FC");
+        await CreateSubscriptionAndActivateRequiredModulesAsync(tenantId);
 
         await using var db = CreateDbContext();
         using var cache = new MemoryCache(new MemoryCacheOptions());
@@ -107,6 +112,7 @@ public class EntitlementAndOnboardingTests : IAsyncLifetime
     {
         var tenantId = await CreateTenantAsync("rg02-int-cache");
         await AssignLicenceAsync(tenantId, "BDC");
+        await CreateSubscriptionAndActivateRequiredModulesAsync(tenantId);
 
         await using var db = CreateDbContext();
         using var cache = new MemoryCache(new MemoryCacheOptions());
@@ -117,6 +123,7 @@ public class EntitlementAndOnboardingTests : IAsyncLifetime
         before.ActiveModules.Select(m => m.ModuleCode).Should().NotContain("FC_RETURNS");
 
         await AssignLicenceAsync(tenantId, "FC");
+        await ActivateModuleAsync(tenantId, "FC_RETURNS");
         await sut.InvalidateCache(tenantId);
 
         var after = await sut.ResolveEntitlements(tenantId);
@@ -129,7 +136,12 @@ public class EntitlementAndOnboardingTests : IAsyncLifetime
         await using var db = CreateDbContext();
         using var cache = new MemoryCache(new MemoryCacheOptions());
         var entitlementService = new EntitlementService(db, cache, NullLogger<EntitlementService>.Instance);
-        var sut = new TenantOnboardingService(db, entitlementService, NullLogger<TenantOnboardingService>.Instance);
+        var subscriptionService = new SubscriptionService(db, entitlementService, NullLogger<SubscriptionService>.Instance);
+        var sut = new TenantOnboardingService(
+            db,
+            entitlementService,
+            subscriptionService,
+            NullLogger<TenantOnboardingService>.Instance);
 
         var slug = $"rg02-bdc-{Guid.NewGuid():N}"[..20];
         var request = new TenantOnboardingRequest
@@ -177,7 +189,12 @@ public class EntitlementAndOnboardingTests : IAsyncLifetime
         await using var db = CreateDbContext();
         using var cache = new MemoryCache(new MemoryCacheOptions());
         var entitlementService = new EntitlementService(db, cache, NullLogger<EntitlementService>.Instance);
-        var sut = new TenantOnboardingService(db, entitlementService, NullLogger<TenantOnboardingService>.Instance);
+        var subscriptionService = new SubscriptionService(db, entitlementService, NullLogger<SubscriptionService>.Instance);
+        var sut = new TenantOnboardingService(
+            db,
+            entitlementService,
+            subscriptionService,
+            NullLogger<TenantOnboardingService>.Instance);
 
         var fixedSlug = $"rg02-dup-{Guid.NewGuid():N}"[..20];
 
@@ -272,5 +289,44 @@ public class EntitlementAndOnboardingTests : IAsyncLifetime
         });
 
         await db.SaveChangesAsync();
+    }
+
+    private async Task CreateSubscriptionAndActivateRequiredModulesAsync(Guid tenantId)
+    {
+        await using var db = CreateDbContext();
+        using var cache = new MemoryCache(new MemoryCacheOptions());
+        var entitlementService = new EntitlementService(db, cache, NullLogger<EntitlementService>.Instance);
+        var subscriptionService = new SubscriptionService(db, entitlementService, NullLogger<SubscriptionService>.Instance);
+
+        // GROUP guarantees pricing availability for all seeded modules in RG-03.
+        await subscriptionService.CreateSubscription(tenantId, "GROUP", BillingFrequency.Monthly);
+
+        var licenceTypeIds = await db.TenantLicenceTypes
+            .Where(t => t.TenantId == tenantId && t.IsActive)
+            .Select(t => t.LicenceTypeId)
+            .ToListAsync();
+
+        var requiredModuleCodes = await db.LicenceModuleMatrix
+            .Where(m => licenceTypeIds.Contains(m.LicenceTypeId) && m.IsRequired)
+            .Join(db.Modules, m => m.ModuleId, mod => mod.Id, (m, mod) => mod.ModuleCode)
+            .Distinct()
+            .ToListAsync();
+
+        foreach (var moduleCode in requiredModuleCodes)
+        {
+            await subscriptionService.ActivateModule(tenantId, moduleCode);
+        }
+
+        await entitlementService.InvalidateCache(tenantId);
+    }
+
+    private async Task ActivateModuleAsync(Guid tenantId, string moduleCode)
+    {
+        await using var db = CreateDbContext();
+        using var cache = new MemoryCache(new MemoryCacheOptions());
+        var entitlementService = new EntitlementService(db, cache, NullLogger<EntitlementService>.Instance);
+        var subscriptionService = new SubscriptionService(db, entitlementService, NullLogger<SubscriptionService>.Instance);
+        await subscriptionService.ActivateModule(tenantId, moduleCode);
+        await entitlementService.InvalidateCache(tenantId);
     }
 }
