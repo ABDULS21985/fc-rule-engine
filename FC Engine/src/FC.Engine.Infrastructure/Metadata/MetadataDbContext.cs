@@ -83,6 +83,8 @@ public class MetadataDbContext : DbContext
 
     // Audit
     public DbSet<AuditLogEntry> AuditLog => Set<AuditLogEntry>();
+    public DbSet<FieldChangeHistory> FieldChangeHistory => Set<FieldChangeHistory>();
+    public DbSet<EvidencePackage> EvidencePackages => Set<EvidencePackage>();
     public DbSet<DdlMigrationRecord> DdlMigrations => Set<DdlMigrationRecord>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -156,6 +158,15 @@ public class AuditLogEntry
     public DateTime PerformedAt { get; set; }
     public string? IpAddress { get; set; }
     public Guid? CorrelationId { get; set; }
+
+    /// <summary>SHA-256 hash of this entry's canonical representation.</summary>
+    public string Hash { get; set; } = string.Empty;
+
+    /// <summary>Hash of the previous entry in the chain, or "GENESIS" for the first entry.</summary>
+    public string PreviousHash { get; set; } = "GENESIS";
+
+    /// <summary>Sequential counter per tenant for chain ordering.</summary>
+    public long SequenceNumber { get; set; }
 }
 
 // DDL migration record

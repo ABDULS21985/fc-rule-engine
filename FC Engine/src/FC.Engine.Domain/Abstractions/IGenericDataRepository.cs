@@ -20,5 +20,6 @@ public interface IGenericDataRepository
         object? value,
         string? dataSource = null,
         string? sourceDetail = null,
+        string? changedBy = null,
         CancellationToken ct = default);
 }

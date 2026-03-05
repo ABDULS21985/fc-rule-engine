@@ -1,5 +1,6 @@
 using System.Reflection;
 using System.Security.Cryptography;
+using System.IO.Compression;
 using System.Text;
 using System.Xml;
 using System.Xml.Linq;
@@ -738,9 +739,60 @@ public class ExportEngineTests
             brandingService.Object);
 
         var bytes = await adapter.Package(submission, ExportFormat.Excel);
+        using var zipStream = new MemoryStream(bytes);
+        using var archive = new ZipArchive(zipStream, ZipArchiveMode.Read);
 
-        using var workbook = new XLWorkbook(new MemoryStream(bytes));
+        archive.Entries.Should().Contain(x => x.FullName.EndsWith(".xlsx", StringComparison.OrdinalIgnoreCase));
+        archive.Entries.Should().Contain(x => x.FullName.EndsWith(".xml", StringComparison.OrdinalIgnoreCase));
+        archive.Entries.Should().Contain(x => string.Equals(x.FullName, "manifest.json", StringComparison.OrdinalIgnoreCase));
+
+        var excelEntry = archive.Entries.First(x => x.FullName.EndsWith(".xlsx", StringComparison.OrdinalIgnoreCase));
+        using var excelStream = excelEntry.Open();
+        using var workbook = new XLWorkbook(excelStream);
         workbook.Worksheets.First().Cell("A1").GetString().Should().Be("CBN eFASS");
+    }
+
+    [Fact]
+    public async Task NFIU_GoAML_Adapter_Fails_Without_Transaction_Rows()
+    {
+        var tenantId = Guid.NewGuid();
+        var submission = BuildSubmission(tenantId, "NFIU-STR");
+        submission.Institution = new Institution
+        {
+            TenantId = tenantId,
+            InstitutionCode = "NFIU001",
+            InstitutionName = "NFIU Demo Bank",
+            IsActive = true
+        };
+
+        var template = BuildTemplate(
+            returnCode: "NFIU-STR",
+            moduleId: 33,
+            fields:
+            [
+                new TemplateField
+                {
+                    FieldName = "txn_amount",
+                    DisplayName = "Transaction Amount",
+                    XmlElementName = "TransactionAmount",
+                    FieldOrder = 1,
+                    DataType = FieldDataType.Money
+                }
+            ]);
+
+        var cache = new Mock<ITemplateMetadataCache>();
+        cache.Setup(x => x.GetPublishedTemplate(tenantId, "NFIU-STR", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(template);
+
+        var dataRepo = new Mock<IGenericDataRepository>();
+        dataRepo.Setup(x => x.GetBySubmission("NFIU-STR", submission.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ReturnDataRecord("NFIU-STR", 1, StructuralCategory.MultiRow));
+
+        var adapter = new NfiuSubmissionAdapter(cache.Object, dataRepo.Object);
+        var act = () => adapter.Package(submission, ExportFormat.XML);
+
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*at least one transaction*");
     }
 
     [Fact]

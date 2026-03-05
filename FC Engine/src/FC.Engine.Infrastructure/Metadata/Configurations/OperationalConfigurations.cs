@@ -143,8 +143,46 @@ public class AuditLogConfiguration : IEntityTypeConfiguration<AuditLogEntry>
         builder.Property(a => a.Action).HasMaxLength(20).IsRequired();
         builder.Property(a => a.PerformedBy).HasMaxLength(100).IsRequired();
         builder.Property(a => a.IpAddress).HasMaxLength(45);
+        builder.Property(a => a.Hash).HasMaxLength(64).IsRequired();
+        builder.Property(a => a.PreviousHash).HasMaxLength(64).IsRequired();
+        builder.Property(a => a.SequenceNumber).IsRequired();
 
         builder.HasIndex(a => a.TenantId);
+        builder.HasIndex(a => new { a.TenantId, a.SequenceNumber })
+            .IsUnique()
+            .HasFilter("[SequenceNumber] > 0");
+    }
+}
+
+public class FieldChangeHistoryConfiguration : IEntityTypeConfiguration<FieldChangeHistory>
+{
+    public void Configure(EntityTypeBuilder<FieldChangeHistory> builder)
+    {
+        builder.ToTable("field_change_history", "meta");
+        builder.HasKey(f => f.Id);
+        builder.Property(f => f.TenantId).IsRequired();
+        builder.Property(f => f.ReturnCode).HasMaxLength(20).IsRequired();
+        builder.Property(f => f.FieldName).HasMaxLength(100).IsRequired();
+        builder.Property(f => f.ChangeSource).HasMaxLength(20).IsRequired();
+        builder.Property(f => f.SourceDetail).HasMaxLength(200);
+        builder.Property(f => f.ChangedBy).HasMaxLength(100).IsRequired();
+
+        builder.HasIndex(f => new { f.TenantId, f.SubmissionId, f.FieldName });
+    }
+}
+
+public class EvidencePackageConfiguration : IEntityTypeConfiguration<EvidencePackage>
+{
+    public void Configure(EntityTypeBuilder<EvidencePackage> builder)
+    {
+        builder.ToTable("evidence_packages", "meta");
+        builder.HasKey(e => e.Id);
+        builder.Property(e => e.TenantId).IsRequired();
+        builder.Property(e => e.PackageHash).HasMaxLength(64).IsRequired();
+        builder.Property(e => e.StoragePath).HasMaxLength(500).IsRequired();
+        builder.Property(e => e.GeneratedBy).HasMaxLength(100).IsRequired();
+
+        builder.HasIndex(e => new { e.TenantId, e.SubmissionId });
     }
 }
 
