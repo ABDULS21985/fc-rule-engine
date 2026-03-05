@@ -62,6 +62,7 @@ public class MetadataDbContext : DbContext
     public DbSet<InstitutionUser> InstitutionUsers => Set<InstitutionUser>();
     public DbSet<SubmissionApproval> SubmissionApprovals => Set<SubmissionApproval>();
     public DbSet<PortalNotification> PortalNotifications => Set<PortalNotification>();
+    public DbSet<ExportRequest> ExportRequests => Set<ExportRequest>();
 
     // Security
     public DbSet<LoginAttempt> LoginAttempts => Set<LoginAttempt>();

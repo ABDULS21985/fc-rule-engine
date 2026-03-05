@@ -65,6 +65,7 @@ public static class DependencyInjection
         services.AddScoped<IInstitutionRepository, InstitutionRepository>();
         services.AddScoped<ISubmissionApprovalRepository, SubmissionApprovalRepository>();
         services.AddScoped<IPortalNotificationRepository, PortalNotificationRepository>();
+        services.AddScoped<IExportRequestRepository, ExportRequestRepository>();
         services.AddScoped<IEmailTemplateRepository, EmailTemplateRepository>();
         services.AddScoped<INotificationPreferenceRepository, NotificationPreferenceRepository>();
         services.AddScoped<INotificationDeliveryRepository, NotificationDeliveryRepository>();
