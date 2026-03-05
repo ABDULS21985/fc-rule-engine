@@ -81,7 +81,11 @@ public class PdfExportGenerator : IExportGenerator
 
                     if (logoBytes is { Length: > 0 })
                     {
-                        row.ConstantItem(90).Height(50).AlignRight().Image(logoBytes);
+                        row.ConstantItem(90)
+                            .AlignRight()
+                            .Height(50)
+                            .Image(logoBytes)
+                            .FitArea();
                     }
                 });
 
@@ -120,6 +124,25 @@ public class PdfExportGenerator : IExportGenerator
                         }
                     });
 
+                    col.Item().PageBreak();
+                    col.Item().Text("Table of Contents").FontSize(16).Bold().FontColor(primaryColor);
+                    col.Item().Column(toc =>
+                    {
+                        toc.Spacing(2);
+                        toc.Item().Text("1. Cover");
+                        toc.Item().Text("2. Approval Chain");
+
+                        var index = 3;
+                        foreach (var dataset in templateData)
+                        {
+                            toc.Item().Text($"{index}. Data Sheet - {dataset.ReturnCode}");
+                            index++;
+                        }
+
+                        toc.Item().Text($"{index}. Validation Summary");
+                        toc.Item().Text($"{index + 1}. Digital Attestation");
+                    });
+
                     foreach (var dataset in templateData)
                     {
                         col.Item().PageBreak();
@@ -148,7 +171,13 @@ public class PdfExportGenerator : IExportGenerator
 
                 page.Footer().Row(row =>
                 {
-                    row.RelativeItem().Text(branding.CopyrightText ?? "RegOS")
+                    var footerText = branding.CopyrightText ?? "RegOS";
+                    if (!string.IsNullOrWhiteSpace(branding.WatermarkText))
+                    {
+                        footerText = $"{footerText} | Watermark: {branding.WatermarkText}";
+                    }
+
+                    row.RelativeItem().Text(footerText)
                         .FontSize(7)
                         .FontColor(Colors.Grey.Medium);
 

@@ -72,14 +72,16 @@ public class XmlExportGenerator : IExportGenerator
         var xml = new XDocument(new XDeclaration("1.0", "utf-8", "yes"), root);
         await ValidateAgainstSchema(template.ReturnCode, xml, ct);
 
-        await using var ms = new MemoryStream();
-        await using (var writer = XmlWriter.Create(ms, new XmlWriterSettings
+        using var ms = new MemoryStream();
+        using (var writer = XmlWriter.Create(ms, new XmlWriterSettings
         {
             Indent = true,
+            Async = false,
             Encoding = new System.Text.UTF8Encoding(false)
         }))
         {
-            xml.WriteTo(writer);
+            xml.Save(writer);
+            writer.Flush();
         }
 
         return ms.ToArray();
@@ -129,19 +131,33 @@ public class XmlExportGenerator : IExportGenerator
     private async Task ValidateAgainstSchema(string returnCode, XDocument xml, CancellationToken ct)
     {
         var schemaSet = await _xsdGenerator.GenerateSchema(returnCode, ct);
-        var errors = new List<string>();
+        var validationErrors = new List<string>();
+        var warnings = new List<string>();
 
         xml.Validate(schemaSet, (_, args) =>
         {
-            errors.Add(args.Message);
+            if (args.Severity == XmlSeverityType.Error)
+            {
+                validationErrors.Add(args.Message);
+            }
+            else
+            {
+                warnings.Add(args.Message);
+            }
         }, true);
 
-        if (errors.Count > 0)
+        if (warnings.Count > 0)
         {
             _logger.LogWarning(
-                "XML export validation warnings for {ReturnCode}: {Errors}",
+                "XML export validation warnings for {ReturnCode}: {Warnings}",
                 returnCode,
-                string.Join("; ", errors));
+                string.Join("; ", warnings));
+        }
+
+        if (validationErrors.Count > 0)
+        {
+            throw new XmlSchemaValidationException(
+                $"XML export failed schema validation for {returnCode}: {string.Join("; ", validationErrors)}");
         }
     }
 }
