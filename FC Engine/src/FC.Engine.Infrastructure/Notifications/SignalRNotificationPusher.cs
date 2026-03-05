@@ -1,4 +1,5 @@
 using FC.Engine.Domain.Abstractions;
+using FC.Engine.Domain.Enums;
 using FC.Engine.Infrastructure.Hubs;
 using FC.Engine.Infrastructure.Metadata;
 using Microsoft.EntityFrameworkCore;
@@ -42,8 +43,13 @@ public class SignalRNotificationPusher : INotificationPusher
 
     public async Task PushToRole(Guid tenantId, string role, NotificationPayload payload, CancellationToken ct = default)
     {
+        if (!Enum.TryParse<InstitutionRole>(role, true, out var parsedRole))
+        {
+            return;
+        }
+
         var userIds = await _db.InstitutionUsers
-            .Where(u => u.TenantId == tenantId && u.IsActive && u.Role.ToString() == role)
+            .Where(u => u.TenantId == tenantId && u.IsActive && u.Role == parsedRole)
             .Select(u => u.Id)
             .ToListAsync(ct);
 

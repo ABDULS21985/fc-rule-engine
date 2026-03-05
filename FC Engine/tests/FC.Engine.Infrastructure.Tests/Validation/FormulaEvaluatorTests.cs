@@ -390,6 +390,170 @@ public class FormulaEvaluatorTests
         errors.Should().BeEmpty();
     }
 
+    [Fact]
+    public async Task Evaluate_CustomFunction_CAR_Calculates_Correctly()
+    {
+        var record = CreateFixedRowRecord(new Dictionary<string, object?>
+        {
+            ["tier1"] = 8_000_000_000m,
+            ["tier2"] = 2_000_000_000m,
+            ["rwa"] = 50_000_000_000m,
+            ["car"] = 20m
+        });
+
+        var formula = new IntraSheetFormula
+        {
+            RuleCode = "CAR-001",
+            FormulaType = FormulaType.Custom,
+            TargetFieldName = "car",
+            OperandFields = "[\"tier1\",\"tier2\",\"rwa\"]",
+            CustomExpression = "FUNC:CAR(tier1,tier2,rwa)",
+            Severity = ValidationSeverity.Error,
+            IsActive = true
+        };
+        SetupCache("MFCR 300", formula);
+
+        var errors = await _evaluator.Evaluate(record);
+
+        errors.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Evaluate_CustomFunction_NPL_Ratio_Calculates_Correctly()
+    {
+        var record = CreateFixedRowRecord(new Dictionary<string, object?>
+        {
+            ["stage3"] = 5_000_000_000m,
+            ["total_loans"] = 100_000_000_000m,
+            ["npl_ratio"] = 5m
+        });
+
+        var formula = new IntraSheetFormula
+        {
+            RuleCode = "NPL-001",
+            FormulaType = FormulaType.Custom,
+            TargetFieldName = "npl_ratio",
+            OperandFields = "[\"stage3\",\"total_loans\"]",
+            CustomExpression = "FUNC:NPL_RATIO(stage3,total_loans)",
+            Severity = ValidationSeverity.Error,
+            IsActive = true
+        };
+        SetupCache("MFCR 300", formula);
+
+        var errors = await _evaluator.Evaluate(record);
+
+        errors.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Evaluate_CustomFunction_LCR_Calculates_Correctly()
+    {
+        var record = CreateFixedRowRecord(new Dictionary<string, object?>
+        {
+            ["hqla"] = 30_000_000_000m,
+            ["net_outflow_30d"] = 25_000_000_000m,
+            ["lcr"] = 120m
+        });
+
+        var formula = new IntraSheetFormula
+        {
+            RuleCode = "LCR-001",
+            FormulaType = FormulaType.Custom,
+            TargetFieldName = "lcr",
+            OperandFields = "[\"hqla\",\"net_outflow_30d\"]",
+            CustomExpression = "FUNC:LCR(hqla,net_outflow_30d)",
+            Severity = ValidationSeverity.Error,
+            IsActive = true
+        };
+        SetupCache("MFCR 300", formula);
+
+        var errors = await _evaluator.Evaluate(record);
+
+        errors.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Evaluate_CustomFunction_ECL_Calculates_Correctly()
+    {
+        var record = CreateFixedRowRecord(new Dictionary<string, object?>
+        {
+            ["pd"] = 0.05m,
+            ["lgd"] = 0.45m,
+            ["ead"] = 1_000_000_000m,
+            ["ecl"] = 22_500_000m
+        });
+
+        var formula = new IntraSheetFormula
+        {
+            RuleCode = "ECL-001",
+            FormulaType = FormulaType.Custom,
+            TargetFieldName = "ecl",
+            OperandFields = "[\"pd\",\"lgd\",\"ead\"]",
+            CustomExpression = "FUNC:ECL(pd,lgd,ead)",
+            Severity = ValidationSeverity.Error,
+            IsActive = true
+        };
+        SetupCache("MFCR 300", formula);
+
+        var errors = await _evaluator.Evaluate(record);
+
+        errors.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Evaluate_CustomFunction_OSS_Ratio_Calculates_Correctly()
+    {
+        var record = CreateFixedRowRecord(new Dictionary<string, object?>
+        {
+            ["operating_revenue"] = 110m,
+            ["total_expenses"] = 100m,
+            ["oss"] = 110m
+        });
+
+        var formula = new IntraSheetFormula
+        {
+            RuleCode = "OSS-001",
+            FormulaType = FormulaType.Custom,
+            TargetFieldName = "oss",
+            OperandFields = "[\"operating_revenue\",\"total_expenses\"]",
+            CustomExpression = "FUNC:OSS_RATIO(operating_revenue,total_expenses)",
+            Severity = ValidationSeverity.Error,
+            IsActive = true
+        };
+        SetupCache("MFCR 300", formula);
+
+        var errors = await _evaluator.Evaluate(record);
+
+        errors.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Evaluate_CustomFunction_RateBandCheck_OutsideBand_ShouldFail()
+    {
+        var record = CreateFixedRowRecord(new Dictionary<string, object?>
+        {
+            ["actual_rate"] = 2000m,
+            ["usd_rate_avg"] = 2000m
+        });
+
+        var formula = new IntraSheetFormula
+        {
+            RuleCode = "RATE-001",
+            FormulaType = FormulaType.Custom,
+            TargetFieldName = "usd_rate_avg",
+            OperandFields = "[\"actual_rate\"]",
+            CustomExpression = "FUNC:RATE_BAND_CHECK(actual_rate,reference_rate=1500,band_percent=10)",
+            Severity = ValidationSeverity.Warning,
+            IsActive = true
+        };
+        SetupCache("MFCR 300", formula);
+
+        var errors = await _evaluator.Evaluate(record);
+
+        errors.Should().ContainSingle();
+        errors[0].RuleId.Should().Be("RATE-001");
+    }
+
     private ReturnDataRecord CreateFixedRowRecord(Dictionary<string, object?> fields)
     {
         var record = new ReturnDataRecord("MFCR 300", 1, StructuralCategory.FixedRow);

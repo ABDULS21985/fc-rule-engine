@@ -250,7 +250,7 @@ public class TenantOnboardingService : ITenantOnboardingService
         {
             await transaction.RollbackAsync(ct);
             _logger.LogError(ex, "Tenant onboarding failed for {TenantName}", request.TenantName);
-            result.Errors.Add($"Onboarding failed: {ex.Message}");
+            result.Errors.Add($"Onboarding failed: {ex.Message} | Root cause: {ex.GetBaseException().Message}");
             return result;
         }
     }

@@ -16,12 +16,11 @@ public class PortalNotificationConfiguration : IEntityTypeConfiguration<PortalNo
         builder.Property(n => n.Title).HasMaxLength(200).IsRequired();
         builder.Property(n => n.Message).HasMaxLength(1000).IsRequired();
         builder.Property(n => n.Link).HasMaxLength(500);
-        builder.Property(n => n.EventType).HasMaxLength(80).IsRequired();
-        builder.Property(n => n.Channel).HasMaxLength(20).IsRequired()
-            .HasConversion<string>();
-        builder.Property(n => n.Priority).HasDefaultValue(NotificationPriority.Normal);
-        builder.Property(n => n.RecipientEmail).HasMaxLength(256);
-        builder.Property(n => n.RecipientPhone).HasMaxLength(32);
+        builder.Ignore(n => n.EventType);
+        builder.Ignore(n => n.Channel);
+        builder.Ignore(n => n.Priority);
+        builder.Ignore(n => n.RecipientEmail);
+        builder.Ignore(n => n.RecipientPhone);
         builder.Property(n => n.Metadata).HasColumnName("MetadataJson").HasMaxLength(4000);
         builder.Property(n => n.Type).HasMaxLength(30).IsRequired()
             .HasConversion<string>();
@@ -31,6 +30,6 @@ public class PortalNotificationConfiguration : IEntityTypeConfiguration<PortalNo
             .HasDatabaseName("IX_PortalNotification_UserQuery");
 
         builder.HasIndex(n => n.TenantId);
-        builder.HasIndex(n => new { n.TenantId, n.EventType, n.CreatedAt });
+        builder.HasIndex(n => new { n.TenantId, n.CreatedAt });
     }
 }

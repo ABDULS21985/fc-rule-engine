@@ -1,0 +1,257 @@
+@page "/settings/notifications"
+@using System.Security.Claims
+@using FC.Engine.Domain.Abstractions
+@using FC.Engine.Domain.Entities
+@using FC.Engine.Domain.Notifications
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Authorization
+@attribute [Authorize(Policy = "InstitutionUser")]
+@inject INotificationPreferenceRepository PreferenceRepository
+@inject ITenantContext TenantContext
+@inject AuthenticationStateProvider AuthStateProvider
+
+<PageTitle>Notification Preferences - FC Engine Portal</PageTitle>
+
+<div class="portal-page">
+    <div class="portal-page-header">
+        <div class="portal-page-header-main">
+            <h1 class="portal-page-title">Notification Preferences</h1>
+            <p class="portal-page-subtitle">Choose how you receive each notification event.</p>
+        </div>
+    </div>
+
+    @if (_isLoading)
+    {
+        <div class="portal-card portal-form-section">
+            <p>Loading notification preferences...</p>
+        </div>
+    }
+    else
+    {
+        <div class="portal-card portal-form-section" style="margin-bottom: 1rem;">
+            <h3 class="portal-form-section-title">SMS Quiet Hours (WAT)</h3>
+            <p class="portal-settings-section-desc">SMS notifications are muted during quiet hours for non-mandatory events.</p>
+            <div class="portal-form-grid" style="max-width: 400px;">
+                <div class="portal-form-group">
+                    <label class="portal-form-label" for="quietStart">Start</label>
+                    <input id="quietStart" type="time" class="portal-form-input" @bind="_quietStart" />
+                </div>
+                <div class="portal-form-group">
+                    <label class="portal-form-label" for="quietEnd">End</label>
+                    <input id="quietEnd" type="time" class="portal-form-input" @bind="_quietEnd" />
+                </div>
+            </div>
+        </div>
+
+        <div class="portal-card portal-form-section">
+            <h3 class="portal-form-section-title">Per-Event Preferences</h3>
+
+            @if (!string.IsNullOrWhiteSpace(_message))
+            {
+                <div class="portal-alert @(_isError ? "portal-alert-error" : "portal-alert-success")" role="alert">
+                    @_message
+                </div>
+            }
+
+            <div class="portal-table-wrap">
+                <table class="portal-table">
+                    <thead>
+                        <tr>
+                            <th>Event</th>
+                            <th>In-App</th>
+                            <th>Email</th>
+                            <th>SMS</th>
+                            <th>Mandatory</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var row in _rows)
+                        {
+                            <tr>
+                                <td>@row.DisplayName</td>
+                                <td>
+                                    <input type="checkbox" @bind="row.InAppEnabled" disabled="@row.IsMandatory" />
+                                </td>
+                                <td>
+                                    <input type="checkbox" @bind="row.EmailEnabled" disabled="@row.IsMandatory" />
+                                </td>
+                                <td>
+                                    <input type="checkbox" @bind="row.SmsEnabled" disabled="@row.IsMandatory" />
+                                </td>
+                                <td>
+                                    @(row.IsMandatory ? "Locked" : "-")
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="portal-settings-form-actions" style="margin-top: 1rem;">
+                <button class="portal-btn portal-btn-primary portal-btn-sm" @onclick="Save" disabled="@_isSaving">
+                    @(_isSaving ? "Saving..." : "Save Preferences")
+                </button>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private readonly List<PreferenceRow> _rows = new();
+    private bool _isLoading = true;
+    private bool _isSaving;
+    private bool _isError;
+    private string? _message;
+
+    private int _userId;
+    private Guid _tenantId;
+
+    private string _quietStart = "22:00";
+    private string _quietEnd = "07:00";
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+            var principal = authState.User;
+
+            int.TryParse(principal.FindFirst(ClaimTypes.NameIdentifier)?.Value, out _userId);
+
+            _tenantId = TenantContext.CurrentTenantId
+                ?? ParseTenantClaim(principal.FindFirst("TenantId")?.Value)
+                ?? ParseTenantClaim(principal.FindFirst("tid")?.Value)
+                ?? Guid.Empty;
+
+            if (_userId <= 0 || _tenantId == Guid.Empty)
+            {
+                _isError = true;
+                _message = "Unable to resolve user context for notification preferences.";
+                return;
+            }
+
+            var stored = await PreferenceRepository.GetByUser(_tenantId, _userId);
+            var byEvent = stored.ToDictionary(x => x.EventType, StringComparer.OrdinalIgnoreCase);
+
+            var quietStart = stored.Select(x => x.SmsQuietHoursStart).FirstOrDefault(x => x.HasValue) ?? new TimeSpan(22, 0, 0);
+            var quietEnd = stored.Select(x => x.SmsQuietHoursEnd).FirstOrDefault(x => x.HasValue) ?? new TimeSpan(7, 0, 0);
+            _quietStart = quietStart.ToString(@"hh\:mm");
+            _quietEnd = quietEnd.ToString(@"hh\:mm");
+
+            foreach (var eventType in NotificationEvents.All)
+            {
+                byEvent.TryGetValue(eventType, out var pref);
+
+                var isMandatory = NotificationPolicy.MandatoryEvents.Contains(eventType);
+                _rows.Add(new PreferenceRow
+                {
+                    EventType = eventType,
+                    DisplayName = GetDisplayName(eventType),
+                    IsMandatory = isMandatory,
+                    InAppEnabled = isMandatory || pref?.InAppEnabled != false,
+                    EmailEnabled = isMandatory || pref?.EmailEnabled != false,
+                    SmsEnabled = isMandatory || pref?.SmsEnabled == true
+                });
+            }
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private async Task Save()
+    {
+        if (_userId <= 0 || _tenantId == Guid.Empty)
+        {
+            _isError = true;
+            _message = "Cannot save preferences without a valid user context.";
+            return;
+        }
+
+        if (!TimeSpan.TryParse(_quietStart, out var quietStart) || !TimeSpan.TryParse(_quietEnd, out var quietEnd))
+        {
+            _isError = true;
+            _message = "Invalid quiet hours format.";
+            return;
+        }
+
+        _isSaving = true;
+        _isError = false;
+        _message = null;
+
+        try
+        {
+            var updates = _rows.Select(row => new NotificationPreference
+            {
+                TenantId = _tenantId,
+                UserId = _userId,
+                EventType = row.EventType,
+                InAppEnabled = row.IsMandatory || row.InAppEnabled,
+                EmailEnabled = row.IsMandatory || row.EmailEnabled,
+                SmsEnabled = row.IsMandatory || row.SmsEnabled,
+                SmsQuietHoursStart = quietStart,
+                SmsQuietHoursEnd = quietEnd
+            });
+
+            await PreferenceRepository.UpsertRange(updates);
+
+            _isError = false;
+            _message = "Notification preferences saved.";
+        }
+        catch (Exception ex)
+        {
+            _isError = true;
+            _message = $"Failed to save preferences: {ex.Message}";
+        }
+        finally
+        {
+            _isSaving = false;
+        }
+    }
+
+    private static Guid? ParseTenantClaim(string? raw)
+    {
+        return Guid.TryParse(raw, out var tenantId) ? tenantId : null;
+    }
+
+    private static string GetDisplayName(string eventType)
+    {
+        return eventType switch
+        {
+            NotificationEvents.ReturnCreated => "Return Created",
+            NotificationEvents.ReturnSubmittedForReview => "Return Submitted For Review",
+            NotificationEvents.ReturnApproved => "Return Approved",
+            NotificationEvents.ReturnRejected => "Return Rejected",
+            NotificationEvents.ReturnSubmittedToRegulator => "Return Submitted To Regulator",
+            NotificationEvents.ReturnQueryRaised => "Return Query Raised",
+            NotificationEvents.DeadlineT30 => "Deadline Reminder (T-30)",
+            NotificationEvents.DeadlineT14 => "Deadline Reminder (T-14)",
+            NotificationEvents.DeadlineT7 => "Deadline Reminder (T-7)",
+            NotificationEvents.DeadlineT3 => "Deadline Reminder (T-3)",
+            NotificationEvents.DeadlineT1 => "Deadline Reminder (T-1)",
+            NotificationEvents.DeadlineOverdue => "Deadline Overdue",
+            NotificationEvents.TrialExpiring => "Trial Expiring",
+            NotificationEvents.PaymentOverdue => "Payment Overdue",
+            NotificationEvents.SubscriptionSuspended => "Subscription Suspended",
+            NotificationEvents.ModuleActivated => "Module Activated",
+            NotificationEvents.UserInvited => "User Invited",
+            NotificationEvents.PasswordReset => "Password Reset",
+            NotificationEvents.MfaCodeSms => "MFA Code",
+            NotificationEvents.SystemAnnouncement => "System Announcement",
+            NotificationEvents.ExportReady => "Export Ready",
+            NotificationEvents.DataFlowCompleted => "Data Flow Completed",
+            _ => eventType
+        };
+    }
+
+    private sealed class PreferenceRow
+    {
+        public string EventType { get; set; } = string.Empty;
+        public string DisplayName { get; set; } = string.Empty;
+        public bool InAppEnabled { get; set; }
+        public bool EmailEnabled { get; set; }
+        public bool SmsEnabled { get; set; }
+        public bool IsMandatory { get; set; }
+    }
+}

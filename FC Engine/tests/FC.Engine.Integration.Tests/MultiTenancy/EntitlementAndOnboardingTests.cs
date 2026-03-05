@@ -164,7 +164,7 @@ public class EntitlementAndOnboardingTests : IAsyncLifetime
 
         var result = await sut.OnboardTenant(request);
 
-        result.Success.Should().BeTrue();
+        result.Success.Should().BeTrue($"errors: {string.Join(" | ", result.Errors)}");
         result.TenantId.Should().NotBeEmpty();
         _createdTenantIds.Add(result.TenantId);
 
@@ -215,7 +215,7 @@ public class EntitlementAndOnboardingTests : IAsyncLifetime
             InstitutionType = "BDC"
         });
 
-        first.Success.Should().BeTrue();
+        first.Success.Should().BeTrue($"errors: {string.Join(" | ", first.Errors)}");
         _createdTenantIds.Add(first.TenantId);
 
         var secondAdminEmail = $"dup-two-{Guid.NewGuid():N}@test.local";

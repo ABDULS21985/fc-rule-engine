@@ -97,7 +97,10 @@ public partial class ModuleImportService : IModuleImportService
             result.Errors.Add($"Duplicate ReturnCode '{dup}'.");
         }
 
-        var templateLookup = definition.Templates.ToDictionary(t => t.ReturnCode, StringComparer.OrdinalIgnoreCase);
+        var templateLookup = definition.Templates
+            .GroupBy(t => t.ReturnCode, StringComparer.OrdinalIgnoreCase)
+            .Select(g => g.First())
+            .ToDictionary(t => t.ReturnCode, StringComparer.OrdinalIgnoreCase);
         var dbReturnCodes = await _db.ReturnTemplates
             .Where(t => definition.Templates.Select(x => x.ReturnCode).Contains(t.ReturnCode))
             .Select(t => t.ReturnCode)
@@ -630,6 +633,11 @@ public partial class ModuleImportService : IModuleImportService
 
     private async Task EnsureRlsPolicyOnTable(string tableName, CancellationToken ct)
     {
+        if (!_db.Database.IsSqlServer())
+        {
+            return;
+        }
+
         var safeTableName = ValidateSqlIdentifier(tableName);
         var sql = $@"
             IF OBJECT_ID(N'dbo.TenantSecurityPolicy', N'SP') IS NOT NULL

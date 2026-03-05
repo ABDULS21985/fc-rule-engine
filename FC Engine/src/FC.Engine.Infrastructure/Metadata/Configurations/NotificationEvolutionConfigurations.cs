@@ -32,7 +32,7 @@ public class NotificationPreferenceConfiguration : IEntityTypeConfiguration<Noti
         builder.HasKey(x => x.Id);
 
         builder.Property(x => x.TenantId).IsRequired();
-        builder.Property(x => x.EventType).HasMaxLength(80).IsRequired();
+        builder.Property(x => x.EventType).HasMaxLength(50).IsRequired();
         builder.Property(x => x.InAppEnabled).HasDefaultValue(true);
         builder.Property(x => x.EmailEnabled).HasDefaultValue(true);
         builder.Property(x => x.SmsEnabled).HasDefaultValue(false);
@@ -52,7 +52,7 @@ public class NotificationDeliveryConfiguration : IEntityTypeConfiguration<Notifi
         builder.HasKey(x => x.Id);
 
         builder.Property(x => x.TenantId).IsRequired();
-        builder.Property(x => x.NotificationEventType).HasMaxLength(80).IsRequired();
+        builder.Property(x => x.NotificationEventType).HasMaxLength(50).IsRequired();
         builder.Property(x => x.Channel).HasMaxLength(10).IsRequired().HasConversion<string>();
         builder.Property(x => x.RecipientAddress).HasMaxLength(255).IsRequired();
         builder.Property(x => x.Status).HasMaxLength(20).IsRequired().HasConversion<string>();
