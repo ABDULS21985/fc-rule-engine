@@ -7,6 +7,7 @@
 @inject ISubmissionApprovalRepository ApprovalRepo
 @inject ApprovalService ApprovalSvc
 @inject ExportService ExportSvc
+@inject IExportEngine ExportEngine
 @inject IJSRuntime JS
 @inject NavigationManager Navigation
 
@@ -163,6 +164,80 @@
                 <span class="portal-validation-summary-count">@FormatDuration(submission.ProcessingDurationMs)</span>
                 <span class="portal-validation-summary-label">Processing Time</span>
             </div>
+        </div>
+
+        <div class="portal-card" style="padding: 1rem 1.25rem;">
+            <div style="display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; flex-wrap: wrap;">
+                <h3 class="portal-detail-section-title" style="margin: 0;">Export Return</h3>
+                <button class="portal-btn portal-btn-ghost portal-btn-sm" @onclick="LoadExportHistory">Refresh</button>
+            </div>
+
+            <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.85rem;">
+                <button class="portal-btn portal-btn-primary portal-btn-sm"
+                        disabled="@isRequestingExport"
+                        @onclick='() => RequestExport(ExportFormat.Excel)'>
+                    Export as Excel
+                </button>
+                <button class="portal-btn portal-btn-outline portal-btn-sm"
+                        disabled="@isRequestingExport"
+                        @onclick='() => RequestExport(ExportFormat.PDF)'>
+                    Export as PDF
+                </button>
+                <button class="portal-btn portal-btn-outline portal-btn-sm"
+                        disabled="@isRequestingExport"
+                        @onclick='() => RequestExport(ExportFormat.XML)'>
+                    Export as XML
+                </button>
+                <button class="portal-btn portal-btn-outline portal-btn-sm"
+                        disabled="@isRequestingExport"
+                        @onclick='() => RequestExport(ExportFormat.XBRL)'>
+                    Export as XBRL
+                </button>
+            </div>
+
+            @if (!string.IsNullOrWhiteSpace(exportStatusMessage))
+            {
+                <div class="portal-alert portal-alert-info" style="margin-top: 0.75rem;">@exportStatusMessage</div>
+            }
+
+            @if (exports.Any())
+            {
+                <div style="margin-top: 1rem;">
+                    <h4 style="margin: 0 0 0.5rem 0; font-size: 0.95rem;">Export History</h4>
+                    @foreach (var export in exports.OrderByDescending(x => x.RequestedAt))
+                    {
+                        <div style="display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; padding: 0.55rem 0; border-top: 1px solid #e5e7eb;">
+                            <div>
+                                <span class="portal-badge portal-badge-neutral">@export.Format</span>
+                                <span class="portal-badge @GetExportStatusBadgeClass(export.Status)">
+                                    @export.Status
+                                </span>
+                                <span style="font-size: 0.82rem; color: #6b7280; margin-left: 0.45rem;">
+                                    @export.RequestedAt.ToString("dd MMM yyyy HH:mm")
+                                </span>
+                            </div>
+                            <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
+                                @if (export.Status == ExportRequestStatus.Completed && !string.IsNullOrWhiteSpace(export.FilePath))
+                                {
+                                    <a href="/exports/@export.Id/download" class="portal-btn portal-btn-outline portal-btn-sm">
+                                        Download (@FormatFileSize(export.FileSize))
+                                    </a>
+                                    @if (!string.IsNullOrWhiteSpace(export.Sha256Hash))
+                                    {
+                                        <span class="portal-badge portal-badge-success" title="SHA-256: @export.Sha256Hash">
+                                            Verified
+                                        </span>
+                                    }
+                                }
+                                else if (export.Status == ExportRequestStatus.Failed)
+                                {
+                                    <span class="portal-badge portal-badge-danger" title="@export.ErrorMessage">Failed</span>
+                                }
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
         </div>
 
         <!-- ═══════════════════════════════════════════════════════
@@ -536,6 +611,7 @@
     private bool isChecker;
     private int institutionId;
     private int? currentUserId;
+    private Guid tenantId;
 
     private string activeTab = "all";
 
@@ -556,6 +632,9 @@
     private int warningCount;
     private int totalIssues;
     private bool showExportMenu;
+    private List<ExportRequest> exports = new();
+    private bool isRequestingExport;
+    private string? exportStatusMessage;
 
     protected override async Task OnInitializedAsync()
     {
@@ -564,6 +643,11 @@
         int.TryParse(instIdStr, out institutionId);
         var userIdStr = state.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         if (int.TryParse(userIdStr, out var uid)) currentUserId = uid;
+        var tenantIdStr = state.User.FindFirst("TenantId")?.Value;
+        if (Guid.TryParse(tenantIdStr, out var parsedTenantId))
+        {
+            tenantId = parsedTenantId;
+        }
         var role = state.User.FindFirst(ClaimTypes.Role)?.Value ?? "";
         isChecker = role == "Checker" || role == "Admin";
 
@@ -579,6 +663,7 @@
         if (submission is null || submission.InstitutionId != institutionId)
         {
             submission = null;
+            exports.Clear();
             isLoading = false;
             return;
         }
@@ -649,6 +734,8 @@
                 expandedCategories.Add(errorsByCategory.Keys.First());
             }
         }
+
+        await LoadExportHistory();
 
         isLoading = false;
     }
@@ -809,6 +896,46 @@
         }
     }
 
+    private async Task RequestExport(ExportFormat format)
+    {
+        if (submission is null || tenantId == Guid.Empty || !currentUserId.HasValue)
+        {
+            exportStatusMessage = "Unable to queue export for this session.";
+            return;
+        }
+
+        isRequestingExport = true;
+        exportStatusMessage = null;
+
+        try
+        {
+            await ExportEngine.QueueExport(tenantId, submission.Id, format, currentUserId.Value);
+            exportStatusMessage = $"{format} export queued. You will be notified when it is ready.";
+            await LoadExportHistory();
+        }
+        catch (Exception ex)
+        {
+            exportStatusMessage = $"Export request failed: {ex.Message}";
+        }
+        finally
+        {
+            isRequestingExport = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task LoadExportHistory()
+    {
+        if (submission is null || tenantId == Guid.Empty)
+        {
+            exports.Clear();
+            return;
+        }
+
+        var history = await ExportEngine.GetExportHistory(tenantId, submission.Id);
+        exports = history;
+    }
+
     // ── Display Helpers ─────────────────────────────────────
 
     private static string GetStatusBadgeClass(string status)
@@ -875,6 +1002,39 @@
         if (category == "IntraSheet") return "Intra-Sheet";
         if (category == "CrossSheet") return "Cross-Sheet";
         return category;
+    }
+
+    private static string GetExportStatusBadgeClass(ExportRequestStatus status)
+    {
+        return status switch
+        {
+            ExportRequestStatus.Completed => "portal-badge-success",
+            ExportRequestStatus.Processing => "portal-badge-info",
+            ExportRequestStatus.Failed => "portal-badge-danger",
+            _ => "portal-badge-warning"
+        };
+    }
+
+    private static string FormatFileSize(long? bytes)
+    {
+        if (!bytes.HasValue || bytes.Value <= 0)
+        {
+            return "0 B";
+        }
+
+        const long kb = 1024;
+        const long mb = 1024 * kb;
+        if (bytes.Value >= mb)
+        {
+            return $"{bytes.Value / (double)mb:0.00} MB";
+        }
+
+        if (bytes.Value >= kb)
+        {
+            return $"{bytes.Value / (double)kb:0.00} KB";
+        }
+
+        return $"{bytes.Value} B";
     }
 
     private string GetApprovalStepClass()

@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Xml;
 using System.Xml.Linq;
+using System.Xml.Schema;
 using FC.Engine.Domain.Abstractions;
 using FC.Engine.Domain.DataRecord;
 using FC.Engine.Domain.Enums;

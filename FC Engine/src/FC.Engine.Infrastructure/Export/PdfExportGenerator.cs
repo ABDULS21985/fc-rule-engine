@@ -1,4 +1,5 @@
 using FC.Engine.Domain.Abstractions;
+using FC.Engine.Domain.Entities;
 using FC.Engine.Domain.Enums;
 using FC.Engine.Domain.Metadata;
 using FC.Engine.Domain.ValueObjects;
@@ -37,7 +38,7 @@ public class PdfExportGenerator : IExportGenerator
 
         var submission = context.Submission;
         var branding = BrandingConfig.WithDefaults(context.Branding);
-        var primaryColor = string.IsNullOrWhiteSpace(branding.PrimaryColor) ? Colors.Green.Darken2 : branding.PrimaryColor!;
+        var primaryColor = string.IsNullOrWhiteSpace(branding.PrimaryColor) ? "#006B3F" : branding.PrimaryColor!;
         var logoBytes = await TryLoadLogo(branding, ct);
 
         var baseTemplate = await _templateCache.GetPublishedTemplate(context.TenantId, submission.ReturnCode, ct);
@@ -47,7 +48,7 @@ public class PdfExportGenerator : IExportGenerator
         var validationErrors = submission.ValidationReport?.Errors
             .OrderByDescending(x => x.Severity)
             .ThenBy(x => x.Category.ToString())
-            .ToList() ?? new List<Domain.Validation.ValidationError>();
+            .ToList() ?? new List<ValidationError>();
 
         return Document.Create(document =>
         {
@@ -212,7 +213,7 @@ public class PdfExportGenerator : IExportGenerator
                 }
                 else
                 {
-                    table.Cell().ColumnSpan(fields.Count).Padding(3).Text("No data available.");
+                    table.Cell().ColumnSpan((uint)fields.Count).Padding(3).Text("No data available.");
                 }
 
                 return;
@@ -235,7 +236,7 @@ public class PdfExportGenerator : IExportGenerator
 
     private static void ComposeValidationTable(
         IContainer container,
-        IReadOnlyList<Domain.Validation.ValidationError> validationErrors,
+        IReadOnlyList<ValidationError> validationErrors,
         string primaryColor)
     {
         container.Table(table =>

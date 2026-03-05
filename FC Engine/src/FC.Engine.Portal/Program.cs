@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using FC.Engine.Application.Services;
 using FC.Engine.Domain.Abstractions;
+using FC.Engine.Domain.Enums;
 using FC.Engine.Infrastructure;
 using FC.Engine.Infrastructure.Auth;
 using FC.Engine.Infrastructure.Hubs;
@@ -272,6 +273,50 @@ app.MapGet("/account/logout", async (HttpContext context) =>
     context.Response.Redirect("/login");
 });
 
+app.MapGet("/exports/{exportRequestId:int}/download", async (
+    int exportRequestId,
+    HttpContext context,
+    IExportEngine exportEngine,
+    IExportRequestRepository exportRequestRepository,
+    CancellationToken ct) =>
+{
+    if (context.User?.Identity?.IsAuthenticated != true)
+    {
+        return Results.Unauthorized();
+    }
+
+    var tenantClaim = context.User.FindFirst("TenantId")?.Value;
+    if (!Guid.TryParse(tenantClaim, out var tenantId))
+    {
+        return Results.Forbid();
+    }
+
+    var request = await exportRequestRepository.GetById(exportRequestId, ct);
+    if (request is null || request.TenantId != tenantId)
+    {
+        return Results.NotFound();
+    }
+
+    try
+    {
+        var stream = await exportEngine.DownloadExport(exportRequestId, tenantId, ct);
+        var fileName = $"submission-{request.SubmissionId}-export-{request.Id}.{GetExtension(request.Format)}";
+        return Results.File(stream, GetContentType(request.Format), fileName);
+    }
+    catch (FileNotFoundException)
+    {
+        return Results.NotFound();
+    }
+    catch (UnauthorizedAccessException)
+    {
+        return Results.Forbid();
+    }
+    catch (InvalidOperationException ex)
+    {
+        return Results.BadRequest(new { message = ex.Message });
+    }
+});
+
 app.MapControllers();
 app.MapHub<NotificationHub>("/hubs/notifications");
 
@@ -279,3 +324,21 @@ app.MapRazorComponents<FC.Engine.Portal.Components.App>()
     .AddInteractiveServerRenderMode();
 
 app.Run();
+
+static string GetContentType(ExportFormat format) => format switch
+{
+    ExportFormat.Excel => "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    ExportFormat.PDF => "application/pdf",
+    ExportFormat.XML => "application/xml",
+    ExportFormat.XBRL => "application/xbrl+xml",
+    _ => "application/octet-stream"
+};
+
+static string GetExtension(ExportFormat format) => format switch
+{
+    ExportFormat.Excel => "xlsx",
+    ExportFormat.PDF => "pdf",
+    ExportFormat.XML => "xml",
+    ExportFormat.XBRL => "xbrl",
+    _ => "bin"
+};

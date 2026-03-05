@@ -1,8 +1,11 @@
 using FC.Engine.Application.Services;
 using FC.Engine.Domain.Entities;
 using FC.Engine.Domain.Models;
+using FC.Engine.Infrastructure.Metadata;
 using FC.Engine.Infrastructure.Services;
 using FluentAssertions;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
 
 namespace FC.Engine.Infrastructure.Tests.Services;
@@ -151,84 +154,138 @@ public class FilingCalendarServiceTests
     // ── SLA tracking (spec-required tests) ─────────────────────
 
     [Fact]
-    public void SLA_Record_Created_On_Submission()
+    public async Task SLA_Record_Created_On_Submission()
     {
-        // Verify SLA record structure is correct for a timely submission
-        var deadlineService = new DeadlineComputationService();
-        var module = new Module { Id = 1, DefaultFrequency = "Monthly" };
-        var period = new ReturnPeriod { Year = 2026, Month = 3, Frequency = "Monthly" };
+        var tenantId = Guid.NewGuid();
+        await using var db = CreateDb(nameof(SLA_Record_Created_On_Submission));
 
-        var deadline = deadlineService.ComputeDeadline(module, period);
-        var submittedDate = deadline.AddDays(-10); // 10 days early
+        var module = new Module { Id = 1, ModuleCode = "TEST", ModuleName = "Test", DefaultFrequency = "Monthly" };
+        db.Modules.Add(module);
 
-        var slaRecord = new FilingSlaRecord
-        {
-            TenantId = Guid.NewGuid(),
-            ModuleId = module.Id,
-            PeriodId = 1,
-            SubmissionId = 100,
-            PeriodEndDate = DeadlineComputationService.GetPeriodEndDate("Monthly", 2026, 3, null),
-            DeadlineDate = deadline,
-            SubmittedDate = submittedDate,
-            DaysToDeadline = (deadline.Date - submittedDate.Date).Days,
-            OnTime = (deadline.Date - submittedDate.Date).Days >= 0
-        };
-
-        slaRecord.DaysToDeadline.Should().Be(10, "Submitted 10 days before deadline");
-        slaRecord.OnTime.Should().BeTrue("Submitted before deadline");
-        slaRecord.SubmissionId.Should().Be(100);
-        slaRecord.PeriodEndDate.Should().Be(new DateTime(2026, 3, 31));
-    }
-
-    [Fact]
-    public void SLA_Tracks_DaysToDeadline_Correctly()
-    {
-        var deadlineService = new DeadlineComputationService();
-        var module = new Module { Id = 1, DefaultFrequency = "Quarterly" };
-        var period = new ReturnPeriod { Year = 2026, Month = 6, Quarter = 2, Frequency = "Quarterly" };
-
-        var deadline = deadlineService.ComputeDeadline(module, period);
-
-        // Early submission: 5 days before
-        var earlyDate = deadline.AddDays(-5);
-        var earlyDays = (deadline.Date - earlyDate.Date).Days;
-        earlyDays.Should().Be(5);
-        (earlyDays >= 0).Should().BeTrue("Early submission is on time");
-
-        // Late submission: 3 days after
-        var lateDate = deadline.AddDays(3);
-        var lateDays = (deadline.Date - lateDate.Date).Days;
-        lateDays.Should().Be(-3);
-        (lateDays >= 0).Should().BeFalse("Late submission is not on time");
-
-        // On-time submission: exact deadline
-        var exactDate = deadline;
-        var exactDays = (deadline.Date - exactDate.Date).Days;
-        exactDays.Should().Be(0);
-        (exactDays >= 0).Should().BeTrue("Submission on deadline day is on time");
-    }
-
-    [Fact]
-    public void Deadline_Override_Resets_Notification_Level()
-    {
-        // Simulate a period at notification level 4 (T-3)
         var period = new ReturnPeriod
         {
-            NotificationLevel = 4,
-            DeadlineDate = DateTime.UtcNow.AddDays(-2),
-            Status = "Overdue"
+            TenantId = tenantId,
+            ModuleId = module.Id,
+            Year = 2026,
+            Month = 3,
+            Frequency = "Monthly",
+            ReportingDate = new DateTime(2026, 3, 31),
+            DeadlineDate = new DateTime(2026, 4, 30),
+            IsOpen = true,
+            CreatedAt = DateTime.UtcNow
         };
+        db.ReturnPeriods.Add(period);
+        await db.SaveChangesAsync();
 
-        // Apply override (simulating what FilingCalendarService.OverrideDeadline does)
-        var newDeadline = DateTime.UtcNow.AddDays(30);
-        period.DeadlineOverrideDate = newDeadline;
-        period.DeadlineOverrideBy = 42;
-        period.DeadlineOverrideReason = "Regulator granted extension";
-        period.NotificationLevel = 0; // Reset
+        var submission = new Submission
+        {
+            TenantId = tenantId,
+            InstitutionId = 1,
+            ReturnPeriodId = period.Id,
+            ReturnCode = "TEST-001",
+            Status = Domain.Enums.SubmissionStatus.Accepted,
+            SubmittedAt = new DateTime(2026, 4, 25),
+            CreatedAt = DateTime.UtcNow
+        };
+        db.Submissions.Add(submission);
+        await db.SaveChangesAsync();
 
-        period.NotificationLevel.Should().Be(0, "Override must reset notification level");
-        period.EffectiveDeadline.Should().Be(newDeadline, "Override deadline should take precedence");
-        period.DeadlineOverrideBy.Should().Be(42, "Must track who performed the override");
-        period.DeadlineOverrideReason.Should().NotBeNullOrEmpty("Must provide a reason");
+        var sut = new FilingCalendarService(db, new DeadlineComputationService(), NullLogger<FilingCalendarService>.Instance);
+        await sut.RecordSla(period.Id, submission.Id);
+
+        var sla = await db.FilingSlaRecords.SingleAsync();
+        sla.TenantId.Should().Be(tenantId);
+        sla.ModuleId.Should().Be(module.Id);
+        sla.PeriodId.Should().Be(period.Id);
+        sla.SubmissionId.Should().Be(submission.Id);
+        sla.DaysToDeadline.Should().Be(5);
+        sla.OnTime.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task SLA_Tracks_DaysToDeadline_Correctly()
+    {
+        var tenantId = Guid.NewGuid();
+        await using var db = CreateDb(nameof(SLA_Tracks_DaysToDeadline_Correctly));
+
+        var module = new Module { Id = 2, ModuleCode = "TEST2", ModuleName = "Test 2", DefaultFrequency = "Quarterly" };
+        db.Modules.Add(module);
+
+        var period = new ReturnPeriod
+        {
+            TenantId = tenantId,
+            ModuleId = module.Id,
+            Year = 2026,
+            Month = 6,
+            Quarter = 2,
+            Frequency = "Quarterly",
+            ReportingDate = new DateTime(2026, 6, 30),
+            DeadlineDate = new DateTime(2026, 8, 14),
+            IsOpen = true,
+            CreatedAt = DateTime.UtcNow
+        };
+        db.ReturnPeriods.Add(period);
+        await db.SaveChangesAsync();
+
+        var submission = new Submission
+        {
+            TenantId = tenantId,
+            InstitutionId = 1,
+            ReturnPeriodId = period.Id,
+            ReturnCode = "TEST-002",
+            Status = Domain.Enums.SubmissionStatus.Accepted,
+            SubmittedAt = new DateTime(2026, 8, 17),
+            CreatedAt = DateTime.UtcNow
+        };
+        db.Submissions.Add(submission);
+        await db.SaveChangesAsync();
+
+        var sut = new FilingCalendarService(db, new DeadlineComputationService(), NullLogger<FilingCalendarService>.Instance);
+        await sut.RecordSla(period.Id, submission.Id);
+
+        var sla = await db.FilingSlaRecords.SingleAsync();
+        sla.DaysToDeadline.Should().Be(-3);
+        sla.OnTime.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Deadline_Override_Resets_Notification_Level()
+    {
+        var tenantId = Guid.NewGuid();
+        await using var db = CreateDb(nameof(Deadline_Override_Resets_Notification_Level));
+
+        var period = new ReturnPeriod
+        {
+            TenantId = tenantId,
+            ModuleId = 1,
+            Year = 2026,
+            Month = 4,
+            Frequency = "Monthly",
+            ReportingDate = new DateTime(2026, 4, 30),
+            DeadlineDate = new DateTime(2026, 5, 30),
+            NotificationLevel = 4,
+            Status = "DueSoon",
+            IsOpen = true,
+            CreatedAt = DateTime.UtcNow
+        };
+        db.ReturnPeriods.Add(period);
+        await db.SaveChangesAsync();
+
+        var sut = new FilingCalendarService(db, new DeadlineComputationService(), NullLogger<FilingCalendarService>.Instance);
+        await sut.OverrideDeadline(tenantId, period.Id, new DateTime(2026, 6, 30), "Regulator extension", 42);
+
+        var updated = await db.ReturnPeriods.SingleAsync();
+        updated.NotificationLevel.Should().Be(0);
+        updated.DeadlineOverrideDate.Should().Be(new DateTime(2026, 6, 30));
+        updated.DeadlineOverrideBy.Should().Be(42);
+        updated.DeadlineOverrideReason.Should().Be("Regulator extension");
+    }
+
+    private static MetadataDbContext CreateDb(string name)
+    {
+        var options = new DbContextOptionsBuilder<MetadataDbContext>()
+            .UseInMemoryDatabase(name)
+            .Options;
+        return new MetadataDbContext(options);
     }
 }
