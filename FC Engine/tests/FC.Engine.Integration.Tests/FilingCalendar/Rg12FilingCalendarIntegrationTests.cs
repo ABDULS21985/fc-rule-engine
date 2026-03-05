@@ -97,6 +97,18 @@ public class Rg12FilingCalendarIntegrationTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task PeriodGeneration_Annual_Creates_1_Period()
+    {
+        var sut = new DeadlineComputationService();
+        var module = new Module { DefaultFrequency = "Annual" };
+
+        var periods = sut.GeneratePeriodsForNext12Months(module, 12);
+
+        periods.Should().HaveCount(1);
+        periods.Should().OnlyContain(p => p.Frequency == "Annual");
+    }
+
+    [Fact]
     public async Task ReturnPeriod_Can_Be_Persisted_With_New_RG12_Columns()
     {
         await using var conn = new SqlConnection(_connectionString);
