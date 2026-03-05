@@ -8,6 +8,7 @@ using FC.Engine.Domain.Metadata;
 using FC.Engine.Domain.Validation;
 using FC.Engine.Infrastructure.Metadata;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.Logging;
 
 namespace FC.Engine.Infrastructure.Services;
@@ -240,7 +241,7 @@ public partial class ModuleImportService : IModuleImportService
             ModuleCode = module.ModuleCode
         };
 
-        await using var tx = await _db.Database.BeginTransactionAsync(ct);
+        await using var tx = await BeginTransactionIfSupported(ct);
         try
         {
             module.Description = definition.Description ?? module.Description;
@@ -464,7 +465,10 @@ public partial class ModuleImportService : IModuleImportService
             }
 
             await _db.SaveChangesAsync(ct);
-            await tx.CommitAsync(ct);
+            if (tx is not null)
+            {
+                await tx.CommitAsync(ct);
+            }
             result.Success = true;
 
             _logger.LogInformation(
@@ -477,7 +481,10 @@ public partial class ModuleImportService : IModuleImportService
         }
         catch (Exception ex)
         {
-            await tx.RollbackAsync(ct);
+            if (tx is not null)
+            {
+                await tx.RollbackAsync(ct);
+            }
             result.Success = false;
             result.Errors.Add($"Import failed: {ex.Message}");
             _logger.LogError(ex, "Module import failed for {ModuleCode}", result.ModuleCode);
@@ -524,7 +531,7 @@ public partial class ModuleImportService : IModuleImportService
             ModuleCode = moduleCode
         };
 
-        await using var tx = await _db.Database.BeginTransactionAsync(ct);
+        await using var tx = await BeginTransactionIfSupported(ct);
         try
         {
             foreach (var draft in draftVersions)
@@ -609,7 +616,10 @@ public partial class ModuleImportService : IModuleImportService
             result.VersionsPublished = 1;
 
             await _db.SaveChangesAsync(ct);
-            await tx.CommitAsync(ct);
+            if (tx is not null)
+            {
+                await tx.CommitAsync(ct);
+            }
 
             _cache.InvalidateModule(module.Id);
             result.Success = true;
@@ -622,7 +632,10 @@ public partial class ModuleImportService : IModuleImportService
         }
         catch (Exception ex)
         {
-            await tx.RollbackAsync(ct);
+            if (tx is not null)
+            {
+                await tx.RollbackAsync(ct);
+            }
             result.Success = false;
             result.Errors.Add($"Publish failed: {ex.Message}");
             _logger.LogError(ex, "Module publish failed for {ModuleCode}", moduleCode);
@@ -670,6 +683,16 @@ public partial class ModuleImportService : IModuleImportService
             END;";
 
         await _db.Database.ExecuteSqlRawAsync(sql, ct);
+    }
+
+    private async Task<IDbContextTransaction?> BeginTransactionIfSupported(CancellationToken ct)
+    {
+        if (!_db.Database.IsRelational())
+        {
+            return null;
+        }
+
+        return await _db.Database.BeginTransactionAsync(ct);
     }
 
     private static string BuildCustomExpression(FormulaDef formula)

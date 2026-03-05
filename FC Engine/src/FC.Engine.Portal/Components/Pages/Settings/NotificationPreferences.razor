@@ -34,11 +34,11 @@
             <div class="portal-form-grid" style="max-width: 400px;">
                 <div class="portal-form-group">
                     <label class="portal-form-label" for="quietStart">Start</label>
-                    <input id="quietStart" type="time" class="portal-form-input" @bind="_quietStart" />
+                    <input id="quietStart" type="time" class="portal-form-input" value="@_quietStart" @onchange="OnQuietStartChanged" />
                 </div>
                 <div class="portal-form-group">
                     <label class="portal-form-label" for="quietEnd">End</label>
-                    <input id="quietEnd" type="time" class="portal-form-input" @bind="_quietEnd" />
+                    <input id="quietEnd" type="time" class="portal-form-input" value="@_quietEnd" @onchange="OnQuietEndChanged" />
                 </div>
             </div>
         </div>
@@ -208,6 +208,16 @@
         {
             _isSaving = false;
         }
+    }
+
+    private void OnQuietStartChanged(ChangeEventArgs args)
+    {
+        _quietStart = args.Value?.ToString() ?? _quietStart;
+    }
+
+    private void OnQuietEndChanged(ChangeEventArgs args)
+    {
+        _quietEnd = args.Value?.ToString() ?? _quietEnd;
     }
 
     private static Guid? ParseTenantClaim(string? raw)
