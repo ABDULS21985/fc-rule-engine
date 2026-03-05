@@ -63,6 +63,13 @@ public class MetadataDbContext : DbContext
     // Security
     public DbSet<LoginAttempt> LoginAttempts => Set<LoginAttempt>();
     public DbSet<PasswordResetToken> PasswordResetTokens => Set<PasswordResetToken>();
+    public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
+    public DbSet<UserMfaConfig> UserMfaConfigs => Set<UserMfaConfig>();
+    public DbSet<Permission> Permissions => Set<Permission>();
+    public DbSet<Role> Roles => Set<Role>();
+    public DbSet<RolePermission> RolePermissions => Set<RolePermission>();
+    public DbSet<TenantSsoConfig> TenantSsoConfigs => Set<TenantSsoConfig>();
+    public DbSet<ApiKey> ApiKeys => Set<ApiKey>();
 
     // Audit
     public DbSet<AuditLogEntry> AuditLog => Set<AuditLogEntry>();

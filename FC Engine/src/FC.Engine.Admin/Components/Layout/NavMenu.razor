@@ -1,11 +1,16 @@
 @using Microsoft.AspNetCore.Components.Authorization
 @using FC.Engine.Domain.Abstractions
+@using FC.Engine.Domain.ValueObjects
 @inject IEntitlementService EntitlementSvc
 @inject ITenantContext TenantContext
+@inject ITenantBrandingService BrandingService
 
 <AuthorizeView>
     <Authorized Context="navAuth">
         <nav class="shell-nav" aria-label="Primary navigation">
+            <div class="nav-tenant-logo-wrap">
+                <img src="@_branding.LogoSmallUrl" alt="@_branding.CompanyName" class="nav-tenant-logo" />
+            </div>
 
             @if (CanAccessModulePages())
             {
@@ -221,6 +226,7 @@
 @code {
     private bool _isPlatformAdmin;
     private HashSet<string> _activeModules = new(StringComparer.OrdinalIgnoreCase);
+    private BrandingConfig _branding = BrandingConfig.WithDefaults();
 
     protected override async Task OnInitializedAsync()
     {
@@ -233,6 +239,8 @@
 
         if (TenantContext.CurrentTenantId is { } tenantId)
         {
+            _branding = await BrandingService.GetBrandingConfig(tenantId);
+
             try
             {
                 var entitlement = await EntitlementSvc.ResolveEntitlements(tenantId);

@@ -1,7 +1,13 @@
 @inherits LayoutComponentBase
 @using System.Security.Claims
+@using FC.Engine.Domain.Abstractions
+@using FC.Engine.Domain.ValueObjects
 @inject NavigationManager Navigation
+@inject ITenantBrandingService BrandingService
+@inject ITenantContext TenantContext
 @implements IDisposable
+
+<TenantThemeProvider />
 
 <!-- Skip to content link for accessibility -->
 <a href="#main-content" class="skip-link">Skip to main content</a>
@@ -15,9 +21,9 @@
     <!-- Sidebar -->
     <aside class="shell-sidebar" aria-label="Main navigation" @onkeydown="HandleSidebarKeyDown">
         <div class="sidebar-brand">
-            <img src="images/cbn-logo.svg" alt="Central Bank of Nigeria" class="sidebar-brand-logo" width="40" height="33" />
+            <img src="@_branding.LogoSmallUrl" alt="@_branding.CompanyName" class="sidebar-brand-logo" width="40" height="33" />
             <div class="sidebar-brand-text">
-                <span class="sidebar-brand-name">FC Engine</span>
+                <span class="sidebar-brand-name">@_branding.CompanyName</span>
                 <span class="sidebar-brand-sub">Admin Portal</span>
             </div>
         </div>
@@ -109,8 +115,8 @@
         <main id="main-content" class="shell-content" role="main">
             <!-- Print letterhead (visible only in print) -->
             <div class="print-letterhead" aria-hidden="true">
-                <div class="print-letterhead-title">Central Bank of Nigeria</div>
-                <div class="print-letterhead-sub">FC Engine &mdash; @_currentPageName</div>
+                <div class="print-letterhead-title">@_branding.CompanyName</div>
+                <div class="print-letterhead-sub">RegOS &mdash; @_currentPageName</div>
                 <span class="print-letterhead-accent"></span>
             </div>
 
@@ -118,7 +124,7 @@
 
             <!-- Print footer (visible only in print) -->
             <div class="print-footer" aria-hidden="true">
-                FC Engine Admin Portal &bull; Central Bank of Nigeria &bull; Printed @DateTime.UtcNow.ToString("dd MMM yyyy HH:mm") UTC
+                @_branding.CopyrightText &bull; Printed @DateTime.UtcNow.ToString("dd MMM yyyy HH:mm") UTC
             </div>
         </main>
     </div>
@@ -133,11 +139,20 @@
     private bool _navigating;
     private bool _progressComplete;
     private string _currentPageName = "Dashboard";
+    private BrandingConfig _branding = BrandingConfig.WithDefaults();
 
     protected override void OnInitialized()
     {
         Navigation.LocationChanged += OnLocationChanged;
         UpdatePageName(Navigation.Uri);
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (TenantContext.CurrentTenantId.HasValue)
+        {
+            _branding = await BrandingService.GetBrandingConfig(TenantContext.CurrentTenantId.Value);
+        }
     }
 
     private async void OnLocationChanged(object? sender, LocationChangedEventArgs e)

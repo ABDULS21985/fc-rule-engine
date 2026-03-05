@@ -3,6 +3,7 @@ using System.Text;
 using FC.Engine.Domain.Abstractions;
 using FC.Engine.Domain.Entities;
 using FC.Engine.Domain.Enums;
+using FC.Engine.Domain.ValueObjects;
 
 namespace FC.Engine.Portal.Services;
 
@@ -12,17 +13,20 @@ public class ExportService
     private readonly IInstitutionRepository _institutionRepo;
     private readonly IInstitutionUserRepository _userRepo;
     private readonly ISubmissionApprovalRepository _approvalRepo;
+    private readonly ITenantBrandingService _brandingService;
 
     public ExportService(
         ISubmissionRepository submissionRepo,
         IInstitutionRepository institutionRepo,
         IInstitutionUserRepository userRepo,
-        ISubmissionApprovalRepository approvalRepo)
+        ISubmissionApprovalRepository approvalRepo,
+        ITenantBrandingService brandingService)
     {
         _submissionRepo = submissionRepo;
         _institutionRepo = institutionRepo;
         _userRepo = userRepo;
         _approvalRepo = approvalRepo;
+        _brandingService = brandingService;
     }
 
     // === VALIDATION REPORT DATA ===
@@ -65,6 +69,7 @@ public class ExportService
 
         return new ValidationReportModel
         {
+            Branding = await _brandingService.GetBrandingConfig(submission.TenantId),
             InstitutionName = institution.InstitutionName,
             InstitutionCode = institution.InstitutionCode,
             InstitutionType = institution.LicenseType ?? "",
@@ -97,6 +102,7 @@ public class ExportService
 
         return new ComplianceCertificateModel
         {
+            Branding = await _brandingService.GetBrandingConfig(submission.TenantId),
             InstitutionName = institution.InstitutionName,
             InstitutionCode = institution.InstitutionCode,
             InstitutionType = institution.LicenseType ?? "",
@@ -133,6 +139,9 @@ public class ExportService
 
         return new ComplianceReportModel
         {
+            Branding = institution is null
+                ? BrandingConfig.WithDefaults()
+                : await _brandingService.GetBrandingConfig(institution.TenantId),
             InstitutionName = institution?.InstitutionName ?? "Unknown",
             InstitutionCode = institution?.InstitutionCode ?? "",
             StartDate = startDate,
@@ -212,6 +221,9 @@ public class ExportService
 
         return new AuditTrailModel
         {
+            Branding = institution is null
+                ? BrandingConfig.WithDefaults()
+                : await _brandingService.GetBrandingConfig(institution.TenantId),
             InstitutionName = institution?.InstitutionName ?? "Unknown",
             InstitutionCode = institution?.InstitutionCode ?? "",
             StartDate = startDate,
@@ -299,6 +311,7 @@ public class ExportService
 
 public class ValidationReportModel
 {
+    public BrandingConfig Branding { get; set; } = BrandingConfig.WithDefaults();
     public string InstitutionName { get; set; } = "";
     public string InstitutionCode { get; set; } = "";
     public string InstitutionType { get; set; } = "";
@@ -329,6 +342,7 @@ public class ValidationReportError
 
 public class ComplianceCertificateModel
 {
+    public BrandingConfig Branding { get; set; } = BrandingConfig.WithDefaults();
     public string InstitutionName { get; set; } = "";
     public string InstitutionCode { get; set; } = "";
     public string InstitutionType { get; set; } = "";
@@ -344,6 +358,7 @@ public class ComplianceCertificateModel
 
 public class ComplianceReportModel
 {
+    public BrandingConfig Branding { get; set; } = BrandingConfig.WithDefaults();
     public string InstitutionName { get; set; } = "";
     public string InstitutionCode { get; set; } = "";
     public DateTime StartDate { get; set; }
@@ -371,6 +386,7 @@ public class ComplianceReportItem
 
 public class AuditTrailModel
 {
+    public BrandingConfig Branding { get; set; } = BrandingConfig.WithDefaults();
     public string InstitutionName { get; set; } = "";
     public string InstitutionCode { get; set; } = "";
     public DateTime StartDate { get; set; }

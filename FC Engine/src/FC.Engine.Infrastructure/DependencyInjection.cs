@@ -1,5 +1,6 @@
 using FC.Engine.Domain.Abstractions;
 using FC.Engine.Infrastructure.Audit;
+using FC.Engine.Infrastructure.Auth;
 using FC.Engine.Infrastructure.BackgroundJobs;
 using FC.Engine.Infrastructure.Caching;
 using FC.Engine.Infrastructure.DynamicSchema;
@@ -10,6 +11,7 @@ using FC.Engine.Infrastructure.MultiTenancy;
 using FC.Engine.Infrastructure.Persistence;
 using FC.Engine.Infrastructure.Persistence.Interceptors;
 using FC.Engine.Infrastructure.Persistence.Repositories;
+using FC.Engine.Infrastructure.Storage;
 using FC.Engine.Infrastructure.Validation;
 using FC.Engine.Infrastructure.Xml;
 using Microsoft.EntityFrameworkCore;
@@ -26,6 +28,7 @@ public static class DependencyInjection
             ?? throw new InvalidOperationException("Connection string 'FcEngine' not found");
 
         services.AddHttpContextAccessor();
+        services.Configure<FileStorageOptions>(configuration.GetSection(FileStorageOptions.SectionName));
 
         // ── Multi-Tenancy ──
         services.AddScoped<ITenantContext, HttpTenantContext>();
@@ -81,6 +84,16 @@ public static class DependencyInjection
         services.AddScoped<IEntitlementService, EntitlementService>();
         services.AddScoped<ISubscriptionService, SubscriptionService>();
         services.AddScoped<ITenantOnboardingService, TenantOnboardingService>();
+        services.AddScoped<IPermissionService, PermissionService>();
+
+        // ── Authentication evolution (RG-05) ──
+        services.Configure<JwtSettings>(configuration.GetSection(JwtSettings.SectionName));
+        services.AddScoped<IJwtTokenService, JwtTokenService>();
+        services.AddScoped<IMfaService, MfaService>();
+        services.AddScoped<IApiKeyService, ApiKeyService>();
+        services.AddSingleton<IMfaChallengeStore, MfaChallengeStore>();
+        services.AddScoped<ITenantBrandingService, TenantBrandingService>();
+        services.AddSingleton<IFileStorageService, LocalFileStorageService>();
 
         // Audit
         services.AddScoped<IAuditLogger, AuditLogger>();

@@ -1,4 +1,5 @@
 using FC.Engine.Domain.Enums;
+using System.Text.Json;
 
 namespace FC.Engine.Domain.Entities;
 
@@ -37,6 +38,7 @@ public class Tenant
     public List<Institution> Institutions { get; set; } = new();
     public List<TenantLicenceType> TenantLicenceTypes { get; set; } = new();
     public List<Subscription> Subscriptions { get; set; } = new();
+    public TenantSsoConfig? SsoConfig { get; set; }
 
     // Required by EF Core
     private Tenant() { }
@@ -105,6 +107,31 @@ public class Tenant
         ContactEmail = contactEmail;
         ContactPhone = contactPhone;
         Address = address;
+        UpdatedAt = DateTime.UtcNow;
+    }
+
+    public Domain.ValueObjects.BrandingConfig GetBrandingConfig()
+    {
+        Domain.ValueObjects.BrandingConfig? custom = null;
+        if (!string.IsNullOrWhiteSpace(BrandingConfig))
+        {
+            try
+            {
+                custom = JsonSerializer.Deserialize<Domain.ValueObjects.BrandingConfig>(BrandingConfig);
+            }
+            catch
+            {
+                // Fall back to defaults if persisted JSON is invalid.
+            }
+        }
+
+        return Domain.ValueObjects.BrandingConfig.WithDefaults(custom);
+    }
+
+    public void SetBrandingConfig(Domain.ValueObjects.BrandingConfig config)
+    {
+        var merged = Domain.ValueObjects.BrandingConfig.WithDefaults(config);
+        BrandingConfig = JsonSerializer.Serialize(merged);
         UpdatedAt = DateTime.UtcNow;
     }
 }

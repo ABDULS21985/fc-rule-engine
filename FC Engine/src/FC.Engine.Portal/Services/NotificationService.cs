@@ -16,17 +16,20 @@ public class NotificationService
     private readonly IInstitutionUserRepository _userRepo;
     private readonly IInstitutionRepository _institutionRepo;
     private readonly ITenantContext _tenantContext;
+    private readonly ITenantBrandingService _brandingService;
 
     public NotificationService(
         IPortalNotificationRepository notificationRepo,
         IInstitutionUserRepository userRepo,
         IInstitutionRepository institutionRepo,
-        ITenantContext tenantContext)
+        ITenantContext tenantContext,
+        ITenantBrandingService brandingService)
     {
         _notificationRepo = notificationRepo;
         _userRepo = userRepo;
         _institutionRepo = institutionRepo;
         _tenantContext = tenantContext;
+        _brandingService = brandingService;
     }
 
     // ═══════════════════════════════════════════════════════════════
@@ -339,6 +342,25 @@ public class NotificationService
             ?? throw new InvalidOperationException($"Institution {institutionId} not found.");
 
         return institution.TenantId;
+    }
+
+    /// <summary>
+    /// Branding variables exposed for RG-06 template rendering integration.
+    /// </summary>
+    public async Task<Dictionary<string, string>> BuildBrandingTemplateVariables(Guid tenantId, CancellationToken ct = default)
+    {
+        var branding = await _brandingService.GetBrandingConfig(tenantId, ct);
+        return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["LogoUrl"] = branding.LogoUrl ?? "/images/cbn-logo.svg",
+            ["PrimaryColor"] = branding.PrimaryColor ?? "#006B3F",
+            ["CompanyName"] = branding.CompanyName ?? "RegOS",
+            ["CopyrightText"] = branding.CopyrightText ?? $"(c) {DateTime.UtcNow.Year} RegOS. All rights reserved.",
+            ["SupportEmail"] = branding.SupportEmail ?? "support@regos.app",
+            ["SupportPhone"] = branding.SupportPhone ?? string.Empty,
+            ["SenderEmail"] = branding.SupportEmail ?? "noreply@regos.app",
+            ["SenderName"] = branding.CompanyName ?? "RegOS"
+        };
     }
 
     private static NotificationModel MapToModel(PortalNotification n) => new()

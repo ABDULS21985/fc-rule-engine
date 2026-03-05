@@ -1,7 +1,13 @@
 @inherits LayoutComponentBase
 @using System.Security.Claims
+@using FC.Engine.Domain.Abstractions
+@using FC.Engine.Domain.ValueObjects
 @inject NavigationManager Navigation
+@inject ITenantBrandingService BrandingService
+@inject ITenantContext TenantContext
 @implements IDisposable
+
+<TenantThemeProvider />
 
 <!-- Skip to content link for accessibility -->
 <a href="#main-content" class="portal-skip-link">Skip to main content</a>
@@ -15,9 +21,9 @@
     <!-- Sidebar -->
     <aside class="portal-sidebar" aria-label="Main navigation" @onkeydown="HandleSidebarKeyDown">
         <div class="portal-sidebar-brand">
-            <img src="images/cbn-logo.svg" alt="Central Bank of Nigeria" class="portal-sidebar-logo" width="40" height="33" />
+            <img src="@_branding.LogoSmallUrl" alt="@_branding.CompanyName" class="portal-sidebar-logo" width="40" height="33" />
             <div class="portal-sidebar-brand-text">
-                <span class="portal-sidebar-brand-name">FC Engine</span>
+                <span class="portal-sidebar-brand-name">@_branding.CompanyName</span>
                 <span class="portal-sidebar-brand-sub">FI Portal</span>
             </div>
         </div>
@@ -132,11 +138,20 @@
     private bool _progressComplete;
     private string _currentPageName = "Dashboard";
     private string _liveAnnouncement = "";
+    private BrandingConfig _branding = BrandingConfig.WithDefaults();
 
     protected override void OnInitialized()
     {
         Navigation.LocationChanged += OnLocationChanged;
         UpdatePageName(Navigation.Uri);
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (TenantContext.CurrentTenantId.HasValue)
+        {
+            _branding = await BrandingService.GetBrandingConfig(TenantContext.CurrentTenantId.Value);
+        }
     }
 
     private async void OnLocationChanged(object? sender, LocationChangedEventArgs e)

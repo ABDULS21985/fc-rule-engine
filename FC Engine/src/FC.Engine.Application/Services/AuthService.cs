@@ -12,6 +12,8 @@ public class AuthService
     private readonly IPortalUserRepository _userRepo;
     private readonly ILoginAttemptRepository _loginAttemptRepo;
     private readonly IPasswordResetTokenRepository _resetTokenRepo;
+    private readonly IEntitlementService _entitlementService;
+    private readonly IPermissionService _permissionService;
 
     // Lockout policy
     private const int MaxFailedAttempts = 5;
@@ -24,11 +26,15 @@ public class AuthService
     public AuthService(
         IPortalUserRepository userRepo,
         ILoginAttemptRepository loginAttemptRepo,
-        IPasswordResetTokenRepository resetTokenRepo)
+        IPasswordResetTokenRepository resetTokenRepo,
+        IEntitlementService entitlementService,
+        IPermissionService permissionService)
     {
         _userRepo = userRepo;
         _loginAttemptRepo = loginAttemptRepo;
         _resetTokenRepo = resetTokenRepo;
+        _entitlementService = entitlementService;
+        _permissionService = permissionService;
     }
 
     /// <summary>
@@ -209,6 +215,67 @@ public class AuthService
 
         var identity = new ClaimsIdentity(claims, "FC.Admin.Auth");
         return new ClaimsPrincipal(identity);
+    }
+
+    public async Task<ClaimsPrincipal> BuildClaimsPrincipalWithPermissions(PortalUser user, CancellationToken ct = default)
+    {
+        var principal = BuildClaimsPrincipal(user);
+        var identity = principal.Identity as ClaimsIdentity;
+        if (identity is null)
+        {
+            return principal;
+        }
+
+        var roleName = user.TenantId.HasValue ? user.Role.ToString() : "PlatformAdmin";
+        var permissions = await _permissionService.GetPermissions(user.TenantId, roleName, ct);
+        foreach (var permission in permissions.Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            identity.AddClaim(new Claim("perm", permission));
+        }
+
+        if (user.TenantId.HasValue)
+        {
+            var entitlement = await _entitlementService.ResolveEntitlements(user.TenantId.Value, ct);
+            foreach (var module in entitlement.ActiveModules.Select(x => x.ModuleCode).Distinct(StringComparer.OrdinalIgnoreCase))
+            {
+                identity.AddClaim(new Claim("mod", module));
+            }
+        }
+
+        return principal;
+    }
+
+    public async Task<AuthenticatedUser> BuildAuthenticatedUser(PortalUser user, CancellationToken ct = default)
+    {
+        if (!user.TenantId.HasValue)
+        {
+            return new AuthenticatedUser
+            {
+                UserId = user.Id,
+                UserType = "PortalUser",
+                TenantId = Guid.Empty,
+                Email = user.Email,
+                FullName = user.DisplayName,
+                Role = "PlatformAdmin",
+                Permissions = (await _permissionService.GetPermissions(null, "PlatformAdmin", ct)).ToList(),
+                EntitledModules = new List<string>()
+            };
+        }
+
+        var permissions = await _permissionService.GetPermissions(user.TenantId, user.Role.ToString(), ct);
+        var entitlement = await _entitlementService.ResolveEntitlements(user.TenantId.Value, ct);
+
+        return new AuthenticatedUser
+        {
+            UserId = user.Id,
+            UserType = "PortalUser",
+            TenantId = user.TenantId.Value,
+            Email = user.Email,
+            FullName = user.DisplayName,
+            Role = user.Role.ToString(),
+            Permissions = permissions.ToList(),
+            EntitledModules = entitlement.ActiveModules.Select(m => m.ModuleCode).ToList()
+        };
     }
 
     public static string HashPassword(string password)

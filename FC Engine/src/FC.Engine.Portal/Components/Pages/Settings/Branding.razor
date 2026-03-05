@@ -1,0 +1,276 @@
+@page "/settings/branding"
+@using FC.Engine.Domain.Abstractions
+@using FC.Engine.Domain.ValueObjects
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize(Roles = "Admin")]
+@inject ITenantBrandingService BrandingService
+@inject ITenantContext TenantContext
+@inject ISubscriptionService SubscriptionService
+
+<PageTitle>Branding Configuration</PageTitle>
+
+<div class="portal-page">
+    <div class="portal-page-header">
+        <div class="portal-page-header-main">
+            <h1 class="portal-page-title">Branding Configuration</h1>
+            <p class="portal-page-subtitle">Configure logo, palette, fonts, and customer-facing identity.</p>
+        </div>
+    </div>
+
+    @if (_isLoading)
+    {
+        <div class="portal-card portal-branding-loading">Loading branding configuration...</div>
+    }
+    else if (!string.IsNullOrWhiteSpace(_errorMessage))
+    {
+        <div class="portal-alert portal-alert-error" role="alert">@_errorMessage</div>
+    }
+    else
+    {
+        @if (!_hasFeature)
+        {
+            <div class="portal-branding-upgrade">
+                <h3>Premium branding requires Enterprise or White Label plan features.</h3>
+                <p>Upgrade to unlock custom identity, domains, and partner-facing white label controls.</p>
+                <a href="/subscription/my-plan" class="portal-btn portal-btn-primary">View Plan</a>
+            </div>
+        }
+
+        @if (!string.IsNullOrWhiteSpace(_successMessage))
+        {
+            <div class="portal-alert portal-alert-success" role="alert">@_successMessage</div>
+        }
+
+        <div class="portal-branding-grid">
+            <section class="portal-card portal-branding-form">
+                <h2 class="portal-form-section-title">Visual Identity</h2>
+
+                <div class="portal-form-group">
+                    <label class="portal-form-label">Logo (PNG/SVG/JPG, max 2MB)</label>
+                    <InputFile OnChange="HandleLogoUpload" accept=".png,.svg,.jpg,.jpeg" disabled="@(!_hasFeature || _isSaving)" />
+                    @if (!string.IsNullOrWhiteSpace(_config.LogoUrl))
+                    {
+                        <img src="@_config.LogoUrl" alt="Current logo" class="portal-branding-logo-preview" />
+                    }
+                </div>
+
+                <div class="portal-form-group">
+                    <label class="portal-form-label">Favicon (PNG/SVG/ICO, max 2MB)</label>
+                    <InputFile OnChange="HandleFaviconUpload" accept=".png,.svg,.ico" disabled="@(!_hasFeature || _isSaving)" />
+                </div>
+
+                <div class="portal-branding-color-grid">
+                    <div class="portal-form-group">
+                        <label class="portal-form-label">Primary</label>
+                        <input type="color" class="portal-branding-color" @bind="_config.PrimaryColor" disabled="@(!_hasFeature || _isSaving)" />
+                        <input type="text" class="portal-form-input" @bind="_config.PrimaryColor" placeholder="#006B3F" disabled="@(!_hasFeature || _isSaving)" />
+                    </div>
+                    <div class="portal-form-group">
+                        <label class="portal-form-label">Secondary</label>
+                        <input type="color" class="portal-branding-color" @bind="_config.SecondaryColor" disabled="@(!_hasFeature || _isSaving)" />
+                        <input type="text" class="portal-form-input" @bind="_config.SecondaryColor" placeholder="#C8A415" disabled="@(!_hasFeature || _isSaving)" />
+                    </div>
+                    <div class="portal-form-group">
+                        <label class="portal-form-label">Accent</label>
+                        <input type="color" class="portal-branding-color" @bind="_config.AccentColor" disabled="@(!_hasFeature || _isSaving)" />
+                        <input type="text" class="portal-form-input" @bind="_config.AccentColor" placeholder="#1A73E8" disabled="@(!_hasFeature || _isSaving)" />
+                    </div>
+                    <div class="portal-form-group">
+                        <label class="portal-form-label">Sidebar</label>
+                        <input type="color" class="portal-branding-color" @bind="_config.SidebarColor" disabled="@(!_hasFeature || _isSaving)" />
+                        <input type="text" class="portal-form-input" @bind="_config.SidebarColor" placeholder="#1A1F2B" disabled="@(!_hasFeature || _isSaving)" />
+                    </div>
+                </div>
+
+                <div class="portal-form-group">
+                    <label class="portal-form-label">Heading Font</label>
+                    <select class="portal-form-select" @bind="_config.FontHeading" disabled="@(!_hasFeature || _isSaving)">
+                        <option>Plus Jakarta Sans</option>
+                        <option>Inter</option>
+                        <option>Montserrat</option>
+                        <option>Poppins</option>
+                        <option>Open Sans</option>
+                        <option>Lato</option>
+                    </select>
+                </div>
+
+                <div class="portal-form-group">
+                    <label class="portal-form-label">Body Font</label>
+                    <select class="portal-form-select" @bind="_config.FontBody" disabled="@(!_hasFeature || _isSaving)">
+                        <option>Inter</option>
+                        <option>Plus Jakarta Sans</option>
+                        <option>Open Sans</option>
+                        <option>Lato</option>
+                        <option>Montserrat</option>
+                    </select>
+                </div>
+
+                <div class="portal-form-group">
+                    <label class="portal-form-label">Company Name</label>
+                    <input class="portal-form-input" @bind="_config.CompanyName" disabled="@(!_hasFeature || _isSaving)" />
+                </div>
+
+                <div class="portal-form-group">
+                    <label class="portal-form-label">Support Email</label>
+                    <input class="portal-form-input" @bind="_config.SupportEmail" disabled="@(!_hasFeature || _isSaving)" />
+                </div>
+
+                <div class="portal-form-group">
+                    <label class="portal-form-label">Support Phone</label>
+                    <input class="portal-form-input" @bind="_config.SupportPhone" disabled="@(!_hasFeature || _isSaving)" />
+                </div>
+
+                <div class="portal-form-group">
+                    <label class="portal-form-label">Copyright Text</label>
+                    <input class="portal-form-input" @bind="_config.CopyrightText" disabled="@(!_hasFeature || _isSaving)" />
+                </div>
+
+                <div class="portal-branding-actions">
+                    <button class="portal-btn portal-btn-primary" @onclick="SaveBranding" disabled="@(!_hasFeature || _isSaving)">
+                        @(_isSaving ? "Saving..." : "Save Changes")
+                    </button>
+                    <button class="portal-btn portal-btn-secondary" @onclick="ResetToDefaults" disabled="@(!_hasFeature || _isSaving)">
+                        Reset to Defaults
+                    </button>
+                </div>
+            </section>
+
+            <section class="portal-card portal-branding-preview" style="--preview-primary:@_config.PrimaryColor; --preview-secondary:@_config.SecondaryColor; --preview-accent:@_config.AccentColor; --preview-sidebar:@_config.SidebarColor; --preview-heading:'@_config.FontHeading'; --preview-body:'@_config.FontBody';">
+                <h2 class="portal-form-section-title">Live Preview</h2>
+                <div class="portal-branding-preview-frame">
+                    <aside class="portal-branding-preview-sidebar">
+                        @if (!string.IsNullOrWhiteSpace(_config.LogoUrl))
+                        {
+                            <img src="@_config.LogoUrl" alt="Preview logo" class="portal-branding-preview-logo" />
+                        }
+                        <div class="portal-branding-preview-nav portal-branding-preview-nav-active">Dashboard</div>
+                        <div class="portal-branding-preview-nav">Returns</div>
+                        <div class="portal-branding-preview-nav">Reports</div>
+                    </aside>
+                    <div class="portal-branding-preview-main">
+                        <header class="portal-branding-preview-header">
+                            <span>@(_config.CompanyName ?? "Your Company")</span>
+                        </header>
+                        <div class="portal-branding-preview-body">
+                            <button class="portal-branding-preview-btn-primary">Primary</button>
+                            <button class="portal-branding-preview-btn-secondary">Secondary</button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </div>
+    }
+</div>
+
+@code {
+    private BrandingConfig _config = BrandingConfig.WithDefaults();
+    private bool _hasFeature;
+    private bool _isLoading = true;
+    private bool _isSaving;
+    private string? _errorMessage;
+    private string? _successMessage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!TenantContext.CurrentTenantId.HasValue)
+        {
+            _errorMessage = "Tenant context is not available for this request.";
+            _isLoading = false;
+            return;
+        }
+
+        var tenantId = TenantContext.CurrentTenantId.Value;
+        _config = await BrandingService.GetBrandingConfig(tenantId);
+
+        var hasCustomDomain = await SubscriptionService.HasFeature(tenantId, "custom_domain");
+        var hasWhiteLabel = await SubscriptionService.HasFeature(tenantId, "white_label");
+        var hasCustomBranding = await SubscriptionService.HasFeature(tenantId, "custom_branding");
+        _hasFeature = hasCustomDomain || hasWhiteLabel || hasCustomBranding;
+
+        _isLoading = false;
+    }
+
+    private async Task SaveBranding()
+    {
+        _successMessage = null;
+        _errorMessage = null;
+
+        if (!TenantContext.CurrentTenantId.HasValue)
+        {
+            _errorMessage = "Tenant context is not available for this request.";
+            return;
+        }
+
+        _isSaving = true;
+        try
+        {
+            await BrandingService.UpdateBrandingConfig(TenantContext.CurrentTenantId.Value, _config);
+            _successMessage = "Branding updated successfully.";
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = ex.Message;
+        }
+        finally
+        {
+            _isSaving = false;
+        }
+    }
+
+    private async Task HandleLogoUpload(InputFileChangeEventArgs args)
+    {
+        if (!TenantContext.CurrentTenantId.HasValue || args.File is null)
+        {
+            return;
+        }
+
+        _errorMessage = null;
+        _successMessage = null;
+
+        try
+        {
+            await using var stream = args.File.OpenReadStream(maxAllowedSize: 2 * 1024 * 1024);
+            _config.LogoUrl = await BrandingService.UploadLogo(
+                TenantContext.CurrentTenantId.Value,
+                stream,
+                args.File.Name,
+                args.File.ContentType);
+            _successMessage = "Logo uploaded successfully.";
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = ex.Message;
+        }
+    }
+
+    private async Task HandleFaviconUpload(InputFileChangeEventArgs args)
+    {
+        if (!TenantContext.CurrentTenantId.HasValue || args.File is null)
+        {
+            return;
+        }
+
+        _errorMessage = null;
+        _successMessage = null;
+
+        try
+        {
+            await using var stream = args.File.OpenReadStream(maxAllowedSize: 2 * 1024 * 1024);
+            _config.FaviconUrl = await BrandingService.UploadFavicon(
+                TenantContext.CurrentTenantId.Value,
+                stream,
+                args.File.Name,
+                args.File.ContentType);
+            _successMessage = "Favicon uploaded successfully.";
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = ex.Message;
+        }
+    }
+
+    private void ResetToDefaults()
+    {
+        _config = BrandingConfig.WithDefaults();
+    }
+}

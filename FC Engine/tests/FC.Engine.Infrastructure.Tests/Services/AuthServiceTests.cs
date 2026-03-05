@@ -13,6 +13,8 @@ public class AuthServiceTests
     private readonly Mock<IPortalUserRepository> _userRepoMock;
     private readonly Mock<ILoginAttemptRepository> _loginAttemptRepoMock;
     private readonly Mock<IPasswordResetTokenRepository> _resetTokenRepoMock;
+    private readonly Mock<IEntitlementService> _entitlementServiceMock;
+    private readonly Mock<IPermissionService> _permissionServiceMock;
     private readonly AuthService _sut;
 
     public AuthServiceTests()
@@ -20,15 +22,22 @@ public class AuthServiceTests
         _userRepoMock = new Mock<IPortalUserRepository>();
         _loginAttemptRepoMock = new Mock<ILoginAttemptRepository>();
         _resetTokenRepoMock = new Mock<IPasswordResetTokenRepository>();
+        _entitlementServiceMock = new Mock<IEntitlementService>();
+        _permissionServiceMock = new Mock<IPermissionService>();
 
         _loginAttemptRepoMock
             .Setup(r => r.Create(It.IsAny<LoginAttempt>(), It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
+        _permissionServiceMock
+            .Setup(s => s.GetPermissions(It.IsAny<Guid?>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Array.Empty<string>());
 
         _sut = new AuthService(
             _userRepoMock.Object,
             _loginAttemptRepoMock.Object,
-            _resetTokenRepoMock.Object);
+            _resetTokenRepoMock.Object,
+            _entitlementServiceMock.Object,
+            _permissionServiceMock.Object);
     }
 
     private PortalUser CreateTestUser(string username = "testuser", string password = "SecureP@ss1!",

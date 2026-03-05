@@ -431,6 +431,28 @@ public class SubscriptionService : ISubscriptionService
         };
     }
 
+    public async Task<bool> HasFeature(Guid tenantId, string featureCode, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(featureCode))
+        {
+            return false;
+        }
+
+        var subscription = await _db.Subscriptions
+            .Where(s => s.TenantId == tenantId)
+            .Where(s => s.Status != SubscriptionStatus.Cancelled && s.Status != SubscriptionStatus.Expired)
+            .OrderByDescending(s => s.UpdatedAt)
+            .Include(s => s.Plan)
+            .FirstOrDefaultAsync(ct);
+
+        if (subscription?.Plan is null)
+        {
+            return false;
+        }
+
+        return subscription.Plan.HasFeature(featureCode);
+    }
+
     public async Task<Subscription> GetActiveSubscription(Guid tenantId, CancellationToken ct = default)
     {
         return await GetActiveSubscriptionInternal(tenantId, includeModules: true, ct);

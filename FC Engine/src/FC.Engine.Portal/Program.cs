@@ -1,6 +1,9 @@
 using System.Security.Claims;
 using FC.Engine.Application.Services;
+using FC.Engine.Domain.Abstractions;
 using FC.Engine.Infrastructure;
+using FC.Engine.Infrastructure.Auth;
+using FC.Engine.Infrastructure.Middleware;
 using FC.Engine.Infrastructure.MultiTenancy;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
@@ -59,6 +62,8 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
 // Authorization policies
 builder.Services.AddAuthorization(options =>
 {
+    options.AddRegosPermissionPolicies();
+
     options.AddPolicy("InstitutionUser", policy =>
         policy.RequireAuthenticatedUser());
 
@@ -74,6 +79,7 @@ builder.Services.AddAuthorization(options =>
 
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddCascadingAuthenticationState();
+builder.Services.AddControllers();
 
 // Blazor Server
 builder.Services.AddRazorComponents()
@@ -87,19 +93,89 @@ if (!app.Environment.IsDevelopment())
     app.UseHsts();
 }
 
+app.UseTenantResolution();
+app.UseTenantFavicon();
 app.UseStaticFiles();
 app.UseAuthentication();
-app.UseAuthorization();
 app.UseTenantContext();
+app.UseAuthorization();
 app.UseAntiforgery();
 
 // Login POST endpoint — authenticates institution users
-app.MapPost("/account/login", async (HttpContext context, InstitutionAuthService authService) =>
+app.MapPost("/account/login", async (
+    HttpContext context,
+    InstitutionAuthService authService,
+    IInstitutionUserRepository institutionUserRepository,
+    IMfaService mfaService,
+    IMfaChallengeStore mfaChallengeStore) =>
 {
     var form = await context.Request.ReadFormAsync();
+    var challengeId = form["challengeId"].ToString().Trim();
+    var returnUrl = form["returnUrl"].ToString().Trim();
+
+    if (!string.IsNullOrWhiteSpace(challengeId))
+    {
+        var challenge = await mfaChallengeStore.GetChallenge(challengeId, context.RequestAborted);
+        if (challenge is null)
+        {
+            context.Response.Redirect("/login?error=mfa-expired");
+            return;
+        }
+
+        var mfaCode = form["mfaCode"].ToString().Trim();
+        var backupCode = form["backupCode"].ToString().Trim().ToUpperInvariant();
+        var verified = false;
+
+        if (!string.IsNullOrWhiteSpace(mfaCode))
+        {
+            verified = await mfaService.VerifyCode(challenge.UserId, mfaCode, challenge.UserType);
+        }
+        else if (!string.IsNullOrWhiteSpace(backupCode))
+        {
+            verified = await mfaService.VerifyBackupCode(challenge.UserId, backupCode, challenge.UserType);
+        }
+
+        if (!verified)
+        {
+            context.Response.Redirect($"/login?mfa=required&challenge={Uri.EscapeDataString(challengeId)}&error=mfa-invalid");
+            return;
+        }
+
+        var challengedUser = await institutionUserRepository.GetById(challenge.UserId, context.RequestAborted);
+        if (challengedUser is null || !challengedUser.IsActive)
+        {
+            context.Response.Redirect("/login?error=invalid");
+            return;
+        }
+
+        await mfaChallengeStore.RemoveChallenge(challengeId, context.RequestAborted);
+
+        var challengeIp = context.Connection.RemoteIpAddress?.ToString();
+        await authService.RecordLogin(challengedUser.Id, challengeIp, context.RequestAborted);
+
+        var challengePrincipal = await authService.BuildClaimsPrincipalWithPermissions(challengedUser, context.RequestAborted);
+        await context.SignInAsync(
+            CookieAuthenticationDefaults.AuthenticationScheme,
+            challengePrincipal,
+            new AuthenticationProperties
+            {
+                IsPersistent = true,
+                ExpiresUtc = DateTimeOffset.UtcNow.AddHours(4),
+            });
+
+        if (challenge.MustChangePassword)
+        {
+            context.Response.Redirect("/change-password");
+            return;
+        }
+
+        var challengeRedirect = string.IsNullOrWhiteSpace(challenge.ReturnUrl) ? "/" : challenge.ReturnUrl;
+        context.Response.Redirect(challengeRedirect);
+        return;
+    }
+
     var username = form["username"].ToString().Trim();
     var password = form["password"].ToString();
-    var returnUrl = form["returnUrl"].ToString();
 
     if (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(password))
     {
@@ -115,11 +191,44 @@ app.MapPost("/account/login", async (HttpContext context, InstitutionAuthService
         return;
     }
 
+    var mfaEnabled = await mfaService.IsMfaEnabled(user.Id, "InstitutionUser");
+    var mfaRequired = await mfaService.IsMfaRequired(user.TenantId, user.Role.ToString());
+    if (mfaEnabled)
+    {
+        var pendingChallengeId = await mfaChallengeStore.CreateChallenge(new MfaLoginChallenge
+        {
+            UserId = user.Id,
+            UserType = "InstitutionUser",
+            Username = user.Username,
+            ReturnUrl = returnUrl,
+            MustChangePassword = user.MustChangePassword
+        }, context.RequestAborted);
+
+        context.Response.Redirect($"/login?mfa=required&challenge={Uri.EscapeDataString(pendingChallengeId)}");
+        return;
+    }
+
+    if (mfaRequired && !mfaEnabled)
+    {
+        var setupPrincipal = await authService.BuildClaimsPrincipalWithPermissions(user, context.RequestAborted);
+        await context.SignInAsync(
+            CookieAuthenticationDefaults.AuthenticationScheme,
+            setupPrincipal,
+            new AuthenticationProperties
+            {
+                IsPersistent = true,
+                ExpiresUtc = DateTimeOffset.UtcNow.AddHours(4),
+            });
+
+        context.Response.Redirect("/account/mfa-setup?enroll=required");
+        return;
+    }
+
     // Record login
     var ipAddress = context.Connection.RemoteIpAddress?.ToString();
-    await authService.RecordLogin(user.Id, ipAddress);
+    await authService.RecordLogin(user.Id, ipAddress, context.RequestAborted);
 
-    var principal = authService.BuildClaimsPrincipal(user);
+    var principal = await authService.BuildClaimsPrincipalWithPermissions(user, context.RequestAborted);
 
     await context.SignInAsync(
         CookieAuthenticationDefaults.AuthenticationScheme,
@@ -146,6 +255,8 @@ app.MapGet("/account/logout", async (HttpContext context) =>
     await context.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
     context.Response.Redirect("/login");
 });
+
+app.MapControllers();
 
 app.MapRazorComponents<FC.Engine.Portal.Components.App>()
     .AddInteractiveServerRenderMode();

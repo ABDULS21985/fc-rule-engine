@@ -1,10 +1,17 @@
 @page "/login"
 @layout LoginLayout
+@using FC.Engine.Domain.Abstractions
+@using FC.Engine.Domain.ValueObjects
+@inject ITenantBrandingService BrandingService
+@inject ITenantContext TenantContext
 
 <PageTitle>Sign In — FC Engine Portal</PageTitle>
 
 <div class="portal-login-container">
     <div class="portal-login-card">
+        <div class="portal-login-header-logo">
+            <img src="@_branding.LogoUrl" alt="@_branding.CompanyName" style="height: 52px; width: auto;" />
+        </div>
         <div class="portal-login-header">
             <h2 class="portal-login-title">Sign In</h2>
             <p class="portal-login-subtitle">Financial Institution Portal</p>
@@ -20,33 +27,60 @@
             </div>
         }
 
-        <form method="post" action="/account/login" class="portal-login-form">
-            <input type="hidden" name="returnUrl" value="@returnUrl" />
-            <AntiforgeryToken />
+        @if (showMfaChallenge && !string.IsNullOrWhiteSpace(challenge))
+        {
+            <form method="post" action="/account/login" class="portal-login-form">
+                <input type="hidden" name="challengeId" value="@challenge" />
+                <input type="hidden" name="returnUrl" value="@returnUrl" />
+                <AntiforgeryToken />
 
-            <div class="portal-form-group">
-                <label for="username" class="portal-form-label">Username</label>
-                <input type="text" id="username" name="username" class="portal-form-input"
-                       placeholder="Enter your username" required autocomplete="username" autofocus />
-            </div>
+                <div class="portal-form-group">
+                    <label for="mfaCode" class="portal-form-label">Authenticator Code</label>
+                    <input type="text" id="mfaCode" name="mfaCode" class="portal-form-input"
+                           placeholder="000000" maxlength="6" autocomplete="one-time-code" autofocus />
+                </div>
 
-            <div class="portal-form-group">
-                <label for="password" class="portal-form-label">Password</label>
-                <input type="password" id="password" name="password" class="portal-form-input"
-                       placeholder="Enter your password" required autocomplete="current-password" />
-            </div>
+                <div class="portal-form-group">
+                    <label for="backupCode" class="portal-form-label">Backup Code (optional)</label>
+                    <input type="text" id="backupCode" name="backupCode" class="portal-form-input"
+                           placeholder="XXXX-XXXX" maxlength="9" />
+                </div>
 
-            <button type="submit" class="portal-btn portal-btn-primary portal-btn-full">
-                Sign In
-            </button>
-        </form>
+                <button type="submit" class="portal-btn portal-btn-primary portal-btn-full">
+                    Verify Code
+                </button>
+            </form>
+        }
+        else
+        {
+            <form method="post" action="/account/login" class="portal-login-form">
+                <input type="hidden" name="returnUrl" value="@returnUrl" />
+                <AntiforgeryToken />
+
+                <div class="portal-form-group">
+                    <label for="username" class="portal-form-label">Username</label>
+                    <input type="text" id="username" name="username" class="portal-form-input"
+                           placeholder="Enter your username" required autocomplete="username" autofocus />
+                </div>
+
+                <div class="portal-form-group">
+                    <label for="password" class="portal-form-label">Password</label>
+                    <input type="password" id="password" name="password" class="portal-form-input"
+                           placeholder="Enter your password" required autocomplete="current-password" />
+                </div>
+
+                <button type="submit" class="portal-btn portal-btn-primary portal-btn-full">
+                    Sign In
+                </button>
+            </form>
+        }
 
         <div class="portal-login-help">
             <p>Having trouble signing in? Contact your institution administrator.</p>
         </div>
 
         <div class="portal-login-footer">
-            <p>&copy; @DateTime.UtcNow.Year Central Bank of Nigeria. All rights reserved.</p>
+            <p>@_branding.CopyrightText</p>
         </div>
     </div>
 </div>
@@ -58,17 +92,34 @@
     [SupplyParameterFromQuery]
     private string? returnUrl { get; set; }
 
-    private string errorMessage = "";
+    [SupplyParameterFromQuery]
+    private string? mfa { get; set; }
 
-    protected override void OnInitialized()
+    [SupplyParameterFromQuery]
+    private string? challenge { get; set; }
+
+    private string errorMessage = "";
+    private BrandingConfig _branding = BrandingConfig.WithDefaults();
+    private bool showMfaChallenge;
+
+    protected override async Task OnInitializedAsync()
     {
+        showMfaChallenge = string.Equals(mfa, "required", StringComparison.OrdinalIgnoreCase);
+
         errorMessage = error switch
         {
             "invalid" => "Invalid username or password.",
             "locked" => "Account is locked. Please try again later.",
             "inactive" => "Account has been deactivated. Contact your institution administrator.",
             "not-configured" => "Institution authentication is being configured. Please try again later.",
+            "mfa-invalid" => "Invalid MFA or backup code. Please try again.",
+            "mfa-expired" => "MFA challenge expired. Sign in again.",
             _ => ""
         };
+
+        if (TenantContext.CurrentTenantId.HasValue)
+        {
+            _branding = await BrandingService.GetBrandingConfig(TenantContext.CurrentTenantId.Value);
+        }
     }
 }

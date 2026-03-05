@@ -1,5 +1,9 @@
 @page "/login"
 @layout FC.Engine.Admin.Components.Layout.LoginLayout
+@using FC.Engine.Domain.Abstractions
+@using FC.Engine.Domain.ValueObjects
+@inject ITenantBrandingService BrandingService
+@inject ITenantContext TenantContext
 
 <div class="login-container">
     <div class="login-card">
@@ -9,7 +13,7 @@
             <!-- Header -->
             <div class="login-card-header">
                 <div class="login-card-logo">
-                    <img src="images/cbn-logo.svg" alt="CBN" width="56" height="46" />
+                    <img src="@_branding.LogoUrl" alt="@_branding.CompanyName" width="56" height="46" />
                 </div>
                 <h2 class="login-title">Secure Login</h2>
                 <p class="login-subtitle">Use your authorized credentials to access the platform</p>
@@ -38,90 +42,134 @@
             }
 
             <!-- Login Form -->
-            <form id="loginForm" method="post" action="/account/login" novalidate>
-                <!-- Username Field -->
-                <div class="floating-field">
-                    <input
-                        id="username"
-                        name="username"
-                        type="text"
-                        class="floating-input"
-                        placeholder=" "
-                        required
-                        autocomplete="username"
-                        aria-label="Username"
-                        aria-required="true" />
-                    <label for="username" class="floating-label">Username</label>
-                    <svg class="field-icon" viewBox="0 0 20 20" fill="currentColor" width="16" height="16" aria-hidden="true">
-                        <path fill-rule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clip-rule="evenodd"/>
-                    </svg>
-                </div>
+            @if (_showMfaChallenge && !string.IsNullOrWhiteSpace(_challenge))
+            {
+                <form id="loginForm" method="post" action="/account/login" novalidate>
+                    <input type="hidden" name="challengeId" value="@_challenge" />
 
-                <!-- Password Field -->
-                <div class="floating-field">
-                    <input
-                        id="password"
-                        name="password"
-                        type="password"
-                        class="floating-input"
-                        placeholder=" "
-                        required
-                        autocomplete="current-password"
-                        aria-label="Password"
-                        aria-required="true" />
-                    <label for="password" class="floating-label">Password</label>
-                    <svg class="field-icon" viewBox="0 0 20 20" fill="currentColor" width="16" height="16" aria-hidden="true">
-                        <path fill-rule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clip-rule="evenodd"/>
-                    </svg>
-                    <button type="button" class="password-toggle" id="pwdToggle" aria-label="Toggle password visibility" tabindex="-1">
-                        <svg class="eye-open" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="18" height="18">
-                            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-                            <circle cx="12" cy="12" r="3"/>
-                        </svg>
-                        <svg class="eye-closed" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="18" height="18">
-                            <path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24"/>
-                            <line x1="1" y1="1" x2="23" y2="23"/>
-                        </svg>
-                    </button>
-                    <!-- Caps Lock Warning -->
-                    <div class="caps-lock-warning" id="capsWarning" role="status" aria-live="polite">
-                        <svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14" aria-hidden="true">
-                            <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
-                        </svg>
-                        <span>Caps Lock is on</span>
+                    <div class="floating-field">
+                        <input
+                            id="mfaCode"
+                            name="mfaCode"
+                            type="text"
+                            class="floating-input"
+                            placeholder=" "
+                            maxlength="6"
+                            autocomplete="one-time-code"
+                            aria-label="MFA code"
+                            aria-required="true" />
+                        <label for="mfaCode" class="floating-label">Authenticator Code</label>
                     </div>
-                </div>
 
-                <!-- Remember Me / Forgot Password Row -->
-                <div class="login-utility-row">
-                    <label class="login-checkbox">
-                        <input type="checkbox" name="rememberMe" value="true" />
-                        <span class="checkbox-visual" aria-hidden="true">
-                            <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="10" height="10">
-                                <polyline points="2.5 6 5 8.5 9.5 3.5"/>
-                            </svg>
+                    <div class="floating-field">
+                        <input
+                            id="backupCode"
+                            name="backupCode"
+                            type="text"
+                            class="floating-input"
+                            placeholder=" "
+                            maxlength="9"
+                            aria-label="Backup code" />
+                        <label for="backupCode" class="floating-label">Backup Code (optional)</label>
+                    </div>
+
+                    <button type="submit" class="btn-gold-submit" id="submitBtn">
+                        <span class="btn-label">
+                            <span>Verify Code</span>
                         </span>
-                        <span class="checkbox-label">Remember me</span>
-                    </label>
-                    <a href="/forgot-password" class="login-forgot-link" tabindex="0">Forgot password?</a>
-                </div>
+                        <span class="btn-loading">
+                            <span>Verifying&hellip;</span>
+                        </span>
+                    </button>
+                </form>
+            }
+            else
+            {
+                <form id="loginForm" method="post" action="/account/login" novalidate>
+                    <!-- Username Field -->
+                    <div class="floating-field">
+                        <input
+                            id="username"
+                            name="username"
+                            type="text"
+                            class="floating-input"
+                            placeholder=" "
+                            required
+                            autocomplete="username"
+                            aria-label="Username"
+                            aria-required="true" />
+                        <label for="username" class="floating-label">Username</label>
+                        <svg class="field-icon" viewBox="0 0 20 20" fill="currentColor" width="16" height="16" aria-hidden="true">
+                            <path fill-rule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clip-rule="evenodd"/>
+                        </svg>
+                    </div>
 
-                <!-- Submit Button -->
-                <button type="submit" class="btn-gold-submit" id="submitBtn">
-                    <span class="btn-label">
-                        <svg viewBox="0 0 20 20" fill="currentColor" width="18" height="18" aria-hidden="true">
-                            <path fill-rule="evenodd" d="M3 3a1 1 0 011 1v12a1 1 0 11-2 0V4a1 1 0 011-1zm7.707 3.293a1 1 0 010 1.414L9.414 9H17a1 1 0 110 2H9.414l1.293 1.293a1 1 0 01-1.414 1.414l-3-3a1 1 0 010-1.414l3-3a1 1 0 011.414 0z" clip-rule="evenodd"/>
+                    <!-- Password Field -->
+                    <div class="floating-field">
+                        <input
+                            id="password"
+                            name="password"
+                            type="password"
+                            class="floating-input"
+                            placeholder=" "
+                            required
+                            autocomplete="current-password"
+                            aria-label="Password"
+                            aria-required="true" />
+                        <label for="password" class="floating-label">Password</label>
+                        <svg class="field-icon" viewBox="0 0 20 20" fill="currentColor" width="16" height="16" aria-hidden="true">
+                            <path fill-rule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clip-rule="evenodd"/>
                         </svg>
-                        <span>Sign In</span>
-                    </span>
-                    <span class="btn-loading">
-                        <svg class="loading-spinner" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
-                            <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="2.5" stroke-dasharray="31.4 31.4" stroke-linecap="round"/>
-                        </svg>
-                        <span>Authenticating&hellip;</span>
-                    </span>
-                </button>
-            </form>
+                        <button type="button" class="password-toggle" id="pwdToggle" aria-label="Toggle password visibility" tabindex="-1">
+                            <svg class="eye-open" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="18" height="18">
+                                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                                <circle cx="12" cy="12" r="3"/>
+                            </svg>
+                            <svg class="eye-closed" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="18" height="18">
+                                <path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24"/>
+                                <line x1="1" y1="1" x2="23" y2="23"/>
+                            </svg>
+                        </button>
+                        <!-- Caps Lock Warning -->
+                        <div class="caps-lock-warning" id="capsWarning" role="status" aria-live="polite">
+                            <svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14" aria-hidden="true">
+                                <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
+                            </svg>
+                            <span>Caps Lock is on</span>
+                        </div>
+                    </div>
+
+                    <!-- Remember Me / Forgot Password Row -->
+                    <div class="login-utility-row">
+                        <label class="login-checkbox">
+                            <input type="checkbox" name="rememberMe" value="true" />
+                            <span class="checkbox-visual" aria-hidden="true">
+                                <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="10" height="10">
+                                    <polyline points="2.5 6 5 8.5 9.5 3.5"/>
+                                </svg>
+                            </span>
+                            <span class="checkbox-label">Remember me</span>
+                        </label>
+                        <a href="/forgot-password" class="login-forgot-link" tabindex="0">Forgot password?</a>
+                    </div>
+
+                    <!-- Submit Button -->
+                    <button type="submit" class="btn-gold-submit" id="submitBtn">
+                        <span class="btn-label">
+                            <svg viewBox="0 0 20 20" fill="currentColor" width="18" height="18" aria-hidden="true">
+                                <path fill-rule="evenodd" d="M3 3a1 1 0 011 1v12a1 1 0 11-2 0V4a1 1 0 011-1zm7.707 3.293a1 1 0 010 1.414L9.414 9H17a1 1 0 110 2H9.414l1.293 1.293a1 1 0 01-1.414 1.414l-3-3a1 1 0 010-1.414l3-3a1 1 0 011.414 0z" clip-rule="evenodd"/>
+                            </svg>
+                            <span>Sign In</span>
+                        </span>
+                        <span class="btn-loading">
+                            <svg class="loading-spinner" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+                                <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="2.5" stroke-dasharray="31.4 31.4" stroke-linecap="round"/>
+                            </svg>
+                            <span>Authenticating&hellip;</span>
+                        </span>
+                    </button>
+                </form>
+            }
 
             <!-- Security Notice -->
             <div class="login-security-notice">
@@ -133,7 +181,7 @@
 
             <!-- Footer -->
             <div class="login-card-footer">
-                <span>Powered by <strong>FC Engine</strong></span>
+                <span>Powered by <strong>@_branding.CompanyName</strong></span>
             </div>
         </div>
     </div>
@@ -196,8 +244,28 @@
     [SupplyParameterFromQuery(Name = "reset")]
     private string? Reset { get; set; }
 
+    [SupplyParameterFromQuery(Name = "mfa")]
+    private string? Mfa { get; set; }
+
+    [SupplyParameterFromQuery(Name = "challenge")]
+    private string? Challenge { get; set; }
+
     private bool _resetSuccess => Reset == "success";
     private bool _hasError => !string.IsNullOrEmpty(Error);
+    private BrandingConfig _branding = BrandingConfig.WithDefaults();
+    private bool _showMfaChallenge;
+    private string? _challenge;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _showMfaChallenge = string.Equals(Mfa, "required", StringComparison.OrdinalIgnoreCase);
+        _challenge = Challenge;
+
+        if (TenantContext.CurrentTenantId.HasValue)
+        {
+            _branding = await BrandingService.GetBrandingConfig(TenantContext.CurrentTenantId.Value);
+        }
+    }
 
     private string _errorMessage => Error switch
     {
@@ -205,6 +273,8 @@
         "locked" => "This account has been temporarily locked due to too many failed attempts. Try again in 15 minutes.",
         "expired" => "Your session has expired. Please sign in again.",
         "denied" => "Access denied. You do not have permission to access this system.",
+        "mfa-invalid" => "Invalid MFA or backup code. Please try again.",
+        "mfa-expired" => "MFA challenge expired. Sign in again.",
         _ => "An error occurred during sign in. Please try again."
     };
 }

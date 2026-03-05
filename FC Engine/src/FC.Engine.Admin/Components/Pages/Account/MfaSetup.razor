@@ -1,0 +1,110 @@
+@page "/account/mfa-setup"
+@attribute [Authorize]
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Components.Authorization
+@using FC.Engine.Domain.Abstractions
+@inject IMfaService MfaService
+@inject AuthenticationStateProvider AuthStateProvider
+@inject NavigationManager NavigationManager
+
+<PageTitle>Set Up MFA — FC Engine Admin</PageTitle>
+
+<div class="login-container" style="min-height:auto;">
+    <div class="login-card" style="max-width:620px;">
+        <div class="login-card-body">
+            @if (!string.IsNullOrWhiteSpace(_error))
+            {
+                <div class="login-alert login-alert-error">@_error</div>
+            }
+
+            @if (_step == 1 && _setupResult is not null)
+            {
+                <h2 class="login-title">Set Up Two-Factor Authentication</h2>
+                <p class="login-subtitle">Scan the QR code below with your authenticator app.</p>
+                <img src="@_setupResult.QrCodeDataUri" alt="MFA QR Code" style="max-width: 220px; margin: 12px 0;" />
+                <p>Manual code: <code>@_setupResult.SecretKey</code></p>
+
+                <div class="floating-field" style="margin-top:16px;">
+                    <input id="verificationCode" class="floating-input" @bind="_verificationCode" maxlength="6" placeholder=" " />
+                    <label for="verificationCode" class="floating-label">Verification code</label>
+                </div>
+
+                <button class="btn-gold-submit" @onclick="VerifyAndActivate" style="margin-top:12px;">
+                    <span class="btn-label"><span>Verify &amp; Activate</span></span>
+                </button>
+            }
+            else if (_step == 2)
+            {
+                <h2 class="login-title">Save Your Backup Codes</h2>
+                <p class="login-subtitle">Store these safely. Each backup code can be used only once.</p>
+                <div style="display:grid;grid-template-columns:repeat(2,minmax(120px,1fr));gap:8px;">
+                    @foreach (var code in _backupCodes)
+                    {
+                        <code style="padding:6px;border:1px solid #ddd;border-radius:6px;">@code</code>
+                    }
+                </div>
+                <button class="btn-gold-submit" style="margin-top:16px;" @onclick="Complete">
+                    <span class="btn-label"><span>Continue</span></span>
+                </button>
+            }
+        </div>
+    </div>
+</div>
+
+@code {
+    private MfaSetupResult? _setupResult;
+    private string _verificationCode = string.Empty;
+    private string _error = string.Empty;
+    private int _step = 1;
+    private List<string> _backupCodes = new();
+    private int _userId;
+    private string _email = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+        if (user.Identity?.IsAuthenticated != true)
+        {
+            NavigationManager.NavigateTo("/login");
+            return;
+        }
+
+        if (!int.TryParse(user.FindFirst(ClaimTypes.NameIdentifier)?.Value, out _userId))
+        {
+            _error = "Unable to resolve user identity for MFA setup.";
+            return;
+        }
+
+        _email = user.FindFirst(ClaimTypes.Email)?.Value
+                 ?? user.FindFirst("email")?.Value
+                 ?? "admin@regos.local";
+
+        _setupResult = await MfaService.InitiateSetup(_userId, "PortalUser", _email);
+    }
+
+    private async Task VerifyAndActivate()
+    {
+        if (string.IsNullOrWhiteSpace(_verificationCode))
+        {
+            _error = "Enter the 6-digit verification code from your authenticator app.";
+            return;
+        }
+
+        var activation = await MfaService.ActivateWithVerification(_userId, "PortalUser", _verificationCode.Trim());
+        if (!activation.Success)
+        {
+            _error = "Invalid verification code. Try again.";
+            return;
+        }
+
+        _backupCodes = activation.BackupCodes;
+        _step = 2;
+        _error = string.Empty;
+    }
+
+    private void Complete()
+    {
+        NavigationManager.NavigateTo("/", forceLoad: true);
+    }
+}

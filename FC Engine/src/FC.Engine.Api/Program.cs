@@ -2,9 +2,13 @@ using FC.Engine.Api.Endpoints;
 using FC.Engine.Api.Middleware;
 using FC.Engine.Application.Services;
 using FC.Engine.Infrastructure;
+using FC.Engine.Infrastructure.Auth;
 using FC.Engine.Infrastructure.MultiTenancy;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using Serilog;
+using System.Security.Cryptography;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -27,6 +31,28 @@ builder.Services.AddScoped<SeedService>();
 builder.Services.AddScoped<FormulaSeedService>();
 builder.Services.AddScoped<CrossSheetRuleSeedService>();
 builder.Services.AddScoped<FormulaCatalogSeeder>();
+builder.Services.AddScoped<InstitutionAuthService>();
+
+var jwtSettings = builder.Configuration.GetSection(JwtSettings.SectionName).Get<JwtSettings>() ?? new JwtSettings();
+var jwtSigningKey = LoadRsaPublicSecurityKey(jwtSettings.SigningKeyPath);
+
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options =>
+    {
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuer = true,
+            ValidIssuer = jwtSettings.Issuer,
+            ValidateAudience = true,
+            ValidAudience = jwtSettings.Audience,
+            ValidateIssuerSigningKey = true,
+            IssuerSigningKey = jwtSigningKey,
+            ValidateLifetime = true,
+            ClockSkew = TimeSpan.FromSeconds(30)
+        };
+    });
+
+builder.Services.AddAuthorization(options => { options.AddRegosPermissionPolicies(); });
 
 // Swagger
 builder.Services.AddHttpContextAccessor();
@@ -41,12 +67,30 @@ builder.Services.AddSwaggerGen(options =>
         Type = SecuritySchemeType.ApiKey,
         Description = "API key for authentication"
     });
+
+    options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
+    {
+        Name = "Authorization",
+        Type = SecuritySchemeType.Http,
+        Scheme = "bearer",
+        BearerFormat = "JWT",
+        In = ParameterLocation.Header,
+        Description = "JWT access token"
+    });
+
     options.AddSecurityRequirement(new OpenApiSecurityRequirement
     {
         {
             new OpenApiSecurityScheme
             {
                 Reference = new OpenApiReference { Type = ReferenceType.SecurityScheme, Id = "ApiKey" }
+            },
+            Array.Empty<string>()
+        },
+        {
+            new OpenApiSecurityScheme
+            {
+                Reference = new OpenApiReference { Type = ReferenceType.SecurityScheme, Id = "Bearer" }
             },
             Array.Empty<string>()
         }
@@ -63,17 +107,17 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseSerilogRequestLogging();
+app.UseAuthentication();
 
-// API key authentication (skips /health and /swagger)
-if (!string.IsNullOrEmpty(builder.Configuration["ApiKey"]))
-{
-    app.UseApiKeyAuth();
-}
+// Dual auth middleware (JWT Bearer first, then API key fallback).
+app.UseApiKeyAuth();
+app.UseAuthorization();
 
 // Tenant context resolution for API requests
 app.UseTenantContext();
 
 // Map endpoints
+app.MapAuthEndpoints();
 app.MapSubmissionEndpoints();
 app.MapTemplateEndpoints();
 app.MapSchemaEndpoints();
@@ -82,3 +126,21 @@ app.MapGet("/health", () => Results.Ok(new { status = "healthy", timestamp = Dat
     .WithTags("Health");
 
 app.Run();
+
+static SecurityKey LoadRsaPublicSecurityKey(string keyPath)
+{
+    if (string.IsNullOrWhiteSpace(keyPath))
+    {
+        throw new InvalidOperationException("Jwt:SigningKeyPath is required for API authentication.");
+    }
+
+    if (!File.Exists(keyPath))
+    {
+        throw new FileNotFoundException($"JWT signing key file was not found at path '{keyPath}'.");
+    }
+
+    var pem = File.ReadAllText(keyPath);
+    var rsa = RSA.Create();
+    rsa.ImportFromPem(pem);
+    return new RsaSecurityKey(rsa.ExportParameters(false));
+}

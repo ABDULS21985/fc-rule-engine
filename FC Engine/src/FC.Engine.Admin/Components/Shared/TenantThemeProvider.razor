@@ -1,0 +1,104 @@
+@using FC.Engine.Domain.Abstractions
+@using FC.Engine.Domain.ValueObjects
+@inject ITenantBrandingService BrandingService
+@inject ITenantContext TenantContext
+
+@if (_branding is not null)
+{
+    <style>
+        :root {
+            --color-primary: @_branding.PrimaryColor;
+            --color-primary-hover: @DarkenColor(_branding.PrimaryColor!, 0.15);
+            --color-primary-light: @LightenColor(_branding.PrimaryColor!, 0.85);
+            --color-primary-rgb: @HexToRgb(_branding.PrimaryColor!);
+            --color-secondary: @_branding.SecondaryColor;
+            --color-secondary-hover: @DarkenColor(_branding.SecondaryColor!, 0.15);
+            --color-accent: @_branding.AccentColor;
+
+            --color-danger: @_branding.DangerColor;
+            --color-success: @_branding.SuccessColor;
+            --color-warning: @_branding.WarningColor;
+            --color-background: @_branding.BackgroundColor;
+            --color-sidebar: @_branding.SidebarColor;
+
+            --font-body: @_branding.FontBody;
+            --font-heading: @_branding.FontHeading;
+
+            /* Bridge existing design tokens to tenant-driven palette */
+            --cbn-primary: var(--color-primary, #006B3F);
+            --cbn-primary-hover: var(--color-primary-hover, #005530);
+            --cbn-primary-subtle: var(--color-primary-light, #E8F5E9);
+            --cbn-accent: var(--color-secondary, #C8A415);
+            --cbn-accent-hover: var(--color-secondary-hover, #A68A10);
+            --cbn-danger: var(--color-danger, #DC3545);
+            --cbn-success: var(--color-success, #28A745);
+            --cbn-warning: var(--color-warning, #FFC107);
+            --cbn-surface: var(--color-background, #F8F9FA);
+            --cbn-sidebar: var(--color-sidebar, #1A1F2B);
+            --font-sans: var(--font-body, 'Inter'), -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+        }
+    </style>
+}
+
+@code {
+    private BrandingConfig? _branding;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _branding = TenantContext.CurrentTenantId.HasValue
+            ? await BrandingService.GetBrandingConfig(TenantContext.CurrentTenantId.Value)
+            : BrandingConfig.WithDefaults();
+    }
+
+    private static string DarkenColor(string hex, double factor)
+    {
+        var (r, g, b) = ParseHex(hex);
+        r = (int)(r * (1 - factor));
+        g = (int)(g * (1 - factor));
+        b = (int)(b * (1 - factor));
+        return $"#{Clamp(r):X2}{Clamp(g):X2}{Clamp(b):X2}";
+    }
+
+    private static string LightenColor(string hex, double factor)
+    {
+        var (r, g, b) = ParseHex(hex);
+        r = (int)(r + (255 - r) * factor);
+        g = (int)(g + (255 - g) * factor);
+        b = (int)(b + (255 - b) * factor);
+        return $"#{Clamp(r):X2}{Clamp(g):X2}{Clamp(b):X2}";
+    }
+
+    private static string HexToRgb(string hex)
+    {
+        var (r, g, b) = ParseHex(hex);
+        return $"{r}, {g}, {b}";
+    }
+
+    private static (int r, int g, int b) ParseHex(string hex)
+    {
+        var value = (hex ?? string.Empty).Trim();
+        if (value.StartsWith('#'))
+        {
+            value = value[1..];
+        }
+
+        if (value.Length != 6)
+        {
+            value = "006B3F";
+        }
+
+        try
+        {
+            return (
+                Convert.ToInt32(value[..2], 16),
+                Convert.ToInt32(value.Substring(2, 2), 16),
+                Convert.ToInt32(value.Substring(4, 2), 16));
+        }
+        catch
+        {
+            return (0, 107, 63);
+        }
+    }
+
+    private static int Clamp(int value) => Math.Max(0, Math.Min(255, value));
+}

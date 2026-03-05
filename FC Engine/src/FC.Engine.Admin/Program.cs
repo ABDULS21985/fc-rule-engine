@@ -1,5 +1,8 @@
 using FC.Engine.Application.Services;
+using FC.Engine.Domain.Abstractions;
 using FC.Engine.Infrastructure;
+using FC.Engine.Infrastructure.Auth;
+using FC.Engine.Infrastructure.Middleware;
 using FC.Engine.Infrastructure.MultiTenancy;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
@@ -51,6 +54,7 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
 // Authorization policies
 builder.Services.AddAuthorization(options =>
 {
+    options.AddRegosPermissionPolicies();
     options.AddPolicy("AdminOnly", policy => policy.RequireRole("Admin"));
     options.AddPolicy("ApproverOrAdmin", policy => policy.RequireRole("Approver", "Admin"));
     options.AddPolicy("Authenticated", policy => policy.RequireAuthenticatedUser());
@@ -72,16 +76,74 @@ if (!app.Environment.IsDevelopment())
     app.UseHsts();
 }
 
+app.UseTenantResolution();
+app.UseTenantFavicon();
 app.UseStaticFiles();
 app.UseAuthentication();
-app.UseAuthorization();
 app.UseTenantContext();
+app.UseAuthorization();
 app.UseAntiforgery();
 
 // Login endpoint — handles cookie auth outside of Blazor's interactive (SignalR) pipeline
-app.MapPost("/account/login", async (HttpContext context, AuthService authService) =>
+app.MapPost("/account/login", async (
+    HttpContext context,
+    AuthService authService,
+    IPortalUserRepository portalUserRepository,
+    IMfaService mfaService,
+    IMfaChallengeStore mfaChallengeStore) =>
 {
     var form = await context.Request.ReadFormAsync();
+    var challengeId = form["challengeId"].ToString().Trim();
+    if (!string.IsNullOrWhiteSpace(challengeId))
+    {
+        var challenge = await mfaChallengeStore.GetChallenge(challengeId, context.RequestAborted);
+        if (challenge is null)
+        {
+            context.Response.Redirect("/login?error=mfa-expired");
+            return;
+        }
+
+        var mfaCode = form["mfaCode"].ToString().Trim();
+        var backupCode = form["backupCode"].ToString().Trim().ToUpperInvariant();
+        var verified = false;
+        if (!string.IsNullOrWhiteSpace(mfaCode))
+        {
+            verified = await mfaService.VerifyCode(challenge.UserId, mfaCode, challenge.UserType);
+        }
+        else if (!string.IsNullOrWhiteSpace(backupCode))
+        {
+            verified = await mfaService.VerifyBackupCode(challenge.UserId, backupCode, challenge.UserType);
+        }
+
+        if (!verified)
+        {
+            context.Response.Redirect($"/login?mfa=required&challenge={Uri.EscapeDataString(challengeId)}&error=mfa-invalid");
+            return;
+        }
+
+        var challengedUser = await portalUserRepository.GetById(challenge.UserId, context.RequestAborted);
+        if (challengedUser is null || !challengedUser.IsActive)
+        {
+            context.Response.Redirect("/login?error=invalid");
+            return;
+        }
+
+        await mfaChallengeStore.RemoveChallenge(challengeId, context.RequestAborted);
+
+        var principalWithMfa = await authService.BuildClaimsPrincipalWithPermissions(challengedUser, context.RequestAborted);
+        await context.SignInAsync(
+            CookieAuthenticationDefaults.AuthenticationScheme,
+            principalWithMfa,
+            new AuthenticationProperties
+            {
+                IsPersistent = true,
+                ExpiresUtc = DateTimeOffset.UtcNow.AddHours(8)
+            });
+
+        context.Response.Redirect("/");
+        return;
+    }
+
     var username = form["username"].ToString();
     var password = form["password"].ToString();
     var rememberMe = form["rememberMe"].ToString() == "true";
@@ -94,7 +156,41 @@ app.MapPost("/account/login", async (HttpContext context, AuthService authServic
         return;
     }
 
-    var principal = authService.BuildClaimsPrincipal(user);
+    var mfaEnabled = await mfaService.IsMfaEnabled(user.Id, "PortalUser");
+    var mfaRequired = user.TenantId.HasValue
+        ? await mfaService.IsMfaRequired(user.TenantId.Value, user.Role.ToString())
+        : string.Equals(user.Role.ToString(), "Approver", StringComparison.OrdinalIgnoreCase);
+
+    if (mfaEnabled)
+    {
+        var pendingChallenge = await mfaChallengeStore.CreateChallenge(new MfaLoginChallenge
+        {
+            UserId = user.Id,
+            UserType = "PortalUser",
+            Username = user.Username
+        }, context.RequestAborted);
+
+        context.Response.Redirect($"/login?mfa=required&challenge={Uri.EscapeDataString(pendingChallenge)}");
+        return;
+    }
+
+    if (mfaRequired && !mfaEnabled)
+    {
+        var setupPrincipal = await authService.BuildClaimsPrincipalWithPermissions(user, context.RequestAborted);
+        await context.SignInAsync(
+            CookieAuthenticationDefaults.AuthenticationScheme,
+            setupPrincipal,
+            new AuthenticationProperties
+            {
+                IsPersistent = true,
+                ExpiresUtc = DateTimeOffset.UtcNow.AddHours(8)
+            });
+
+        context.Response.Redirect("/account/mfa-setup?enroll=required");
+        return;
+    }
+
+    var principal = await authService.BuildClaimsPrincipalWithPermissions(user, context.RequestAborted);
 
     await context.SignInAsync(
         CookieAuthenticationDefaults.AuthenticationScheme,

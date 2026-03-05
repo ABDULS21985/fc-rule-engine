@@ -21,6 +21,7 @@ public interface ISubscriptionService
 
     Task<UsageSummary> GetUsageSummary(Guid tenantId, CancellationToken ct = default);
     Task<bool> CheckLimit(Guid tenantId, string limitType, CancellationToken ct = default);
+    Task<bool> HasFeature(Guid tenantId, string featureCode, CancellationToken ct = default);
 
     Task<Subscription> GetActiveSubscription(Guid tenantId, CancellationToken ct = default);
     Task<List<Invoice>> GetInvoices(Guid tenantId, int page = 1, int pageSize = 20, CancellationToken ct = default);

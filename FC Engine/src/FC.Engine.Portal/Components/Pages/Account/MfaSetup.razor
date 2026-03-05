@@ -1,0 +1,118 @@
+@page "/account/mfa-setup"
+@attribute [Authorize]
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Components.Authorization
+@using FC.Engine.Domain.Abstractions
+@inject IMfaService MfaService
+@inject AuthenticationStateProvider AuthStateProvider
+@inject NavigationManager NavigationManager
+
+<PageTitle>Set Up MFA — FC Engine Portal</PageTitle>
+
+<div class="portal-page-shell">
+    <div class="portal-page-card">
+        @if (!string.IsNullOrWhiteSpace(_error))
+        {
+            <div class="portal-alert portal-alert-error">@_error</div>
+        }
+
+        @if (_step == 1 && _setupResult is not null)
+        {
+            <h2>Set Up Two-Factor Authentication</h2>
+            <p>Scan this QR code with Google Authenticator, Authy, or Microsoft Authenticator.</p>
+
+            <img src="@_setupResult.QrCodeDataUri" alt="MFA QR Code" style="max-width: 240px; margin: 12px 0;" />
+            <p>Manual setup code: <code>@_setupResult.SecretKey</code></p>
+
+            <div class="portal-form-group" style="max-width: 320px;">
+                <label for="verificationCode" class="portal-form-label">Verification code</label>
+                <input id="verificationCode"
+                       class="portal-form-input"
+                       @bind="_verificationCode"
+                       maxlength="6"
+                       placeholder="000000" />
+            </div>
+
+            <button class="portal-btn portal-btn-primary" @onclick="VerifyAndActivate">
+                Verify &amp; Activate
+            </button>
+        }
+        else if (_step == 2)
+        {
+            <h2>Save Your Backup Codes</h2>
+            <div class="portal-alert portal-alert-error">
+                Save these codes now. Each code can be used once, and you will not see them again.
+            </div>
+
+            <div style="display:grid;grid-template-columns:repeat(2,minmax(120px,1fr));gap:8px;max-width:420px;">
+                @foreach (var code in _backupCodes)
+                {
+                    <code style="padding:6px;border:1px solid #ddd;border-radius:6px;">@code</code>
+                }
+            </div>
+
+            <button class="portal-btn portal-btn-primary" style="margin-top:16px;" @onclick="Complete">
+                I Have Saved My Codes
+            </button>
+        }
+    </div>
+</div>
+
+@code {
+    private MfaSetupResult? _setupResult;
+    private string _verificationCode = string.Empty;
+    private string _error = string.Empty;
+    private int _step = 1;
+    private List<string> _backupCodes = new();
+    private int _userId;
+    private string _email = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+        if (user.Identity?.IsAuthenticated != true)
+        {
+            NavigationManager.NavigateTo("/login");
+            return;
+        }
+
+        var userIdClaim = user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        if (!int.TryParse(userIdClaim, out _userId))
+        {
+            _error = "Unable to resolve user identity for MFA setup.";
+            return;
+        }
+
+        _email = user.FindFirst(ClaimTypes.Email)?.Value
+                 ?? user.FindFirst("email")?.Value
+                 ?? "user@regos.local";
+
+        _setupResult = await MfaService.InitiateSetup(_userId, "InstitutionUser", _email);
+    }
+
+    private async Task VerifyAndActivate()
+    {
+        if (string.IsNullOrWhiteSpace(_verificationCode))
+        {
+            _error = "Enter the 6-digit verification code from your authenticator app.";
+            return;
+        }
+
+        var activation = await MfaService.ActivateWithVerification(_userId, "InstitutionUser", _verificationCode.Trim());
+        if (!activation.Success)
+        {
+            _error = "Invalid verification code. Try again.";
+            return;
+        }
+
+        _backupCodes = activation.BackupCodes;
+        _step = 2;
+        _error = string.Empty;
+    }
+
+    private void Complete()
+    {
+        NavigationManager.NavigateTo("/", forceLoad: true);
+    }
+}

@@ -15,5 +15,8 @@ public enum InstitutionRole
     Checker = 2,
 
     /// <summary>Read-only access to submissions and reports.</summary>
-    Viewer = 3
+    Viewer = 3,
+
+    /// <summary>Can perform final approval/rejection where four-eyes controls require separate approver role.</summary>
+    Approver = 4
 }

@@ -1,18 +1,24 @@
 @inherits LayoutComponentBase
+@using FC.Engine.Domain.Abstractions
+@using FC.Engine.Domain.ValueObjects
+@inject ITenantBrandingService BrandingService
+@inject ITenantContext TenantContext
+
+<TenantThemeProvider />
 
 <div class="portal-login-layout">
     <!-- Left Brand Panel -->
-    <aside class="portal-brand-panel" aria-hidden="true">
+    <aside class="portal-brand-panel" aria-hidden="true" style="@BackgroundStyle">
         <div class="portal-brand-bg-layer"></div>
         <div class="portal-brand-bg-accent"></div>
         <div class="portal-brand-bg-grid" aria-hidden="true"></div>
 
         <div class="portal-brand-content">
             <div class="portal-brand-logo-wrapper">
-                <img src="images/cbn-logo.svg" alt="" class="portal-brand-logo" width="130" height="108" />
+                <img src="@_branding.LogoUrl" alt="" class="portal-brand-logo" width="130" height="108" />
             </div>
 
-            <h1 class="portal-brand-name">Central Bank of Nigeria</h1>
+            <h1 class="portal-brand-name">@_branding.CompanyName</h1>
 
             <div class="portal-brand-separator" role="presentation">
                 <span class="portal-separator-line"></span>
@@ -53,3 +59,20 @@
         @Body
     </main>
 </div>
+
+@code {
+    private BrandingConfig _branding = BrandingConfig.WithDefaults();
+
+    private string? BackgroundStyle =>
+        string.IsNullOrWhiteSpace(_branding.LoginBackgroundUrl)
+            ? null
+            : $"background-image: linear-gradient(135deg, rgba(0,0,0,0.45), rgba(0,0,0,0.1)), url('{_branding.LoginBackgroundUrl}'); background-size: cover; background-position: center;";
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (TenantContext.CurrentTenantId.HasValue)
+        {
+            _branding = await BrandingService.GetBrandingConfig(TenantContext.CurrentTenantId.Value);
+        }
+    }
+}
