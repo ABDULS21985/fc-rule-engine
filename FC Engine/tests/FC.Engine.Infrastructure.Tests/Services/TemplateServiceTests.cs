@@ -15,9 +15,10 @@ public class TemplateServiceTests
     private readonly Mock<IAuditLogger> _audit = new();
     private readonly Mock<ITemplateMetadataCache> _cache = new();
     private readonly Mock<ISqlTypeMapper> _sqlTypeMapper = new();
+    private readonly Mock<IEntitlementService> _entitlementService = new();
 
     private TemplateService CreateService() =>
-        new(_templateRepo.Object, _audit.Object, _cache.Object, _sqlTypeMapper.Object);
+        new(_templateRepo.Object, _audit.Object, _cache.Object, _sqlTypeMapper.Object, _entitlementService.Object);
 
     // ──────────────────────────────────────────────────
     // Helper: builds a valid CreateTemplateRequest

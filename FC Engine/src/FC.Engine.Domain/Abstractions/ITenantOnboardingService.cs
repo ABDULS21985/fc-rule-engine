@@ -16,6 +16,7 @@ public class TenantOnboardingRequest
     public string? RcNumber { get; set; }
     public string? TaxId { get; set; }
     public List<string> LicenceTypeCodes { get; set; } = new();
+    public string? SubscriptionPlanCode { get; set; }
 
     // First admin user
     public string AdminEmail { get; set; } = string.Empty;

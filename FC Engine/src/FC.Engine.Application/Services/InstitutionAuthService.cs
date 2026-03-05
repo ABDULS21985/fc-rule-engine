@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using System.Security.Claims;
 using FC.Engine.Domain.Abstractions;
 using FC.Engine.Domain.Entities;
 using FC.Engine.Domain.Enums;
@@ -182,6 +183,24 @@ public class InstitutionAuthService
         user.LastLoginAt = DateTime.UtcNow;
         user.LastLoginIp = ipAddress;
         await _userRepo.Update(user, ct);
+    }
+
+    public ClaimsPrincipal BuildClaimsPrincipal(InstitutionUser user)
+    {
+        var claims = new List<Claim>
+        {
+            new(ClaimTypes.NameIdentifier, user.Id.ToString()),
+            new(ClaimTypes.Name, user.Username),
+            new(ClaimTypes.Email, user.Email),
+            new("DisplayName", user.DisplayName),
+            new(ClaimTypes.Role, user.Role.ToString()),
+            new("InstitutionId", user.InstitutionId.ToString()),
+            new("InstitutionName", user.Institution?.InstitutionName ?? "Unknown"),
+            new("TenantId", user.TenantId.ToString())
+        };
+
+        var identity = new ClaimsIdentity(claims, "FC.Portal.Auth");
+        return new ClaimsPrincipal(identity);
     }
 
     // ── Password Hashing (identical to AuthService) ──

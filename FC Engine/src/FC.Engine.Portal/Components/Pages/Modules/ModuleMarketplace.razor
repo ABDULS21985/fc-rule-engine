@@ -1,9 +1,11 @@
 @page "/modules"
 @attribute [Authorize(Policy = "InstitutionUser")]
 @using FC.Engine.Domain.Abstractions
-@using FC.Engine.Domain.ValueObjects
+@using FC.Engine.Infrastructure.Metadata
+@using Microsoft.EntityFrameworkCore
 @inject IEntitlementService EntitlementSvc
 @inject ITenantContext TenantContext
+@inject MetadataDbContext Db
 
 <PageTitle>Modules — FC Engine Portal</PageTitle>
 
@@ -41,8 +43,8 @@
                 <span class="portal-stat-label">Active</span>
             </div>
             <div class="portal-stat-card">
-                <span class="portal-stat-value">@(_eligibleModules.Count - _activeModules.Count)</span>
-                <span class="portal-stat-label">Eligible</span>
+                <span class="portal-stat-value">@Math.Max(_eligibleModules.Count - _activeModules.Count, 0)</span>
+                <span class="portal-stat-label">Eligible - Not Activated</span>
             </div>
             <div class="portal-stat-card portal-stat-card-muted">
                 <span class="portal-stat-value">@(_allModules.Count - _eligibleModules.Count)</span>
@@ -127,18 +129,20 @@
                 .Select(m => m.ModuleCode)
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-            // Show all eligible modules (active + eligible), plus mark others as not available
-            _allModules = entitlement.EligibleModules
+            _allModules = await Db.Modules
+                .AsNoTracking()
+                .Where(m => m.IsActive)
+                .OrderBy(m => m.DisplayOrder)
+                .ThenBy(m => m.ModuleCode)
                 .Select(m => new ModuleViewModel
                 {
-                    ModuleCode = m.ModuleCode,
-                    ModuleName = m.ModuleName,
-                    RegulatorCode = m.RegulatorCode,
+                    ModuleCode = m.ModuleCode!,
+                    ModuleName = m.ModuleName!,
+                    RegulatorCode = m.RegulatorCode!,
                     SheetCount = m.SheetCount,
                     DefaultFrequency = m.DefaultFrequency
                 })
-                .OrderBy(m => m.ModuleCode)
-                .ToList();
+                .ToListAsync();
         }
         catch (Exception ex)
         {
@@ -153,7 +157,7 @@
     private string GetModuleStatus(ModuleViewModel module)
     {
         if (_activeModules.Contains(module.ModuleCode)) return "Active";
-        if (_eligibleModules.Contains(module.ModuleCode)) return "Eligible";
+        if (_eligibleModules.Contains(module.ModuleCode)) return "Eligible - Not Activated";
         return "Not Available";
     }
 
@@ -163,14 +167,14 @@
     private static string GetCardClass(string status) => status switch
     {
         "Active" => "portal-card-active",
-        "Eligible" => "portal-card-eligible",
+        "Eligible - Not Activated" => "portal-card-eligible",
         _ => "portal-card-disabled"
     };
 
     private static string GetBadgeClass(string status) => status switch
     {
         "Active" => "portal-badge-success",
-        "Eligible" => "portal-badge-info",
+        "Eligible - Not Activated" => "portal-badge-info",
         _ => "portal-badge-muted"
     };
 

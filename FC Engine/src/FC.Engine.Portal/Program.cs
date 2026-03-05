@@ -119,21 +119,7 @@ app.MapPost("/account/login", async (HttpContext context, InstitutionAuthService
     var ipAddress = context.Connection.RemoteIpAddress?.ToString();
     await authService.RecordLogin(user.Id, ipAddress);
 
-    // Build claims
-    var claims = new List<Claim>
-    {
-        new(ClaimTypes.NameIdentifier, user.Id.ToString()),
-        new(ClaimTypes.Name, user.Username),
-        new(ClaimTypes.Email, user.Email),
-        new("DisplayName", user.DisplayName),
-        new(ClaimTypes.Role, user.Role.ToString()),
-        new("InstitutionId", user.InstitutionId.ToString()),
-        new("InstitutionName", user.Institution?.InstitutionName ?? "Unknown"),
-        new("TenantId", user.TenantId.ToString()),
-    };
-
-    var identity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
-    var principal = new ClaimsPrincipal(identity);
+    var principal = authService.BuildClaimsPrincipal(user);
 
     await context.SignInAsync(
         CookieAuthenticationDefaults.AuthenticationScheme,

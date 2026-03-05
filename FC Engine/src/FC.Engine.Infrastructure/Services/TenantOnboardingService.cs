@@ -34,11 +34,17 @@ public class TenantOnboardingService : ITenantOnboardingService
         try
         {
             // ── Step 1: Validate ──
-            var slug = !string.IsNullOrWhiteSpace(request.TenantSlug)
-                ? request.TenantSlug
-                : GenerateSlug(request.TenantName);
+            var slug = ResolveSlugCandidate(request);
+            if (await _db.Tenants.AnyAsync(t => t.TenantSlug == slug, ct))
+            {
+                if (!string.IsNullOrWhiteSpace(request.TenantSlug))
+                {
+                    result.Errors.Add($"Tenant slug '{slug}' is already in use");
+                    return result;
+                }
 
-            slug = await EnsureUniqueSlug(slug, ct);
+                slug = await EnsureUniqueSlug(slug, ct);
+            }
 
             if (await _db.Set<InstitutionUser>().AnyAsync(u => u.Email == request.AdminEmail, ct))
             {
@@ -58,12 +64,32 @@ public class TenantOnboardingService : ITenantOnboardingService
                 return result;
             }
 
+            SubscriptionPlan? selectedPlan = null;
+            if (!string.IsNullOrWhiteSpace(request.SubscriptionPlanCode))
+            {
+                selectedPlan = await _db.SubscriptionPlans
+                    .FirstOrDefaultAsync(
+                        p => p.PlanCode == request.SubscriptionPlanCode && p.IsActive,
+                        ct);
+
+                if (selectedPlan is null)
+                {
+                    result.Errors.Add($"Invalid subscription plan code: {request.SubscriptionPlanCode}");
+                    return result;
+                }
+            }
+
             // ── Step 2: Create Tenant ──
             var tenant = Tenant.Create(request.TenantName, slug, request.TenantType, request.ContactEmail);
             tenant.ContactPhone = request.ContactPhone;
             tenant.Address = request.Address;
             tenant.RcNumber = request.RcNumber;
             tenant.TaxId = request.TaxId;
+            if (selectedPlan is not null)
+            {
+                tenant.MaxInstitutions = selectedPlan.MaxInstitutions;
+                tenant.MaxUsersPerEntity = selectedPlan.MaxUsersPerEntity;
+            }
 
             _db.Tenants.Add(tenant);
             await _db.SaveChangesAsync(ct);
@@ -93,7 +119,8 @@ public class TenantOnboardingService : ITenantOnboardingService
                 LicenseType = request.InstitutionType,
                 IsActive = true,
                 EntityType = EntityType.HeadOffice,
-                CreatedAt = DateTime.UtcNow
+                CreatedAt = DateTime.UtcNow,
+                MaxUsersAllowed = selectedPlan?.MaxUsersPerEntity ?? 10
             };
             _db.Institutions.Add(institution);
             await _db.SaveChangesAsync(ct);
@@ -124,18 +151,18 @@ public class TenantOnboardingService : ITenantOnboardingService
 
             result.AdminTemporaryPassword = tempPassword;
 
-            // ── Step 6: Activate Tenant ──
-            tenant.Activate();
-            await _db.SaveChangesAsync(ct);
-
-            // ── Step 7: Resolve Entitlements ──
+            // ── Step 6: Resolve Entitlements ──
             var entitlement = await _entitlementService.ResolveEntitlements(tenant.TenantId, ct);
             result.ActivatedModules = entitlement.ActiveModules.Select(m => m.ModuleCode).ToList();
 
-            // ── Step 8: Create Return Periods & Filing Calendar ──
+            // ── Step 7: Create Return Periods & Filing Calendar ──
             var periodsCreated = await CreateInitialReturnPeriods(
                 tenant.TenantId, tenant.FiscalYearStartMonth, entitlement.ActiveModules, ct);
             result.ReturnPeriodsCreated = periodsCreated;
+
+            // ── Step 8: Activate Tenant ──
+            tenant.Activate();
+            await _db.SaveChangesAsync(ct);
 
             // ── Step 9: Create Welcome Notification ──
             var notification = new PortalNotification
@@ -172,7 +199,7 @@ public class TenantOnboardingService : ITenantOnboardingService
 
     /// <summary>
     /// Creates initial return periods for each activated module based on its default frequency.
-    /// Generates the current period plus the next 2 upcoming periods.
+    /// Generates periods within the next 12 months.
     /// </summary>
     private async Task<int> CreateInitialReturnPeriods(
         Guid tenantId,
@@ -183,15 +210,16 @@ public class TenantOnboardingService : ITenantOnboardingService
         var now = DateTime.UtcNow;
         var periodsCreated = 0;
 
-        // Determine distinct frequencies from active modules
+        // Determine distinct frequencies from active modules.
+        // Supports combined values like "Monthly/Quarterly".
         var frequencies = activeModules
-            .Select(m => m.DefaultFrequency)
+            .SelectMany(m => ExpandFrequencies(m.DefaultFrequency))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
 
         foreach (var frequency in frequencies)
         {
-            var periods = GeneratePeriodsForFrequency(frequency, now, fiscalYearStartMonth);
+            var periods = GeneratePeriodsForFrequency(frequency, now, fiscalYearStartMonth, monthsHorizon: 12);
             foreach (var (year, month) in periods)
             {
                 // Check for duplicates (same tenant + year + month + frequency)
@@ -220,66 +248,100 @@ public class TenantOnboardingService : ITenantOnboardingService
     }
 
     /// <summary>
-    /// Generates (year, month) tuples for the current period plus 2 future periods
-    /// based on the reporting frequency.
+    /// Generates (year, month) tuples for a rolling horizon based on reporting frequency.
     /// </summary>
     internal static List<(int Year, int Month)> GeneratePeriodsForFrequency(
-        string frequency, DateTime referenceDate, int fiscalYearStartMonth = 1)
+        string frequency, DateTime referenceDate, int fiscalYearStartMonth = 1, int monthsHorizon = 12)
     {
-        var periods = new List<(int Year, int Month)>();
-
-        switch (frequency.ToUpperInvariant())
+        if (monthsHorizon <= 0)
         {
-            case "MONTHLY":
-                for (var i = 0; i < 3; i++)
-                {
-                    var dt = referenceDate.AddMonths(i);
-                    periods.Add((dt.Year, dt.Month));
-                }
-                break;
-
-            case "QUARTERLY":
-                // Find current quarter end month
-                var qMonth = ((referenceDate.Month - 1) / 3 + 1) * 3;
-                var qDate = new DateTime(referenceDate.Year, qMonth, 1);
-                for (var i = 0; i < 3; i++)
-                {
-                    var dt = qDate.AddMonths(i * 3);
-                    periods.Add((dt.Year, dt.Month));
-                }
-                break;
-
-            case "SEMIANNUAL":
-                var saMonth = referenceDate.Month <= 6 ? 6 : 12;
-                var saDate = new DateTime(referenceDate.Year, saMonth, 1);
-                for (var i = 0; i < 3; i++)
-                {
-                    var dt = saDate.AddMonths(i * 6);
-                    periods.Add((dt.Year, dt.Month));
-                }
-                break;
-
-            case "ANNUAL":
-                // Use fiscal year end month (default: December)
-                var annualMonth = fiscalYearStartMonth == 1 ? 12 : fiscalYearStartMonth - 1;
-                var baseYear = referenceDate.Year;
-                for (var i = 0; i < 3; i++)
-                {
-                    periods.Add((baseYear + i, annualMonth));
-                }
-                break;
-
-            default:
-                // Default to monthly
-                for (var i = 0; i < 3; i++)
-                {
-                    var dt = referenceDate.AddMonths(i);
-                    periods.Add((dt.Year, dt.Month));
-                }
-                break;
+            return new List<(int Year, int Month)>();
         }
 
-        return periods;
+        var normalizedFrequency = NormalizeFrequency(frequency);
+        var monthStart = new DateTime(referenceDate.Year, referenceDate.Month, 1);
+        var timeline = Enumerable.Range(0, monthsHorizon)
+            .Select(i => monthStart.AddMonths(i))
+            .ToList();
+
+        return normalizedFrequency switch
+        {
+            "Monthly" => timeline.Select(d => (d.Year, d.Month)).ToList(),
+            "Quarterly" => timeline
+                .Where(d => d.Month is 3 or 6 or 9 or 12)
+                .Select(d => (d.Year, d.Month))
+                .ToList(),
+            "SemiAnnual" => timeline
+                .Where(d => d.Month is 6 or 12)
+                .Select(d => (d.Year, d.Month))
+                .ToList(),
+            "Annual" => timeline
+                .Where(d => d.Month == ResolveFiscalYearEndMonth(fiscalYearStartMonth))
+                .Select(d => (d.Year, d.Month))
+                .ToList(),
+            _ => timeline.Select(d => (d.Year, d.Month)).ToList()
+        };
+    }
+
+    private static IEnumerable<string> ExpandFrequencies(string? rawFrequency)
+    {
+        if (string.IsNullOrWhiteSpace(rawFrequency))
+        {
+            yield return "Monthly";
+            yield break;
+        }
+
+        var parts = rawFrequency.Split(new[] { '/', ',', ';', '|' },
+            StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+        if (parts.Length == 0)
+        {
+            yield return "Monthly";
+            yield break;
+        }
+
+        foreach (var part in parts)
+        {
+            yield return NormalizeFrequency(part);
+        }
+    }
+
+    private static string NormalizeFrequency(string frequency)
+    {
+        return frequency.Trim().ToUpperInvariant() switch
+        {
+            "MONTHLY" => "Monthly",
+            "QUARTERLY" => "Quarterly",
+            "SEMIANNUAL" => "SemiAnnual",
+            "ANNUAL" => "Annual",
+            "ADHOC" => "AdHoc",
+            _ => "Monthly"
+        };
+    }
+
+    private static int ResolveFiscalYearEndMonth(int fiscalYearStartMonth)
+    {
+        if (fiscalYearStartMonth <= 1)
+        {
+            return 12;
+        }
+
+        return fiscalYearStartMonth - 1;
+    }
+
+    private static string ResolveSlugCandidate(TenantOnboardingRequest request)
+    {
+        var source = !string.IsNullOrWhiteSpace(request.TenantSlug)
+            ? request.TenantSlug
+            : request.TenantName;
+
+        var slug = GenerateSlug(source);
+        if (string.IsNullOrWhiteSpace(slug))
+        {
+            slug = $"tenant-{Guid.NewGuid():N}"[..15];
+        }
+
+        return slug;
     }
 
     private static string GenerateSlug(string name)

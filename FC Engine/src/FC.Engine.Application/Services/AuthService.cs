@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using System.Security.Claims;
 using FC.Engine.Domain.Abstractions;
 using FC.Engine.Domain.Entities;
 using FC.Engine.Domain.Enums;
@@ -183,6 +184,31 @@ public class AuthService
         user.FailedLoginAttempts = 0;
         user.LockoutEnd = null;
         await _userRepo.Update(user, ct);
+    }
+
+    public ClaimsPrincipal BuildClaimsPrincipal(PortalUser user)
+    {
+        var claims = new List<Claim>
+        {
+            new(ClaimTypes.NameIdentifier, user.Id.ToString()),
+            new(ClaimTypes.Name, user.Username),
+            new("DisplayName", user.DisplayName),
+            new(ClaimTypes.Email, user.Email),
+            new(ClaimTypes.Role, user.Role.ToString())
+        };
+
+        if (user.TenantId.HasValue)
+        {
+            claims.Add(new Claim("TenantId", user.TenantId.Value.ToString()));
+        }
+        else
+        {
+            claims.Add(new Claim("IsPlatformAdmin", "true"));
+            claims.Add(new Claim(ClaimTypes.Role, "PlatformAdmin"));
+        }
+
+        var identity = new ClaimsIdentity(claims, "FC.Admin.Auth");
+        return new ClaimsPrincipal(identity);
     }
 
     public static string HashPassword(string password)

@@ -238,44 +238,44 @@ public class TenantOnboardingServiceTests : IDisposable
             .ToListAsync();
         // FC_RETURNS module has Monthly default frequency
         periods.Should().OnlyContain(p => p.Frequency == "Monthly");
-        // Should create 3 periods (current + 2 future)
-        periods.Should().HaveCount(3);
+        // Should create 12 rolling monthly periods
+        periods.Should().HaveCount(12);
     }
 
     [Fact]
-    public void GeneratePeriodsForFrequency_Monthly_Returns3Periods()
+    public void GeneratePeriodsForFrequency_Monthly_Returns12Periods()
     {
         var referenceDate = new DateTime(2026, 3, 15);
         var periods = TenantOnboardingService.GeneratePeriodsForFrequency("Monthly", referenceDate);
 
-        periods.Should().HaveCount(3);
+        periods.Should().HaveCount(12);
         periods[0].Should().Be((2026, 3));
         periods[1].Should().Be((2026, 4));
         periods[2].Should().Be((2026, 5));
+        periods[^1].Should().Be((2027, 2));
     }
 
     [Fact]
-    public void GeneratePeriodsForFrequency_Quarterly_Returns3Periods()
+    public void GeneratePeriodsForFrequency_Quarterly_Returns4Periods()
     {
         var referenceDate = new DateTime(2026, 2, 15);
         var periods = TenantOnboardingService.GeneratePeriodsForFrequency("Quarterly", referenceDate);
 
-        periods.Should().HaveCount(3);
+        periods.Should().HaveCount(4);
         periods[0].Should().Be((2026, 3));  // Q1 end
         periods[1].Should().Be((2026, 6));  // Q2 end
         periods[2].Should().Be((2026, 9));  // Q3 end
+        periods[3].Should().Be((2026, 12)); // Q4 end
     }
 
     [Fact]
-    public void GeneratePeriodsForFrequency_Annual_Returns3Periods()
+    public void GeneratePeriodsForFrequency_Annual_Returns1Period()
     {
         var referenceDate = new DateTime(2026, 6, 1);
         var periods = TenantOnboardingService.GeneratePeriodsForFrequency("Annual", referenceDate);
 
-        periods.Should().HaveCount(3);
+        periods.Should().HaveCount(1);
         periods[0].Should().Be((2026, 12));
-        periods[1].Should().Be((2027, 12));
-        periods[2].Should().Be((2028, 12));
     }
 
     [Fact]
@@ -315,6 +315,23 @@ public class TenantOnboardingServiceTests : IDisposable
         var result2 = await _sut.OnboardTenant(request2);
 
         result1.TenantSlug.Should().NotBe(result2.TenantSlug);
+    }
+
+    [Fact]
+    public async Task OnboardTenant_DuplicateProvidedSlug_ReturnsError()
+    {
+        var request1 = CreateValidRequest("First Org", "first-admin@test.com");
+        request1.TenantSlug = "fixed-tenant-slug";
+        request1.InstitutionCode = "FS001";
+        await _sut.OnboardTenant(request1);
+
+        var request2 = CreateValidRequest("Second Org", "second-admin@test.com");
+        request2.TenantSlug = "fixed-tenant-slug";
+        request2.InstitutionCode = "FS002";
+        var result = await _sut.OnboardTenant(request2);
+
+        result.Success.Should().BeFalse();
+        result.Errors.Should().ContainMatch("*slug*already*");
     }
 
     [Fact]

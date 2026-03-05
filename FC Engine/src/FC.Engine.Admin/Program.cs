@@ -1,4 +1,3 @@
-using System.Security.Claims;
 using FC.Engine.Application.Services;
 using FC.Engine.Infrastructure;
 using FC.Engine.Infrastructure.MultiTenancy;
@@ -95,29 +94,7 @@ app.MapPost("/account/login", async (HttpContext context, AuthService authServic
         return;
     }
 
-    var claims = new List<Claim>
-    {
-        new(ClaimTypes.NameIdentifier, user.Id.ToString()),
-        new(ClaimTypes.Name, user.Username),
-        new("DisplayName", user.DisplayName),
-        new(ClaimTypes.Email, user.Email),
-        new(ClaimTypes.Role, user.Role.ToString())
-    };
-
-    // Add TenantId claim for multi-tenancy
-    if (user.TenantId.HasValue)
-    {
-        claims.Add(new Claim("TenantId", user.TenantId.Value.ToString()));
-    }
-    else
-    {
-        // PortalUser with no TenantId is a PlatformAdmin
-        claims.Add(new Claim("IsPlatformAdmin", "true"));
-        claims.Add(new Claim(ClaimTypes.Role, "PlatformAdmin"));
-    }
-
-    var identity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
-    var principal = new ClaimsPrincipal(identity);
+    var principal = authService.BuildClaimsPrincipal(user);
 
     await context.SignInAsync(
         CookieAuthenticationDefaults.AuthenticationScheme,

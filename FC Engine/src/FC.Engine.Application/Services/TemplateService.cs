@@ -11,17 +11,20 @@ public class TemplateService
     private readonly IAuditLogger _audit;
     private readonly ITemplateMetadataCache _cache;
     private readonly ISqlTypeMapper _sqlTypeMapper;
+    private readonly IEntitlementService _entitlementService;
 
     public TemplateService(
         ITemplateRepository templateRepo,
         IAuditLogger audit,
         ITemplateMetadataCache cache,
-        ISqlTypeMapper sqlTypeMapper)
+        ISqlTypeMapper sqlTypeMapper,
+        IEntitlementService entitlementService)
     {
         _templateRepo = templateRepo;
         _audit = audit;
         _cache = cache;
         _sqlTypeMapper = sqlTypeMapper;
+        _entitlementService = entitlementService;
     }
 
     public async Task<TemplateDto> CreateTemplate(CreateTemplateRequest request, CancellationToken ct = default)
@@ -67,6 +70,25 @@ public class TemplateService
     {
         var templates = await _templateRepo.GetAll(ct);
         return templates.Select(MapToDto).ToList();
+    }
+
+    public async Task<List<ReturnTemplate>> GetEntitledTemplates(Guid tenantId, CancellationToken ct = default)
+    {
+        var entitlement = await _entitlementService.ResolveEntitlements(tenantId, ct);
+        var activeModuleIds = entitlement.ActiveModules
+            .Select(m => m.ModuleId)
+            .Distinct()
+            .ToList();
+
+        if (activeModuleIds.Count == 0)
+        {
+            return new List<ReturnTemplate>();
+        }
+
+        var templates = await _templateRepo.GetByModuleIds(activeModuleIds, ct);
+        return templates
+            .Where(t => t.TenantId == tenantId || t.TenantId == null)
+            .ToList();
     }
 
     public async Task AddFieldToVersion(int templateId, int versionId, AddFieldRequest request, string performedBy, CancellationToken ct = default)

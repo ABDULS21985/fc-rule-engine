@@ -24,7 +24,7 @@
                             <span class="portal-nav-label">Dashboard</span>
                         </NavLink>
                     </li>
-                    @if (HasModule("FC_RETURNS"))
+                    @if (HasAnyModuleAccess())
                     {
                         <li>
                             <NavLink href="/submit" class="portal-nav-item">
@@ -88,7 +88,7 @@
             </div>
 
             <!-- VALIDATION -->
-            @if (HasModule("FC_RETURNS"))
+            @if (HasAnyModuleAccess())
             {
                 <div class="portal-nav-group">
                     <h3 class="portal-nav-group-label">Validation</h3>
@@ -276,10 +276,12 @@
         }
         catch
         {
-            // Silently handle — badge just won't show, all modules visible as fallback
+            // Keep nav safe-by-default: module-gated items remain hidden when entitlement lookup fails.
         }
     }
 
+    private bool HasAnyModuleAccess() => _activeModules.Count > 0;
+
     private bool HasModule(string moduleCode) =>
-        _activeModules.Count == 0 || _activeModules.Contains(moduleCode);
+        _activeModules.Contains(moduleCode);
 }
