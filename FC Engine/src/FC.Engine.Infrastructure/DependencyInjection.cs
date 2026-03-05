@@ -125,6 +125,10 @@ public static class DependencyInjection
         {
             services.AddScoped<IEmailSender, SendGridEmailSender>();
         }
+        else if (string.Equals(notificationOptions.Email.Provider, "AwsSes", StringComparison.OrdinalIgnoreCase))
+        {
+            services.AddScoped<IEmailSender, AwsSesEmailSender>();
+        }
         else
         {
             services.AddScoped<IEmailSender, NoopEmailSender>();

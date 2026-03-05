@@ -13,6 +13,7 @@ public class EmailSettings
 {
     public string Provider { get; set; } = "SendGrid";
     public SendGridSettings SendGrid { get; set; } = new();
+    public AwsSesSettings AwsSes { get; set; } = new();
 }
 
 public class SmsSettings
@@ -31,6 +32,16 @@ public class SendGridSettings
     public string ApiKey { get; set; } = string.Empty;
     public string DefaultFromEmail { get; set; } = "noreply@regos.app";
     public string DefaultFromName { get; set; } = "RegOS";
+}
+
+public class AwsSesSettings
+{
+    public string Region { get; set; } = "eu-west-1";
+    public string? AccessKeyId { get; set; }
+    public string? SecretAccessKey { get; set; }
+    public string DefaultFromEmail { get; set; } = "noreply@regos.app";
+    public string DefaultFromName { get; set; } = "RegOS";
+    public string? ConfigurationSetName { get; set; }
 }
 
 public class AfricasTalkingSettings

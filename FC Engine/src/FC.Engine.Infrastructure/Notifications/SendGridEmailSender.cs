@@ -8,17 +8,28 @@ namespace FC.Engine.Infrastructure.Notifications;
 
 public class SendGridEmailSender : IEmailSender
 {
-    private readonly SendGridClient _client;
+    private readonly ISendGridClient _client;
     private readonly SendGridSettings _settings;
     private readonly IEmailTemplateRepository _templateRepository;
 
     public SendGridEmailSender(
         IOptions<NotificationSettings> notificationOptions,
         IEmailTemplateRepository templateRepository)
+        : this(
+            new SendGridClient(notificationOptions.Value.Email.SendGrid.ApiKey),
+            notificationOptions,
+            templateRepository)
+    {
+    }
+
+    internal SendGridEmailSender(
+        ISendGridClient client,
+        IOptions<NotificationSettings> notificationOptions,
+        IEmailTemplateRepository templateRepository)
     {
         _settings = notificationOptions.Value.Email.SendGrid;
         _templateRepository = templateRepository;
-        _client = new SendGridClient(_settings.ApiKey);
+        _client = client;
     }
 
     public async Task<EmailSendResult> SendAsync(EmailMessage message, CancellationToken ct = default)
@@ -86,13 +97,7 @@ public class SendGridEmailSender : IEmailSender
 
         htmlBody = WrapWithBranding(htmlBody, branding);
 
-        var fromEmail = !string.IsNullOrWhiteSpace(branding.SupportEmail)
-            ? branding.SupportEmail
-            : _settings.DefaultFromEmail;
-
-        var fromName = !string.IsNullOrWhiteSpace(branding.CompanyName)
-            ? branding.CompanyName
-            : _settings.DefaultFromName;
+        var (fromEmail, fromName) = ResolveSender(branding, _settings);
 
         return await SendAsync(new EmailMessage
         {
@@ -105,6 +110,19 @@ public class SendGridEmailSender : IEmailSender
             PlainTextBody = plainText,
             ReplyTo = branding.SupportEmail
         }, ct);
+    }
+
+    internal static (string FromEmail, string FromName) ResolveSender(BrandingConfig branding, SendGridSettings defaults)
+    {
+        var fromEmail = !string.IsNullOrWhiteSpace(branding.SupportEmail)
+            ? branding.SupportEmail!
+            : defaults.DefaultFromEmail;
+
+        var fromName = !string.IsNullOrWhiteSpace(branding.CompanyName)
+            ? branding.CompanyName!
+            : defaults.DefaultFromName;
+
+        return (fromEmail, fromName);
     }
 
     internal static string ReplaceVariables(string? template, IReadOnlyDictionary<string, string> vars)

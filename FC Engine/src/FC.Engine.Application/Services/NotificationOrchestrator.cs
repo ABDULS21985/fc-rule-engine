@@ -11,6 +11,33 @@ namespace FC.Engine.Application.Services;
 public class NotificationOrchestrator : INotificationOrchestrator
 {
     private static readonly TimeZoneInfo WafTimeZone = ResolveWafTimeZone();
+    private static readonly NotificationChannelPolicy FallbackPolicy = new(
+        InAppEnabled: true,
+        EmailEnabled: true,
+        SmsEnabled: false,
+        IgnorePreferences: false,
+        IgnoreQuietHours: false);
+
+    private static readonly IReadOnlyDictionary<string, NotificationChannelPolicy> EventChannelMatrix =
+        new Dictionary<string, NotificationChannelPolicy>(StringComparer.OrdinalIgnoreCase)
+        {
+            [NotificationEvents.ReturnSubmittedForReview] = new(true, true, false, false, false),
+            [NotificationEvents.ReturnApproved] = new(true, true, false, false, false),
+            [NotificationEvents.ReturnRejected] = new(true, true, false, false, false),
+
+            [NotificationEvents.DeadlineT30] = new(false, true, false, false, false),
+            [NotificationEvents.DeadlineT14] = new(true, true, false, false, false),
+            [NotificationEvents.DeadlineT7] = new(true, true, true, false, false),
+            [NotificationEvents.DeadlineT3] = new(true, true, true, false, false),
+            [NotificationEvents.DeadlineT1] = new(false, true, true, false, true),
+            [NotificationEvents.DeadlineOverdue] = new(false, true, true, true, true),
+
+            [NotificationEvents.PaymentOverdue] = new(false, true, true, true, true),
+            [NotificationEvents.SubscriptionSuspended] = new(false, true, true, true, true),
+            [NotificationEvents.ExportReady] = new(true, true, false, false, false),
+            [NotificationEvents.UserInvited] = new(false, true, false, false, false),
+            [NotificationEvents.MfaCodeSms] = new(false, false, true, true, true)
+        };
 
     private readonly IPortalNotificationRepository _portalNotificationRepository;
     private readonly IInstitutionUserRepository _institutionUserRepository;
@@ -66,13 +93,15 @@ public class NotificationOrchestrator : INotificationOrchestrator
 
         var branding = await _brandingService.GetBrandingConfig(request.TenantId, ct);
         var mandatory = request.IsMandatory || NotificationPolicy.MandatoryEvents.Contains(request.EventType);
+        var policy = ResolvePolicy(request);
 
         foreach (var recipient in recipients)
         {
             var preference = await ResolvePreference(request.TenantId, recipient.UserId, request.EventType, ct);
             var payload = request.ToPayload();
+            var ignorePreferences = policy.IgnorePreferences || mandatory;
 
-            if (preference.InAppEnabled || mandatory)
+            if (policy.InAppEnabled && (preference.InAppEnabled || ignorePreferences))
             {
                 await CreateInAppNotification(request, recipient, ct);
                 try
@@ -85,18 +114,17 @@ public class NotificationOrchestrator : INotificationOrchestrator
                 }
             }
 
-            if ((preference.EmailEnabled || mandatory) && !string.IsNullOrWhiteSpace(recipient.Email))
+            if (policy.EmailEnabled
+                && (preference.EmailEnabled || ignorePreferences)
+                && !string.IsNullOrWhiteSpace(recipient.Email))
             {
                 await SendEmail(request, recipient, branding, ct);
             }
 
-            var smsAllowedByPriority = request.Priority >= NotificationPriority.High
-                || string.Equals(request.EventType, NotificationEvents.MfaCodeSms, StringComparison.OrdinalIgnoreCase);
-
-            if ((preference.SmsEnabled || mandatory)
-                && smsAllowedByPriority
+            if (policy.SmsEnabled
+                && (preference.SmsEnabled || ignorePreferences)
                 && !string.IsNullOrWhiteSpace(recipient.Phone)
-                && (mandatory || !IsWithinQuietHours(preference)))
+                && (policy.IgnoreQuietHours || ignorePreferences || !IsWithinQuietHours(preference)))
             {
                 await SendSms(request, recipient, ct);
             }
@@ -410,6 +438,17 @@ public class NotificationOrchestrator : INotificationOrchestrator
         return builder.ToString();
     }
 
+    private static NotificationChannelPolicy ResolvePolicy(NotificationRequest request)
+    {
+        if (EventChannelMatrix.TryGetValue(request.EventType, out var policy))
+        {
+            return policy;
+        }
+
+        var smsEnabled = request.Priority >= NotificationPriority.High;
+        return FallbackPolicy with { SmsEnabled = smsEnabled };
+    }
+
     private static NotificationType MapLegacyType(string eventType)
     {
         if (eventType.StartsWith("deadline.", StringComparison.OrdinalIgnoreCase))
@@ -449,4 +488,11 @@ public class NotificationOrchestrator : INotificationOrchestrator
             return TimeZoneInfo.CreateCustomTimeZone("WAT", TimeSpan.FromHours(1), "WAT", "WAT");
         }
     }
+
+    private sealed record NotificationChannelPolicy(
+        bool InAppEnabled,
+        bool EmailEnabled,
+        bool SmsEnabled,
+        bool IgnorePreferences,
+        bool IgnoreQuietHours);
 }
