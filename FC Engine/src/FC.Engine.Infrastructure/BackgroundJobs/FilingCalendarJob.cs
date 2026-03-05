@@ -68,8 +68,8 @@ public class FilingCalendarJob : BackgroundService
         var notifications = scope.ServiceProvider.GetService<INotificationOrchestrator>();
 
         var periodsGenerated = await GenerateUpcomingPeriods(db, entitlementService, deadlineService, ct);
-        var escalated = await CheckDeadlinesAndEscalate(db, notifications, ct);
         var draftsCreated = await AutoCreateDraftReturns(db, notifications, ct);
+        var escalated = await CheckDeadlinesAndEscalate(db, notifications, ct);
 
         _logger.LogInformation(
             "FilingCalendarJob: {PeriodsGenerated} periods generated, {Escalated} escalations, {DraftsCreated} drafts created",
@@ -199,13 +199,24 @@ public class FilingCalendarJob : BackgroundService
                 _ => "Upcoming"
             };
 
-            // Escalate if level increased, OR re-notify daily for overdue
-            var shouldNotify = newLevel > period.NotificationLevel
-                || (newLevel == 6 && period.NotificationLevel == 6); // Overdue re-sends daily
+            var overdueReminderSentToday = false;
+            if (newLevel == 6 && period.NotificationLevel == 6)
+            {
+                overdueReminderSentToday = await HasOverdueReminderSentToday(db, period, ct);
+            }
+
+            // Escalate on level increase, and re-send overdue once per day until submitted.
+            var shouldNotify = ShouldTriggerEscalation(
+                period.NotificationLevel,
+                newLevel,
+                overdueReminderSentToday);
 
             if (shouldNotify && notifications is not null)
             {
-                period.NotificationLevel = newLevel;
+                if (newLevel > period.NotificationLevel)
+                {
+                    period.NotificationLevel = newLevel;
+                }
                 await TriggerEscalationNotification(notifications, period, daysToDeadline, newLevel, ct);
                 escalationCount++;
             }
@@ -264,12 +275,57 @@ public class FilingCalendarJob : BackgroundService
             ActionUrl = $"/returns/create?module={period.Module.ModuleCode}&period={period.Id}",
             Data = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
+                ["PeriodId"] = period.Id.ToString(),
+                ["ModuleCode"] = period.Module.ModuleCode,
                 ["ModuleName"] = period.Module.ModuleName,
                 ["PeriodLabel"] = periodLabel,
                 ["Deadline"] = period.EffectiveDeadline.ToString("dd MMM yyyy"),
                 ["DaysRemaining"] = daysToDeadline.ToString()
             }
         }, ct);
+    }
+
+    internal static bool ShouldTriggerEscalation(int currentLevel, int newLevel, bool overdueReminderSentToday)
+    {
+        if (newLevel > currentLevel)
+        {
+            return true;
+        }
+
+        if (newLevel == 6 && currentLevel == 6 && !overdueReminderSentToday)
+        {
+            return true;
+        }
+
+        return false;
+    }
+
+    private static async Task<bool> HasOverdueReminderSentToday(
+        MetadataDbContext db,
+        ReturnPeriod period,
+        CancellationToken ct)
+    {
+        var todayStart = DateTime.UtcNow.Date;
+        var periodToken = $"\"PeriodId\":\"{period.Id}\"";
+
+        var inAppSent = await db.PortalNotifications.AnyAsync(n =>
+            n.TenantId == period.TenantId &&
+            n.EventType == NotificationEvents.DeadlineOverdue &&
+            n.CreatedAt >= todayStart &&
+            n.Metadata != null &&
+            n.Metadata.Contains(periodToken), ct);
+
+        if (inAppSent)
+        {
+            return true;
+        }
+
+        return await db.NotificationDeliveries.AnyAsync(d =>
+            d.TenantId == period.TenantId &&
+            d.NotificationEventType == NotificationEvents.DeadlineOverdue &&
+            d.CreatedAt >= todayStart &&
+            d.Payload != null &&
+            d.Payload.Contains(periodToken), ct);
     }
 
     /// <summary>
@@ -284,9 +340,10 @@ public class FilingCalendarJob : BackgroundService
         var count = 0;
 
         var periods = await db.ReturnPeriods
-            .Where(rp => rp.Status == "Upcoming"
-                      && rp.AutoCreatedReturnId == null
-                      && rp.ModuleId != null)
+            .Where(rp => rp.AutoCreatedReturnId == null
+                      && rp.ModuleId != null
+                      && rp.Status != "Completed"
+                      && rp.Status != "Closed")
             .Include(rp => rp.Module)
             .ToListAsync(ct);
 
@@ -298,6 +355,22 @@ public class FilingCalendarJob : BackgroundService
         foreach (var period in eligiblePeriods)
         {
             if (period.Module is null) continue;
+
+            var existingSubmissionId = await db.Submissions
+                .Where(s => s.TenantId == period.TenantId && s.ReturnPeriodId == period.Id)
+                .OrderByDescending(s => s.Id)
+                .Select(s => (int?)s.Id)
+                .FirstOrDefaultAsync(ct);
+
+            if (existingSubmissionId.HasValue)
+            {
+                period.AutoCreatedReturnId = existingSubmissionId.Value;
+                if (period.Status == "Upcoming")
+                {
+                    period.Status = "Open";
+                }
+                continue;
+            }
 
             // Get primary template for this module
             var primaryTemplate = await db.ReturnTemplates
@@ -362,6 +435,7 @@ public class FilingCalendarJob : BackgroundService
             }
         }
 
+        await db.SaveChangesAsync(ct);
         return count;
     }
 }

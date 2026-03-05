@@ -121,6 +121,7 @@ app.MapAuthEndpoints();
 app.MapSubmissionEndpoints();
 app.MapTemplateEndpoints();
 app.MapSchemaEndpoints();
+app.MapFilingCalendarEndpoints();
 
 app.MapGet("/health", () => Results.Ok(new { status = "healthy", timestamp = DateTime.UtcNow }))
     .WithTags("Health");

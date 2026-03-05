@@ -16,6 +16,7 @@ public static class SubmissionEndpoints
             int institutionId,
             int returnPeriodId,
             IngestionOrchestrator orchestrator,
+            IFilingCalendarService filingCalendarService,
             CancellationToken ct) =>
         {
             if (request.ContentType == null || !request.ContentType.Contains("xml", StringComparison.OrdinalIgnoreCase))
@@ -23,6 +24,18 @@ public static class SubmissionEndpoints
 
             var result = await orchestrator.Process(
                 request.Body, returnCode, institutionId, returnPeriodId, ct);
+
+            if (result.Status is "Accepted" or "AcceptedWithWarnings")
+            {
+                try
+                {
+                    await filingCalendarService.RecordSla(returnPeriodId, result.SubmissionId, ct);
+                }
+                catch
+                {
+                    // SLA tracking should not block API submissions.
+                }
+            }
 
             return result.Status switch
             {

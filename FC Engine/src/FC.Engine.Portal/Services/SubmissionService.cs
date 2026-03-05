@@ -21,6 +21,7 @@ public class SubmissionService
     private readonly IngestionOrchestrator _orchestrator;
     private readonly MetadataDbContext _db;
     private readonly NotificationService _notificationSvc;
+    private readonly IFilingCalendarService _filingCalendarService;
 
     public SubmissionService(
         TemplateService templateService,
@@ -28,7 +29,8 @@ public class SubmissionService
         ISubmissionApprovalRepository approvalRepo,
         IngestionOrchestrator orchestrator,
         MetadataDbContext db,
-        NotificationService notificationSvc)
+        NotificationService notificationSvc,
+        IFilingCalendarService filingCalendarService)
     {
         _templateService = templateService;
         _submissionRepo = submissionRepo;
@@ -36,6 +38,7 @@ public class SubmissionService
         _orchestrator = orchestrator;
         _db = db;
         _notificationSvc = notificationSvc;
+        _filingCalendarService = filingCalendarService;
     }
 
     /// <summary>
@@ -148,6 +151,11 @@ public class SubmissionService
         var isAccepted = result.Status == "Accepted" || result.Status == "AcceptedWithWarnings";
         if (!isAccepted || submittedByUserId is null)
         {
+            if (isAccepted)
+            {
+                await TryRecordSla(returnPeriodId, result.SubmissionId);
+            }
+
             // Notify of submission result (rejected or non-user submissions)
             if (submittedByUserId.HasValue)
             {
@@ -175,6 +183,8 @@ public class SubmissionService
                 sub.SubmittedByUserId = submittedByUserId;
                 await _submissionRepo.Update(sub);
             }
+
+            await TryRecordSla(returnPeriodId, result.SubmissionId);
 
             // Notify of direct acceptance
             try
@@ -219,5 +229,17 @@ public class SubmissionService
         }
 
         return result;
+    }
+
+    private async Task TryRecordSla(int periodId, int submissionId)
+    {
+        try
+        {
+            await _filingCalendarService.RecordSla(periodId, submissionId);
+        }
+        catch
+        {
+            // SLA tracking should not break submission flow.
+        }
     }
 }

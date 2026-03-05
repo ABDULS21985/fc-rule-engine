@@ -14,17 +14,20 @@ public class WorkflowService
     private readonly ISubmissionApprovalRepository _approvalRepo;
     private readonly IInstitutionUserRepository _userRepo;
     private readonly INotificationOrchestrator _notificationOrchestrator;
+    private readonly IFilingCalendarService _filingCalendarService;
 
     public WorkflowService(
         ISubmissionRepository submissionRepo,
         ISubmissionApprovalRepository approvalRepo,
         IInstitutionUserRepository userRepo,
-        INotificationOrchestrator notificationOrchestrator)
+        INotificationOrchestrator notificationOrchestrator,
+        IFilingCalendarService filingCalendarService)
     {
         _submissionRepo = submissionRepo;
         _approvalRepo = approvalRepo;
         _userRepo = userRepo;
         _notificationOrchestrator = notificationOrchestrator;
+        _filingCalendarService = filingCalendarService;
     }
 
     public async Task<ApprovalActionResult> Approve(
@@ -72,6 +75,15 @@ public class WorkflowService
 
         await _approvalRepo.Update(approval, ct);
         await _submissionRepo.Update(submission, ct);
+
+        try
+        {
+            await _filingCalendarService.RecordSla(submission.ReturnPeriodId, submission.Id, ct);
+        }
+        catch
+        {
+            // SLA tracking should not block approval.
+        }
 
         try
         {
