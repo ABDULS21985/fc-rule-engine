@@ -6,49 +6,98 @@
 
 <PageTitle>My Plan</PageTitle>
 
-<h1>My Plan</h1>
+<div class="portal-sub-shell">
+    <header class="portal-page-header portal-page-header-split">
+        <div class="portal-page-header-main">
+            <p class="portal-sub-kicker">Subscription</p>
+            <h1 class="portal-page-title">My Plan</h1>
+            <p class="portal-page-subtitle">Track limits, feature access, and subscription lifecycle in real time.</p>
+        </div>
+        <div class="portal-page-header-actions portal-sub-actions-top">
+            <a class="portal-btn portal-btn-outline portal-btn-sm" href="/subscription/modules">Manage Modules</a>
+            <a class="portal-btn portal-btn-primary portal-btn-sm" href="/subscription/invoices">View Invoices</a>
+        </div>
+    </header>
 
-@if (_loading)
-{
-    <p>Loading subscription...</p>
-}
-else if (_error is not null)
-{
-    <p class="text-danger">@_error</p>
-}
-else if (_subscription is not null && _usage is not null)
-{
-    <div style="display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:1rem; margin-bottom:1.5rem;">
-        <div class="card" style="padding:1rem;"><strong>Plan</strong><br />@_subscription.Plan?.PlanName (@_subscription.Plan?.PlanCode)</div>
-        <div class="card" style="padding:1rem;"><strong>Status</strong><br />@_subscription.Status</div>
-        <div class="card" style="padding:1rem;"><strong>Billing</strong><br />@_subscription.BillingFrequency</div>
-        <div class="card" style="padding:1rem;"><strong>Period End</strong><br />@_subscription.CurrentPeriodEnd.ToString("yyyy-MM-dd")</div>
-    </div>
+    @if (_loading)
+    {
+        <section class="portal-card">
+            <p>Loading subscription...</p>
+        </section>
+    }
+    else if (!string.IsNullOrWhiteSpace(_error))
+    {
+        <div class="portal-alert portal-alert-error">@_error</div>
+    }
+    else if (_subscription is not null && _usage is not null)
+    {
+        <section class="portal-dash-stats">
+            <article class="portal-stat-card">
+                <div class="portal-stat-label">Plan</div>
+                <div class="portal-stat-value">@_subscription.Plan?.PlanCode</div>
+                <div class="portal-stat-detail">@_subscription.Plan?.PlanName</div>
+            </article>
+            <article class="portal-stat-card">
+                <div class="portal-stat-label">Status</div>
+                <div class="portal-stat-value">@_subscription.Status</div>
+                <div class="portal-stat-detail">
+                    <span class="portal-badge @GetStatusBadgeClass(_subscription.Status)">@_subscription.Status</span>
+                </div>
+            </article>
+            <article class="portal-stat-card">
+                <div class="portal-stat-label">Monthly Base</div>
+                <div class="portal-stat-value">@FormatCurrency(_subscription.Plan?.BasePriceMonthly ?? 0)</div>
+                <div class="portal-stat-detail">NGN recurring</div>
+            </article>
+            <article class="portal-stat-card">
+                <div class="portal-stat-label">Period Ends</div>
+                <div class="portal-stat-value">@_subscription.CurrentPeriodEnd.ToString("dd MMM")</div>
+                <div class="portal-stat-detail">@_subscription.CurrentPeriodEnd.ToString("yyyy")</div>
+            </article>
+        </section>
 
-    <h3>Usage</h3>
-    <table class="table">
-        <thead>
-            <tr>
-                <th>Metric</th>
-                <th>Current</th>
-                <th>Limit</th>
-            </tr>
-        </thead>
-        <tbody>
-            <tr><td>Users</td><td>@_usage.ActiveUsers</td><td>@_usage.ActiveUsersLimit</td></tr>
-            <tr><td>Entities</td><td>@_usage.ActiveEntities</td><td>@_usage.ActiveEntitiesLimit</td></tr>
-            <tr><td>Modules</td><td>@_usage.ActiveModules</td><td>@_usage.ActiveModulesLimit</td></tr>
-            <tr><td>API Calls (month)</td><td>@_usage.ApiCallCount</td><td>@_usage.ApiCallLimit</td></tr>
-            <tr><td>Storage (MB)</td><td>@_usage.StorageUsedMb</td><td>@_usage.StorageLimitMb</td></tr>
-        </tbody>
-    </table>
-}
+        <section class="portal-card portal-sub-usage-card">
+            <div class="portal-sub-section-head">
+                <h2>Usage Against Plan Limits</h2>
+                <span class="portal-sub-caption">As of @_usage.AsOfDate.ToString("yyyy-MM-dd")</span>
+            </div>
+
+            <div class="portal-sub-usage-grid">
+                @UsageMeter("Users", _usage.ActiveUsers, _usage.ActiveUsersLimit)
+                @UsageMeter("Entities", _usage.ActiveEntities, _usage.ActiveEntitiesLimit)
+                @UsageMeter("Modules", _usage.ActiveModules, _usage.ActiveModulesLimit)
+                @UsageMeter("API Calls", _usage.ApiCallCount, _usage.ApiCallLimit <= 0 ? 1 : _usage.ApiCallLimit, _usage.ApiCallLimit <= 0)
+                @StorageMeter("Storage", _usage.StorageUsedMb, _usage.StorageLimitMb)
+            </div>
+        </section>
+
+        <section class="portal-card portal-sub-feature-card">
+            <div class="portal-sub-section-head">
+                <h2>Plan Features</h2>
+            </div>
+            @if (_features.Count == 0)
+            {
+                <p class="portal-sub-caption">No plan features declared.</p>
+            }
+            else
+            {
+                <div class="portal-sub-feature-list">
+                    @foreach (var feature in _features)
+                    {
+                        <span class="portal-badge portal-badge-info portal-badge-lg">@feature.Replace('_', ' ')</span>
+                    }
+                </div>
+            }
+        </section>
+    }
+</div>
 
 @code {
     private bool _loading = true;
     private string? _error;
     private FC.Engine.Domain.Entities.Subscription? _subscription;
     private UsageSummary? _usage;
+    private List<string> _features = new();
 
     protected override async Task OnInitializedAsync()
     {
@@ -64,6 +113,7 @@ else if (_subscription is not null && _usage is not null)
         {
             _subscription = await SubscriptionService.GetActiveSubscription(tenantId.Value);
             _usage = await SubscriptionService.GetUsageSummary(tenantId.Value);
+            _features = _subscription.Plan?.GetFeatures() ?? new List<string>();
         }
         catch (Exception ex)
         {
@@ -74,4 +124,112 @@ else if (_subscription is not null && _usage is not null)
             _loading = false;
         }
     }
+
+    private RenderFragment UsageMeter(string label, int current, int limit, bool unlimited = false) => builder =>
+    {
+        var percent = unlimited ? 0m : GetPercent(current, limit);
+        var meterClass = GetMeterClass(percent);
+
+        builder.OpenElement(0, "article");
+        builder.AddAttribute(1, "class", "portal-sub-meter");
+
+        builder.OpenElement(2, "div");
+        builder.AddAttribute(3, "class", "portal-sub-meter-top");
+        builder.OpenElement(4, "span");
+        builder.AddContent(5, label);
+        builder.CloseElement();
+        builder.OpenElement(6, "strong");
+        builder.AddContent(7, unlimited ? $"{current} / Unlimited" : $"{current} / {limit}");
+        builder.CloseElement();
+        builder.CloseElement();
+
+        builder.OpenElement(8, "div");
+        builder.AddAttribute(9, "class", "portal-sub-meter-track");
+        builder.OpenElement(10, "div");
+        builder.AddAttribute(11, "class", meterClass);
+        builder.AddAttribute(12, "style", $"width:{percent:0.##}%");
+        builder.CloseElement();
+        builder.CloseElement();
+
+        builder.OpenElement(13, "div");
+        builder.AddAttribute(14, "class", "portal-sub-meter-foot");
+        builder.AddContent(15, unlimited ? "No plan cap" : $"{percent:0.#}% used");
+        builder.CloseElement();
+
+        builder.CloseElement();
+    };
+
+    private RenderFragment StorageMeter(string label, decimal current, int limit) => builder =>
+    {
+        var percent = GetPercent(current, limit);
+        var meterClass = GetMeterClass(percent);
+
+        builder.OpenElement(0, "article");
+        builder.AddAttribute(1, "class", "portal-sub-meter");
+
+        builder.OpenElement(2, "div");
+        builder.AddAttribute(3, "class", "portal-sub-meter-top");
+        builder.OpenElement(4, "span");
+        builder.AddContent(5, label);
+        builder.CloseElement();
+        builder.OpenElement(6, "strong");
+        builder.AddContent(7, $"{current:N2} / {limit:N0} MB");
+        builder.CloseElement();
+        builder.CloseElement();
+
+        builder.OpenElement(8, "div");
+        builder.AddAttribute(9, "class", "portal-sub-meter-track");
+        builder.OpenElement(10, "div");
+        builder.AddAttribute(11, "class", meterClass);
+        builder.AddAttribute(12, "style", $"width:{percent:0.##}%");
+        builder.CloseElement();
+        builder.CloseElement();
+
+        builder.OpenElement(13, "div");
+        builder.AddAttribute(14, "class", "portal-sub-meter-foot");
+        builder.AddContent(15, $"{percent:0.#}% used");
+        builder.CloseElement();
+
+        builder.CloseElement();
+    };
+
+    private static decimal GetPercent(int current, int limit)
+    {
+        if (limit <= 0)
+        {
+            return 0;
+        }
+
+        return Math.Clamp((decimal)current / limit * 100m, 0m, 100m);
+    }
+
+    private static decimal GetPercent(decimal current, int limit)
+    {
+        if (limit <= 0)
+        {
+            return 0;
+        }
+
+        return Math.Clamp(current / limit * 100m, 0m, 100m);
+    }
+
+    private static string GetMeterClass(decimal percent) => percent switch
+    {
+        >= 90m => "portal-sub-meter-fill portal-sub-meter-fill-danger",
+        >= 75m => "portal-sub-meter-fill portal-sub-meter-fill-warning",
+        _ => "portal-sub-meter-fill"
+    };
+
+    private static string GetStatusBadgeClass(SubscriptionStatus status) => status switch
+    {
+        SubscriptionStatus.Active => "portal-badge-success",
+        SubscriptionStatus.Trial => "portal-badge-info",
+        SubscriptionStatus.PastDue => "portal-badge-warning",
+        SubscriptionStatus.Suspended => "portal-badge-danger",
+        SubscriptionStatus.Cancelled => "portal-badge-danger",
+        SubscriptionStatus.Expired => "portal-badge-danger",
+        _ => "portal-badge-neutral"
+    };
+
+    private static string FormatCurrency(decimal value) => value.ToString("N2");
 }

@@ -1,42 +1,192 @@
 @page "/billing/revenue"
 @using Microsoft.AspNetCore.Authorization
-@attribute [Authorize(Policy = "PlatformAdmin")]
 @using FC.Engine.Domain.Enums
 @using FC.Engine.Infrastructure.Metadata
 @using Microsoft.EntityFrameworkCore
+@attribute [Authorize(Policy = "PlatformAdmin")]
 @inject MetadataDbContext Db
 
 <PageTitle>Revenue Dashboard</PageTitle>
 
-<h1>Revenue Dashboard</h1>
+<div class="billing-shell">
+    <section class="billing-hero">
+        <div>
+            <p class="billing-kicker">Platform Billing</p>
+            <h1>Revenue Dashboard</h1>
+            <p>Track MRR, collections, plan mix, and top-performing tenants in one view.</p>
+        </div>
+        <div class="billing-hero-note">
+            <span class="badge badge-review">Finance Snapshot</span>
+            <span>@DateTime.UtcNow.ToString("dd MMM yyyy HH:mm") UTC</span>
+        </div>
+    </section>
 
-@if (_loading)
-{
-    <p>Loading revenue metrics...</p>
-}
-else
-{
-    <div style="display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:1rem; margin-bottom:1.5rem;">
-        <div class="card" style="padding:1rem;"><strong>MRR (NGN)</strong><br />@_mrr.ToString("N2")</div>
-        <div class="card" style="padding:1rem;"><strong>ARR (NGN)</strong><br />@_arr.ToString("N2")</div>
-        <div class="card" style="padding:1rem;"><strong>Paid This Month (NGN)</strong><br />@_paidThisMonth.ToString("N2")</div>
-        <div class="card" style="padding:1rem;"><strong>Overdue Invoices</strong><br />@_overdueCount</div>
-    </div>
-}
+    @if (_loading)
+    {
+        <section class="card billing-surface">
+            <p>Loading revenue analytics...</p>
+        </section>
+    }
+    else
+    {
+        <section class="billing-metrics">
+            <article class="billing-metric-card">
+                <p class="billing-metric-label">MRR</p>
+                <p class="billing-metric-value">@FormatCurrency(_mrr)</p>
+                <p class="billing-metric-sub">recurring monthly run-rate</p>
+            </article>
+            <article class="billing-metric-card">
+                <p class="billing-metric-label">ARR</p>
+                <p class="billing-metric-value">@FormatCurrency(_arr)</p>
+                <p class="billing-metric-sub">annualized recurring revenue</p>
+            </article>
+            <article class="billing-metric-card">
+                <p class="billing-metric-label">Paid This Month</p>
+                <p class="billing-metric-value">@FormatCurrency(_paidThisMonth)</p>
+                <p class="billing-metric-sub">cash collected this month</p>
+            </article>
+            <article class="billing-metric-card">
+                <p class="billing-metric-label">Outstanding</p>
+                <p class="billing-metric-value">@FormatCurrency(_outstanding)</p>
+                <p class="billing-metric-sub">issued and overdue invoices</p>
+            </article>
+        </section>
+
+        <section class="billing-layout">
+            <section class="card billing-surface">
+                <div class="card-header">
+                    <h2>Collections Trend (Last 6 Months)</h2>
+                </div>
+
+                @if (!_monthlyTrend.Any())
+                {
+                    <p class="billing-muted">No paid invoice activity in the selected window.</p>
+                }
+                else
+                {
+                    <div class="billing-chart-list">
+                        @foreach (var point in _monthlyTrend)
+                        {
+                            var width = _trendMaxAmount <= 0 ? 0 : Math.Clamp((point.Amount / _trendMaxAmount) * 100m, 0m, 100m);
+                            <div class="billing-chart-row">
+                                <div class="billing-chart-label">@point.Label</div>
+                                <div class="billing-chart-track">
+                                    <div class="billing-chart-fill" style="width:@($"{width:0.##}%")"></div>
+                                </div>
+                                <div class="billing-chart-value">@FormatCurrency(point.Amount)</div>
+                            </div>
+                        }
+                    </div>
+                }
+            </section>
+
+            <section class="card billing-surface">
+                <div class="card-header">
+                    <h2>Plan Mix</h2>
+                </div>
+
+                @if (!_planMix.Any())
+                {
+                    <p class="billing-muted">No active subscriptions found.</p>
+                }
+                else
+                {
+                    <div class="billing-planmix-list">
+                        @foreach (var plan in _planMix)
+                        {
+                            var ratio = _activeSubscriptionCount == 0 ? 0 : (decimal)plan.Count / _activeSubscriptionCount * 100m;
+                            <div class="billing-planmix-row">
+                                <div class="billing-planmix-head">
+                                    <span>@plan.PlanCode</span>
+                                    <span>@plan.Count tenant(s)</span>
+                                </div>
+                                <div class="billing-chart-track">
+                                    <div class="billing-chart-fill billing-chart-fill-accent" style="width:@($"{ratio:0.##}%")"></div>
+                                </div>
+                                <div class="billing-planmix-foot">Monthly contribution: @FormatCurrency(plan.MonthlyRevenue)</div>
+                            </div>
+                        }
+                    </div>
+                }
+            </section>
+        </section>
+
+        <section class="card billing-surface">
+            <div class="card-header">
+                <h2>Top Tenants by Paid Revenue (YTD)</h2>
+            </div>
+
+            <div class="billing-table-wrap">
+                <table class="data-table billing-table">
+                    <thead>
+                        <tr>
+                            <th>Tenant</th>
+                            <th>Total Paid (NGN)</th>
+                            <th>Invoice Count</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (!_topTenants.Any())
+                        {
+                            <tr>
+                                <td colspan="3" class="billing-empty-cell">No paid invoices available for this year.</td>
+                            </tr>
+                        }
+                        else
+                        {
+                            @foreach (var tenant in _topTenants)
+                            {
+                                <tr>
+                                    <td>
+                                        <div class="billing-plan-name">@tenant.TenantName</div>
+                                        <div class="billing-plan-code">@tenant.TenantSlug</div>
+                                    </td>
+                                    <td>@FormatCurrency(tenant.TotalPaid)</td>
+                                    <td>@tenant.InvoiceCount</td>
+                                </tr>
+                            }
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    }
+</div>
 
 @code {
     private bool _loading = true;
     private decimal _mrr;
     private decimal _arr;
     private decimal _paidThisMonth;
-    private int _overdueCount;
+    private decimal _outstanding;
+    private int _activeSubscriptionCount;
+    private decimal _trendMaxAmount;
+
+    private List<MonthlyTrendPoint> _monthlyTrend = new();
+    private List<PlanMixPoint> _planMix = new();
+    private List<TenantRevenuePoint> _topTenants = new();
 
     protected override async Task OnInitializedAsync()
     {
+        await LoadDashboard();
+        _loading = false;
+    }
+
+    private async Task LoadDashboard()
+    {
+        var revenueStatuses = new[]
+        {
+            SubscriptionStatus.Active,
+            SubscriptionStatus.PastDue,
+            SubscriptionStatus.Suspended,
+            SubscriptionStatus.Trial
+        };
+
         _mrr = await Db.Subscriptions
             .AsNoTracking()
-            .Where(s => s.Status == SubscriptionStatus.Active)
-            .Join(Db.SubscriptionPlans, s => s.PlanId, p => p.Id, (s, p) => p.BasePriceMonthly)
+            .Where(s => revenueStatuses.Contains(s.Status))
+            .Join(Db.SubscriptionPlans, s => s.PlanId, p => p.Id, (_, p) => p.BasePriceMonthly)
+            .DefaultIfEmpty(0)
             .SumAsync();
 
         _arr = _mrr * 12;
@@ -49,10 +199,117 @@ else
             .DefaultIfEmpty(0)
             .SumAsync();
 
-        _overdueCount = await Db.Invoices
+        _outstanding = await Db.Invoices
             .AsNoTracking()
-            .CountAsync(i => i.Status == InvoiceStatus.Overdue);
+            .Where(i => i.Status == InvoiceStatus.Issued || i.Status == InvoiceStatus.Overdue)
+            .Select(i => i.TotalAmount)
+            .DefaultIfEmpty(0)
+            .SumAsync();
 
-        _loading = false;
+        _activeSubscriptionCount = await Db.Subscriptions
+            .AsNoTracking()
+            .CountAsync(s => s.Status != SubscriptionStatus.Cancelled && s.Status != SubscriptionStatus.Expired);
+
+        await LoadMonthlyTrend();
+        await LoadPlanMix();
+        await LoadTopTenants();
+    }
+
+    private async Task LoadMonthlyTrend()
+    {
+        var currentMonth = new DateTime(DateTime.UtcNow.Year, DateTime.UtcNow.Month, 1);
+        var firstMonth = currentMonth.AddMonths(-5);
+
+        var paidRows = await Db.Invoices
+            .AsNoTracking()
+            .Where(i => i.Status == InvoiceStatus.Paid
+                && i.PaidAt.HasValue
+                && i.PaidAt.Value >= firstMonth)
+            .Select(i => new { i.PaidAt!.Value.Year, i.PaidAt!.Value.Month, i.TotalAmount })
+            .ToListAsync();
+
+        _monthlyTrend = new List<MonthlyTrendPoint>();
+        for (var i = 0; i < 6; i++)
+        {
+            var bucket = firstMonth.AddMonths(i);
+            var amount = paidRows
+                .Where(r => r.Year == bucket.Year && r.Month == bucket.Month)
+                .Sum(r => r.TotalAmount);
+
+            _monthlyTrend.Add(new MonthlyTrendPoint
+            {
+                Label = bucket.ToString("MMM yyyy"),
+                Amount = amount
+            });
+        }
+
+        _trendMaxAmount = _monthlyTrend.Any() ? _monthlyTrend.Max(t => t.Amount) : 0;
+    }
+
+    private async Task LoadPlanMix()
+    {
+        _planMix = await Db.Subscriptions
+            .AsNoTracking()
+            .Where(s => s.Status != SubscriptionStatus.Cancelled && s.Status != SubscriptionStatus.Expired)
+            .Join(Db.SubscriptionPlans,
+                s => s.PlanId,
+                p => p.Id,
+                (_, p) => new { p.PlanCode, p.BasePriceMonthly })
+            .GroupBy(x => x.PlanCode)
+            .Select(g => new PlanMixPoint
+            {
+                PlanCode = g.Key,
+                Count = g.Count(),
+                MonthlyRevenue = g.Sum(x => x.BasePriceMonthly)
+            })
+            .OrderByDescending(x => x.Count)
+            .ToListAsync();
+    }
+
+    private async Task LoadTopTenants()
+    {
+        var yearStart = new DateTime(DateTime.UtcNow.Year, 1, 1);
+
+        _topTenants = await Db.Invoices
+            .AsNoTracking()
+            .Where(i => i.Status == InvoiceStatus.Paid && i.PaidAt.HasValue && i.PaidAt.Value >= yearStart)
+            .Join(Db.Tenants,
+                i => i.TenantId,
+                t => t.TenantId,
+                (i, t) => new { t.TenantName, t.TenantSlug, i.TotalAmount })
+            .GroupBy(x => new { x.TenantName, x.TenantSlug })
+            .Select(g => new TenantRevenuePoint
+            {
+                TenantName = g.Key.TenantName,
+                TenantSlug = g.Key.TenantSlug,
+                TotalPaid = g.Sum(x => x.TotalAmount),
+                InvoiceCount = g.Count()
+            })
+            .OrderByDescending(x => x.TotalPaid)
+            .Take(10)
+            .ToListAsync();
+    }
+
+    private static string FormatCurrency(decimal value) => value.ToString("N2");
+
+    private sealed class MonthlyTrendPoint
+    {
+        public string Label { get; set; } = string.Empty;
+        public decimal Amount { get; set; }
+    }
+
+    private sealed class PlanMixPoint
+    {
+        public string PlanCode { get; set; } = string.Empty;
+        public int Count { get; set; }
+        public decimal MonthlyRevenue { get; set; }
+    }
+
+    private sealed class TenantRevenuePoint
+    {
+        public string TenantName { get; set; } = string.Empty;
+        public string TenantSlug { get; set; } = string.Empty;
+        public decimal TotalPaid { get; set; }
+        public int InvoiceCount { get; set; }
     }
 }

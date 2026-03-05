@@ -1,79 +1,417 @@
 @page "/billing/invoices"
 @using Microsoft.AspNetCore.Authorization
-@attribute [Authorize(Policy = "PlatformAdmin")]
+@using FC.Engine.Domain.Abstractions
 @using FC.Engine.Domain.Enums
 @using FC.Engine.Infrastructure.Metadata
 @using Microsoft.EntityFrameworkCore
+@attribute [Authorize(Policy = "PlatformAdmin")]
 @inject MetadataDbContext Db
+@inject ISubscriptionService SubscriptionService
 
 <PageTitle>Invoices</PageTitle>
 
-<h1>Invoices</h1>
+<div class="billing-shell">
+    <section class="billing-hero">
+        <div>
+            <p class="billing-kicker">Platform Billing</p>
+            <h1>Invoices & Collections</h1>
+            <p>Issue invoices, capture payments, and manage overdue exposure across tenants.</p>
+        </div>
+        <div class="billing-hero-note">
+            <span class="badge badge-review">Collections Desk</span>
+            <span>@DateTime.UtcNow.ToString("dd MMM yyyy HH:mm") UTC</span>
+        </div>
+    </section>
 
-@if (_loading)
-{
-    <p>Loading invoices...</p>
-}
-else
-{
-    <table class="table">
-        <thead>
-            <tr>
-                <th>Invoice Number</th>
-                <th>Tenant</th>
-                <th>Status</th>
-                <th>Total (NGN)</th>
-                <th>Due Date</th>
-                <th>Issued At</th>
-            </tr>
-        </thead>
-        <tbody>
-            @foreach (var invoice in _invoices)
-            {
-                <tr>
-                    <td>@invoice.InvoiceNumber</td>
-                    <td>@invoice.TenantName</td>
-                    <td>@invoice.Status</td>
-                    <td>@invoice.TotalAmount.ToString("N2")</td>
-                    <td>@(invoice.DueDate?.ToString("yyyy-MM-dd") ?? "-")</td>
-                    <td>@(invoice.IssuedAt?.ToString("yyyy-MM-dd HH:mm") ?? "-")</td>
-                </tr>
-            }
-        </tbody>
-    </table>
-}
+    @if (_loading)
+    {
+        <section class="card billing-surface">
+            <p>Loading invoice data...</p>
+        </section>
+    }
+    else
+    {
+        @if (!string.IsNullOrWhiteSpace(_error))
+        {
+            <div class="cbn-alert cbn-alert-error">@_error</div>
+        }
+        @if (!string.IsNullOrWhiteSpace(_message))
+        {
+            <div class="cbn-alert cbn-alert-success">@_message</div>
+        }
+
+        <section class="billing-metrics">
+            <article class="billing-metric-card">
+                <p class="billing-metric-label">Outstanding Amount</p>
+                <p class="billing-metric-value">@FormatCurrency(_outstandingAmount)</p>
+                <p class="billing-metric-sub">issued + overdue invoices</p>
+            </article>
+            <article class="billing-metric-card">
+                <p class="billing-metric-label">Paid This Month</p>
+                <p class="billing-metric-value">@FormatCurrency(_paidThisMonth)</p>
+                <p class="billing-metric-sub">cash receipts in current month</p>
+            </article>
+            <article class="billing-metric-card">
+                <p class="billing-metric-label">Overdue Count</p>
+                <p class="billing-metric-value">@_invoices.Count(i => i.Status == InvoiceStatus.Overdue)</p>
+                <p class="billing-metric-sub">needs immediate recovery</p>
+            </article>
+            <article class="billing-metric-card">
+                <p class="billing-metric-label">Draft Invoices</p>
+                <p class="billing-metric-value">@_invoices.Count(i => i.Status == InvoiceStatus.Draft)</p>
+                <p class="billing-metric-sub">awaiting issue</p>
+            </article>
+        </section>
+
+        <section class="card billing-surface">
+            <div class="billing-inline-form">
+                <label for="tenant-generate">Generate invoice for tenant</label>
+                <select id="tenant-generate" class="form-control billing-select" @bind="_selectedTenantId">
+                    <option value="">Select tenant</option>
+                    @foreach (var tenant in _tenantOptions)
+                    {
+                        <option value="@tenant.TenantId.ToString()">@tenant.TenantName (@tenant.PlanCode)</option>
+                    }
+                </select>
+                <button class="btn btn-primary"
+                        disabled="@(_busyInvoiceId.HasValue || string.IsNullOrWhiteSpace(_selectedTenantId))"
+                        @onclick="GenerateForTenant">
+                    Generate Draft
+                </button>
+            </div>
+        </section>
+
+        <section class="card billing-surface">
+            <div class="billing-toolbar billing-toolbar-wrap">
+                <input class="form-control billing-search"
+                       type="search"
+                       @bind="_searchTerm"
+                       @bind:event="oninput"
+                       placeholder="Search invoice or tenant" />
+
+                <select class="form-control billing-select" @bind="_statusFilter">
+                    <option value="ALL">All statuses</option>
+                    @foreach (var status in Enum.GetValues<InvoiceStatus>())
+                    {
+                        <option value="@status.ToString()">@status</option>
+                    }
+                </select>
+
+                <button class="btn btn-outline btn-sm" @onclick="ClearFilters">Clear</button>
+            </div>
+
+            <div class="billing-table-wrap">
+                <table class="data-table billing-table">
+                    <thead>
+                        <tr>
+                            <th>Invoice</th>
+                            <th>Tenant</th>
+                            <th>Status</th>
+                            <th>Period</th>
+                            <th>Total (NGN)</th>
+                            <th>Due</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (!FilteredInvoices.Any())
+                        {
+                            <tr>
+                                <td colspan="7" class="billing-empty-cell">No invoices match the selected filters.</td>
+                            </tr>
+                        }
+                        else
+                        {
+                            @foreach (var invoice in FilteredInvoices)
+                            {
+                                <tr>
+                                    <td>
+                                        <div class="billing-plan-name">@invoice.InvoiceNumber</div>
+                                        <div class="billing-plan-code">Created @invoice.CreatedAt.ToString("yyyy-MM-dd")</div>
+                                    </td>
+                                    <td>
+                                        <div class="billing-plan-name">@invoice.TenantName</div>
+                                        <div class="billing-plan-code">@invoice.TenantSlug</div>
+                                    </td>
+                                    <td>
+                                        <span class="badge @GetInvoiceBadgeClass(invoice.Status)">@invoice.Status</span>
+                                    </td>
+                                    <td>
+                                        <div class="billing-stack-sm">@invoice.PeriodStart.ToString("yyyy-MM-dd")</div>
+                                        <div class="billing-plan-code">to @invoice.PeriodEnd.ToString("yyyy-MM-dd")</div>
+                                    </td>
+                                    <td>@FormatCurrency(invoice.TotalAmount)</td>
+                                    <td>
+                                        @if (invoice.DueDate.HasValue)
+                                        {
+                                            <span>@invoice.DueDate.Value.ToString("yyyy-MM-dd")</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="billing-muted">-</span>
+                                        }
+                                    </td>
+                                    <td>
+                                        <div class="billing-actions-grid">
+                                            @if (invoice.Status == InvoiceStatus.Draft)
+                                            {
+                                                <button class="btn btn-outline btn-sm"
+                                                        disabled="@(_busyInvoiceId == invoice.Id)"
+                                                        @onclick="() => IssueInvoice(invoice.Id)">
+                                                    Issue
+                                                </button>
+                                            }
+                                            @if (invoice.Status is InvoiceStatus.Issued or InvoiceStatus.Overdue)
+                                            {
+                                                <button class="btn btn-success btn-sm"
+                                                        disabled="@(_busyInvoiceId == invoice.Id)"
+                                                        @onclick="() => RecordManualPayment(invoice)">
+                                                    Mark Paid
+                                                </button>
+                                            }
+                                            @if (invoice.Status is InvoiceStatus.Draft or InvoiceStatus.Issued or InvoiceStatus.Overdue)
+                                            {
+                                                <button class="btn btn-danger btn-sm"
+                                                        disabled="@(_busyInvoiceId == invoice.Id)"
+                                                        @onclick="() => VoidInvoice(invoice.Id)">
+                                                    Void
+                                                </button>
+                                            }
+                                        </div>
+                                    </td>
+                                </tr>
+                            }
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    }
+</div>
 
 @code {
     private bool _loading = true;
-    private List<Row> _invoices = new();
+    private string? _error;
+    private string? _message;
+    private string _searchTerm = string.Empty;
+    private string _statusFilter = "ALL";
+    private string? _selectedTenantId;
+    private int? _busyInvoiceId;
+
+    private decimal _outstandingAmount;
+    private decimal _paidThisMonth;
+
+    private List<InvoiceRow> _invoices = new();
+    private List<TenantOption> _tenantOptions = new();
+
+    private IEnumerable<InvoiceRow> FilteredInvoices => _invoices
+        .Where(i => string.IsNullOrWhiteSpace(_searchTerm)
+            || i.InvoiceNumber.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase)
+            || i.TenantName.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase)
+            || i.TenantSlug.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase))
+        .Where(i => _statusFilter == "ALL" || i.Status.ToString() == _statusFilter)
+        .OrderByDescending(i => i.CreatedAt)
+        .ThenByDescending(i => i.InvoiceNumber);
 
     protected override async Task OnInitializedAsync()
     {
-        _invoices = await Db.Invoices
-            .AsNoTracking()
-            .Join(Db.Tenants, i => i.TenantId, t => t.TenantId, (i, t) => new Row
-            {
-                InvoiceNumber = i.InvoiceNumber,
-                TenantName = t.TenantName,
-                Status = i.Status,
-                TotalAmount = i.TotalAmount,
-                DueDate = i.DueDate,
-                IssuedAt = i.IssuedAt
-            })
-            .OrderByDescending(i => i.IssuedAt)
-            .ThenByDescending(i => i.InvoiceNumber)
-            .ToListAsync();
-
+        await LoadData();
         _loading = false;
     }
 
-    private sealed class Row
+    private async Task LoadData()
     {
+        _invoices = await Db.Invoices
+            .AsNoTracking()
+            .Join(Db.Tenants,
+                i => i.TenantId,
+                t => t.TenantId,
+                (i, t) => new InvoiceRow
+                {
+                    Id = i.Id,
+                    TenantId = i.TenantId,
+                    InvoiceNumber = i.InvoiceNumber,
+                    TenantName = t.TenantName,
+                    TenantSlug = t.TenantSlug,
+                    Status = i.Status,
+                    PeriodStart = i.PeriodStart,
+                    PeriodEnd = i.PeriodEnd,
+                    TotalAmount = i.TotalAmount,
+                    Currency = i.Currency,
+                    DueDate = i.DueDate,
+                    PaidAt = i.PaidAt,
+                    CreatedAt = i.CreatedAt
+                })
+            .ToListAsync();
+
+        var monthStart = new DateTime(DateTime.UtcNow.Year, DateTime.UtcNow.Month, 1);
+        _paidThisMonth = _invoices
+            .Where(i => i.Status == InvoiceStatus.Paid && i.PaidAt.HasValue && i.PaidAt.Value >= monthStart)
+            .Sum(i => i.TotalAmount);
+
+        _outstandingAmount = _invoices
+            .Where(i => i.Status is InvoiceStatus.Issued or InvoiceStatus.Overdue)
+            .Sum(i => i.TotalAmount);
+
+        _tenantOptions = await Db.Subscriptions
+            .AsNoTracking()
+            .Include(s => s.Tenant)
+            .Include(s => s.Plan)
+            .Where(s => s.Status != SubscriptionStatus.Cancelled && s.Status != SubscriptionStatus.Expired)
+            .Select(s => new TenantOption
+            {
+                TenantId = s.TenantId,
+                TenantName = s.Tenant != null ? s.Tenant.TenantName : "Unknown",
+                PlanCode = s.Plan != null ? s.Plan.PlanCode : "N/A"
+            })
+            .GroupBy(t => t.TenantId)
+            .Select(g => g.First())
+            .OrderBy(t => t.TenantName)
+            .ToListAsync();
+    }
+
+    private void ClearFilters()
+    {
+        _searchTerm = string.Empty;
+        _statusFilter = "ALL";
+    }
+
+    private async Task GenerateForTenant()
+    {
+        if (!Guid.TryParse(_selectedTenantId, out var tenantId))
+        {
+            _error = "Select a tenant with an active subscription first.";
+            return;
+        }
+
+        _busyInvoiceId = -1;
+        _error = null;
+        _message = null;
+
+        try
+        {
+            var invoice = await SubscriptionService.GenerateInvoice(tenantId);
+            _message = $"Generated draft invoice {invoice.InvoiceNumber}.";
+            await LoadData();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _busyInvoiceId = null;
+        }
+    }
+
+    private async Task IssueInvoice(int invoiceId)
+    {
+        _busyInvoiceId = invoiceId;
+        _error = null;
+        _message = null;
+
+        try
+        {
+            var invoice = await SubscriptionService.IssueInvoice(invoiceId);
+            _message = $"Issued invoice {invoice.InvoiceNumber}.";
+            await LoadData();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _busyInvoiceId = null;
+        }
+    }
+
+    private async Task RecordManualPayment(InvoiceRow invoice)
+    {
+        _busyInvoiceId = invoice.Id;
+        _error = null;
+        _message = null;
+
+        try
+        {
+            await SubscriptionService.RecordPayment(invoice.Id, new RecordPaymentRequest
+            {
+                Amount = invoice.TotalAmount,
+                Currency = invoice.Currency,
+                PaymentMethod = "Manual",
+                PaymentReference = $"ADMIN-{DateTime.UtcNow:yyyyMMddHHmmss}",
+                ProviderName = "PlatformAdmin",
+                IsSuccessful = true
+            });
+
+            _message = $"Recorded payment for {invoice.InvoiceNumber}.";
+            await LoadData();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _busyInvoiceId = null;
+        }
+    }
+
+    private async Task VoidInvoice(int invoiceId)
+    {
+        _busyInvoiceId = invoiceId;
+        _error = null;
+        _message = null;
+
+        try
+        {
+            await SubscriptionService.VoidInvoice(invoiceId, "Voided by platform administrator");
+            _message = $"Voided invoice ID {invoiceId}.";
+            await LoadData();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _busyInvoiceId = null;
+        }
+    }
+
+    private static string FormatCurrency(decimal value) => value.ToString("N2");
+
+    private static string GetInvoiceBadgeClass(InvoiceStatus status) => status switch
+    {
+        InvoiceStatus.Draft => "badge-review",
+        InvoiceStatus.Issued => "badge-draft",
+        InvoiceStatus.Overdue => "badge-deprecated",
+        InvoiceStatus.Paid => "badge-published",
+        InvoiceStatus.Voided => "badge-deprecated",
+        _ => "badge-review"
+    };
+
+    private sealed class InvoiceRow
+    {
+        public int Id { get; set; }
+        public Guid TenantId { get; set; }
         public string InvoiceNumber { get; set; } = string.Empty;
         public string TenantName { get; set; } = string.Empty;
+        public string TenantSlug { get; set; } = string.Empty;
         public InvoiceStatus Status { get; set; }
+        public DateOnly PeriodStart { get; set; }
+        public DateOnly PeriodEnd { get; set; }
         public decimal TotalAmount { get; set; }
+        public string Currency { get; set; } = "NGN";
         public DateOnly? DueDate { get; set; }
-        public DateTime? IssuedAt { get; set; }
+        public DateTime? PaidAt { get; set; }
+        public DateTime CreatedAt { get; set; }
+    }
+
+    private sealed class TenantOption
+    {
+        public Guid TenantId { get; set; }
+        public string TenantName { get; set; } = string.Empty;
+        public string PlanCode { get; set; } = string.Empty;
     }
 }

@@ -1,70 +1,140 @@
 @page "/subscription/invoices"
 @attribute [Authorize(Policy = "InstitutionUser")]
 @using FC.Engine.Domain.Abstractions
+@using FC.Engine.Domain.Enums
 @inject ISubscriptionService SubscriptionService
 @inject ITenantContext TenantContext
 
 <PageTitle>My Invoices</PageTitle>
 
-<h1>My Invoices</h1>
+<div class="portal-sub-shell">
+    <header class="portal-page-header portal-page-header-split">
+        <div class="portal-page-header-main">
+            <p class="portal-sub-kicker">Subscription</p>
+            <h1 class="portal-page-title">Invoices</h1>
+            <p class="portal-page-subtitle">Review invoice lifecycle, issue drafts, and record manual payments.</p>
+        </div>
+        <div class="portal-page-header-actions portal-sub-actions-top">
+            <button class="portal-btn portal-btn-primary portal-btn-sm"
+                    disabled="@(_busyInvoiceId.HasValue)"
+                    @onclick="GenerateInvoice">
+                Generate Draft Invoice
+            </button>
+        </div>
+    </header>
 
-@if (_loading)
-{
-    <p>Loading invoices...</p>
-}
-else if (_error is not null)
-{
-    <p class="text-danger">@_error</p>
-}
-else
-{
-    @if (!string.IsNullOrWhiteSpace(_message))
+    @if (_loading)
     {
-        <p>@_message</p>
+        <section class="portal-card">
+            <p>Loading invoices...</p>
+        </section>
     }
+    else if (!string.IsNullOrWhiteSpace(_error))
+    {
+        <div class="portal-alert portal-alert-error">@_error</div>
+    }
+    else
+    {
+        @if (!string.IsNullOrWhiteSpace(_message))
+        {
+            <div class="portal-alert portal-alert-success">@_message</div>
+        }
 
-    <button @onclick="GenerateInvoice">Generate Draft Invoice</button>
+        <section class="portal-dash-stats">
+            <article class="portal-stat-card">
+                <div class="portal-stat-label">Total Invoices</div>
+                <div class="portal-stat-value">@_invoices.Count</div>
+                <div class="portal-stat-detail">all billing documents</div>
+            </article>
+            <article class="portal-stat-card">
+                <div class="portal-stat-label">Outstanding</div>
+                <div class="portal-stat-value">@FormatCurrency(_invoices.Where(i => i.Status is InvoiceStatus.Issued or InvoiceStatus.Overdue).Sum(i => i.TotalAmount))</div>
+                <div class="portal-stat-detail">issued and overdue</div>
+            </article>
+            <article class="portal-stat-card">
+                <div class="portal-stat-label">Paid</div>
+                <div class="portal-stat-value">@FormatCurrency(_invoices.Where(i => i.Status == InvoiceStatus.Paid).Sum(i => i.TotalAmount))</div>
+                <div class="portal-stat-detail">confirmed payments</div>
+            </article>
+            <article class="portal-stat-card">
+                <div class="portal-stat-label">Draft</div>
+                <div class="portal-stat-value">@_invoices.Count(i => i.Status == InvoiceStatus.Draft)</div>
+                <div class="portal-stat-detail">pending issue</div>
+            </article>
+        </section>
 
-    <table class="table" style="margin-top:1rem;">
-        <thead>
-            <tr>
-                <th>Invoice</th>
-                <th>Status</th>
-                <th>Period</th>
-                <th>Total (NGN)</th>
-                <th>Due</th>
-                <th>Action</th>
-            </tr>
-        </thead>
-        <tbody>
-            @foreach (var invoice in _invoices)
-            {
-                <tr>
-                    <td>@invoice.InvoiceNumber</td>
-                    <td>@invoice.Status</td>
-                    <td>@invoice.PeriodStart.ToString("yyyy-MM-dd") - @invoice.PeriodEnd.ToString("yyyy-MM-dd")</td>
-                    <td>@invoice.TotalAmount.ToString("N2")</td>
-                    <td>@(invoice.DueDate?.ToString("yyyy-MM-dd") ?? "-")</td>
-                    <td>
-                        @if (invoice.Status == FC.Engine.Domain.Enums.InvoiceStatus.Draft)
+        <section class="portal-card">
+            <div class="portal-table-container">
+                <table class="portal-table">
+                    <thead>
+                        <tr>
+                            <th>Invoice</th>
+                            <th>Status</th>
+                            <th>Period</th>
+                            <th>Total (NGN)</th>
+                            <th>Due Date</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (!_invoices.Any())
                         {
-                            <button @onclick="() => Issue(invoice.Id)">Issue</button>
+                            <tr>
+                                <td colspan="6" class="portal-table-primary">No invoices yet. Generate your first draft invoice.</td>
+                            </tr>
                         }
                         else
                         {
-                            <span>-</span>
+                            @foreach (var invoice in _invoices)
+                            {
+                                <tr>
+                                    <td>
+                                        <span class="portal-table-primary">@invoice.InvoiceNumber</span>
+                                    </td>
+                                    <td>
+                                        <span class="portal-badge @GetStatusBadgeClass(invoice.Status)">@invoice.Status</span>
+                                    </td>
+                                    <td>
+                                        @invoice.PeriodStart.ToString("yyyy-MM-dd")<br />
+                                        <span class="portal-text-sm">to @invoice.PeriodEnd.ToString("yyyy-MM-dd")</span>
+                                    </td>
+                                    <td>@FormatCurrency(invoice.TotalAmount)</td>
+                                    <td>@(invoice.DueDate?.ToString("yyyy-MM-dd") ?? "-")</td>
+                                    <td>
+                                        <div class="portal-sub-action-stack">
+                                            @if (invoice.Status == InvoiceStatus.Draft)
+                                            {
+                                                <button class="portal-btn portal-btn-outline portal-btn-sm"
+                                                        disabled="@(_busyInvoiceId == invoice.Id)"
+                                                        @onclick="() => Issue(invoice.Id)">
+                                                    Issue
+                                                </button>
+                                            }
+                                            else if (invoice.Status is InvoiceStatus.Issued or InvoiceStatus.Overdue)
+                                            {
+                                                <span class="portal-sub-caption">Awaiting payment confirmation</span>
+                                            }
+                                            else
+                                            {
+                                                <span class="portal-sub-caption">No actions</span>
+                                            }
+                                        </div>
+                                    </td>
+                                </tr>
+                            }
                         }
-                    </td>
-                </tr>
-            }
-        </tbody>
-    </table>
-}
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    }
+</div>
 
 @code {
     private bool _loading = true;
     private string? _error;
     private string? _message;
+    private int? _busyInvoiceId;
     private Guid _tenantId;
     private List<FC.Engine.Domain.Entities.Invoice> _invoices = new();
 
@@ -85,7 +155,7 @@ else
     {
         try
         {
-            _invoices = await SubscriptionService.GetInvoices(_tenantId, 1, 50);
+            _invoices = await SubscriptionService.GetInvoices(_tenantId, 1, 100);
         }
         catch (Exception ex)
         {
@@ -100,8 +170,10 @@ else
 
     private async Task GenerateInvoice()
     {
+        _busyInvoiceId = -1;
         _error = null;
         _message = null;
+
         try
         {
             var invoice = await SubscriptionService.GenerateInvoice(_tenantId);
@@ -112,12 +184,18 @@ else
         {
             _error = ex.Message;
         }
+        finally
+        {
+            _busyInvoiceId = null;
+        }
     }
 
     private async Task Issue(int invoiceId)
     {
+        _busyInvoiceId = invoiceId;
         _error = null;
         _message = null;
+
         try
         {
             var invoice = await SubscriptionService.IssueInvoice(invoiceId);
@@ -128,5 +206,21 @@ else
         {
             _error = ex.Message;
         }
+        finally
+        {
+            _busyInvoiceId = null;
+        }
     }
+
+    private static string GetStatusBadgeClass(InvoiceStatus status) => status switch
+    {
+        InvoiceStatus.Draft => "portal-badge-info",
+        InvoiceStatus.Issued => "portal-badge-warning",
+        InvoiceStatus.Overdue => "portal-badge-danger",
+        InvoiceStatus.Paid => "portal-badge-success",
+        InvoiceStatus.Voided => "portal-badge-neutral",
+        _ => "portal-badge-neutral"
+    };
+
+    private static string FormatCurrency(decimal value) => value.ToString("N2");
 }

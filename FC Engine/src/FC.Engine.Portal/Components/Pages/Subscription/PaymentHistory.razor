@@ -1,47 +1,102 @@
 @page "/subscription/payments"
 @attribute [Authorize(Policy = "InstitutionUser")]
 @using FC.Engine.Domain.Abstractions
+@using FC.Engine.Domain.Enums
 @inject ISubscriptionService SubscriptionService
 @inject ITenantContext TenantContext
 
 <PageTitle>Payment History</PageTitle>
 
-<h1>Payment History</h1>
+<div class="portal-sub-shell">
+    <header class="portal-page-header portal-page-header-split">
+        <div class="portal-page-header-main">
+            <p class="portal-sub-kicker">Subscription</p>
+            <h1 class="portal-page-title">Payment History</h1>
+            <p class="portal-page-subtitle">Audit all captured payments and reconciliation references.</p>
+        </div>
+        <div class="portal-page-header-actions portal-sub-actions-top">
+            <a class="portal-btn portal-btn-outline portal-btn-sm" href="/subscription/invoices">Back to Invoices</a>
+        </div>
+    </header>
 
-@if (_loading)
-{
-    <p>Loading payments...</p>
-}
-else if (_error is not null)
-{
-    <p class="text-danger">@_error</p>
-}
-else
-{
-    <table class="table">
-        <thead>
-            <tr>
-                <th>Date</th>
-                <th>Method</th>
-                <th>Reference</th>
-                <th>Status</th>
-                <th>Amount (NGN)</th>
-            </tr>
-        </thead>
-        <tbody>
-            @foreach (var payment in _payments)
-            {
-                <tr>
-                    <td>@payment.CreatedAt.ToString("yyyy-MM-dd HH:mm")</td>
-                    <td>@payment.PaymentMethod</td>
-                    <td>@(payment.PaymentReference ?? "-")</td>
-                    <td>@payment.Status</td>
-                    <td>@payment.Amount.ToString("N2")</td>
-                </tr>
-            }
-        </tbody>
-    </table>
-}
+    @if (_loading)
+    {
+        <section class="portal-card">
+            <p>Loading payments...</p>
+        </section>
+    }
+    else if (!string.IsNullOrWhiteSpace(_error))
+    {
+        <div class="portal-alert portal-alert-error">@_error</div>
+    }
+    else
+    {
+        <section class="portal-dash-stats">
+            <article class="portal-stat-card">
+                <div class="portal-stat-label">Payments</div>
+                <div class="portal-stat-value">@_payments.Count</div>
+                <div class="portal-stat-detail">all records</div>
+            </article>
+            <article class="portal-stat-card">
+                <div class="portal-stat-label">Confirmed</div>
+                <div class="portal-stat-value">@_payments.Count(p => p.Status == PaymentStatus.Confirmed)</div>
+                <div class="portal-stat-detail">successful collections</div>
+            </article>
+            <article class="portal-stat-card">
+                <div class="portal-stat-label">Failed</div>
+                <div class="portal-stat-value">@_payments.Count(p => p.Status == PaymentStatus.Failed)</div>
+                <div class="portal-stat-detail">requires retry</div>
+            </article>
+            <article class="portal-stat-card">
+                <div class="portal-stat-label">Total Paid</div>
+                <div class="portal-stat-value">@FormatCurrency(_payments.Where(p => p.Status == PaymentStatus.Confirmed).Sum(p => p.Amount))</div>
+                <div class="portal-stat-detail">NGN confirmed amount</div>
+            </article>
+        </section>
+
+        <section class="portal-card">
+            <div class="portal-table-container">
+                <table class="portal-table">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Method</th>
+                            <th>Reference</th>
+                            <th>Status</th>
+                            <th>Amount (NGN)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (!_payments.Any())
+                        {
+                            <tr>
+                                <td colspan="5" class="portal-table-primary">No payment records yet.</td>
+                            </tr>
+                        }
+                        else
+                        {
+                            @foreach (var payment in _payments)
+                            {
+                                <tr>
+                                    <td>
+                                        <span class="portal-td-date">@payment.CreatedAt.ToString("yyyy-MM-dd")</span>
+                                        <span class="portal-td-time">@payment.CreatedAt.ToString("HH:mm") UTC</span>
+                                    </td>
+                                    <td>@payment.PaymentMethod</td>
+                                    <td class="portal-td-mono">@(payment.PaymentReference ?? payment.ProviderTransactionId ?? "-")</td>
+                                    <td>
+                                        <span class="portal-badge @GetStatusBadgeClass(payment.Status)">@payment.Status</span>
+                                    </td>
+                                    <td>@FormatCurrency(payment.Amount)</td>
+                                </tr>
+                            }
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    }
+</div>
 
 @code {
     private bool _loading = true;
@@ -59,7 +114,7 @@ else
 
         try
         {
-            _payments = await SubscriptionService.GetPayments(TenantContext.CurrentTenantId.Value, 1, 100);
+            _payments = await SubscriptionService.GetPayments(TenantContext.CurrentTenantId.Value, 1, 200);
         }
         catch (Exception ex)
         {
@@ -70,4 +125,14 @@ else
             _loading = false;
         }
     }
+
+    private static string GetStatusBadgeClass(PaymentStatus status) => status switch
+    {
+        PaymentStatus.Confirmed => "portal-badge-success",
+        PaymentStatus.Failed => "portal-badge-danger",
+        PaymentStatus.Pending => "portal-badge-warning",
+        _ => "portal-badge-neutral"
+    };
+
+    private static string FormatCurrency(decimal value) => value.ToString("N2");
 }

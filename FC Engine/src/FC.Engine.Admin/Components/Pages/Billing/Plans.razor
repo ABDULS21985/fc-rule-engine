@@ -1,64 +1,370 @@
 @page "/billing/plans"
 @using Microsoft.AspNetCore.Authorization
-@attribute [Authorize(Policy = "PlatformAdmin")]
+@using System.Text.Json
+@using FC.Engine.Domain.Entities
 @using FC.Engine.Infrastructure.Metadata
 @using Microsoft.EntityFrameworkCore
+@attribute [Authorize(Policy = "PlatformAdmin")]
 @inject MetadataDbContext Db
 
 <PageTitle>Billing Plans</PageTitle>
 
-<h1>Subscription Plans</h1>
+<div class="billing-shell">
+    <section class="billing-hero">
+        <div>
+            <p class="billing-kicker">Platform Billing</p>
+            <h1>Subscription Plans</h1>
+            <p>Manage commercial plans, limits, and base pricing for all tenants.</p>
+        </div>
+        <div class="billing-hero-note">
+            <span class="badge badge-review">Platform Admin</span>
+            <span>@DateTime.UtcNow.ToString("dd MMM yyyy HH:mm") UTC</span>
+        </div>
+    </section>
 
-@if (_loading)
-{
-    <p>Loading plans...</p>
-}
-else
-{
-    <table class="table">
-        <thead>
-            <tr>
-                <th>Code</th>
-                <th>Name</th>
-                <th>Tier</th>
-                <th>Monthly (NGN)</th>
-                <th>Annual (NGN)</th>
-                <th>Max Modules</th>
-                <th>Max Users</th>
-                <th>Max Entities</th>
-                <th>Active</th>
-            </tr>
-        </thead>
-        <tbody>
-            @foreach (var plan in _plans)
-            {
-                <tr>
-                    <td>@plan.PlanCode</td>
-                    <td>@plan.PlanName</td>
-                    <td>@plan.Tier</td>
-                    <td>@plan.BasePriceMonthly.ToString("N2")</td>
-                    <td>@plan.BasePriceAnnual.ToString("N2")</td>
-                    <td>@plan.MaxModules</td>
-                    <td>@plan.MaxUsersPerEntity</td>
-                    <td>@plan.MaxEntities</td>
-                    <td>@(plan.IsActive ? "Yes" : "No")</td>
-                </tr>
-            }
-        </tbody>
-    </table>
-}
+    @if (_loading)
+    {
+        <section class="card billing-surface">
+            <p>Loading plans...</p>
+        </section>
+    }
+    else
+    {
+        @if (!string.IsNullOrWhiteSpace(_error))
+        {
+            <div class="cbn-alert cbn-alert-error">@_error</div>
+        }
+        @if (!string.IsNullOrWhiteSpace(_message))
+        {
+            <div class="cbn-alert cbn-alert-success">@_message</div>
+        }
+
+        <section class="billing-metrics">
+            <article class="billing-metric-card">
+                <p class="billing-metric-label">Active Plans</p>
+                <p class="billing-metric-value">@_plans.Count(p => p.IsActive)</p>
+                <p class="billing-metric-sub">of @_plans.Count total plans</p>
+            </article>
+            <article class="billing-metric-card">
+                <p class="billing-metric-label">Average Monthly Price</p>
+                <p class="billing-metric-value">@FormatCurrency(_plans.Any() ? _plans.Average(p => p.BasePriceMonthly) : 0)</p>
+                <p class="billing-metric-sub">NGN across plan catalogue</p>
+            </article>
+            <article class="billing-metric-card">
+                <p class="billing-metric-label">Highest Plan Price</p>
+                <p class="billing-metric-value">@FormatCurrency(_plans.Any() ? _plans.Max(p => p.BasePriceMonthly) : 0)</p>
+                <p class="billing-metric-sub">monthly base fee</p>
+            </article>
+            <article class="billing-metric-card">
+                <p class="billing-metric-label">Feature Flags</p>
+                <p class="billing-metric-value">@_plans.Sum(p => CountFeatures(p.Features))</p>
+                <p class="billing-metric-sub">declared features across plans</p>
+            </article>
+        </section>
+
+        <section class="billing-layout">
+            <section class="card billing-surface">
+                <div class="billing-toolbar">
+                    <input class="form-control billing-search"
+                           type="search"
+                           @bind="_searchTerm"
+                           @bind:event="oninput"
+                           placeholder="Search by code, name, or description" />
+                    <button class="btn btn-outline btn-sm" @onclick="ClearSearch">Clear</button>
+                </div>
+
+                <div class="billing-table-wrap">
+                    <table class="data-table billing-table">
+                        <thead>
+                            <tr>
+                                <th>Plan</th>
+                                <th>Tier</th>
+                                <th>Monthly</th>
+                                <th>Annual</th>
+                                <th>Limits</th>
+                                <th>Features</th>
+                                <th>Status</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @if (!FilteredPlans.Any())
+                            {
+                                <tr>
+                                    <td colspan="8" class="billing-empty-cell">No plans match your filter.</td>
+                                </tr>
+                            }
+                            else
+                            {
+                                @foreach (var plan in FilteredPlans)
+                                {
+                                    <tr class="@(IsEditing(plan.Id) ? "billing-row-active" : string.Empty)">
+                                        <td>
+                                            <div class="billing-plan-name">@plan.PlanName</div>
+                                            <div class="billing-plan-code">@plan.PlanCode</div>
+                                        </td>
+                                        <td>@plan.Tier</td>
+                                        <td>@FormatCurrency(plan.BasePriceMonthly)</td>
+                                        <td>@FormatCurrency(plan.BasePriceAnnual)</td>
+                                        <td>
+                                            <div class="billing-stack-sm">Modules: @plan.MaxModules</div>
+                                            <div class="billing-stack-sm">Users: @plan.MaxUsersPerEntity</div>
+                                            <div class="billing-stack-sm">Entities: @plan.MaxEntities</div>
+                                        </td>
+                                        <td>@CountFeatures(plan.Features)</td>
+                                        <td>
+                                            <span class="badge @(plan.IsActive ? "badge-published" : "badge-deprecated")">
+                                                @(plan.IsActive ? "Active" : "Inactive")
+                                            </span>
+                                        </td>
+                                        <td>
+                                            <button class="btn btn-outline btn-sm" @onclick="() => BeginEdit(plan)">Edit</button>
+                                        </td>
+                                    </tr>
+                                }
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <aside class="card billing-editor">
+                <div class="billing-editor-header">
+                    <h2>Plan Editor</h2>
+                    @if (_editing is not null)
+                    {
+                        <span class="badge badge-review">@_editing.PlanCode</span>
+                    }
+                </div>
+
+                @if (_editing is null)
+                {
+                    <p class="billing-muted">Select a plan from the table to edit pricing and limits.</p>
+                }
+                else
+                {
+                    <div class="form-group">
+                        <label>Plan Name</label>
+                        <input class="form-control" @bind="_editing.PlanName" />
+                    </div>
+
+                    <div class="billing-grid-2">
+                        <div class="form-group">
+                            <label>Tier</label>
+                            <input class="form-control" type="number" min="0" @bind="_editing.Tier" />
+                        </div>
+                        <div class="form-group">
+                            <label>Trial Days</label>
+                            <input class="form-control" type="number" min="0" @bind="_editing.TrialDays" />
+                        </div>
+                    </div>
+
+                    <div class="billing-grid-2">
+                        <div class="form-group">
+                            <label>Monthly Price (NGN)</label>
+                            <input class="form-control" type="number" min="0" step="0.01" @bind="_editing.BasePriceMonthly" />
+                        </div>
+                        <div class="form-group">
+                            <label>Annual Price (NGN)</label>
+                            <input class="form-control" type="number" min="0" step="0.01" @bind="_editing.BasePriceAnnual" />
+                        </div>
+                    </div>
+
+                    <div class="billing-grid-3">
+                        <div class="form-group">
+                            <label>Max Modules</label>
+                            <input class="form-control" type="number" min="1" @bind="_editing.MaxModules" />
+                        </div>
+                        <div class="form-group">
+                            <label>Max Users / Entity</label>
+                            <input class="form-control" type="number" min="1" @bind="_editing.MaxUsersPerEntity" />
+                        </div>
+                        <div class="form-group">
+                            <label>Max Entities</label>
+                            <input class="form-control" type="number" min="1" @bind="_editing.MaxEntities" />
+                        </div>
+                    </div>
+
+                    <div class="billing-grid-2">
+                        <div class="form-group">
+                            <label>API Calls / Month</label>
+                            <input class="form-control" type="number" min="0" @bind="_editing.MaxApiCallsPerMonth" />
+                        </div>
+                        <div class="form-group">
+                            <label>Storage (MB)</label>
+                            <input class="form-control" type="number" min="0" @bind="_editing.MaxStorageMb" />
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Features (JSON array or comma-separated)</label>
+                        <textarea class="form-control" rows="4" @bind="_editing.Features"></textarea>
+                    </div>
+
+                    <div class="form-group billing-toggle-row">
+                        <label>
+                            <input type="checkbox" @bind="_editing.IsActive" />
+                            <span>Plan is active</span>
+                        </label>
+                    </div>
+
+                    <div class="billing-editor-actions">
+                        <button class="btn btn-primary" @onclick="SaveEdit">Save Changes</button>
+                        <button class="btn btn-outline" @onclick="CancelEdit">Cancel</button>
+                    </div>
+                }
+            </aside>
+        </section>
+    }
+</div>
 
 @code {
     private bool _loading = true;
-    private List<FC.Engine.Domain.Entities.SubscriptionPlan> _plans = new();
+    private string _searchTerm = string.Empty;
+    private string? _error;
+    private string? _message;
+    private List<SubscriptionPlan> _plans = new();
+    private PlanEditorModel? _editing;
+
+    private IEnumerable<SubscriptionPlan> FilteredPlans => _plans
+        .Where(p => string.IsNullOrWhiteSpace(_searchTerm)
+            || p.PlanCode.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase)
+            || p.PlanName.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase)
+            || (!string.IsNullOrWhiteSpace(p.Description)
+                && p.Description.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase)))
+        .OrderBy(p => p.DisplayOrder)
+        .ThenBy(p => p.PlanCode);
 
     protected override async Task OnInitializedAsync()
+    {
+        await LoadPlans();
+        _loading = false;
+    }
+
+    private async Task LoadPlans()
     {
         _plans = await Db.SubscriptionPlans
             .AsNoTracking()
             .OrderBy(p => p.DisplayOrder)
             .ThenBy(p => p.PlanCode)
             .ToListAsync();
-        _loading = false;
+    }
+
+    private void ClearSearch() => _searchTerm = string.Empty;
+
+    private void BeginEdit(SubscriptionPlan plan)
+    {
+        _error = null;
+        _message = null;
+
+        _editing = new PlanEditorModel
+        {
+            Id = plan.Id,
+            PlanCode = plan.PlanCode,
+            PlanName = plan.PlanName,
+            Tier = plan.Tier,
+            MaxModules = plan.MaxModules,
+            MaxUsersPerEntity = plan.MaxUsersPerEntity,
+            MaxEntities = plan.MaxEntities,
+            MaxApiCallsPerMonth = plan.MaxApiCallsPerMonth,
+            MaxStorageMb = plan.MaxStorageMb,
+            BasePriceMonthly = plan.BasePriceMonthly,
+            BasePriceAnnual = plan.BasePriceAnnual,
+            TrialDays = plan.TrialDays,
+            Features = plan.Features,
+            IsActive = plan.IsActive
+        };
+    }
+
+    private async Task SaveEdit()
+    {
+        if (_editing is null)
+        {
+            return;
+        }
+
+        try
+        {
+            var plan = await Db.SubscriptionPlans.FirstOrDefaultAsync(p => p.Id == _editing.Id);
+            if (plan is null)
+            {
+                _error = "Selected plan no longer exists.";
+                return;
+            }
+
+            plan.PlanName = _editing.PlanName.Trim();
+            plan.Tier = Math.Max(0, _editing.Tier);
+            plan.MaxModules = Math.Max(1, _editing.MaxModules);
+            plan.MaxUsersPerEntity = Math.Max(1, _editing.MaxUsersPerEntity);
+            plan.MaxEntities = Math.Max(1, _editing.MaxEntities);
+            plan.MaxApiCallsPerMonth = Math.Max(0, _editing.MaxApiCallsPerMonth);
+            plan.MaxStorageMb = Math.Max(0, _editing.MaxStorageMb);
+            plan.BasePriceMonthly = Math.Max(0, _editing.BasePriceMonthly);
+            plan.BasePriceAnnual = Math.Max(0, _editing.BasePriceAnnual);
+            plan.TrialDays = Math.Max(0, _editing.TrialDays);
+            plan.Features = string.IsNullOrWhiteSpace(_editing.Features) ? "[]" : _editing.Features.Trim();
+            plan.IsActive = _editing.IsActive;
+
+            await Db.SaveChangesAsync();
+            await LoadPlans();
+
+            _message = $"Updated plan {plan.PlanCode}.";
+            _editing = null;
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+    }
+
+    private void CancelEdit()
+    {
+        _editing = null;
+        _error = null;
+    }
+
+    private bool IsEditing(int planId) => _editing?.Id == planId;
+
+    private static string FormatCurrency(decimal value) => value.ToString("N2");
+
+    private static int CountFeatures(string? features)
+    {
+        if (string.IsNullOrWhiteSpace(features))
+        {
+            return 0;
+        }
+
+        try
+        {
+            if (features.TrimStart().StartsWith("[", StringComparison.Ordinal))
+            {
+                var parsed = JsonSerializer.Deserialize<List<string>>(features);
+                return parsed?.Count ?? 0;
+            }
+
+            return features.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Length;
+        }
+        catch
+        {
+            return 0;
+        }
+    }
+
+    private sealed class PlanEditorModel
+    {
+        public int Id { get; set; }
+        public string PlanCode { get; set; } = string.Empty;
+        public string PlanName { get; set; } = string.Empty;
+        public int Tier { get; set; }
+        public int MaxModules { get; set; }
+        public int MaxUsersPerEntity { get; set; }
+        public int MaxEntities { get; set; }
+        public int MaxApiCallsPerMonth { get; set; }
+        public int MaxStorageMb { get; set; }
+        public decimal BasePriceMonthly { get; set; }
+        public decimal BasePriceAnnual { get; set; }
+        public int TrialDays { get; set; }
+        public string? Features { get; set; }
+        public bool IsActive { get; set; }
     }
 }
