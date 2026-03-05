@@ -94,4 +94,17 @@ public class MfaServiceTests
         checkerRequired.Should().BeTrue();
         viewerRequired.Should().BeFalse();
     }
+
+    [Fact]
+    public async Task MFA_Not_Required_For_Viewer_Role()
+    {
+        var (sut, db, tenantId) = CreateSut();
+        var tenant = Tenant.Create("Viewer Tenant", "viewer-tenant", TenantType.Institution);
+        tenant.Activate();
+        db.Tenants.Add(tenant);
+        await db.SaveChangesAsync();
+
+        var viewerRequired = await sut.IsMfaRequired(tenantId, "Viewer");
+        viewerRequired.Should().BeFalse();
+    }
 }

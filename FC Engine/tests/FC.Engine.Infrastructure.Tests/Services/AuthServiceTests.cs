@@ -4,6 +4,7 @@ using FC.Engine.Domain.Entities;
 using FC.Engine.Domain.Enums;
 using FluentAssertions;
 using Moq;
+using System.Security.Claims;
 using Xunit;
 
 namespace FC.Engine.Infrastructure.Tests.Services;
@@ -918,5 +919,20 @@ public class AuthServiceTests
         var (oldPwdResult, oldPwdErr) = await _sut.ValidateLogin("lifecycle", password);
         oldPwdResult.Should().BeNull();
         oldPwdErr.Should().Be("invalid");
+    }
+
+    [Fact]
+    public void Existing_Cookie_Auth_Still_Works_After_JWT_Addition()
+    {
+        var tenantId = Guid.NewGuid();
+        var user = CreateTestUser(role: PortalRole.Admin);
+        user.TenantId = tenantId;
+
+        var principal = _sut.BuildClaimsPrincipal(user);
+
+        principal.Identity.Should().NotBeNull();
+        principal.Identity!.AuthenticationType.Should().Be("FC.Admin.Auth");
+        principal.FindFirst(ClaimTypes.NameIdentifier)!.Value.Should().Be(user.Id.ToString());
+        principal.FindFirst("TenantId")!.Value.Should().Be(tenantId.ToString());
     }
 }

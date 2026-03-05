@@ -10,6 +10,9 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using Moq;
+using System.IdentityModel.Tokens.Jwt;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace FC.Engine.Infrastructure.Tests.Services;
 
@@ -104,6 +107,26 @@ public class JwtTokenServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task JWT_AccessToken_Expires_After_15_Minutes()
+    {
+        var response = await _sut.GenerateTokenPair(new AuthenticatedUser
+        {
+            UserId = 12,
+            UserType = "InstitutionUser",
+            TenantId = Guid.NewGuid(),
+            Email = "expiry@test.local",
+            FullName = "Expiry User",
+            Role = "Maker",
+            Permissions = new List<string>(),
+            EntitledModules = new List<string>()
+        });
+
+        var token = new JwtSecurityTokenHandler().ReadJwtToken(response.AccessToken);
+        token.ValidTo.Should().BeAfter(DateTime.UtcNow.AddMinutes(14));
+        token.ValidTo.Should().BeBefore(DateTime.UtcNow.AddMinutes(16));
+    }
+
+    [Fact]
     public async Task Refresh_Token_Single_Use_Rotation()
     {
         var tenant = Tenant.Create("Token Tenant", "token-tenant", TenantType.Institution, "token@test.local");
@@ -153,6 +176,46 @@ public class JwtTokenServiceTests : IDisposable
         await replay.Should().ThrowAsync<SecurityTokenException>();
     }
 
+    [Fact]
+    public async Task Expired_Refresh_Token_Rejected()
+    {
+        _db.RefreshTokens.Add(new RefreshToken
+        {
+            TenantId = Guid.NewGuid(),
+            UserId = 999,
+            UserType = "InstitutionUser",
+            Token = "expired-refresh-token",
+            TokenHash = ComputeSha256("expired-refresh-token"),
+            ExpiresAt = DateTime.UtcNow.AddMinutes(-5),
+            IsRevoked = false,
+            IsUsed = false
+        });
+        await _db.SaveChangesAsync();
+
+        Func<Task> act = async () => await _sut.RefreshToken("expired-refresh-token", "127.0.0.1");
+        await act.Should().ThrowAsync<SecurityTokenException>();
+    }
+
+    [Fact]
+    public async Task Revoked_Refresh_Token_Rejected()
+    {
+        _db.RefreshTokens.Add(new RefreshToken
+        {
+            TenantId = Guid.NewGuid(),
+            UserId = 999,
+            UserType = "InstitutionUser",
+            Token = "revoked-refresh-token",
+            TokenHash = ComputeSha256("revoked-refresh-token"),
+            ExpiresAt = DateTime.UtcNow.AddDays(1),
+            IsRevoked = true,
+            IsUsed = false
+        });
+        await _db.SaveChangesAsync();
+
+        Func<Task> act = async () => await _sut.RefreshToken("revoked-refresh-token", "127.0.0.1");
+        await act.Should().ThrowAsync<SecurityTokenException>();
+    }
+
     private static string GetClaimValue(System.Security.Claims.ClaimsPrincipal principal, params string[] claimTypes)
     {
         foreach (var claimType in claimTypes)
@@ -165,5 +228,11 @@ public class JwtTokenServiceTests : IDisposable
         }
 
         throw new InvalidOperationException($"None of the expected claims were present: {string.Join(", ", claimTypes)}");
+    }
+
+    private static string ComputeSha256(string input)
+    {
+        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(input));
+        return Convert.ToHexString(bytes).ToLowerInvariant();
     }
 }

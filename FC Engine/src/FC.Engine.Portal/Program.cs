@@ -10,6 +10,7 @@ using Microsoft.AspNetCore.Authentication.Cookies;
 using Serilog;
 
 var builder = WebApplication.CreateBuilder(args);
+const string PortalAuthScheme = "FC.Portal.Auth";
 
 // Serilog
 builder.Host.UseSerilog((ctx, lc) => lc
@@ -46,8 +47,8 @@ builder.Services.AddScoped<FC.Engine.Portal.Services.DryRunValidationService>();
 builder.Services.AddMemoryCache();
 
 // Authentication — cookie-based for Blazor Server (separate cookie from Admin)
-builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
-    .AddCookie(options =>
+builder.Services.AddAuthentication(PortalAuthScheme)
+    .AddCookie(PortalAuthScheme, options =>
     {
         options.LoginPath = "/login";
         options.LogoutPath = "/account/logout";
@@ -155,7 +156,7 @@ app.MapPost("/account/login", async (
 
         var challengePrincipal = await authService.BuildClaimsPrincipalWithPermissions(challengedUser, context.RequestAborted);
         await context.SignInAsync(
-            CookieAuthenticationDefaults.AuthenticationScheme,
+            PortalAuthScheme,
             challengePrincipal,
             new AuthenticationProperties
             {
@@ -212,7 +213,7 @@ app.MapPost("/account/login", async (
     {
         var setupPrincipal = await authService.BuildClaimsPrincipalWithPermissions(user, context.RequestAborted);
         await context.SignInAsync(
-            CookieAuthenticationDefaults.AuthenticationScheme,
+            PortalAuthScheme,
             setupPrincipal,
             new AuthenticationProperties
             {
@@ -231,7 +232,7 @@ app.MapPost("/account/login", async (
     var principal = await authService.BuildClaimsPrincipalWithPermissions(user, context.RequestAborted);
 
     await context.SignInAsync(
-        CookieAuthenticationDefaults.AuthenticationScheme,
+        PortalAuthScheme,
         principal,
         new AuthenticationProperties
         {
@@ -252,7 +253,7 @@ app.MapPost("/account/login", async (
 
 app.MapGet("/account/logout", async (HttpContext context) =>
 {
-    await context.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+    await context.SignOutAsync(PortalAuthScheme);
     context.Response.Redirect("/login");
 });
 

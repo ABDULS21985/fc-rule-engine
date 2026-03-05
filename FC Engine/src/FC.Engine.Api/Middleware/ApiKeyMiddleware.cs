@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using FC.Engine.Domain.Abstractions;
+using FC.Engine.Domain.Security;
 using Microsoft.IdentityModel.Tokens;
 
 namespace FC.Engine.Api.Middleware;
@@ -126,6 +127,19 @@ public class ApiKeyMiddleware
             return;
         }
 
+        var legacyClaims = new List<Claim>
+        {
+            new("sub", "apikey:legacy"),
+            new("tid", legacyTenantId.ToString()),
+            new("utype", "ApiKeyLegacy")
+        };
+
+        foreach (var permission in PermissionCatalog.All)
+        {
+            legacyClaims.Add(new Claim("perm", permission));
+        }
+
+        context.User = new ClaimsPrincipal(new ClaimsIdentity(legacyClaims, "ApiKeyLegacy"));
         context.Items["TenantId"] = legacyTenantId;
 
         await _next(context);

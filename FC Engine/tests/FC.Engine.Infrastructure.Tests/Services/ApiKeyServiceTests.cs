@@ -63,4 +63,26 @@ public class ApiKeyServiceTests
         var validated = await sut.ValidateApiKey(created.RawKey, "127.0.0.1");
         validated.Should().BeNull();
     }
+
+    [Fact]
+    public async Task API_Key_Permissions_Enforced()
+    {
+        await using var db = CreateDb();
+        var tenant = Tenant.Create("ApiKey Scoped", "api-key-scoped", TenantType.Institution);
+        tenant.Activate();
+        db.Tenants.Add(tenant);
+        await db.SaveChangesAsync();
+
+        var sut = new ApiKeyService(db);
+        var created = await sut.CreateApiKey(tenant.TenantId, 23, new CreateApiKeyRequest
+        {
+            Description = "Scoped",
+            Permissions = new List<string> { "submission.create", "report.read" }
+        });
+
+        var validated = await sut.ValidateApiKey(created.RawKey, "127.0.0.1");
+        validated.Should().NotBeNull();
+        validated!.Permissions.Should().Contain(new[] { "submission.create", "report.read" });
+        validated.Permissions.Should().NotContain("submission.approve");
+    }
 }

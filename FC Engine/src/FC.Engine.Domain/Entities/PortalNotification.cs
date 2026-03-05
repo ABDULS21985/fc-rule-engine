@@ -1,3 +1,7 @@
+using System.ComponentModel.DataAnnotations.Schema;
+using FC.Engine.Domain.Enums;
+using FC.Engine.Domain.Notifications;
+
 namespace FC.Engine.Domain.Entities;
 
 /// <summary>
@@ -21,6 +25,15 @@ public class PortalNotification
 
     // ── Content ──
 
+    /// <summary>Domain event code (e.g., return.submitted_for_review).</summary>
+    public string EventType { get; set; } = NotificationEvents.SystemAnnouncement;
+
+    /// <summary>Channel represented by this notification record.</summary>
+    public NotificationChannel Channel { get; set; } = NotificationChannel.InApp;
+
+    /// <summary>Priority controls urgency/escalation across channels.</summary>
+    public NotificationPriority Priority { get; set; } = NotificationPriority.Normal;
+
     public NotificationType Type { get; set; }
     public string Title { get; set; } = "";
     public string Message { get; set; } = "";
@@ -28,8 +41,22 @@ public class PortalNotification
     /// <summary>Relative URL for the notification's action (e.g., "/submissions/123"). Null = no link.</summary>
     public string? Link { get; set; }
 
+    /// <summary>Email recipient used for email channel delivery records.</summary>
+    public string? RecipientEmail { get; set; }
+
+    /// <summary>SMS recipient used for sms channel delivery records.</summary>
+    public string? RecipientPhone { get; set; }
+
     /// <summary>Optional JSON metadata for additional context.</summary>
-    public string? MetadataJson { get; set; }
+    public string? Metadata { get; set; }
+
+    /// <summary>Backward-compatible alias used by legacy portal code.</summary>
+    [NotMapped]
+    public string? MetadataJson
+    {
+        get => Metadata;
+        set => Metadata = value;
+    }
 
     // ── State ──
 

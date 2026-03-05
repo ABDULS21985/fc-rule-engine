@@ -9,6 +9,7 @@ using Microsoft.AspNetCore.Authentication.Cookies;
 using Serilog;
 
 var builder = WebApplication.CreateBuilder(args);
+const string AdminAuthScheme = "FC.Admin.Auth";
 
 // Serilog
 builder.Host.UseSerilog((ctx, lc) => lc
@@ -39,8 +40,8 @@ builder.Services.AddScoped<FC.Engine.Admin.Services.DialogService>();
 builder.Services.AddScoped<FC.Engine.Admin.Services.TenantManagementService>();
 
 // Authentication — cookie-based for Blazor Server
-builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
-    .AddCookie(options =>
+builder.Services.AddAuthentication(AdminAuthScheme)
+    .AddCookie(AdminAuthScheme, options =>
     {
         options.LoginPath = "/login";
         options.LogoutPath = "/logout";
@@ -49,6 +50,7 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
         options.SlidingExpiration = true;
         options.Cookie.HttpOnly = true;
         options.Cookie.SameSite = SameSiteMode.Strict;
+        options.Cookie.Name = "FC.Admin.Auth";
     });
 
 // Authorization policies
@@ -132,7 +134,7 @@ app.MapPost("/account/login", async (
 
         var principalWithMfa = await authService.BuildClaimsPrincipalWithPermissions(challengedUser, context.RequestAborted);
         await context.SignInAsync(
-            CookieAuthenticationDefaults.AuthenticationScheme,
+            AdminAuthScheme,
             principalWithMfa,
             new AuthenticationProperties
             {
@@ -193,7 +195,7 @@ app.MapPost("/account/login", async (
     var principal = await authService.BuildClaimsPrincipalWithPermissions(user, context.RequestAborted);
 
     await context.SignInAsync(
-        CookieAuthenticationDefaults.AuthenticationScheme,
+        AdminAuthScheme,
         principal,
         new AuthenticationProperties
         {
@@ -208,7 +210,7 @@ app.MapPost("/account/login", async (
 
 app.MapGet("/account/logout", async (HttpContext context) =>
 {
-    await context.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+    await context.SignOutAsync(AdminAuthScheme);
     context.Response.Redirect("/login");
 });
 
