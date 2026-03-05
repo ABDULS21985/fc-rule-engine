@@ -391,6 +391,139 @@ public class FormulaEvaluatorTests
     }
 
     [Fact]
+    public async Task Dmb_Lcr_Minimum_Threshold_Fails_When_Below_100()
+    {
+        var record = CreateFixedRowRecord(new Dictionary<string, object?>
+        {
+            ["total_hqla"] = 90m,
+            ["net_cash_outflow_30d"] = 100m,
+            ["lcr_ratio"] = 90m,
+            ["lcr_minimum"] = 100m
+        });
+
+        var ratioFormula = new IntraSheetFormula
+        {
+            RuleCode = "LCR-RATIO-001",
+            FormulaType = FormulaType.Custom,
+            TargetFieldName = "lcr_ratio",
+            OperandFields = "[\"total_hqla\",\"net_cash_outflow_30d\"]",
+            CustomExpression = "FUNC:LCR(total_hqla,net_cash_outflow_30d)",
+            Severity = ValidationSeverity.Error,
+            IsActive = true,
+            SortOrder = 1
+        };
+
+        var thresholdFormula = new IntraSheetFormula
+        {
+            RuleCode = "LCR-THRESH-001",
+            FormulaType = FormulaType.GreaterThanOrEqual,
+            TargetFieldName = "lcr_ratio",
+            OperandFields = "[\"lcr_minimum\"]",
+            Severity = ValidationSeverity.Error,
+            IsActive = true,
+            SortOrder = 2
+        };
+
+        SetupCache("MFCR 300", category: StructuralCategory.FixedRow);
+        SetupCacheWithFormulas("MFCR 300", [ratioFormula, thresholdFormula]);
+
+        var errors = await _evaluator.Evaluate(record);
+
+        errors.Should().Contain(e => e.RuleId == "LCR-THRESH-001");
+    }
+
+    [Fact]
+    public async Task Dmb_Nsfr_Minimum_Threshold_Fails_When_Below_100()
+    {
+        var record = CreateFixedRowRecord(new Dictionary<string, object?>
+        {
+            ["asf_total"] = 95m,
+            ["rsf_total"] = 100m,
+            ["nsfr_ratio"] = 95m,
+            ["nsfr_minimum"] = 100m
+        });
+
+        var ratioFormula = new IntraSheetFormula
+        {
+            RuleCode = "NSFR-RATIO-001",
+            FormulaType = FormulaType.Custom,
+            TargetFieldName = "nsfr_ratio",
+            OperandFields = "[\"asf_total\",\"rsf_total\"]",
+            CustomExpression = "FUNC:NSFR(asf_total,rsf_total)",
+            Severity = ValidationSeverity.Error,
+            IsActive = true,
+            SortOrder = 1
+        };
+
+        var thresholdFormula = new IntraSheetFormula
+        {
+            RuleCode = "NSFR-THRESH-001",
+            FormulaType = FormulaType.GreaterThanOrEqual,
+            TargetFieldName = "nsfr_ratio",
+            OperandFields = "[\"nsfr_minimum\"]",
+            Severity = ValidationSeverity.Error,
+            IsActive = true,
+            SortOrder = 2
+        };
+
+        SetupCache("MFCR 300", category: StructuralCategory.FixedRow);
+        SetupCacheWithFormulas("MFCR 300", [ratioFormula, thresholdFormula]);
+
+        var errors = await _evaluator.Evaluate(record);
+
+        errors.Should().Contain(e => e.RuleId == "NSFR-THRESH-001");
+    }
+
+    [Fact]
+    public async Task Psp_Transaction_Channel_Total_Validates()
+    {
+        var record = CreateFixedRowRecord(new Dictionary<string, object?>
+        {
+            ["ussd_txn_count"] = 10m,
+            ["card_txn_count"] = 20m,
+            ["mobile_txn_count"] = 30m,
+            ["web_txn_count"] = 40m,
+            ["pos_txn_count"] = 50m,
+            ["atm_txn_count"] = 60m,
+            ["total_txn_count"] = 210m
+        });
+
+        var formula = CreateSumFormula(
+            "total_txn_count",
+            ["ussd_txn_count", "card_txn_count", "mobile_txn_count", "web_txn_count", "pos_txn_count", "atm_txn_count"]);
+
+        SetupCache("MFCR 300", formula);
+        var errors = await _evaluator.Evaluate(record);
+
+        errors.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Pmb_Nhf_Rate_At_Or_Below_6_Passes()
+    {
+        var record = CreateFixedRowRecord(new Dictionary<string, object?>
+        {
+            ["nhf_avg_rate"] = 6m,
+            ["nhf_rate_cap"] = 6m
+        });
+
+        var formula = new IntraSheetFormula
+        {
+            RuleCode = "PMB-NHF-001",
+            FormulaType = FormulaType.LessThanOrEqual,
+            TargetFieldName = "nhf_avg_rate",
+            OperandFields = "[\"nhf_rate_cap\"]",
+            Severity = ValidationSeverity.Error,
+            IsActive = true
+        };
+        SetupCache("MFCR 300", formula);
+
+        var errors = await _evaluator.Evaluate(record);
+
+        errors.Should().BeEmpty();
+    }
+
+    [Fact]
     public async Task Evaluate_CustomFunction_NSFR_Calculates_Correctly()
     {
         var record = CreateFixedRowRecord(new Dictionary<string, object?>
@@ -738,6 +871,39 @@ public class FormulaEvaluatorTests
         var formulas = formula != null
             ? new List<IntraSheetFormula> { formula }.AsReadOnly()
             : new List<IntraSheetFormula>().AsReadOnly();
+
+        var cached = new CachedTemplate
+        {
+            TemplateId = 1,
+            ReturnCode = returnCode,
+            Name = returnCode,
+            StructuralCategory = category.ToString(),
+            PhysicalTableName = returnCode.ToLowerInvariant().Replace(" ", "_"),
+            XmlRootElement = returnCode.Replace(" ", ""),
+            XmlNamespace = $"urn:cbn:dfis:fc:{returnCode.Replace(" ", "").ToLowerInvariant()}",
+            CurrentVersion = new CachedTemplateVersion
+            {
+                Id = 1,
+                VersionNumber = 1,
+                Fields = fields,
+                ItemCodes = new List<TemplateItemCode>().AsReadOnly(),
+                IntraSheetFormulas = formulas
+            }
+        };
+
+        _cacheMock.Setup(c => c.GetPublishedTemplate(returnCode, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(cached);
+    }
+
+    private void SetupCacheWithFormulas(
+        string returnCode,
+        IReadOnlyList<IntraSheetFormula> formulas,
+        StructuralCategory category = StructuralCategory.FixedRow)
+    {
+        var fields = new List<TemplateField>
+        {
+            new() { FieldName = "cash_notes", FieldOrder = 1, DataType = FieldDataType.Money }
+        }.AsReadOnly();
 
         var cached = new CachedTemplate
         {

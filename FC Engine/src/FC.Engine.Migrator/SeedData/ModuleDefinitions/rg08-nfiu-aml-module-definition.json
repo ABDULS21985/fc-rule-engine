@@ -1,0 +1,1025 @@
+{
+  "moduleCode": "NFIU_AML",
+  "moduleVersion": "2.0.0",
+  "description": "RG-08 NFIU AML module pack (12 sheets) including STR/CTR/PEP/TFS/goAML metadata support.",
+  "templates": [
+    {
+      "returnCode": "NFIU_COV",
+      "name": "NFIU Cover & Declaration",
+      "frequency": "Monthly",
+      "structuralCategory": "FixedRow",
+      "tablePrefix": "nfiu",
+      "sections": [
+        {
+          "code": "COV",
+          "name": "Cover",
+          "displayOrder": 1
+        }
+      ],
+      "fields": [
+        {
+          "fieldCode": "institution_code",
+          "label": "Institution Code",
+          "dataType": "Text",
+          "section": "COV",
+          "required": true,
+          "displayOrder": 1
+        },
+        {
+          "fieldCode": "institution_name",
+          "label": "Institution Name",
+          "dataType": "Text",
+          "section": "COV",
+          "required": true,
+          "displayOrder": 2
+        },
+        {
+          "fieldCode": "aml_officer_name",
+          "label": "AML Officer Name",
+          "dataType": "Text",
+          "section": "COV",
+          "required": true,
+          "displayOrder": 3
+        },
+        {
+          "fieldCode": "reporting_period",
+          "label": "Reporting Period",
+          "dataType": "Text",
+          "section": "COV",
+          "required": true,
+          "displayOrder": 4
+        },
+        {
+          "fieldCode": "period_start",
+          "label": "Period Start",
+          "dataType": "Date",
+          "section": "COV",
+          "required": true,
+          "displayOrder": 5
+        },
+        {
+          "fieldCode": "period_end",
+          "label": "Period End",
+          "dataType": "Date",
+          "section": "COV",
+          "required": true,
+          "displayOrder": 6
+        },
+        {
+          "fieldCode": "declaration_signed",
+          "label": "Declaration Signed",
+          "dataType": "Boolean",
+          "section": "COV",
+          "required": true,
+          "displayOrder": 7
+        },
+        {
+          "fieldCode": "declaration_signatory",
+          "label": "Declaration Signatory",
+          "dataType": "Text",
+          "section": "COV",
+          "required": true,
+          "displayOrder": 8
+        },
+        {
+          "fieldCode": "submission_date",
+          "label": "Submission Date",
+          "dataType": "Date",
+          "section": "COV",
+          "required": true,
+          "displayOrder": 9
+        },
+        {
+          "fieldCode": "goaml_namespace",
+          "label": "goAML Namespace",
+          "dataType": "Text",
+          "section": "COV",
+          "required": false,
+          "displayOrder": 10,
+          "helpText": "urn:un:unece:uncefact:data:standard:ReusableAggregateBusinessInformationEntity:100"
+        }
+      ],
+      "itemCodes": [],
+      "formulas": [],
+      "crossSheetRules": []
+    },
+    {
+      "returnCode": "NFIU_STR",
+      "name": "NFIU Suspicious Transaction Reports",
+      "frequency": "Monthly",
+      "structuralCategory": "FixedRow",
+      "tablePrefix": "nfiu",
+      "sections": [
+        {
+          "code": "STR",
+          "name": "STR",
+          "displayOrder": 1
+        }
+      ],
+      "fields": [
+        {
+          "fieldCode": "str_filed_count",
+          "label": "STR Filed Count",
+          "dataType": "Integer",
+          "section": "STR",
+          "required": true,
+          "displayOrder": 1
+        },
+        {
+          "fieldCode": "str_quality_score",
+          "label": "STR Quality Score (1-5)",
+          "dataType": "Decimal",
+          "section": "STR",
+          "required": false,
+          "displayOrder": 2
+        },
+        {
+          "fieldCode": "str_money_laundering",
+          "label": "STR Money Laundering",
+          "dataType": "Integer",
+          "section": "STR",
+          "required": false,
+          "displayOrder": 3
+        },
+        {
+          "fieldCode": "str_terrorist_financing",
+          "label": "STR Terrorist Financing",
+          "dataType": "Integer",
+          "section": "STR",
+          "required": false,
+          "displayOrder": 4
+        },
+        {
+          "fieldCode": "str_fraud",
+          "label": "STR Fraud",
+          "dataType": "Integer",
+          "section": "STR",
+          "required": false,
+          "displayOrder": 5
+        },
+        {
+          "fieldCode": "str_other",
+          "label": "STR Other",
+          "dataType": "Integer",
+          "section": "STR",
+          "required": false,
+          "displayOrder": 6
+        },
+        {
+          "fieldCode": "str_avg_response_time_days",
+          "label": "STR Avg Response Time Days",
+          "dataType": "Decimal",
+          "section": "STR",
+          "required": false,
+          "displayOrder": 7
+        },
+        {
+          "fieldCode": "str_dismissed_count",
+          "label": "STR Dismissed Count",
+          "dataType": "Integer",
+          "section": "STR",
+          "required": false,
+          "displayOrder": 8
+        },
+        {
+          "fieldCode": "str_forwarded_to_efcc",
+          "label": "STR Forwarded to EFCC",
+          "dataType": "Integer",
+          "section": "STR",
+          "required": false,
+          "displayOrder": 9
+        }
+      ],
+      "itemCodes": [],
+      "formulas": [
+        {
+          "formulaType": "Sum",
+          "targetField": "str_filed_count",
+          "sourceFields": [
+            "str_money_laundering",
+            "str_terrorist_financing",
+            "str_fraud",
+            "str_other"
+          ],
+          "severity": "Error",
+          "description": "STR by category totals"
+        }
+      ],
+      "crossSheetRules": []
+    },
+    {
+      "returnCode": "NFIU_CTR",
+      "name": "NFIU Currency Transaction Reports",
+      "frequency": "Monthly",
+      "structuralCategory": "FixedRow",
+      "tablePrefix": "nfiu",
+      "sections": [
+        {
+          "code": "CTR",
+          "name": "CTR",
+          "displayOrder": 1
+        }
+      ],
+      "fields": [
+        {
+          "fieldCode": "ctr_filed_count",
+          "label": "CTR Filed Count",
+          "dataType": "Integer",
+          "section": "CTR",
+          "required": true,
+          "displayOrder": 1
+        },
+        {
+          "fieldCode": "ctr_threshold_ngn",
+          "label": "CTR Threshold NGN",
+          "dataType": "Money",
+          "section": "CTR",
+          "required": true,
+          "minValue": 5000000,
+          "displayOrder": 2,
+          "validationNote": "NFIU/SCUML cash threshold floor is NGN 5,000,000."
+        },
+        {
+          "fieldCode": "ctr_threshold_fx",
+          "label": "CTR Threshold FX (USD)",
+          "dataType": "Money",
+          "section": "CTR",
+          "required": true,
+          "minValue": 10000,
+          "displayOrder": 3,
+          "validationNote": "NFIU/SCUML FX threshold floor is USD 10,000 equivalent."
+        },
+        {
+          "fieldCode": "cash_deposits_over_threshold",
+          "label": "Cash Deposits Over Threshold",
+          "dataType": "Integer",
+          "section": "CTR",
+          "required": false,
+          "displayOrder": 4
+        },
+        {
+          "fieldCode": "cash_withdrawals_over_threshold",
+          "label": "Cash Withdrawals Over Threshold",
+          "dataType": "Integer",
+          "section": "CTR",
+          "required": false,
+          "displayOrder": 5
+        },
+        {
+          "fieldCode": "fx_transactions_over_threshold",
+          "label": "FX Transactions Over Threshold",
+          "dataType": "Integer",
+          "section": "CTR",
+          "required": false,
+          "displayOrder": 6
+        },
+        {
+          "fieldCode": "ctr_total_threshold_events",
+          "label": "Total Threshold Events",
+          "dataType": "Integer",
+          "section": "CTR",
+          "required": false,
+          "displayOrder": 7
+        }
+      ],
+      "itemCodes": [],
+      "formulas": [
+        {
+          "formulaType": "Sum",
+          "targetField": "ctr_total_threshold_events",
+          "sourceFields": [
+            "cash_deposits_over_threshold",
+            "cash_withdrawals_over_threshold",
+            "fx_transactions_over_threshold"
+          ],
+          "severity": "Error",
+          "description": "Threshold event count"
+        }
+      ],
+      "crossSheetRules": []
+    },
+    {
+      "returnCode": "NFIU_FTR",
+      "name": "NFIU Foreign Transaction Reports",
+      "frequency": "Quarterly",
+      "structuralCategory": "FixedRow",
+      "tablePrefix": "nfiu",
+      "sections": [
+        {
+          "code": "FTR",
+          "name": "FTR",
+          "displayOrder": 1
+        }
+      ],
+      "fields": [
+        {
+          "fieldCode": "international_wire_count",
+          "label": "International Wire Count",
+          "dataType": "Integer",
+          "section": "FTR",
+          "required": false,
+          "displayOrder": 1
+        },
+        {
+          "fieldCode": "total_wire_value_usd",
+          "label": "Total Wire Value USD",
+          "dataType": "Money",
+          "section": "FTR",
+          "required": false,
+          "displayOrder": 2
+        },
+        {
+          "fieldCode": "wire_corridor_top1",
+          "label": "Top Corridor 1",
+          "dataType": "Text",
+          "section": "FTR",
+          "required": false,
+          "displayOrder": 3
+        },
+        {
+          "fieldCode": "wire_corridor_top2",
+          "label": "Top Corridor 2",
+          "dataType": "Text",
+          "section": "FTR",
+          "required": false,
+          "displayOrder": 4
+        },
+        {
+          "fieldCode": "wire_corridor_top3",
+          "label": "Top Corridor 3",
+          "dataType": "Text",
+          "section": "FTR",
+          "required": false,
+          "displayOrder": 5
+        },
+        {
+          "fieldCode": "suspicious_wire_count",
+          "label": "Suspicious Wire Count",
+          "dataType": "Integer",
+          "section": "FTR",
+          "required": false,
+          "displayOrder": 6
+        },
+        {
+          "fieldCode": "swift_compliance_rate",
+          "label": "SWIFT Compliance Rate",
+          "dataType": "Percentage",
+          "section": "FTR",
+          "required": false,
+          "displayOrder": 7
+        }
+      ],
+      "itemCodes": [],
+      "formulas": [],
+      "crossSheetRules": []
+    },
+    {
+      "returnCode": "NFIU_NIL",
+      "name": "NFIU NIL Returns",
+      "frequency": "Monthly",
+      "structuralCategory": "FixedRow",
+      "tablePrefix": "nfiu",
+      "sections": [
+        {
+          "code": "NIL",
+          "name": "NIL",
+          "displayOrder": 1
+        }
+      ],
+      "fields": [
+        {
+          "fieldCode": "nil_declaration",
+          "label": "NIL Declaration",
+          "dataType": "Boolean",
+          "section": "NIL",
+          "required": false,
+          "displayOrder": 1
+        },
+        {
+          "fieldCode": "nil_explanation",
+          "label": "NIL Explanation",
+          "dataType": "Text",
+          "section": "NIL",
+          "required": false,
+          "displayOrder": 2
+        },
+        {
+          "fieldCode": "nil_approved_by",
+          "label": "NIL Approved By",
+          "dataType": "Text",
+          "section": "NIL",
+          "required": false,
+          "displayOrder": 3
+        },
+        {
+          "fieldCode": "nil_approval_date",
+          "label": "NIL Approval Date",
+          "dataType": "Date",
+          "section": "NIL",
+          "required": false,
+          "displayOrder": 4
+        },
+        {
+          "fieldCode": "nil_period_reference",
+          "label": "NIL Period Reference",
+          "dataType": "Text",
+          "section": "NIL",
+          "required": false,
+          "displayOrder": 5
+        }
+      ],
+      "itemCodes": [],
+      "formulas": [],
+      "crossSheetRules": []
+    },
+    {
+      "returnCode": "NFIU_PEP",
+      "name": "NFIU Politically Exposed Persons",
+      "frequency": "Quarterly",
+      "structuralCategory": "FixedRow",
+      "tablePrefix": "nfiu",
+      "sections": [
+        {
+          "code": "PEP",
+          "name": "PEP",
+          "displayOrder": 1
+        }
+      ],
+      "fields": [
+        {
+          "fieldCode": "pep_count",
+          "label": "PEP Customers Total",
+          "dataType": "Integer",
+          "section": "PEP",
+          "required": false,
+          "displayOrder": 1
+        },
+        {
+          "fieldCode": "pep_new_period",
+          "label": "PEP New in Period",
+          "dataType": "Integer",
+          "section": "PEP",
+          "required": false,
+          "displayOrder": 2
+        },
+        {
+          "fieldCode": "pep_enhanced_monitoring",
+          "label": "PEP Enhanced Monitoring",
+          "dataType": "Integer",
+          "section": "PEP",
+          "required": false,
+          "displayOrder": 3
+        },
+        {
+          "fieldCode": "pep_high_risk",
+          "label": "PEP High Risk",
+          "dataType": "Integer",
+          "section": "PEP",
+          "required": false,
+          "displayOrder": 4
+        },
+        {
+          "fieldCode": "pep_medium_risk",
+          "label": "PEP Medium Risk",
+          "dataType": "Integer",
+          "section": "PEP",
+          "required": false,
+          "displayOrder": 5
+        },
+        {
+          "fieldCode": "pep_low_risk",
+          "label": "PEP Low Risk",
+          "dataType": "Integer",
+          "section": "PEP",
+          "required": false,
+          "displayOrder": 6
+        },
+        {
+          "fieldCode": "pep_account_closures",
+          "label": "PEP Account Closures",
+          "dataType": "Integer",
+          "section": "PEP",
+          "required": false,
+          "displayOrder": 7
+        },
+        {
+          "fieldCode": "pep_sar_generated",
+          "label": "PEP SAR Generated",
+          "dataType": "Integer",
+          "section": "PEP",
+          "required": false,
+          "displayOrder": 8
+        }
+      ],
+      "itemCodes": [],
+      "formulas": [
+        {
+          "formulaType": "Sum",
+          "targetField": "pep_count",
+          "sourceFields": [
+            "pep_high_risk",
+            "pep_medium_risk",
+            "pep_low_risk"
+          ],
+          "severity": "Error",
+          "description": "PEP risk bucket total"
+        }
+      ],
+      "crossSheetRules": []
+    },
+    {
+      "returnCode": "NFIU_SAR",
+      "name": "NFIU Suspicious Activity Reports",
+      "frequency": "Quarterly",
+      "structuralCategory": "FixedRow",
+      "tablePrefix": "nfiu",
+      "sections": [
+        {
+          "code": "SAR",
+          "name": "SAR",
+          "displayOrder": 1
+        }
+      ],
+      "fields": [
+        {
+          "fieldCode": "sar_filed",
+          "label": "SAR Filed",
+          "dataType": "Integer",
+          "section": "SAR",
+          "required": false,
+          "displayOrder": 1
+        },
+        {
+          "fieldCode": "sar_money_laundering",
+          "label": "SAR ML",
+          "dataType": "Integer",
+          "section": "SAR",
+          "required": false,
+          "displayOrder": 2
+        },
+        {
+          "fieldCode": "sar_terrorism",
+          "label": "SAR TF",
+          "dataType": "Integer",
+          "section": "SAR",
+          "required": false,
+          "displayOrder": 3
+        },
+        {
+          "fieldCode": "sar_fraud",
+          "label": "SAR Fraud",
+          "dataType": "Integer",
+          "section": "SAR",
+          "required": false,
+          "displayOrder": 4
+        },
+        {
+          "fieldCode": "sar_other",
+          "label": "SAR Other",
+          "dataType": "Integer",
+          "section": "SAR",
+          "required": false,
+          "displayOrder": 5
+        },
+        {
+          "fieldCode": "sar_average_response_time",
+          "label": "SAR Avg Response Time",
+          "dataType": "Decimal",
+          "section": "SAR",
+          "required": false,
+          "displayOrder": 6
+        },
+        {
+          "fieldCode": "sar_regulatory_feedback",
+          "label": "SAR Regulatory Feedback",
+          "dataType": "Text",
+          "section": "SAR",
+          "required": false,
+          "displayOrder": 7
+        }
+      ],
+      "itemCodes": [],
+      "formulas": [
+        {
+          "formulaType": "Sum",
+          "targetField": "sar_filed",
+          "sourceFields": [
+            "sar_money_laundering",
+            "sar_terrorism",
+            "sar_fraud",
+            "sar_other"
+          ],
+          "severity": "Error",
+          "description": "SAR by type totals"
+        }
+      ],
+      "crossSheetRules": []
+    },
+    {
+      "returnCode": "NFIU_TFS",
+      "name": "NFIU Targeted Financial Sanctions",
+      "frequency": "Monthly",
+      "structuralCategory": "FixedRow",
+      "tablePrefix": "nfiu",
+      "sections": [
+        {
+          "code": "TFS",
+          "name": "TFS",
+          "displayOrder": 1
+        }
+      ],
+      "fields": [
+        {
+          "fieldCode": "tfs_screening_count",
+          "label": "TFS Screening Count",
+          "dataType": "Integer",
+          "section": "TFS",
+          "required": false,
+          "displayOrder": 1
+        },
+        {
+          "fieldCode": "tfs_matches_found",
+          "label": "TFS Matches Found",
+          "dataType": "Integer",
+          "section": "TFS",
+          "required": false,
+          "displayOrder": 2
+        },
+        {
+          "fieldCode": "tfs_false_positives",
+          "label": "TFS False Positives",
+          "dataType": "Integer",
+          "section": "TFS",
+          "required": false,
+          "displayOrder": 3
+        },
+        {
+          "fieldCode": "tfs_confirmed_matches",
+          "label": "TFS Confirmed Matches",
+          "dataType": "Integer",
+          "section": "TFS",
+          "required": false,
+          "displayOrder": 4
+        },
+        {
+          "fieldCode": "tfs_assets_frozen_count",
+          "label": "TFS Assets Frozen Count",
+          "dataType": "Integer",
+          "section": "TFS",
+          "required": false,
+          "displayOrder": 5
+        },
+        {
+          "fieldCode": "tfs_assets_frozen_value",
+          "label": "TFS Assets Frozen Value",
+          "dataType": "Money",
+          "section": "TFS",
+          "required": false,
+          "displayOrder": 6
+        },
+        {
+          "fieldCode": "un_list_screening",
+          "label": "UN List Screening",
+          "dataType": "Boolean",
+          "section": "TFS",
+          "required": false,
+          "displayOrder": 7
+        },
+        {
+          "fieldCode": "ofac_screening",
+          "label": "OFAC Screening",
+          "dataType": "Boolean",
+          "section": "TFS",
+          "required": false,
+          "displayOrder": 8
+        },
+        {
+          "fieldCode": "eu_screening",
+          "label": "EU Screening",
+          "dataType": "Boolean",
+          "section": "TFS",
+          "required": false,
+          "displayOrder": 9
+        }
+      ],
+      "itemCodes": [],
+      "formulas": [],
+      "crossSheetRules": []
+    },
+    {
+      "returnCode": "NFIU_CMP",
+      "name": "NFIU Compliance Programme",
+      "frequency": "Quarterly",
+      "structuralCategory": "FixedRow",
+      "tablePrefix": "nfiu",
+      "sections": [
+        {
+          "code": "CMP",
+          "name": "Compliance Programme",
+          "displayOrder": 1
+        }
+      ],
+      "fields": [
+        {
+          "fieldCode": "aml_policy_version",
+          "label": "AML Policy Version",
+          "dataType": "Text",
+          "section": "CMP",
+          "required": false,
+          "displayOrder": 1
+        },
+        {
+          "fieldCode": "aml_policy_last_updated",
+          "label": "AML Policy Last Updated",
+          "dataType": "Date",
+          "section": "CMP",
+          "required": false,
+          "displayOrder": 2
+        },
+        {
+          "fieldCode": "staff_trained_count",
+          "label": "Staff Trained Count",
+          "dataType": "Integer",
+          "section": "CMP",
+          "required": false,
+          "displayOrder": 3
+        },
+        {
+          "fieldCode": "total_staff",
+          "label": "Total Staff",
+          "dataType": "Integer",
+          "section": "CMP",
+          "required": false,
+          "displayOrder": 4
+        },
+        {
+          "fieldCode": "training_hours",
+          "label": "Training Hours",
+          "dataType": "Integer",
+          "section": "CMP",
+          "required": false,
+          "displayOrder": 5
+        },
+        {
+          "fieldCode": "compliance_budget",
+          "label": "Compliance Budget",
+          "dataType": "Money",
+          "section": "CMP",
+          "required": false,
+          "displayOrder": 6
+        },
+        {
+          "fieldCode": "external_audit_date",
+          "label": "External Audit Date",
+          "dataType": "Date",
+          "section": "CMP",
+          "required": false,
+          "displayOrder": 7
+        },
+        {
+          "fieldCode": "external_audit_rating",
+          "label": "External Audit Rating",
+          "dataType": "Text",
+          "section": "CMP",
+          "required": false,
+          "displayOrder": 8
+        },
+        {
+          "fieldCode": "training_coverage_ratio",
+          "label": "Training Coverage Ratio",
+          "dataType": "Percentage",
+          "section": "CMP",
+          "required": false,
+          "displayOrder": 9
+        }
+      ],
+      "itemCodes": [],
+      "formulas": [
+        {
+          "formulaType": "Ratio",
+          "targetField": "training_coverage_ratio",
+          "sourceFields": [
+            "staff_trained_count",
+            "total_staff"
+          ],
+          "severity": "Warning",
+          "description": "Training coverage ratio"
+        }
+      ],
+      "crossSheetRules": []
+    },
+    {
+      "returnCode": "NFIU_RBA",
+      "name": "NFIU Risk-Based Approach",
+      "frequency": "Quarterly",
+      "structuralCategory": "FixedRow",
+      "tablePrefix": "nfiu",
+      "sections": [
+        {
+          "code": "RBA",
+          "name": "Risk-Based Approach",
+          "displayOrder": 1
+        }
+      ],
+      "fields": [
+        {
+          "fieldCode": "institutional_risk_assessment_date",
+          "label": "Institutional Risk Assessment Date",
+          "dataType": "Date",
+          "section": "RBA",
+          "required": false,
+          "displayOrder": 1
+        },
+        {
+          "fieldCode": "risk_categories_count",
+          "label": "Risk Categories Count",
+          "dataType": "Integer",
+          "section": "RBA",
+          "required": false,
+          "displayOrder": 2
+        },
+        {
+          "fieldCode": "high_risk_customers_count",
+          "label": "High Risk Customers Count",
+          "dataType": "Integer",
+          "section": "RBA",
+          "required": false,
+          "displayOrder": 3
+        },
+        {
+          "fieldCode": "high_risk_products",
+          "label": "High Risk Products",
+          "dataType": "Text",
+          "section": "RBA",
+          "required": false,
+          "displayOrder": 4
+        },
+        {
+          "fieldCode": "high_risk_geographies",
+          "label": "High Risk Geographies",
+          "dataType": "Text",
+          "section": "RBA",
+          "required": false,
+          "displayOrder": 5
+        },
+        {
+          "fieldCode": "risk_appetite_statement",
+          "label": "Risk Appetite Statement",
+          "dataType": "Boolean",
+          "section": "RBA",
+          "required": false,
+          "displayOrder": 6
+        },
+        {
+          "fieldCode": "risk_mitigation_actions",
+          "label": "Risk Mitigation Actions",
+          "dataType": "Text",
+          "section": "RBA",
+          "required": false,
+          "displayOrder": 7
+        },
+        {
+          "fieldCode": "rba_governance_score",
+          "label": "RBA Governance Score",
+          "dataType": "Percentage",
+          "section": "RBA",
+          "required": false,
+          "displayOrder": 8
+        }
+      ],
+      "itemCodes": [],
+      "formulas": [],
+      "crossSheetRules": []
+    },
+    {
+      "returnCode": "NFIU_ENF",
+      "name": "NFIU Enforcement & Sanctions",
+      "frequency": "Quarterly",
+      "structuralCategory": "FixedRow",
+      "tablePrefix": "nfiu",
+      "sections": [
+        {
+          "code": "ENF",
+          "name": "Enforcement",
+          "displayOrder": 1
+        }
+      ],
+      "fields": [
+        {
+          "fieldCode": "regulatory_sanctions_received",
+          "label": "Regulatory Sanctions Received",
+          "dataType": "Integer",
+          "section": "ENF",
+          "required": false,
+          "displayOrder": 1
+        },
+        {
+          "fieldCode": "penalties_amount",
+          "label": "Penalties Amount",
+          "dataType": "Money",
+          "section": "ENF",
+          "required": false,
+          "displayOrder": 2
+        },
+        {
+          "fieldCode": "remediation_actions_count",
+          "label": "Remediation Actions Count",
+          "dataType": "Integer",
+          "section": "ENF",
+          "required": false,
+          "displayOrder": 3
+        },
+        {
+          "fieldCode": "remediation_completed",
+          "label": "Remediation Completed",
+          "dataType": "Integer",
+          "section": "ENF",
+          "required": false,
+          "displayOrder": 4
+        },
+        {
+          "fieldCode": "compliance_improvement_plan",
+          "label": "Compliance Improvement Plan",
+          "dataType": "Boolean",
+          "section": "ENF",
+          "required": false,
+          "displayOrder": 5
+        },
+        {
+          "fieldCode": "remediation_completion_rate",
+          "label": "Remediation Completion Rate",
+          "dataType": "Percentage",
+          "section": "ENF",
+          "required": false,
+          "displayOrder": 6
+        }
+      ],
+      "itemCodes": [],
+      "formulas": [
+        {
+          "formulaType": "Ratio",
+          "targetField": "remediation_completion_rate",
+          "sourceFields": [
+            "remediation_completed",
+            "remediation_actions_count"
+          ],
+          "severity": "Warning",
+          "description": "Remediation completion rate"
+        }
+      ],
+      "crossSheetRules": []
+    },
+    {
+      "returnCode": "NFIU_DIC",
+      "name": "NFIU Data Dictionary & Summary",
+      "frequency": "Monthly",
+      "structuralCategory": "FixedRow",
+      "tablePrefix": "nfiu",
+      "sections": [
+        {
+          "code": "DIC",
+          "name": "Summary",
+          "displayOrder": 1
+        }
+      ],
+      "fields": [
+        {
+          "fieldCode": "validation_errors_count",
+          "label": "Validation Errors Count",
+          "dataType": "Integer",
+          "section": "DIC",
+          "required": false,
+          "displayOrder": 1
+        },
+        {
+          "fieldCode": "validation_warnings_count",
+          "label": "Validation Warnings Count",
+          "dataType": "Integer",
+          "section": "DIC",
+          "required": false,
+          "displayOrder": 2
+        },
+        {
+          "fieldCode": "completeness_score",
+          "label": "Completeness Score",
+          "dataType": "Percentage",
+          "section": "DIC",
+          "required": false,
+          "displayOrder": 3
+        },
+        {
+          "fieldCode": "data_quality_score",
+          "label": "Data Quality Score",
+          "dataType": "Percentage",
+          "section": "DIC",
+          "required": false,
+          "displayOrder": 4
+        }
+      ],
+      "itemCodes": [],
+      "formulas": [],
+      "crossSheetRules": []
+    }
+  ],
+  "interModuleDataFlows": []
+}

@@ -83,7 +83,7 @@ public class InterModuleDataFlowEngine : IInterModuleDataFlowEngine
                 sourceValue,
                 tenantId,
                 submissionId,
-                sourceModuleCode,
+                sourceTemplateCode,
                 institutionId,
                 returnPeriodId,
                 ct);
@@ -110,7 +110,7 @@ public class InterModuleDataFlowEngine : IInterModuleDataFlowEngine
         object sourceValue,
         Guid tenantId,
         int submissionId,
-        string sourceModuleCode,
+        string sourceTemplateCode,
         int institutionId,
         int returnPeriodId,
         CancellationToken ct)
@@ -126,8 +126,6 @@ public class InterModuleDataFlowEngine : IInterModuleDataFlowEngine
             var groupFlows = await _db.InterModuleDataFlows
                 .Include(f => f.SourceModule)
                 .Where(f => f.IsActive
-                            && f.SourceModule != null
-                            && f.SourceModule.ModuleCode == sourceModuleCode
                             && f.TargetModuleCode == flow.TargetModuleCode
                             && f.TargetTemplateCode == flow.TargetTemplateCode
                             && f.TargetFieldCode == flow.TargetFieldCode)
@@ -136,9 +134,23 @@ public class InterModuleDataFlowEngine : IInterModuleDataFlowEngine
             decimal sum = 0m;
             foreach (var sumFlow in groupFlows)
             {
+                var sourceSubmissionId = await ResolveSourceSubmissionId(
+                    tenantId,
+                    institutionId,
+                    returnPeriodId,
+                    sumFlow.SourceTemplateCode,
+                    sourceTemplateCode,
+                    submissionId,
+                    ct);
+
+                if (!sourceSubmissionId.HasValue)
+                {
+                    continue;
+                }
+
                 var value = await _genericDataRepo.ReadFieldValue(
                     sumFlow.SourceTemplateCode,
-                    submissionId,
+                    sourceSubmissionId.Value,
                     sumFlow.SourceFieldCode,
                     ct);
 
@@ -201,6 +213,33 @@ public class InterModuleDataFlowEngine : IInterModuleDataFlowEngine
         }
 
         return sourceValue;
+    }
+
+    private async Task<int?> ResolveSourceSubmissionId(
+        Guid tenantId,
+        int institutionId,
+        int returnPeriodId,
+        string candidateSourceTemplateCode,
+        string currentSourceTemplateCode,
+        int currentSubmissionId,
+        CancellationToken ct)
+    {
+        if (string.Equals(candidateSourceTemplateCode, currentSourceTemplateCode, StringComparison.OrdinalIgnoreCase))
+        {
+            return currentSubmissionId;
+        }
+
+        var sourceSubmission = await _db.Submissions
+            .AsNoTracking()
+            .Where(s => s.TenantId == tenantId
+                        && s.InstitutionId == institutionId
+                        && s.ReturnPeriodId == returnPeriodId
+                        && s.ReturnCode == candidateSourceTemplateCode)
+            .OrderByDescending(s => s.SubmittedAt)
+            .ThenByDescending(s => s.Id)
+            .FirstOrDefaultAsync(ct);
+
+        return sourceSubmission?.Id;
     }
 
     private async Task<Submission?> FindOrCreateTargetSubmission(
