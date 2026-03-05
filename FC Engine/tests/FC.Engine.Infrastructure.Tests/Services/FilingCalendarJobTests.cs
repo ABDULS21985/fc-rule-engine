@@ -2,6 +2,7 @@ using FC.Engine.Application.Services;
 using FC.Engine.Domain.Entities;
 using FC.Engine.Domain.Enums;
 using FC.Engine.Domain.Notifications;
+using FC.Engine.Infrastructure.BackgroundJobs;
 using FluentAssertions;
 using Xunit;
 
@@ -187,10 +188,10 @@ public class FilingCalendarJobTests
     [Fact]
     public void Escalation_Only_Fires_When_Level_Increases()
     {
-        // Simulate: period already at level 2 (T-14), new check at T-14 → should NOT re-escalate
-        var currentLevel = 2;
-        var newLevel = 2;
-        var shouldEscalate = newLevel > currentLevel;
+        var shouldEscalate = FilingCalendarJob.ShouldTriggerEscalation(
+            currentLevel: 2,
+            newLevel: 2,
+            overdueReminderSentToday: false);
 
         shouldEscalate.Should().BeFalse();
     }
@@ -198,10 +199,10 @@ public class FilingCalendarJobTests
     [Fact]
     public void Escalation_Fires_When_Level_Increases()
     {
-        // Simulate: period at level 2 (T-14), new check at T-7 → should escalate
-        var currentLevel = 2;
-        var newLevel = 3;
-        var shouldEscalate = newLevel > currentLevel;
+        var shouldEscalate = FilingCalendarJob.ShouldTriggerEscalation(
+            currentLevel: 2,
+            newLevel: 3,
+            overdueReminderSentToday: false);
 
         shouldEscalate.Should().BeTrue();
     }
@@ -271,15 +272,23 @@ public class FilingCalendarJobTests
     [Fact]
     public void Overdue_Sends_Daily_Until_Submitted()
     {
-        // Overdue (level 6) should re-send even when already at level 6
-        var currentLevel = 6;
-        var newLevel = 6;
-
-        // The escalation logic: fire if level increased OR if both are overdue
-        var shouldNotify = newLevel > currentLevel
-            || (newLevel == 6 && currentLevel == 6);
+        var shouldNotify = FilingCalendarJob.ShouldTriggerEscalation(
+            currentLevel: 6,
+            newLevel: 6,
+            overdueReminderSentToday: false);
 
         shouldNotify.Should().BeTrue("Overdue notifications must re-send daily until submitted");
+    }
+
+    [Fact]
+    public void Overdue_Does_Not_Send_More_Than_Once_Per_Day()
+    {
+        var shouldNotify = FilingCalendarJob.ShouldTriggerEscalation(
+            currentLevel: 6,
+            newLevel: 6,
+            overdueReminderSentToday: true);
+
+        shouldNotify.Should().BeFalse("Overdue reminders should be capped at once per day");
     }
 
     [Fact]

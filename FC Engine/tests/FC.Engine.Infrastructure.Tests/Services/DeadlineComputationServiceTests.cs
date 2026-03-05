@@ -38,13 +38,13 @@ public class DeadlineComputationServiceTests
     }
 
     [Fact]
-    public void Annual_Module_Generates_Periods()
+    public void Annual_Module_Generates_1_Period_Per_Year()
     {
         var module = CreateModule("Annual");
 
         var periods = _sut.GeneratePeriodsForNext12Months(module, 12);
 
-        periods.Should().HaveCountGreaterOrEqualTo(1);
+        periods.Should().HaveCount(1);
         periods.Should().AllSatisfy(p => p.Frequency.Should().Be("Annual"));
     }
 

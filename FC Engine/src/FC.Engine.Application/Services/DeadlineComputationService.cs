@@ -124,24 +124,26 @@ public class DeadlineComputationService
                 break;
 
             case "Annual":
-                periods.Add(new ReturnPeriod
+                var horizonEnd = startDate.AddMonths(monthsAhead).AddDays(-1);
+                for (var year = startDate.Year; ; year++)
                 {
-                    Year = today.Year,
-                    Month = 12,
-                    Frequency = "Annual",
-                    ReportingDate = new DateTime(today.Year, 12, 31),
-                    IsOpen = true,
-                    CreatedAt = DateTime.UtcNow
-                });
-                // Also generate next year
-                if (monthsAhead > 6)
-                {
+                    var annualEnd = new DateTime(year, 12, 31);
+                    if (annualEnd < startDate)
+                    {
+                        continue;
+                    }
+
+                    if (annualEnd > horizonEnd)
+                    {
+                        break;
+                    }
+
                     periods.Add(new ReturnPeriod
                     {
-                        Year = today.Year + 1,
+                        Year = year,
                         Month = 12,
                         Frequency = "Annual",
-                        ReportingDate = new DateTime(today.Year + 1, 12, 31),
+                        ReportingDate = annualEnd,
                         IsOpen = true,
                         CreatedAt = DateTime.UtcNow
                     });

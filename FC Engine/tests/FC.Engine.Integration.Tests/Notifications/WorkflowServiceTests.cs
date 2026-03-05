@@ -23,6 +23,7 @@ public class WorkflowServiceTests
         var approvalRepo = new Mock<ISubmissionApprovalRepository>();
         var userRepo = new Mock<IInstitutionUserRepository>();
         var notificationOrchestrator = new Mock<INotificationOrchestrator>();
+        var filingCalendarService = new Mock<IFilingCalendarService>();
 
         var approval = new SubmissionApproval
         {
@@ -36,6 +37,7 @@ public class WorkflowServiceTests
             Id = submissionId,
             TenantId = tenantId,
             InstitutionId = 12,
+            ReturnPeriodId = 55,
             ReturnCode = "MFCR 310",
             ReturnPeriod = new ReturnPeriod { Year = 2026, Month = 3 },
             Status = SubmissionStatus.PendingApproval
@@ -66,11 +68,16 @@ public class WorkflowServiceTests
             .Setup(x => x.Notify(It.IsAny<NotificationRequest>(), It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
 
+        filingCalendarService
+            .Setup(x => x.RecordSla(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
         var sut = new WorkflowService(
             submissionRepo.Object,
             approvalRepo.Object,
             userRepo.Object,
-            notificationOrchestrator.Object);
+            notificationOrchestrator.Object,
+            filingCalendarService.Object);
 
         var result = await sut.Approve(submissionId, checkerUserId, "Looks good", CancellationToken.None);
 
@@ -83,5 +90,9 @@ public class WorkflowServiceTests
                 n.Priority == NotificationPriority.Normal &&
                 n.ActionUrl == $"/submissions/{submissionId}"),
             It.IsAny<CancellationToken>()), Times.Once);
+
+        filingCalendarService.Verify(
+            x => x.RecordSla(submission.ReturnPeriodId, submissionId, It.IsAny<CancellationToken>()),
+            Times.Once);
     }
 }

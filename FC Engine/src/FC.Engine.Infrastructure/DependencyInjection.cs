@@ -5,6 +5,8 @@ using FC.Engine.Infrastructure.Auth;
 using FC.Engine.Infrastructure.BackgroundJobs;
 using FC.Engine.Infrastructure.Caching;
 using FC.Engine.Infrastructure.DynamicSchema;
+using FC.Engine.Infrastructure.Export;
+using FC.Engine.Infrastructure.Export.Adapters;
 using FC.Engine.Infrastructure.Metadata;
 using FC.Engine.Infrastructure.Metadata.Repositories;
 using FC.Engine.Infrastructure.Services;
@@ -81,6 +83,20 @@ public static class DependencyInjection
         // XML
         services.AddScoped<IGenericXmlParser, GenericXmlParser>();
         services.AddScoped<IXsdGenerator, XsdGenerator>();
+        services.AddScoped<IExportEngine, ExportEngine>();
+        services.AddScoped<IExportGenerator, ExcelExportGenerator>();
+        services.AddScoped<IExportGenerator, PdfExportGenerator>();
+        services.AddScoped<IExportGenerator, XmlExportGenerator>();
+        services.AddScoped<IExportGenerator, XbrlExportGenerator>();
+
+        // Regulator adapters
+        services.AddScoped<IRegulatorSubmissionAdapter, CbnSubmissionAdapter>();
+        services.AddScoped<IRegulatorSubmissionAdapter, NdicSubmissionAdapter>();
+        services.AddScoped<IRegulatorSubmissionAdapter, SecSubmissionAdapter>();
+        services.AddScoped<IRegulatorSubmissionAdapter, NaicomSubmissionAdapter>();
+        services.AddScoped<IRegulatorSubmissionAdapter, PencomSubmissionAdapter>();
+        services.AddScoped<IRegulatorSubmissionAdapter, NfiuSubmissionAdapter>();
+        services.AddScoped<IRegulatorSubmissionAdapter, InternalSubmissionAdapter>();
 
         // Caching — singleton so the in-memory ConcurrentDictionary lives across requests
         services.AddSingleton<ITemplateMetadataCache, TemplateMetadataCache>();
@@ -163,6 +179,8 @@ public static class DependencyInjection
         services.AddHostedService<OverdueInvoiceJob>();
         services.AddHostedService<NotificationRetryJob>();
         services.AddHostedService<FilingCalendarJob>();
+        services.AddHostedService<ExportProcessingJob>();
+        services.AddHostedService<ExportCleanupJob>();
 
         return services;
     }
