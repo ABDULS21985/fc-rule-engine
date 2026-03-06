@@ -121,6 +121,32 @@ public partial class AddMultiJurisdictionFrameworkRg27 : Migration
                     ADD CONSTRAINT FK_institutions_jurisdictions_JurisdictionId
                     FOREIGN KEY (JurisdictionId) REFERENCES dbo.jurisdictions(Id);
 
+            DECLARE @fkName NVARCHAR(256);
+            DECLARE @fkDropSql NVARCHAR(MAX);
+            DECLARE fk_cursor CURSOR FAST_FORWARD FOR
+                SELECT fk.name
+                FROM sys.foreign_keys fk
+                INNER JOIN sys.foreign_key_columns fkc ON fk.object_id = fkc.constraint_object_id
+                INNER JOIN sys.indexes ix ON fkc.referenced_object_id = ix.object_id
+                WHERE ix.name = 'IX_modules_ModuleCode'
+                  AND fkc.referenced_object_id = OBJECT_ID('dbo.modules');
+            OPEN fk_cursor;
+            FETCH NEXT FROM fk_cursor INTO @fkName;
+            WHILE @@FETCH_STATUS = 0
+            BEGIN
+                DECLARE @fkTable NVARCHAR(512);
+                SELECT @fkTable = QUOTENAME(s.name) + '.' + QUOTENAME(t.name)
+                FROM sys.foreign_keys fk2
+                INNER JOIN sys.tables t ON fk2.parent_object_id = t.object_id
+                INNER JOIN sys.schemas s ON t.schema_id = s.schema_id
+                WHERE fk2.name = @fkName;
+                SET @fkDropSql = N'ALTER TABLE ' + @fkTable + N' DROP CONSTRAINT ' + QUOTENAME(@fkName);
+                EXEC sp_executesql @fkDropSql;
+                FETCH NEXT FROM fk_cursor INTO @fkName;
+            END;
+            CLOSE fk_cursor;
+            DEALLOCATE fk_cursor;
+
             IF EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_modules_ModuleCode' AND object_id = OBJECT_ID('dbo.modules'))
                 DROP INDEX IX_modules_ModuleCode ON dbo.modules;
 

@@ -186,7 +186,7 @@ public partial class AddRegulatorPortalRg25 : Migration
                             INNER JOIN dbo.modules m ON m.Id = lmm.ModuleId
                             WHERE tlt.TenantId = @TenantId
                               AND tlt.IsActive = 1
-                              AND lmm.IsEnabled = 1
+                              AND (lmm.IsRequired = 1 OR lmm.IsOptional = 1)
                               AND m.RegulatorCode = CAST(SESSION_CONTEXT(N''RegulatorCode'') AS NVARCHAR(30))
                         )
                    );');
