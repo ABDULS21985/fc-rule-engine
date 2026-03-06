@@ -15,63 +15,28 @@
 
 <PageTitle>Module: @ModuleCode</PageTitle>
 
+<PageHeader Title="@(_module?.ModuleName ?? ModuleCode)"
+            Subtitle="@(_module != null ? $"{_module.RegulatorCode} regulatory module with {_module.SheetCount} template sheet(s)." : null)"
+            StatusBadge="@(_module != null ? (_module.IsActive ? "Active" : "Inactive") : null)"
+            StatusVariant="@(_module?.IsActive == true ? "success" : "neutral")"
+            BackUrl="/modules">
+    <PrimaryAction>
+        <button class="fc-btn fc-btn--outline" @onclick="OpenImport" type="button">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16" aria-hidden="true"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            Import Update
+        </button>
+        <button class="fc-btn fc-btn--gold" disabled="@_publishing" @onclick="PublishDrafts" type="button">
+            @if (_publishing)
+            {
+                <span class="spinner" style="width:16px;height:16px;"></span>
+            }
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16" aria-hidden="true"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0018 9h-1.26A8 8 0 103 16.3"/></svg>
+            Publish Drafts
+        </button>
+    </PrimaryAction>
+</PageHeader>
+
 <div class="fc-page">
-
-    <!-- Breadcrumb -->
-    <nav class="fc-breadcrumb" aria-label="Breadcrumb">
-        <a href="/">Dashboard</a>
-        <span class="fc-breadcrumb-sep" aria-hidden="true">/</span>
-        <a href="/modules">Modules</a>
-        <span class="fc-breadcrumb-sep" aria-hidden="true">/</span>
-        <span class="fc-breadcrumb-current">@ModuleCode</span>
-    </nav>
-
-    <!-- Page Header -->
-    <div class="fc-page-header">
-        <div class="fc-page-header-top">
-            <div>
-                <h1>@(_module?.ModuleName ?? ModuleCode)</h1>
-                @if (_module is not null)
-                {
-                    <p class="fc-page-header-subtitle">@_module.RegulatorCode regulatory module with @_module.SheetCount template sheet(s).</p>
-                }
-            </div>
-            <div style="display:flex;gap:0.5rem;">
-                <button class="fc-btn fc-btn--outline" @onclick="OpenImport" type="button">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-                    Import Update
-                </button>
-                <button class="fc-btn fc-btn--gold" disabled="@_publishing" @onclick="PublishDrafts" type="button">
-                    @if (_publishing)
-                    {
-                        <span class="spinner" style="width:16px;height:16px;"></span>
-                    }
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0018 9h-1.26A8 8 0 103 16.3"/></svg>
-                    Publish Drafts
-                </button>
-            </div>
-        </div>
-
-        @if (_module is not null)
-        {
-            <div class="fc-chip-group">
-                <span class="fc-chip">
-                    <span class="fc-chip__dot @(_module.IsActive ? "fc-chip__dot--active" : "fc-chip__dot--inactive")" aria-hidden="true"></span>
-                    @(_module.IsActive ? "Active" : "Inactive")
-                </span>
-                <span class="fc-chip">
-                    <span class="fc-chip__count">@_moduleVersions.Count</span> Versions
-                </span>
-                <span class="fc-chip">
-                    <span class="fc-chip__count">@_templateRows.Count</span> Templates
-                </span>
-                <span class="fc-chip">
-                    <span class="fc-chip__count">@_templateRows.Sum(t => t.FieldCount)</span> Fields
-                </span>
-            </div>
-        }
-    </div>
-
     <!-- Content -->
     @if (_loading)
     {

@@ -42,6 +42,7 @@ builder.Services.AddScoped<FC.Engine.Admin.Services.ToastService>();
 builder.Services.AddScoped<FC.Engine.Admin.Services.DialogService>();
 builder.Services.AddScoped<FC.Engine.Admin.Services.CommandPaletteService>();
 builder.Services.AddScoped<FC.Engine.Admin.Services.SidebarStateService>();
+builder.Services.AddScoped<FC.Engine.Admin.Services.DataTableExportService>();
 
 // Platform Admin services
 builder.Services.AddScoped<FC.Engine.Admin.Services.TenantManagementService>();

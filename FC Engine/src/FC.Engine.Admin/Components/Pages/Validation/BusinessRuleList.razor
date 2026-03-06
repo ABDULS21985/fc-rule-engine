@@ -9,35 +9,85 @@
 @inject FormulaService FormulaService
 @inject ToastService Toast
 
-<div class="fc-list-page">
-    <div class="fc-list-page-header">
-        <div class="fc-list-page-header-text">
-            <h1>
-                Business Rules
-                @if (!_loading)
-                {
-                    <span class="fc-list-count-chip">@_rules.Count</span>
-                }
-            </h1>
-            <p>Expression-based validation rules with template applicability</p>
-        </div>
-    </div>
+<PageHeader Title="Business Rules"
+            Subtitle="Expression-based validation rules with template applicability"
+            CountBadge="@(!_loading ? _rules.Count : null)" />
 
-    <div class="fc-list-card">
-        <div class="fc-list-toolbar">
+<div class="fc-list-page">
+
+    @if (_showAddForm)
+    {
+        <div class="fc-list-inline-form">
+            <h3>Add Business Rule</h3>
+            <div class="grid-2">
+                <div class="form-group">
+                    <label>Rule Code</label>
+                    <input class="form-control" @bind="_addCode" placeholder="e.g. BR-001" />
+                </div>
+                <div class="form-group">
+                    <label>Rule Name</label>
+                    <input class="form-control" @bind="_addName" placeholder="e.g. Date Validity Check" />
+                </div>
+                <div class="form-group">
+                    <label>Rule Type</label>
+                    <select class="form-control" @bind="_addRuleType">
+                        <option value="Completeness">Completeness</option>
+                        <option value="DateCheck">DateCheck</option>
+                        <option value="ThresholdCheck">ThresholdCheck</option>
+                        <option value="Custom">Custom</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Severity</label>
+                    <select class="form-control" @bind="_addSeverity">
+                        @foreach (var s in Enum.GetValues<ValidationSeverity>())
+                        {
+                            <option value="@s">@s</option>
+                        }
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Expression (optional)</label>
+                    <input class="form-control" @bind="_addExpression" placeholder="e.g. total_assets > 0" />
+                </div>
+                <div class="form-group">
+                    <label>Applies To Templates (comma-separated, blank=all)</label>
+                    <input class="form-control" @bind="_addAppliesToTemplates" placeholder="e.g. MFCR 300,MFCR 301" />
+                </div>
+            </div>
+            <div class="fc-list-form-actions">
+                <button class="fc-btn fc-btn--primary fc-btn--sm" @onclick="AddRule">Create</button>
+                <button class="fc-btn fc-btn--outline fc-btn--sm" @onclick="CancelAdd">Cancel</button>
+            </div>
+        </div>
+    }
+
+    <DataTable TItem="BusinessRule"
+               Items="@FilteredRules"
+               Loading="_loading"
+               PageSize="25"
+               PageSizeOptions="new[]{10,25,50,100}"
+               ShowPagination="true"
+               ShowPageSizeSelector="true"
+               Sortable="true"
+               EmptyTitle="No business rules found"
+               EmptyText="No rules match your current filters. Try adjusting your search or create a new business rule."
+               SkeletonRows="5"
+               ExportFileName="business-rules">
+        <ToolbarContent>
             <div class="fc-list-toolbar-filters">
                 <div class="fc-list-search-wrap">
                     <svg class="fc-list-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
-                    <input class="fc-list-search-input" placeholder="Search by rule code or name..." @bind="_search" @bind:event="oninput" @bind:after="ResetPage" />
+                    <input class="fc-list-search-input" placeholder="Search by rule code or name..." @bind="_search" @bind:event="oninput" />
                 </div>
-                <select class="fc-list-filter-select" @bind="_typeFilter" @bind:after="ResetPage">
+                <select class="fc-list-filter-select" @bind="_typeFilter">
                     <option value="">All Types</option>
                     <option value="Completeness">Completeness</option>
                     <option value="DateCheck">DateCheck</option>
                     <option value="ThresholdCheck">ThresholdCheck</option>
                     <option value="Custom">Custom</option>
                 </select>
-                <select class="fc-list-filter-select" @bind="_severityFilter" @bind:after="ResetPage">
+                <select class="fc-list-filter-select" @bind="_severityFilter">
                     <option value="">All Severities</option>
                     @foreach (var s in Enum.GetValues<ValidationSeverity>())
                     {
@@ -55,176 +105,72 @@
                     </Authorized>
                 </AuthorizeView>
             </div>
-        </div>
-
-        @if (_showAddForm)
-        {
-            <div class="fc-list-inline-form">
-                <h3>Add Business Rule</h3>
-                <div class="grid-2">
-                    <div class="form-group">
-                        <label>Rule Code</label>
-                        <input class="form-control" @bind="_addCode" placeholder="e.g. BR-001" />
-                    </div>
-                    <div class="form-group">
-                        <label>Rule Name</label>
-                        <input class="form-control" @bind="_addName" placeholder="e.g. Date Validity Check" />
-                    </div>
-                    <div class="form-group">
-                        <label>Rule Type</label>
-                        <select class="form-control" @bind="_addRuleType">
-                            <option value="Completeness">Completeness</option>
-                            <option value="DateCheck">DateCheck</option>
-                            <option value="ThresholdCheck">ThresholdCheck</option>
-                            <option value="Custom">Custom</option>
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label>Severity</label>
-                        <select class="form-control" @bind="_addSeverity">
-                            @foreach (var s in Enum.GetValues<ValidationSeverity>())
-                            {
-                                <option value="@s">@s</option>
-                            }
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label>Expression (optional)</label>
-                        <input class="form-control" @bind="_addExpression" placeholder="e.g. total_assets > 0" />
-                    </div>
-                    <div class="form-group">
-                        <label>Applies To Templates (comma-separated, blank=all)</label>
-                        <input class="form-control" @bind="_addAppliesToTemplates" placeholder="e.g. MFCR 300,MFCR 301" />
-                    </div>
-                </div>
-                <div class="fc-list-form-actions">
-                    <button class="fc-btn fc-btn--primary fc-btn--sm" @onclick="AddRule">Create</button>
-                    <button class="fc-btn fc-btn--outline fc-btn--sm" @onclick="CancelAdd">Cancel</button>
-                </div>
-            </div>
-        }
-
-        @if (_loading)
-        {
-            <div class="fc-list-skeleton">
-                @for (var i = 0; i < 5; i++)
-                {
-                    <div class="fc-list-skeleton-row">
-                        <div class="fc-list-skeleton-cell" style="width:80px;"></div>
-                        <div class="fc-list-skeleton-cell" style="flex:1;"></div>
-                        <div class="fc-list-skeleton-cell" style="width:80px;"></div>
-                        <div class="fc-list-skeleton-cell" style="width:120px;"></div>
-                        <div class="fc-list-skeleton-cell" style="width:60px;"></div>
-                    </div>
-                }
-            </div>
-        }
-        else if (!FilteredRules.Any())
-        {
-            <div class="fc-list-empty">
-                <svg class="fc-list-empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 12h6"/><path d="M12 9v6"/><circle cx="12" cy="12" r="10"/></svg>
-                <h3 class="fc-list-empty-title">No business rules found</h3>
-                <p class="fc-list-empty-text">No rules match your current filters. Try adjusting your search or create a new business rule.</p>
-            </div>
-        }
-        else
-        {
-            <div class="fc-table-wrap">
-                <table class="fc-table" role="table">
-                    <thead>
-                        <tr>
-                            <th scope="col">Rule Code</th>
-                            <th scope="col">Name</th>
-                            <th scope="col">Type</th>
-                            <th scope="col">Expression</th>
-                            <th scope="col">Applies To</th>
-                            <th scope="col">Severity</th>
-                            <th scope="col">Status</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @foreach (var rule in PagedRules)
-                        {
-                            <tr>
-                                <td class="fc-list-cell-code">@rule.RuleCode</td>
-                                <td class="fc-list-cell-strong">@rule.RuleName</td>
-                                <td>
-                                    <span class="fc-badge fc-badge--review">@rule.RuleType</span>
-                                </td>
-                                <td class="fc-list-cell-code fc-list-cell-truncate" title="@rule.Expression">@(rule.Expression ?? "—")</td>
-                                <td class="fc-list-cell-muted fc-list-cell-truncate" title="@rule.AppliesToTemplates">@(rule.AppliesToTemplates ?? "All")</td>
-                                <td>
-                                    <span class="fc-badge @StatusBadge(rule.Severity.ToString())">@rule.Severity</span>
-                                </td>
-                                <td>
-                                    @if (rule.IsActive)
-                                    {
-                                        <span class="fc-badge fc-badge--success">Active</span>
-                                    }
-                                    else
-                                    {
-                                        <span class="fc-badge fc-badge--muted">Disabled</span>
-                                    }
-                                </td>
-                            </tr>
-                        }
-                    </tbody>
-                </table>
-            </div>
-
-            <div class="fc-list-footer">
-                <div class="fc-list-footer-summary">
-                    Showing <strong>@(_startIndex + 1)–@(_startIndex + PagedRules.Count())</strong> of <strong>@_filteredCount</strong> business rules
-                    @if (_filteredCount != _rules.Count)
+        </ToolbarContent>
+        <ChildContent>
+            <DataColumn TItem="BusinessRule"
+                        Title="Rule Code"
+                        SortKey="x => x.RuleCode"
+                        CellClass="fc-list-cell-code">
+                <CellTemplate>
+                    @context.RuleCode
+                </CellTemplate>
+            </DataColumn>
+            <DataColumn TItem="BusinessRule"
+                        Title="Name"
+                        SortKey="x => x.RuleName"
+                        CellClass="fc-list-cell-strong">
+                <CellTemplate>
+                    @context.RuleName
+                </CellTemplate>
+            </DataColumn>
+            <DataColumn TItem="BusinessRule"
+                        Title="Type">
+                <CellTemplate>
+                    <span class="fc-badge fc-badge--review">@context.RuleType</span>
+                </CellTemplate>
+            </DataColumn>
+            <DataColumn TItem="BusinessRule"
+                        Title="Expression"
+                        CellClass="fc-list-cell-code fc-list-cell-truncate">
+                <CellTemplate>
+                    <span title="@context.Expression">@(context.Expression ?? "—")</span>
+                </CellTemplate>
+            </DataColumn>
+            <DataColumn TItem="BusinessRule"
+                        Title="Applies To"
+                        CellClass="fc-list-cell-muted fc-list-cell-truncate">
+                <CellTemplate>
+                    <span title="@context.AppliesToTemplates">@(context.AppliesToTemplates ?? "All")</span>
+                </CellTemplate>
+            </DataColumn>
+            <DataColumn TItem="BusinessRule"
+                        Title="Severity">
+                <CellTemplate>
+                    <span class="fc-badge @StatusBadge(context.Severity.ToString())">@context.Severity</span>
+                </CellTemplate>
+            </DataColumn>
+            <DataColumn TItem="BusinessRule"
+                        Title="Status">
+                <CellTemplate>
+                    @if (context.IsActive)
                     {
-                        <span> (filtered from @_rules.Count)</span>
+                        <span class="fc-badge fc-badge--success">Active</span>
                     }
-                </div>
-                @if (TotalPages > 1)
-                {
-                    <div class="fc-list-pagination">
-                        <button class="fc-list-page-btn" disabled="@(_currentPage == 1)" @onclick="() => GoToPage(1)" title="First page">
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="11 17 6 12 11 7"/><polyline points="18 17 13 12 18 7"/></svg>
-                        </button>
-                        <button class="fc-list-page-btn" disabled="@(_currentPage == 1)" @onclick="() => GoToPage(_currentPage - 1)" title="Previous page">
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
-                        </button>
-                        @foreach (var p in VisiblePages)
-                        {
-                            @if (p == -1)
-                            {
-                                <span class="fc-list-page-btn" style="border:none;cursor:default;">…</span>
-                            }
-                            else
-                            {
-                                <button class="fc-list-page-btn @(p == _currentPage ? "fc-list-page-btn-active" : "")" @onclick="() => GoToPage(p)">@p</button>
-                            }
-                        }
-                        <button class="fc-list-page-btn" disabled="@(_currentPage == TotalPages)" @onclick="() => GoToPage(_currentPage + 1)" title="Next page">
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
-                        </button>
-                        <button class="fc-list-page-btn" disabled="@(_currentPage == TotalPages)" @onclick="() => GoToPage(TotalPages)" title="Last page">
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="13 17 18 12 13 7"/><polyline points="6 17 11 12 6 7"/></svg>
-                        </button>
-                        <select class="fc-list-filter-select" style="margin-left:8px;min-width:auto;padding:4px 8px;font-size:12px;" @bind="_pageSize" @bind:after="OnPageSizeChanged">
-                            <option value="15">15 / page</option>
-                            <option value="25">25 / page</option>
-                            <option value="50">50 / page</option>
-                            <option value="100">100 / page</option>
-                        </select>
-                    </div>
-                }
-            </div>
-        }
-    </div>
+                    else
+                    {
+                        <span class="fc-badge fc-badge--muted">Disabled</span>
+                    }
+                </CellTemplate>
+            </DataColumn>
+        </ChildContent>
+    </DataTable>
+
 </div>
 
 @code {
     private bool _loading = true;
     private IReadOnlyList<BusinessRule> _rules = Array.Empty<BusinessRule>();
     private string _search = "", _typeFilter = "", _severityFilter = "";
-    private int _currentPage = 1;
-    private int _pageSize = 15;
 
     // Add form
     private bool _showAddForm;
@@ -232,63 +178,18 @@
     private string _addExpression = "", _addAppliesToTemplates = "";
     private ValidationSeverity _addSeverity = ValidationSeverity.Error;
 
-    private IEnumerable<BusinessRule> FilteredRules => _rules
+    private IReadOnlyList<BusinessRule> FilteredRules => _rules
         .Where(r => string.IsNullOrEmpty(_search) ||
                     r.RuleCode.Contains(_search, StringComparison.OrdinalIgnoreCase) ||
                     r.RuleName.Contains(_search, StringComparison.OrdinalIgnoreCase))
         .Where(r => string.IsNullOrEmpty(_typeFilter) || r.RuleType == _typeFilter)
-        .Where(r => string.IsNullOrEmpty(_severityFilter) || r.Severity.ToString() == _severityFilter);
-
-    private int _filteredCount => FilteredRules.Count();
-    private int TotalPages => Math.Max(1, (int)Math.Ceiling((double)_filteredCount / _pageSize));
-    private int _startIndex => (_currentPage - 1) * _pageSize;
-
-    private IEnumerable<BusinessRule> PagedRules => FilteredRules
-        .Skip(_startIndex)
-        .Take(_pageSize);
-
-    private IEnumerable<int> VisiblePages
-    {
-        get
-        {
-            var pages = new List<int>();
-            var total = TotalPages;
-            if (total <= 7)
-            {
-                for (var i = 1; i <= total; i++) pages.Add(i);
-            }
-            else
-            {
-                pages.Add(1);
-                if (_currentPage > 3) pages.Add(-1); // ellipsis
-                for (var i = Math.Max(2, _currentPage - 1); i <= Math.Min(total - 1, _currentPage + 1); i++)
-                    pages.Add(i);
-                if (_currentPage < total - 2) pages.Add(-1); // ellipsis
-                pages.Add(total);
-            }
-            return pages;
-        }
-    }
-
-    private void GoToPage(int page)
-    {
-        _currentPage = Math.Clamp(page, 1, TotalPages);
-    }
-
-    private void OnPageSizeChanged() => _currentPage = 1;
-    private void ResetPage() => _currentPage = 1;
+        .Where(r => string.IsNullOrEmpty(_severityFilter) || r.Severity.ToString() == _severityFilter)
+        .ToList();
 
     protected override async Task OnInitializedAsync()
     {
         _rules = await FormulaRepo.GetActiveBusinessRules();
         _loading = false;
-    }
-
-    // Reset to page 1 when filters change
-    protected override void OnParametersSet()
-    {
-        if (_currentPage > TotalPages)
-            _currentPage = 1;
     }
 
     private void ShowAddRule() => _showAddForm = true;
@@ -319,7 +220,6 @@
             Toast.Success($"Business rule '{_addCode}' created.", "Rule Created");
             _showAddForm = false;
             _rules = await FormulaRepo.GetActiveBusinessRules();
-            _currentPage = 1;
         }
         catch (Exception ex)
         {

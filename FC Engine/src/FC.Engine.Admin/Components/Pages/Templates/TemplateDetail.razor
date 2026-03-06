@@ -17,16 +17,41 @@
 @inject ToastService Toast
 @inject DialogService Dialog
 
-<div class="fc-detail-page">
+<PageHeader Title="@(_detail?.Name ?? ReturnCode)"
+            Subtitle="@(_detail != null ? $"{_detail.ReturnCode} — {_detail.Frequency} template · {_detail.StructuralCategory} structure" : null)"
+            StatusBadge="@_activeVersion?.Status"
+            StatusVariant="@(_activeVersion?.Status switch { "Published" => "success", "Review" => "warning", "Draft" => "neutral", _ => "neutral" })"
+            BackUrl="/templates">
+    <PrimaryAction>
+        @if (_activeVersion?.Status == "Draft")
+        {
+            <AuthorizeView Roles="Admin,Approver">
+                <Authorized>
+                    <button class="fc-btn fc-btn--outline fc-btn--sm" @onclick="SubmitForReview">Submit for Review</button>
+                </Authorized>
+            </AuthorizeView>
+        }
+        @if (_activeVersion?.Status == "Review")
+        {
+            <AuthorizeView Roles="Admin">
+                <Authorized>
+                    <button class="fc-btn fc-btn--outline fc-btn--sm" @onclick="PreviewDdl">Preview DDL</button>
+                    <button class="fc-btn fc-btn--primary fc-btn--sm" @onclick="PublishVersion">Publish</button>
+                </Authorized>
+            </AuthorizeView>
+        }
+        @if (_activeVersion?.Status == "Published")
+        {
+            <AuthorizeView Roles="Admin,Approver">
+                <Authorized>
+                    <button class="fc-btn fc-btn--primary fc-btn--sm" @onclick="CreateDraftVersion">New Draft</button>
+                </Authorized>
+            </AuthorizeView>
+        }
+    </PrimaryAction>
+</PageHeader>
 
-    <!-- Breadcrumb -->
-    <nav class="fc-breadcrumb" aria-label="Breadcrumb">
-        <a href="/">Dashboard</a>
-        <span class="fc-breadcrumb-sep" aria-hidden="true">/</span>
-        <a href="/templates">Templates</a>
-        <span class="fc-breadcrumb-sep" aria-hidden="true">/</span>
-        <span class="fc-breadcrumb-current">@ReturnCode</span>
-    </nav>
+<div class="fc-detail-page">
 
     @if (_loading)
     {
@@ -68,85 +93,29 @@
             <AppAlert Variant="AppAlert.AlertVariant.Error" Message="@_errorMessage" Dismissible="true" OnDismiss="() => _errorMessage = null" />
         }
 
-        <!-- Hero Header -->
-        <section class="fc-detail-hero" role="banner">
-            <div class="fc-detail-hero-left">
-                <div class="fc-detail-hero-title-row">
-                    <h1 class="fc-detail-hero-title">@_detail.Name</h1>
-                    @if (_activeVersion != null)
-                    {
-                        <span class="fc-detail-status fc-detail-status-@_activeVersion.Status.ToLowerInvariant()">
-                            <span class="fc-detail-status-dot" aria-hidden="true"></span>
-                            @_activeVersion.Status
-                        </span>
-                    }
-                </div>
-                <p class="fc-detail-hero-subtitle">@_detail.ReturnCode &mdash; @_detail.Frequency template &middot; @_detail.StructuralCategory structure</p>
-
-                <div class="fc-detail-hero-meta">
-                    <div class="fc-detail-meta-item">
-                        <span class="fc-detail-meta-label">Return Code</span>
-                        <span class="fc-detail-meta-value"><code>@_detail.ReturnCode</code></span>
-                    </div>
-                    <div class="fc-detail-meta-item">
-                        <span class="fc-detail-meta-label">Category</span>
-                        <span class="fc-detail-meta-value">@_detail.StructuralCategory</span>
-                    </div>
-                    <div class="fc-detail-meta-item">
-                        <span class="fc-detail-meta-label">Version</span>
-                        <span class="fc-detail-meta-value">v@(_activeVersion?.VersionNumber)</span>
-                    </div>
-                    <div class="fc-detail-meta-item">
-                        <span class="fc-detail-meta-label">Fields</span>
-                        <span class="fc-detail-meta-value">@(_activeVersion?.FieldCount ?? 0)</span>
-                    </div>
-                    <div class="fc-detail-meta-item">
-                        <span class="fc-detail-meta-label">Formulas</span>
-                        <span class="fc-detail-meta-value">@(_activeVersion?.FormulaCount ?? 0)</span>
-                    </div>
-                </div>
+        <!-- Template meta strip -->
+        <div class="fc-detail-meta-strip">
+            <div class="fc-detail-meta-item">
+                <span class="fc-detail-meta-label">Return Code</span>
+                <span class="fc-detail-meta-value"><code>@_detail.ReturnCode</code></span>
             </div>
-
-            <div class="fc-detail-hero-actions">
-                @if (_activeVersion?.Status == "Draft")
-                {
-                    <AuthorizeView Roles="Admin,Approver" Context="submitAuth">
-                        <Authorized Context="sAuth">
-                            <button class="fc-btn fc-btn--outline fc-btn--sm" @onclick="SubmitForReview">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16" aria-hidden="true"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
-                                Submit for Review
-                            </button>
-                        </Authorized>
-                    </AuthorizeView>
-                }
-                @if (_activeVersion?.Status == "Review")
-                {
-                    <AuthorizeView Roles="Admin" Context="publishAuth">
-                        <Authorized Context="pAuth">
-                            <button class="fc-btn fc-btn--outline fc-btn--sm" @onclick="PreviewDdl">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16" aria-hidden="true"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
-                                Preview DDL
-                            </button>
-                            <button class="fc-btn fc-btn--primary fc-btn--sm" @onclick="PublishVersion">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16" aria-hidden="true"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-                                Publish
-                            </button>
-                        </Authorized>
-                    </AuthorizeView>
-                }
-                @if (_activeVersion?.Status == "Published")
-                {
-                    <AuthorizeView Roles="Admin,Approver" Context="versionAuth">
-                        <Authorized Context="vAuth">
-                            <button class="fc-btn fc-btn--primary fc-btn--sm" @onclick="CreateDraftVersion">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16" aria-hidden="true"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-                                New Draft
-                            </button>
-                        </Authorized>
-                    </AuthorizeView>
-                }
+            <div class="fc-detail-meta-item">
+                <span class="fc-detail-meta-label">Category</span>
+                <span class="fc-detail-meta-value">@_detail.StructuralCategory</span>
             </div>
-        </section>
+            <div class="fc-detail-meta-item">
+                <span class="fc-detail-meta-label">Version</span>
+                <span class="fc-detail-meta-value">v@(_activeVersion?.VersionNumber)</span>
+            </div>
+            <div class="fc-detail-meta-item">
+                <span class="fc-detail-meta-label">Fields</span>
+                <span class="fc-detail-meta-value">@(_activeVersion?.FieldCount ?? 0)</span>
+            </div>
+            <div class="fc-detail-meta-item">
+                <span class="fc-detail-meta-label">Formulas</span>
+                <span class="fc-detail-meta-value">@(_activeVersion?.FormulaCount ?? 0)</span>
+            </div>
+        </div>
 
         <!-- Tabbed Navigation -->
         <div class="fc-tabs" role="tablist" aria-label="Template sections">

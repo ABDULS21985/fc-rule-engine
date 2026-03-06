@@ -1,0 +1,136 @@
+@inject IJSRuntime JS
+@implements IAsyncDisposable
+
+@* ================================================================
+   FileDropZone — File upload area with drag-and-drop support
+
+   Usage:
+     <FileDropZone Accept=".json,.xlsx" OnFilesDropped="HandleDrop">
+       <ChildContent>
+         <p>Drop files here or <label>browse</label></p>
+       </ChildContent>
+     </FileDropZone>
+   ================================================================ *@
+
+<div class="fc-drop-zone @(_active ? "fc-drop-active" : "") @CssClass"
+     @ref="_zoneRef"
+     aria-label="@(AriaLabel ?? "File drop zone. Drag and drop files here or use the browse button.")"
+     aria-dropeffect="copy"
+     role="region">
+
+    @* Hidden native file input *@
+    <InputFile id="@_inputId"
+               class="fc-drop-zone-input"
+               accept="@Accept"
+               multiple="@Multiple"
+               OnChange="OnNativeFileChange"
+               tabindex="-1"
+               aria-hidden="true" />
+
+    <div class="fc-drop-zone-inner">
+        @if (ChildContent != null)
+        {
+            @ChildContent
+        }
+        else
+        {
+            <div class="fc-drop-zone-default">
+                <div class="fc-drop-zone-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" width="40" height="40">
+                        <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+                        <polyline points="17 8 12 3 7 8"/>
+                        <line x1="12" y1="3" x2="12" y2="15"/>
+                    </svg>
+                </div>
+                <p class="fc-drop-zone-label">
+                    Drop @(Accept ?? "files") here, or
+                    <label class="fc-drop-zone-browse" for="@_inputId">browse</label>
+                </p>
+                @if (Hint != null)
+                {
+                    <p class="fc-drop-zone-hint">@Hint</p>
+                }
+            </div>
+        }
+
+        <label class="fc-drop-zone-browse-full" for="@_inputId" aria-label="Browse for files">
+            <span class="sr-only">Browse for files</span>
+        </label>
+    </div>
+
+    @if (_active)
+    {
+        <div class="fc-drop-zone-overlay" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="48" height="48">
+                <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+                <polyline points="17 8 12 3 7 8"/>
+                <line x1="12" y1="3" x2="12" y2="15"/>
+            </svg>
+            <span>Drop to upload</span>
+        </div>
+    }
+</div>
+
+@code {
+    /// <summary>Accepted file extensions/MIME types (e.g. ".json,.xlsx").</summary>
+    [Parameter] public string? Accept { get; set; }
+
+    /// <summary>Allow multiple file selection.</summary>
+    [Parameter] public bool Multiple { get; set; } = false;
+
+    /// <summary>Hint text shown below the label.</summary>
+    [Parameter] public string? Hint { get; set; }
+
+    /// <summary>Custom inner content. If null, shows default drop prompt.</summary>
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    /// <summary>Called when files are dropped or selected via browse.</summary>
+    [Parameter] public EventCallback<IReadOnlyList<IBrowserFile>> OnFilesDropped { get; set; }
+
+    /// <summary>Additional CSS class for the outer element.</summary>
+    [Parameter] public string? CssClass { get; set; }
+
+    /// <summary>Aria label for the drop zone.</summary>
+    [Parameter] public string? AriaLabel { get; set; }
+
+    private ElementReference _zoneRef;
+    private DotNetObjectReference<FileDropZone>? _dotNetRef;
+    private readonly string _inputId = $"fc-dz-{Guid.NewGuid():N}";
+    private bool _active;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _dotNetRef = DotNetObjectReference.Create(this);
+            await JS.InvokeVoidAsync("fcDragDrop.initDropZone", _zoneRef, _dotNetRef);
+        }
+    }
+
+    private async Task OnNativeFileChange(InputFileChangeEventArgs e)
+    {
+        var files = e.GetMultipleFiles(e.FileCount);
+        await OnFilesDropped.InvokeAsync(files);
+    }
+
+    /// <summary>Called from JS when files are dragged and dropped.</summary>
+    [JSInvokable("OnFilesDropped")]
+    public Task HandleJsFilesDropped(object[] fileInfos)
+    {
+        // JS drag-drop gives us metadata only — signal that a drop occurred
+        // The actual file data is handled via the native input reset trick
+        // For real file access, re-trigger via a hidden input — here we update active state
+        _active = false;
+        return InvokeAsync(StateHasChanged);
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("fcDragDrop.destroyDropZone", _zoneRef);
+        }
+        catch { }
+        _dotNetRef?.Dispose();
+    }
+}

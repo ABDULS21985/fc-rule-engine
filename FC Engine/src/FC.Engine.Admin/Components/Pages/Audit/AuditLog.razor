@@ -5,40 +5,10 @@
 @using Microsoft.EntityFrameworkCore
 @inject IServiceProvider ServiceProvider
 
+<PageHeader Title="Audit Log"
+            Subtitle="Trace all operational activity, metadata changes, and administrative actions across the platform." />
+
 <div class="fc-page">
-
-    <!-- Breadcrumb -->
-    <nav class="fc-breadcrumb" aria-label="Breadcrumb">
-        <a href="/">Dashboard</a>
-        <span class="fc-breadcrumb-sep" aria-hidden="true">/</span>
-        <span class="fc-breadcrumb-current">Audit Log</span>
-    </nav>
-
-    <!-- Page Header -->
-    <div class="fc-page-header">
-        <div class="fc-page-header-top">
-            <div>
-                <h1>Audit Log</h1>
-                <p class="fc-page-header-subtitle">Trace all operational activity, metadata changes, and administrative actions across the platform.</p>
-            </div>
-        </div>
-
-        @if (!_loading && _entries.Any())
-        {
-            <div class="fc-chip-group">
-                <span class="fc-chip">
-                    <span class="fc-chip__count">@FilteredEntries.Count()</span> Events Shown
-                </span>
-                @foreach (var group in _entries.GroupBy(e => e.Action).OrderByDescending(g => g.Count()).Take(4))
-                {
-                    <span class="fc-chip">
-                        <span class="fc-chip__dot @GetChipDotClass(group.Key)" aria-hidden="true"></span>
-                        <span class="fc-chip__count">@group.Count()</span> @group.Key
-                    </span>
-                }
-            </div>
-        }
-    </div>
 
     <!-- Filter Toolbar -->
     <div class="fc-toolbar">

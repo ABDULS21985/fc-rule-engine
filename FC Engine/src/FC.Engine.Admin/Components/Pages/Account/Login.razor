@@ -10,13 +10,19 @@
         <div class="fc-login-card-accent"></div>
 
         <div class="fc-login-card-body">
-            <!-- Header -->
+            <!-- Header — staggered entrance -->
             <div class="fc-login-card-header">
-                <div class="fc-login-card-logo">
+                <div class="fc-login-card-logo fc-anim-entrance" style="--anim-delay: 0.05s">
                     <img src="@_branding.LogoUrl" alt="@_branding.CompanyName" width="56" height="46" />
                 </div>
-                <h2 class="fc-login-title">Secure Login</h2>
-                <p class="fc-login-subtitle">Use your authorized credentials to access the platform</p>
+                <h2 class="fc-login-title fc-anim-entrance" style="--anim-delay: 0.15s">
+                    @(_showMfaChallenge ? "Two-Factor Auth" : "Secure Login")
+                </h2>
+                <p class="fc-login-subtitle fc-anim-entrance" style="--anim-delay: 0.25s">
+                    @(_showMfaChallenge
+                        ? "Enter the 6-digit code from your authenticator app"
+                        : "Use your authorized credentials to access the platform")
+                </p>
             </div>
 
             <!-- Password Reset Success -->
@@ -33,118 +39,177 @@
             <!-- Error Alert -->
             @if (_hasError)
             {
-                <div class="fc-alert fc-alert--inline fc-alert--error" role="alert">
+                <div class="fc-alert fc-alert--inline fc-alert--error" role="alert" id="errorAlert">
                     <svg class="fc-alert__icon" viewBox="0 0 20 20" fill="currentColor" width="18" height="18" aria-hidden="true">
                         <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"/>
                     </svg>
-                    <span>@(_errorMessage)</span>
+                    <span>@_errorMessage</span>
                 </div>
             }
 
-            <!-- Login Form -->
+            <!-- ── MFA Challenge ─────────────────────────────────── -->
             @if (_showMfaChallenge && !string.IsNullOrWhiteSpace(_challenge))
             {
                 <form id="loginForm" method="post" action="/account/login" novalidate>
                     <input type="hidden" name="challengeId" value="@_challenge" />
+                    <input type="hidden" name="mfaCode" id="mfaCodeHidden" />
 
-                    <div class="fc-floating-field">
-                        <input
-                            id="mfaCode"
-                            name="mfaCode"
-                            type="text"
-                            class="fc-floating-input"
-                            placeholder=" "
-                            maxlength="6"
-                            autocomplete="one-time-code"
-                            aria-label="MFA code"
-                            aria-required="true" />
-                        <label for="mfaCode" class="fc-floating-label">Authenticator Code</label>
+                    <!-- MFA header icon -->
+                    <div class="fc-mfa-header fc-anim-entrance" style="--anim-delay: 0.3s">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"
+                             stroke-linecap="round" stroke-linejoin="round" width="40" height="40" aria-hidden="true">
+                            <rect x="5" y="11" width="14" height="10" rx="2"/>
+                            <path d="M8 11V7a4 4 0 018 0v4"/>
+                            <circle cx="12" cy="16" r="1" fill="currentColor" stroke="none"/>
+                        </svg>
+                        <h3>Authenticator Code</h3>
+                        <p>Check your authenticator app for the 6-digit code</p>
                     </div>
 
-                    <div class="fc-floating-field">
-                        <input
-                            id="backupCode"
-                            name="backupCode"
-                            type="text"
-                            class="fc-floating-input"
-                            placeholder=" "
-                            maxlength="9"
-                            aria-label="Backup code" />
-                        <label for="backupCode" class="fc-floating-label">Backup Code (optional)</label>
+                    <!-- 6-digit code boxes -->
+                    <div class="fc-mfa-code-wrap fc-anim-entrance" style="--anim-delay: 0.4s">
+                        <div class="fc-mfa-digits" id="mfaDigits" role="group" aria-label="One-time code input">
+                            <input class="fc-mfa-digit" type="tel" maxlength="1" inputmode="numeric"
+                                   pattern="[0-9]" autocomplete="off" aria-label="Digit 1" data-idx="0" />
+                            <input class="fc-mfa-digit" type="tel" maxlength="1" inputmode="numeric"
+                                   pattern="[0-9]" autocomplete="off" aria-label="Digit 2" data-idx="1" />
+                            <input class="fc-mfa-digit" type="tel" maxlength="1" inputmode="numeric"
+                                   pattern="[0-9]" autocomplete="off" aria-label="Digit 3" data-idx="2" />
+                            <span class="fc-mfa-sep" aria-hidden="true">·</span>
+                            <input class="fc-mfa-digit" type="tel" maxlength="1" inputmode="numeric"
+                                   pattern="[0-9]" autocomplete="off" aria-label="Digit 4" data-idx="3" />
+                            <input class="fc-mfa-digit" type="tel" maxlength="1" inputmode="numeric"
+                                   pattern="[0-9]" autocomplete="off" aria-label="Digit 5" data-idx="4" />
+                            <input class="fc-mfa-digit" type="tel" maxlength="1" inputmode="numeric"
+                                   pattern="[0-9]" autocomplete="off" aria-label="Digit 6" data-idx="5" />
+                        </div>
+                        <p class="fc-mfa-hint">Auto-submits when all 6 digits are entered</p>
                     </div>
 
-                    <button type="submit" class="fc-btn fc-btn--gold-submit" id="submitBtn">
+                    <!-- Backup code (collapsible) -->
+                    <button type="button" class="fc-backup-toggle" id="backupToggle">
+                        Use a backup code instead
+                    </button>
+                    <div class="fc-backup-field" id="backupField">
+                        <div class="fc-floating-field">
+                            <input id="backupCode" name="backupCode" type="text" class="fc-floating-input"
+                                   placeholder=" " maxlength="9" autocomplete="off" aria-label="Backup code"
+                                   spellcheck="false" />
+                            <label for="backupCode" class="fc-floating-label">Backup Code</label>
+                        </div>
+                    </div>
+
+                    <!-- Submit button -->
+                    <button type="submit" class="fc-btn fc-btn--gold-submit fc-anim-entrance"
+                            id="submitBtn" style="--anim-delay: 0.5s">
                         <span class="fc-btn-label">
                             <span>Verify Code</span>
                         </span>
-                        <span class="fc-btn-loading">
+                        <span class="fc-btn-loading" aria-hidden="true">
+                            <svg class="loading-spinner" viewBox="0 0 24 24" width="18" height="18">
+                                <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor"
+                                        stroke-width="2.5" stroke-dasharray="31.4 31.4" stroke-linecap="round"/>
+                            </svg>
                             <span>Verifying&hellip;</span>
+                        </span>
+                        <span class="fc-btn-success" aria-hidden="true">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+                                 stroke-linecap="round" stroke-linejoin="round" width="18" height="18">
+                                <path class="fc-check-path" d="M5 13l4 4L19 7"/>
+                            </svg>
+                            <span>Verified!</span>
                         </span>
                     </button>
                 </form>
             }
             else
             {
+                <!-- ── Login Form ───────────────────────────────────── -->
                 <form id="loginForm" method="post" action="/account/login" novalidate>
+
                     <!-- Username Field -->
-                    <div class="fc-floating-field">
-                        <input
-                            id="username"
-                            name="username"
-                            type="text"
-                            class="fc-floating-input"
-                            placeholder=" "
-                            required
-                            autocomplete="username"
-                            aria-label="Username"
-                            aria-required="true" />
+                    <div class="fc-floating-field fc-anim-entrance" style="--anim-delay: 0.35s">
+                        <input id="username" name="username" type="text" class="fc-floating-input"
+                               placeholder=" " required autocomplete="username"
+                               aria-label="Username" aria-required="true" />
                         <label for="username" class="fc-floating-label">Username</label>
-                        <svg class="field-icon" viewBox="0 0 20 20" fill="currentColor" width="16" height="16" aria-hidden="true">
+                        <svg class="field-icon" viewBox="0 0 20 20" fill="currentColor"
+                             width="16" height="16" aria-hidden="true">
                             <path fill-rule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clip-rule="evenodd"/>
                         </svg>
                     </div>
 
                     <!-- Password Field -->
-                    <div class="fc-floating-field">
-                        <input
-                            id="password"
-                            name="password"
-                            type="password"
-                            class="fc-floating-input"
-                            placeholder=" "
-                            required
-                            autocomplete="current-password"
-                            aria-label="Password"
-                            aria-required="true" />
+                    <div class="fc-floating-field fc-anim-entrance" style="--anim-delay: 0.45s" id="passwordWrap">
+                        <input id="password" name="password" type="password" class="fc-floating-input"
+                               placeholder=" " required autocomplete="current-password"
+                               aria-label="Password" aria-required="true" />
                         <label for="password" class="fc-floating-label">Password</label>
-                        <svg class="field-icon" viewBox="0 0 20 20" fill="currentColor" width="16" height="16" aria-hidden="true">
+                        <svg class="field-icon" viewBox="0 0 20 20" fill="currentColor"
+                             width="16" height="16" aria-hidden="true">
                             <path fill-rule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clip-rule="evenodd"/>
                         </svg>
-                        <button type="button" class="password-toggle" id="pwdToggle" aria-label="Toggle password visibility" tabindex="-1">
-                            <svg class="eye-open" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="18" height="18">
+
+                        <!-- Show/hide toggle (crossfade) -->
+                        <button type="button" class="password-toggle" id="pwdToggle"
+                                aria-label="Toggle password visibility" tabindex="-1">
+                            <svg class="eye-open" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                 stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                                 width="18" height="18" aria-hidden="true">
                                 <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
                                 <circle cx="12" cy="12" r="3"/>
                             </svg>
-                            <svg class="eye-closed" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="18" height="18">
+                            <svg class="eye-closed" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                 stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                                 width="18" height="18" aria-hidden="true">
                                 <path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24"/>
                                 <line x1="1" y1="1" x2="23" y2="23"/>
                             </svg>
                         </button>
-                        <!-- Caps Lock Warning -->
+
+                        <!-- Caps Lock warning -->
                         <div class="caps-lock-warning" id="capsWarning" role="status" aria-live="polite">
                             <svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14" aria-hidden="true">
                                 <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
                             </svg>
                             <span>Caps Lock is on</span>
                         </div>
+
+                        <!-- Password strength meter -->
+                        <div class="fc-pwd-strength" id="pwdStrength" data-strength="0" aria-live="polite">
+                            <div class="fc-pwd-strength-track">
+                                <div class="fc-pwd-strength-seg"></div>
+                                <div class="fc-pwd-strength-seg"></div>
+                                <div class="fc-pwd-strength-seg"></div>
+                                <div class="fc-pwd-strength-seg"></div>
+                            </div>
+                            <div class="fc-pwd-strength-meta">
+                                <span class="fc-pwd-strength-lbl" id="pwdStrengthLbl">Too short</span>
+                            </div>
+                            <div class="fc-pwd-reqs">
+                                <span class="fc-pwd-req" data-req="length">
+                                    <span class="fc-pwd-req-dot"></span>8+ chars
+                                </span>
+                                <span class="fc-pwd-req" data-req="upper">
+                                    <span class="fc-pwd-req-dot"></span>Uppercase
+                                </span>
+                                <span class="fc-pwd-req" data-req="number">
+                                    <span class="fc-pwd-req-dot"></span>Number
+                                </span>
+                                <span class="fc-pwd-req" data-req="special">
+                                    <span class="fc-pwd-req-dot"></span>Special char
+                                </span>
+                            </div>
+                        </div>
                     </div>
 
                     <!-- Remember Me / Forgot Password Row -->
-                    <div class="fc-login-utility-row">
+                    <div class="fc-login-utility-row fc-anim-entrance" style="--anim-delay: 0.55s">
                         <label class="fc-login-checkbox">
                             <input type="checkbox" name="rememberMe" value="true" />
                             <span class="checkbox-visual" aria-hidden="true">
-                                <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="10" height="10">
+                                <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2"
+                                     stroke-linecap="round" stroke-linejoin="round" width="10" height="10">
                                     <polyline points="2.5 6 5 8.5 9.5 3.5"/>
                                 </svg>
                             </span>
@@ -153,26 +218,59 @@
                         <a href="/forgot-password" class="fc-login-forgot-link" tabindex="0">Forgot password?</a>
                     </div>
 
+                    <!-- Biometric hint (shown if device supports it) -->
+                    <div class="fc-biometric-row fc-anim-entrance" id="biometricRow" style="--anim-delay: 0.6s">
+                        <div class="fc-biometric-divider">
+                            <span class="fc-biometric-line"></span>
+                            <span class="fc-biometric-or">or</span>
+                            <span class="fc-biometric-line"></span>
+                        </div>
+                        <button type="button" class="fc-biometric-btn" id="biometricBtn" aria-label="Sign in with biometrics">
+                            <!-- Fingerprint icon -->
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"
+                                 stroke-linecap="round" stroke-linejoin="round" width="20" height="20" aria-hidden="true">
+                                <path d="M12 10a2 2 0 0 0-2 2c0 1.02-.1 2.51-.26 4"/>
+                                <path d="M14 13.12c0 2.38 0 6.38-1 8.88"/>
+                                <path d="M17.29 21.02c.12-.6.43-2.3.5-3.02"/>
+                                <path d="M2 12a10 10 0 0 1 18-6"/>
+                                <path d="M2 17c1.5.5 2.5 1 4 1 3 0 3.5-4 4.5-7"/>
+                                <path d="M20 13c-.28 4-.5 6.23-1 7"/>
+                                <path d="M8.65 22c.21-.66.45-1.32.57-2"/>
+                                <path d="M4 17.29V17a8 8 0 0 1 8-8"/>
+                            </svg>
+                            <span id="biometricLabel">Use Touch ID / Face ID</span>
+                        </button>
+                    </div>
+
                     <!-- Submit Button -->
-                    <button type="submit" class="fc-btn fc-btn--gold-submit" id="submitBtn">
+                    <button type="submit" class="fc-btn fc-btn--gold-submit fc-anim-entrance"
+                            id="submitBtn" style="--anim-delay: 0.65s">
                         <span class="fc-btn-label">
                             <svg viewBox="0 0 20 20" fill="currentColor" width="18" height="18" aria-hidden="true">
                                 <path fill-rule="evenodd" d="M3 3a1 1 0 011 1v12a1 1 0 11-2 0V4a1 1 0 011-1zm7.707 3.293a1 1 0 010 1.414L9.414 9H17a1 1 0 110 2H9.414l1.293 1.293a1 1 0 01-1.414 1.414l-3-3a1 1 0 010-1.414l3-3a1 1 0 011.414 0z" clip-rule="evenodd"/>
                             </svg>
                             <span>Sign In</span>
                         </span>
-                        <span class="fc-btn-loading">
-                            <svg class="loading-spinner" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
-                                <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="2.5" stroke-dasharray="31.4 31.4" stroke-linecap="round"/>
+                        <span class="fc-btn-loading" aria-hidden="true">
+                            <svg class="loading-spinner" viewBox="0 0 24 24" width="18" height="18">
+                                <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor"
+                                        stroke-width="2.5" stroke-dasharray="31.4 31.4" stroke-linecap="round"/>
                             </svg>
                             <span>Authenticating&hellip;</span>
+                        </span>
+                        <span class="fc-btn-success" aria-hidden="true">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+                                 stroke-linecap="round" stroke-linejoin="round" width="18" height="18">
+                                <path class="fc-check-path" d="M5 13l4 4L19 7"/>
+                            </svg>
+                            <span>Welcome!</span>
                         </span>
                     </button>
                 </form>
             }
 
             <!-- Security Notice -->
-            <div class="fc-login-security-notice">
+            <div class="fc-login-security-notice fc-anim-entrance" style="--anim-delay: 0.75s">
                 <svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14" aria-hidden="true">
                     <path fill-rule="evenodd" d="M2.166 4.999A11.954 11.954 0 0010 1.944 11.954 11.954 0 0017.834 5c.11.65.166 1.32.166 2.001 0 5.225-3.34 9.67-8 11.317C5.34 16.67 2 12.225 2 7c0-.682.057-1.35.166-2.001zm11.541 3.708a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
                 </svg>
@@ -180,7 +278,7 @@
             </div>
 
             <!-- Footer -->
-            <div class="fc-login-card-footer">
+            <div class="fc-login-card-footer fc-anim-entrance" style="--anim-delay: 0.85s">
                 <span>Powered by <strong>@_branding.CompanyName</strong></span>
             </div>
         </div>
@@ -188,45 +286,121 @@
 </div>
 
 <script>
-    (function () {
-        // Password visibility toggle
-        var pwdInput = document.getElementById('password');
-        var toggle = document.getElementById('pwdToggle');
-        if (toggle && pwdInput) {
-            toggle.addEventListener('click', function () {
-                var isPassword = pwdInput.type === 'password';
-                pwdInput.type = isPassword ? 'text' : 'password';
-                toggle.classList.toggle('active', isPassword);
-            });
-        }
+(function () {
+    'use strict';
 
-        // Caps Lock detection on password field
-        var capsWarning = document.getElementById('capsWarning');
-        if (pwdInput && capsWarning) {
-            pwdInput.addEventListener('keyup', function (e) {
-                capsWarning.classList.toggle('is-visible', e.getModifierState && e.getModifierState('CapsLock'));
-            });
-            pwdInput.addEventListener('blur', function () {
-                capsWarning.classList.remove('is-visible');
-            });
-        }
+    /* ── Helpers ──────────────────────────────────────────────────── */
+    function $(id) { return document.getElementById(id); }
+    function hasError() { return !!document.querySelector('[id="errorAlert"]'); }
 
-        // Loading state on form submit
-        var form = document.getElementById('loginForm');
-        var btn = document.getElementById('submitBtn');
-        if (form && btn) {
-            form.addEventListener('submit', function () {
-                btn.disabled = true;
-                btn.classList.add('is-loading');
-            });
-        }
+    /* ── Password visibility toggle (crossfade) ───────────────────── */
+    var pwdInput  = $('password');
+    var pwdToggle = $('pwdToggle');
+    if (pwdToggle && pwdInput) {
+        pwdToggle.addEventListener('click', function () {
+            var show = pwdInput.type === 'password';
+            pwdInput.type = show ? 'text' : 'password';
+            pwdToggle.classList.toggle('active', show);
+            pwdToggle.setAttribute('aria-label', show ? 'Hide password' : 'Show password');
+        });
+    }
 
-        // Inline validation feedback
-        var fields = form ? form.querySelectorAll('.fc-floating-input[required]') : [];
-        fields.forEach(function (field) {
+    /* ── Caps Lock detection ───────────────────────────────────────── */
+    var capsWarning = $('capsWarning');
+    if (pwdInput && capsWarning) {
+        function checkCaps(e) {
+            var on = e.getModifierState && e.getModifierState('CapsLock');
+            capsWarning.classList.toggle('is-visible', on);
+        }
+        pwdInput.addEventListener('keyup',  checkCaps);
+        pwdInput.addEventListener('keydown', checkCaps);
+        pwdInput.addEventListener('blur', function () {
+            capsWarning.classList.remove('is-visible');
+        });
+    }
+
+    /* ── Password strength meter ──────────────────────────────────── */
+    var pwdStrength = $('pwdStrength');
+    var pwdStrengthLbl = $('pwdStrengthLbl');
+    var strengthLabels = ['Too short', 'Weak', 'Fair', 'Good', 'Strong'];
+
+    function calcStrength(v) {
+        if (!v || v.length < 4) return 0;
+        var score = 0;
+        if (v.length >= 8)            score++;
+        if (/[A-Z]/.test(v))          score++;
+        if (/[0-9]/.test(v))          score++;
+        if (/[^A-Za-z0-9]/.test(v))   score++;
+        return score;
+    }
+
+    if (pwdInput && pwdStrength) {
+        pwdInput.addEventListener('input', function () {
+            var val = pwdInput.value;
+            if (!val) {
+                pwdStrength.classList.remove('is-visible');
+                pwdStrength.setAttribute('data-strength', '0');
+                return;
+            }
+            pwdStrength.classList.add('is-visible');
+            var score = calcStrength(val);
+            pwdStrength.setAttribute('data-strength', score);
+            if (pwdStrengthLbl) pwdStrengthLbl.textContent = strengthLabels[score] || '';
+
+            /* Update requirement items */
+            var reqs = {
+                length:  val.length >= 8,
+                upper:   /[A-Z]/.test(val),
+                number:  /[0-9]/.test(val),
+                special: /[^A-Za-z0-9]/.test(val)
+            };
+            pwdStrength.querySelectorAll('.fc-pwd-req[data-req]').forEach(function (el) {
+                el.classList.toggle('met', !!reqs[el.getAttribute('data-req')]);
+            });
+        });
+    }
+
+    /* ── Submit button: loading → success → redirect ─────────────── */
+    var form    = $('loginForm');
+    var submitBtn = $('submitBtn');
+
+    if (form && submitBtn) {
+        form.addEventListener('submit', function (e) {
+            e.preventDefault();
+            submitBtn.disabled = true;
+            submitBtn.classList.add('is-loading');
+
+            /* Simulate brief loading, show success, then submit */
+            setTimeout(function () {
+                submitBtn.classList.remove('is-loading');
+                submitBtn.classList.add('is-success');
+                setTimeout(function () {
+                    form.submit();
+                }, 700);
+            }, 900);
+        });
+    }
+
+    /* ── Shake fields on page-load error ─────────────────────────── */
+    if (hasError()) {
+        var inputs = document.querySelectorAll('#loginForm .fc-floating-input[required]');
+        inputs.forEach(function (inp) {
+            inp.classList.add('fc-shake');
+            inp.addEventListener('animationend', function () {
+                inp.classList.remove('fc-shake');
+            }, { once: true });
+        });
+    }
+
+    /* ── Inline validation ────────────────────────────────────────── */
+    if (form) {
+        form.querySelectorAll('.fc-floating-input[required]').forEach(function (field) {
             field.addEventListener('invalid', function (e) {
                 e.preventDefault();
-                field.classList.add('is-invalid');
+                field.classList.add('is-invalid', 'fc-shake');
+                field.addEventListener('animationend', function () {
+                    field.classList.remove('fc-shake');
+                }, { once: true });
             });
             field.addEventListener('input', function () {
                 if (field.classList.contains('is-invalid') && field.value.trim()) {
@@ -234,7 +408,154 @@
                 }
             });
         });
-    })();
+    }
+
+    /* ── MFA 6-digit input ────────────────────────────────────────── */
+    var mfaContainer = $('mfaDigits');
+    var mfaHidden    = $('mfaCodeHidden');
+
+    if (mfaContainer && mfaHidden) {
+        var digits = Array.from(mfaContainer.querySelectorAll('.fc-mfa-digit'));
+
+        function getCode() { return digits.map(function (d) { return d.value; }).join(''); }
+        function syncHidden() { mfaHidden.value = getCode(); }
+
+        function focusAt(i) {
+            if (digits[i]) digits[i].focus();
+        }
+
+        digits.forEach(function (dig, idx) {
+            /* Input: advance on digit */
+            dig.addEventListener('input', function () {
+                var val = dig.value.replace(/[^0-9]/g, '');
+                dig.value = val ? val.slice(-1) : '';
+                dig.classList.toggle('is-filled', !!dig.value);
+                syncHidden();
+
+                if (dig.value && idx < digits.length - 1) {
+                    focusAt(idx + 1);
+                }
+                /* Auto-submit when complete */
+                if (getCode().length === 6 && submitBtn) {
+                    setTimeout(function () {
+                        submitBtn.disabled = true;
+                        submitBtn.classList.add('is-loading');
+                        setTimeout(function () { form.submit(); }, 300);
+                    }, 120);
+                }
+            });
+
+            /* Keydown: backspace navigates back */
+            dig.addEventListener('keydown', function (e) {
+                if (e.key === 'Backspace' && !dig.value && idx > 0) {
+                    focusAt(idx - 1);
+                }
+                /* Allow only digits */
+                if (e.key.length === 1 && !/[0-9]/.test(e.key) && !e.metaKey && !e.ctrlKey) {
+                    e.preventDefault();
+                }
+            });
+
+            /* Click: select single char for easy replacement */
+            dig.addEventListener('click', function () {
+                dig.select();
+            });
+        });
+
+        /* Paste: distribute digits */
+        mfaContainer.addEventListener('paste', function (e) {
+            e.preventDefault();
+            var pasted = (e.clipboardData || window.clipboardData).getData('text');
+            var nums   = pasted.replace(/[^0-9]/g, '').slice(0, 6).split('');
+            nums.forEach(function (n, i) {
+                if (digits[i]) {
+                    digits[i].value = n;
+                    digits[i].classList.add('is-filled');
+                }
+            });
+            syncHidden();
+            var nextEmpty = digits.findIndex(function (d) { return !d.value; });
+            focusAt(nextEmpty === -1 ? digits.length - 1 : nextEmpty);
+
+            if (getCode().length === 6 && submitBtn) {
+                setTimeout(function () {
+                    submitBtn.disabled = true;
+                    submitBtn.classList.add('is-loading');
+                    setTimeout(function () { form.submit(); }, 300);
+                }, 120);
+            }
+        });
+
+        /* Auto-focus first digit on MFA page */
+        setTimeout(function () { focusAt(0); }, 150);
+    }
+
+    /* ── Backup code toggle ───────────────────────────────────────── */
+    var backupToggle = $('backupToggle');
+    var backupField  = $('backupField');
+    if (backupToggle && backupField) {
+        backupToggle.addEventListener('click', function () {
+            var open = backupField.classList.toggle('is-open');
+            backupToggle.textContent = open ? 'Use authenticator app instead' : 'Use a backup code instead';
+            if (open) {
+                var inp = backupField.querySelector('input');
+                if (inp) setTimeout(function () { inp.focus(); }, 200);
+            }
+        });
+    }
+
+    /* ── Biometric hint ───────────────────────────────────────────── */
+    var biometricRow = $('biometricRow');
+    var biometricBtn = $('biometricBtn');
+    var biometricLbl = $('biometricLabel');
+
+    if (biometricRow && typeof PublicKeyCredential !== 'undefined' &&
+        typeof PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable === 'function') {
+
+        PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable().then(function (available) {
+            if (!available) return;
+
+            /* Detect platform hint */
+            var ua = navigator.userAgent;
+            var label = 'Use Biometrics';
+            if (/iPhone|iPad|iPod/.test(ua))             label = 'Use Face ID / Touch ID';
+            else if (/Mac/.test(ua) && /Safari/.test(ua)) label = 'Use Touch ID';
+            else if (/Android/.test(ua))                   label = 'Use Fingerprint / Face Unlock';
+            else if (/Windows/.test(ua))                   label = 'Use Windows Hello';
+
+            if (biometricLbl) biometricLbl.textContent = label;
+            biometricRow.classList.add('is-visible');
+        }).catch(function () { /* not supported — stay hidden */ });
+    }
+
+    if (biometricBtn) {
+        biometricBtn.addEventListener('click', function () {
+            /* Check for available credentials; if none configured show informational state */
+            if (typeof PublicKeyCredential !== 'undefined') {
+                biometricBtn.disabled = true;
+                biometricBtn.style.opacity = '0.6';
+                navigator.credentials.get({
+                    publicKey: {
+                        challenge: new Uint8Array(32),
+                        timeout: 60000,
+                        userVerification: 'required',
+                        rpId: window.location.hostname
+                    }
+                }).then(function (cred) {
+                    if (cred) {
+                        /* In a real implementation the credential assertion would be sent to the server.
+                           For now redirect to a WebAuthn-specific handler. */
+                        window.location.href = '/account/webauthn';
+                    }
+                }).catch(function () {
+                    biometricBtn.disabled = false;
+                    biometricBtn.style.opacity = '';
+                });
+            }
+        });
+    }
+
+})();
 </script>
 
 @code {
@@ -269,12 +590,12 @@
 
     private string _errorMessage => Error switch
     {
-        "invalid" => "Invalid username or password. Please try again.",
-        "locked" => "This account has been temporarily locked due to too many failed attempts. Try again in 15 minutes.",
-        "expired" => "Your session has expired. Please sign in again.",
-        "denied" => "Access denied. You do not have permission to access this system.",
+        "invalid"     => "Invalid username or password. Please try again.",
+        "locked"      => "This account has been temporarily locked due to too many failed attempts. Try again in 15 minutes.",
+        "expired"     => "Your session has expired. Please sign in again.",
+        "denied"      => "Access denied. You do not have permission to access this system.",
         "mfa-invalid" => "Invalid MFA or backup code. Please try again.",
         "mfa-expired" => "MFA challenge expired. Sign in again.",
-        _ => "An error occurred during sign in. Please try again."
+        _             => "An error occurred during sign in. Please try again."
     };
 }

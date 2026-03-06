@@ -1,0 +1,644 @@
+@typeparam TItem
+@inject IJSRuntime JS
+@inject DataTableExportService ExportService
+@implements IAsyncDisposable
+
+@* Render column definitions (they produce no HTML, just register themselves) *@
+<CascadingValue Value="this" IsFixed="true">
+    @ChildContent
+</CascadingValue>
+
+<div id="@_tableId" class="fc-dt-wrapper @(Responsive ? "fc-dt-responsive" : "") @WrapperClass">
+
+    @* ── Toolbar ── *@
+    @if (ToolbarContent is not null || ShowExport || _columns.Any(c => c.Hideable))
+    {
+        <div class="fc-dt-toolbar">
+            <div class="fc-dt-toolbar-left">
+                @ToolbarContent
+            </div>
+            <div class="fc-dt-toolbar-right">
+                @if (_columns.Any(c => c.Hideable))
+                {
+                    <DataTableColumnToggle Columns="@_columnInfos"
+                                          HiddenColumns="@_hiddenColumns"
+                                          OnToggle="ToggleColumn" />
+                }
+                @if (ShowExport)
+                {
+                    <DataTableExportMenu OnExportCsv="ExportCsvAsync"
+                                        OnExportExcel="ExportExcelAsync"
+                                        OnExportPdf="ExportPdfAsync" />
+                }
+            </div>
+        </div>
+    }
+
+    @* ── Bulk Actions Bar ── *@
+    @if (Selectable && _selectedItems.Count > 0 && BulkActionsContent is not null)
+    {
+        <div class="fc-dt-bulk-bar" role="toolbar" aria-label="Bulk actions">
+            <span class="fc-dt-bulk-bar-count">
+                @_selectedItems.Count item@(_selectedItems.Count == 1 ? "" : "s") selected
+            </span>
+            @BulkActionsContent
+            <button class="fc-btn fc-btn--ghost fc-btn--sm" type="button" @onclick="ClearSelection">
+                Clear
+            </button>
+        </div>
+    }
+
+    @{
+        var sortedItems = GetSortedItems();
+        var pagedItems = GetPagedItems(sortedItems);
+        var visibleCols = GetVisibleColumns();
+    }
+
+    @* ── Skeleton Loading ── *@
+    @if (Loading)
+    {
+        <div class="fc-table-wrap">
+            <table class="fc-table" role="table" aria-busy="true" aria-label="Loading data">
+                <thead>
+                    <tr>
+                        @if (Selectable) { <th class="fc-dt-checkbox-cell" scope="col"></th> }
+                        @foreach (var col in visibleCols)
+                        {
+                            <th scope="col" style="@GetHeaderStyle(col)">
+                                <div class="fc-skel fc-skel-text" style="width:@SkeletonWidth(col)"></div>
+                            </th>
+                        }
+                    </tr>
+                </thead>
+                <tbody>
+                    @for (var i = 0; i < SkeletonRows; i++)
+                    {
+                        <tr>
+                            @if (Selectable)
+                            {
+                                <td class="fc-dt-checkbox-cell">
+                                    <div class="fc-skel" style="width:16px;height:16px;border-radius:3px;"></div>
+                                </td>
+                            }
+                            @foreach (var col in visibleCols)
+                            {
+                                <td>
+                                    <div class="fc-skel fc-skel-text" style="width:@SkeletonWidth(col);max-width:200px;"></div>
+                                </td>
+                            }
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+
+    @* ── Empty State ── *@
+    else if (!Items.Any())
+    {
+        <div class="fc-list-empty">
+            <div class="fc-list-empty-icon">
+                @if (EmptyIcon is not null)
+                {
+                    @EmptyIcon
+                }
+                else
+                {
+                    <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                        <rect x="8" y="16" width="48" height="36" rx="4" stroke="currentColor" stroke-width="2" fill="none"/>
+                        <path d="M8 24h48" stroke="currentColor" stroke-width="2"/>
+                        <path d="M20 32h8M20 38h16M20 44h10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                        <circle cx="46" cy="46" r="10" fill="var(--cbn-surface-elevated)" stroke="currentColor" stroke-width="2"/>
+                        <path d="M43 46h6M46 43v6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                    </svg>
+                }
+            </div>
+            <h3 class="fc-list-empty-title">@EmptyTitle</h3>
+            <p class="fc-list-empty-text">@EmptyText</p>
+        </div>
+    }
+
+    @* ── Data Table ── *@
+    else
+    {
+        <div class="fc-table-wrap">
+            <table class="fc-table @(!Striped ? "fc-table--no-stripe" : "")"
+                   role="table"
+                   id="@(_tableId + "-tbl")"
+                   aria-rowcount="@sortedItems.Count">
+                <thead>
+                    <tr>
+                        @if (Selectable)
+                        {
+                            <th class="fc-dt-checkbox-cell" scope="col">
+                                <input type="checkbox"
+                                       checked="@IsAllSelected(sortedItems)"
+                                       @onchange="e => ToggleSelectAll(e, sortedItems)"
+                                       aria-label="Select all rows" />
+                            </th>
+                        }
+                        @{ var colIdx = Selectable ? 1 : 0; }
+                        @foreach (var col in visibleCols)
+                        {
+                            var capturedIdx = colIdx;
+                            var isSortable = col.SortKey is not null && Sortable;
+                            var isActiveSort = _sortColumn == col;
+                            var sortCls = isSortable
+                                ? (isActiveSort ? (_sortDescending ? "fc-dt-sort-desc" : "fc-dt-sort-asc") : "")
+                                : "";
+                            var ariaSortVal = isActiveSort
+                                ? (_sortDescending ? "descending" : "ascending")
+                                : (isSortable ? "none" : null);
+
+                            <th scope="col"
+                                class="@($"fc-dt-th {(isSortable ? "fc-dt-sortable" : "")} {sortCls} {col.HeaderClass}".Trim())"
+                                style="@GetHeaderStyle(col)"
+                                @onclick="() => HandleSort(col)"
+                                aria-sort="@ariaSortVal">
+                                @if (col.HeaderTemplate is not null)
+                                {
+                                    @col.HeaderTemplate
+                                }
+                                else
+                                {
+                                    @col.Title
+                                }
+                                @if (isSortable)
+                                {
+                                    <svg class="fc-dt-sort-icon" viewBox="0 0 24 24" fill="none"
+                                         stroke="currentColor" stroke-width="2.5"
+                                         stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                        <polyline points="6 15 12 9 18 15"/>
+                                    </svg>
+                                }
+                                @if (col.Resizable)
+                                {
+                                    <div class="fc-dt-resize-handle"
+                                         @onmousedown="async e => await StartResize(capturedIdx, e)"
+                                         @onmousedown:stopPropagation="true"
+                                         @onmousedown:preventDefault="true"
+                                         role="separator" aria-hidden="true"></div>
+                                }
+                            </th>
+                            colIdx++;
+                        }
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (UseVirtualization)
+                    {
+                        <Virtualize Items="sortedItems" Context="vItem" ItemSize="VirtualItemHeight">
+                            @RenderRow(vItem, -1, visibleCols)
+                        </Virtualize>
+                    }
+                    else
+                    {
+                        var rowIdx = 0;
+                        foreach (var item in pagedItems)
+                        {
+                            var ri = rowIdx++;
+                            @RenderRow(item, ri, visibleCols)
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
+
+        @* ── Mobile Cards ── *@
+        @if (Responsive)
+        {
+            <div class="fc-dt-cards" aria-hidden="true">
+                @foreach (var item in pagedItems)
+                {
+                    var localItem = item;
+                    var isRowSelected = _selectedItems.Contains(item);
+                    <div class="fc-dt-card @(Clickable || OnRowClick.HasDelegate ? "fc-dt-card--clickable" : "") @(isRowSelected ? "fc-dt-card--selected" : "") @(RowClass?.Invoke(item) ?? "")"
+                         @onclick="async () => await HandleRowClick(localItem)">
+                        @if (Selectable)
+                        {
+                            <div class="fc-dt-card-select">
+                                <input type="checkbox" checked="@isRowSelected"
+                                       @onchange="async () => await ToggleRowSelection(localItem)"
+                                       @onclick:stopPropagation="true" />
+                            </div>
+                        }
+                        @foreach (var col in visibleCols.Where(c => c.MobilePriority <= 1))
+                        {
+                            <div class="fc-dt-card-row">
+                                <span class="fc-dt-card-label">@(col.MobileLabel ?? col.Title)</span>
+                                <span class="fc-dt-card-value @col.CellClass">
+                                    @if (col.CellTemplate is not null) { @col.CellTemplate(item) }
+                                </span>
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+        }
+
+        @* ── Pagination ── *@
+        @if (ShowPagination && !UseVirtualization)
+        {
+            <DataTablePagination CurrentPage="_currentPage"
+                                 TotalPages="@GetTotalPages(sortedItems.Count)"
+                                 TotalCount="Items.Count"
+                                 FilteredCount="sortedItems.Count"
+                                 PageSize="_pageSize"
+                                 PageSizeOptions="PageSizeOptions"
+                                 ShowPageSizeSelector="ShowPageSizeSelector"
+                                 OnPageChanged="GoToPage"
+                                 OnPageSizeChanged="ChangePageSize" />
+        }
+    }
+</div>
+
+@code {
+    // ── Parameters ─────────────────────────────────────────────────────────────
+
+    /// <summary>Full data set. All sorting and pagination happen client-side.</summary>
+    [Parameter] public IReadOnlyList<TItem> Items { get; set; } = Array.Empty<TItem>();
+
+    /// <summary>Show skeleton loading state.</summary>
+    [Parameter] public bool Loading { get; set; }
+
+    /// <summary>Initial page size (rows per page).</summary>
+    [Parameter] public int PageSize { get; set; } = 25;
+
+    /// <summary>Available page size options shown in the selector.</summary>
+    [Parameter] public int[] PageSizeOptions { get; set; } = [10, 25, 50, 100];
+
+    /// <summary>Show pagination footer.</summary>
+    [Parameter] public bool ShowPagination { get; set; } = true;
+
+    /// <summary>Show page size selector in pagination footer.</summary>
+    [Parameter] public bool ShowPageSizeSelector { get; set; } = true;
+
+    /// <summary>Enable column header click-to-sort globally.</summary>
+    [Parameter] public bool Sortable { get; set; } = true;
+
+    /// <summary>Enable row checkbox selection.</summary>
+    [Parameter] public bool Selectable { get; set; }
+
+    /// <summary>Two-way binding for selected items.</summary>
+    [Parameter] public HashSet<TItem> SelectedItems { get; set; } = new();
+
+    /// <summary>Raised when selection changes.</summary>
+    [Parameter] public EventCallback<HashSet<TItem>> SelectedItemsChanged { get; set; }
+
+    /// <summary>Alternate row background color.</summary>
+    [Parameter] public bool Striped { get; set; } = true;
+
+    /// <summary>Show pointer cursor on rows. Also enables OnRowClick.</summary>
+    [Parameter] public bool Clickable { get; set; }
+
+    /// <summary>Raised when a row is clicked.</summary>
+    [Parameter] public EventCallback<TItem> OnRowClick { get; set; }
+
+    /// <summary>Custom SVG icon shown in the empty state.</summary>
+    [Parameter] public RenderFragment? EmptyIcon { get; set; }
+
+    /// <summary>Heading text for empty state.</summary>
+    [Parameter] public string EmptyTitle { get; set; } = "No data found";
+
+    /// <summary>Body text for empty state.</summary>
+    [Parameter] public string EmptyText { get; set; } = "Try adjusting your filters or search terms.";
+
+    /// <summary>Number of skeleton rows shown while loading.</summary>
+    [Parameter] public int SkeletonRows { get; set; } = 5;
+
+    /// <summary>Show the export dropdown button.</summary>
+    [Parameter] public bool ShowExport { get; set; }
+
+    /// <summary>Base filename for exported files (without extension).</summary>
+    [Parameter] public string ExportFileName { get; set; } = "export";
+
+    /// <summary>Collapse table to card layout on mobile.</summary>
+    [Parameter] public bool Responsive { get; set; } = true;
+
+    /// <summary>Use Blazor Virtualize instead of pagination. Suitable for very long lists.</summary>
+    [Parameter] public bool UseVirtualization { get; set; }
+
+    /// <summary>Approximate row height in pixels for virtualization overscan calculation.</summary>
+    [Parameter] public float VirtualItemHeight { get; set; } = 48;
+
+    /// <summary>Container for DataColumn definitions.</summary>
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    /// <summary>Content injected into the toolbar's left side (search, filters, etc.).</summary>
+    [Parameter] public RenderFragment? ToolbarContent { get; set; }
+
+    /// <summary>Action buttons shown when one or more rows are selected.</summary>
+    [Parameter] public RenderFragment? BulkActionsContent { get; set; }
+
+    /// <summary>Dynamic row CSS class function.</summary>
+    [Parameter] public Func<TItem, string>? RowClass { get; set; }
+
+    /// <summary>Additional CSS class on the outer wrapper div.</summary>
+    [Parameter] public string? WrapperClass { get; set; }
+
+    // ── Internal State ──────────────────────────────────────────────────────────
+
+    private readonly List<DataColumn<TItem>> _columns = new();
+    private readonly HashSet<string> _hiddenColumns = new();
+    private HashSet<TItem> _selectedItems = new();
+    private DataColumn<TItem>? _sortColumn;
+    private bool _sortDescending;
+    private int _currentPage = 1;
+    private int _pageSize;
+    private int _focusedRowIndex = -1;
+    private readonly string _tableId = $"fc-dt-{Guid.NewGuid():N}"[..14];
+    private DotNetObjectReference<DataTable<TItem>>? _dotnetRef;
+    private bool _jsInitialized;
+
+    // ── Lifecycle ───────────────────────────────────────────────────────────────
+
+    protected override void OnInitialized()
+    {
+        _pageSize = PageSize;
+        _selectedItems = SelectedItems;
+    }
+
+    protected override void OnParametersSet()
+    {
+        _selectedItems = SelectedItems;
+        // Clamp current page when item count shrinks
+        var totalPages = GetTotalPages(GetSortedItems().Count);
+        if (_currentPage > totalPages) _currentPage = 1;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && !_jsInitialized)
+        {
+            try
+            {
+                _dotnetRef = DotNetObjectReference.Create(this);
+                await JS.InvokeVoidAsync("dataTable.init", _tableId + "-tbl", _dotnetRef);
+                _jsInitialized = true;
+            }
+            catch { /* JS not available (prerender) */ }
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_jsInitialized)
+        {
+            try { await JS.InvokeVoidAsync("dataTable.dispose", _tableId + "-tbl"); }
+            catch { }
+        }
+        _dotnetRef?.Dispose();
+    }
+
+    // ── Column Registration ─────────────────────────────────────────────────────
+
+    internal void RegisterColumn(DataColumn<TItem> column)
+    {
+        if (!_columns.Contains(column))
+        {
+            _columns.Add(column);
+            StateHasChanged();
+        }
+    }
+
+    internal void UnregisterColumn(DataColumn<TItem> column)
+    {
+        if (_columns.Remove(column))
+            StateHasChanged();
+    }
+
+    // ── Computed Helpers ────────────────────────────────────────────────────────
+
+    private List<DataColumn<TItem>> GetVisibleColumns() =>
+        _columns.Where(c => c.Visible && !_hiddenColumns.Contains(c.Id)).ToList();
+
+    private IReadOnlyList<DataTableColumnToggle.DataColumnInfo> _columnInfos =>
+        _columns.Select(c => new DataTableColumnToggle.DataColumnInfo(c.Id, c.Title, c.Hideable)).ToList();
+
+    private List<TItem> GetSortedItems()
+    {
+        if (_sortColumn?.SortKey == null) return Items.ToList();
+        return _sortDescending
+            ? Items.OrderByDescending(_sortColumn.SortKey!).ToList()
+            : Items.OrderBy(_sortColumn.SortKey!).ToList();
+    }
+
+    private IEnumerable<TItem> GetPagedItems(List<TItem> sorted) =>
+        ShowPagination && !UseVirtualization
+            ? sorted.Skip((_currentPage - 1) * _pageSize).Take(_pageSize)
+            : sorted;
+
+    private int GetTotalPages(int filteredCount) =>
+        _pageSize > 0 ? Math.Max(1, (int)Math.Ceiling(filteredCount / (double)_pageSize)) : 1;
+
+    private bool IsAllSelected(List<TItem> sorted) =>
+        sorted.Count > 0 && sorted.All(i => _selectedItems.Contains(i));
+
+    private static string GetHeaderStyle(DataColumn<TItem> col)
+    {
+        var parts = new List<string>();
+        if (col.Width is not null) parts.Add($"width:{col.Width}");
+        if (col.MinWidth is not null) parts.Add($"min-width:{col.MinWidth}");
+        if (col.Align != "left") parts.Add($"text-align:{col.Align}");
+        return string.Join(";", parts);
+    }
+
+    private static string SkeletonWidth(DataColumn<TItem> col) =>
+        col.Width ?? "70%";
+
+    // ── Sorting ─────────────────────────────────────────────────────────────────
+
+    private void HandleSort(DataColumn<TItem> col)
+    {
+        if (col.SortKey == null || !Sortable) return;
+        if (_sortColumn == col)
+            _sortDescending = !_sortDescending;
+        else
+        {
+            _sortColumn = col;
+            _sortDescending = false;
+        }
+        _currentPage = 1;
+    }
+
+    // ── Pagination ───────────────────────────────────────────────────────────────
+
+    private void GoToPage(int page)
+    {
+        var sorted = GetSortedItems();
+        _currentPage = Math.Clamp(page, 1, GetTotalPages(sorted.Count));
+    }
+
+    private void ChangePageSize(int size)
+    {
+        _pageSize = size;
+        _currentPage = 1;
+    }
+
+    // ── Selection ────────────────────────────────────────────────────────────────
+
+    private async Task ToggleSelectAll(ChangeEventArgs e, List<TItem> sorted)
+    {
+        if (IsAllSelected(sorted))
+            foreach (var item in sorted) _selectedItems.Remove(item);
+        else
+            foreach (var item in sorted) _selectedItems.Add(item);
+        await SelectedItemsChanged.InvokeAsync(_selectedItems);
+    }
+
+    private async Task ToggleRowSelection(TItem item)
+    {
+        if (_selectedItems.Contains(item)) _selectedItems.Remove(item);
+        else _selectedItems.Add(item);
+        await SelectedItemsChanged.InvokeAsync(_selectedItems);
+    }
+
+    /// <summary>Clears all selected rows. Can be called by parent pages.</summary>
+    public async Task ClearSelection()
+    {
+        _selectedItems.Clear();
+        await SelectedItemsChanged.InvokeAsync(_selectedItems);
+    }
+
+    // ── Row Click ────────────────────────────────────────────────────────────────
+
+    private async Task HandleRowClick(TItem item)
+    {
+        if (OnRowClick.HasDelegate)
+            await OnRowClick.InvokeAsync(item);
+    }
+
+    // ── Column Visibility ────────────────────────────────────────────────────────
+
+    private void ToggleColumn(string columnId)
+    {
+        if (_hiddenColumns.Contains(columnId)) _hiddenColumns.Remove(columnId);
+        else _hiddenColumns.Add(columnId);
+    }
+
+    // ── Column Resize (JS) ───────────────────────────────────────────────────────
+
+    private async Task StartResize(int columnIndex, MouseEventArgs e)
+    {
+        try { await JS.InvokeVoidAsync("dataTable.initResize", _tableId + "-tbl", columnIndex, e.ClientX); }
+        catch { }
+    }
+
+    // ── Keyboard Navigation (JS → .NET) ─────────────────────────────────────────
+
+    [JSInvokable]
+    public async Task HandleKeyNav(string key)
+    {
+        var sorted = GetSortedItems();
+        var paged = GetPagedItems(sorted).ToList();
+        if (key == "ArrowDown") _focusedRowIndex = Math.Min(_focusedRowIndex + 1, paged.Count - 1);
+        else if (key == "ArrowUp") _focusedRowIndex = Math.Max(_focusedRowIndex - 1, 0);
+
+        if (_focusedRowIndex >= 0)
+        {
+            try { await JS.InvokeVoidAsync("dataTable.focusRow", _tableId + "-tbl", _focusedRowIndex); }
+            catch { }
+        }
+    }
+
+    [JSInvokable]
+    public async Task HandleKeyAction(string key)
+    {
+        var sorted = GetSortedItems();
+        var paged = GetPagedItems(sorted).ToList();
+        if (_focusedRowIndex < 0 || _focusedRowIndex >= paged.Count) return;
+        var item = paged[_focusedRowIndex];
+        if (key == "Enter") await HandleRowClick(item);
+        else if (key == " " && Selectable) await ToggleRowSelection(item);
+    }
+
+    // ── Export ───────────────────────────────────────────────────────────────────
+
+    private List<ExportColumnDef<TItem>> BuildExportColumns() =>
+        GetVisibleColumns()
+            .Select(col => new ExportColumnDef<TItem>(
+                col.Title,
+                item => col.ExportValue?.Invoke(item) ?? string.Empty))
+            .ToList();
+
+    private async Task ExportCsvAsync()
+    {
+        var bytes = ExportService.ExportCsv(GetSortedItems(), BuildExportColumns());
+        await DownloadFileAsync($"{ExportFileName}.csv", "text/csv;charset=utf-8", bytes);
+    }
+
+    private async Task ExportExcelAsync()
+    {
+        var bytes = ExportService.ExportExcel(GetSortedItems(), BuildExportColumns(), ExportFileName);
+        await DownloadFileAsync($"{ExportFileName}.xlsx",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", bytes);
+    }
+
+    private async Task ExportPdfAsync()
+    {
+        var bytes = ExportService.ExportPdf(GetSortedItems(), BuildExportColumns(), ExportFileName);
+        await DownloadFileAsync($"{ExportFileName}.pdf", "application/pdf", bytes);
+    }
+
+    private async Task DownloadFileAsync(string fileName, string contentType, byte[] bytes)
+    {
+        try
+        {
+            var base64 = Convert.ToBase64String(bytes);
+            await JS.InvokeVoidAsync("dataTable.downloadFile", fileName, contentType, base64);
+        }
+        catch { }
+    }
+
+    // ── Row Rendering ─────────────────────────────────────────────────────────────
+
+    private RenderFragment RenderRow(TItem item, int rowIndex, List<DataColumn<TItem>> cols) => builder =>
+    {
+        var isSelected = _selectedItems.Contains(item);
+        var isFocused = rowIndex >= 0 && rowIndex == _focusedRowIndex;
+        var rowCss = string.Join(" ", new[]
+        {
+            isSelected ? "fc-dt-row-selected" : null,
+            isFocused  ? "fc-dt-row-focused"  : null,
+            (Clickable || OnRowClick.HasDelegate) ? "fc-list-row-clickable" : null,
+            RowClass?.Invoke(item)
+        }.Where(s => !string.IsNullOrEmpty(s)));
+
+        builder.OpenElement(0, "tr");
+        if (!string.IsNullOrEmpty(rowCss)) builder.AddAttribute(1, "class", rowCss);
+        builder.AddAttribute(2, "tabindex", "0");
+        builder.AddAttribute(3, "role", "row");
+        if (Clickable || OnRowClick.HasDelegate)
+            builder.AddAttribute(4, "onclick", EventCallback.Factory.Create<MouseEventArgs>(this, _ => HandleRowClick(item)));
+
+        if (Selectable)
+        {
+            builder.OpenElement(10, "td");
+            builder.AddAttribute(11, "class", "fc-dt-checkbox-cell");
+            builder.OpenElement(12, "input");
+            builder.AddAttribute(13, "type", "checkbox");
+            builder.AddAttribute(14, "checked", isSelected);
+            builder.AddAttribute(15, "onchange", EventCallback.Factory.Create<ChangeEventArgs>(this, _ => ToggleRowSelection(item)));
+            builder.AddAttribute(16, "onclick", "event.stopPropagation()");
+            builder.CloseElement(); // input
+            builder.CloseElement(); // td
+        }
+
+        foreach (var col in cols)
+        {
+            builder.OpenElement(20, "td");
+            var tdCls = new List<string>();
+            if (!string.IsNullOrEmpty(col.CellClass)) tdCls.Add(col.CellClass);
+            if (col.Align == "center") tdCls.Add("fc-dt-align-center");
+            else if (col.Align == "right") tdCls.Add("fc-dt-align-right");
+            if (tdCls.Count > 0) builder.AddAttribute(21, "class", string.Join(" ", tdCls));
+
+            if (col.CellTemplate is not null)
+                builder.AddContent(22, col.CellTemplate(item));
+
+            builder.CloseElement(); // td
+        }
+
+        builder.CloseElement(); // tr
+    };
+}

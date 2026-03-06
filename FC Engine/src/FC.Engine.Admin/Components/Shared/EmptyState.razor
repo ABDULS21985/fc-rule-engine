@@ -1,0 +1,318 @@
+@* Universal empty state component — illustration + heading + description + actions.
+   Use Context to pick a built-in SVG illustration, or supply your own via IllustrationContent. *@
+
+<div class="fc-empty @SizeClass" role="status" aria-live="polite">
+
+    @* ── Illustration ────────────────────────────────── *@
+    <div class="fc-empty__illu" aria-hidden="true">
+        @if (IllustrationContent is not null)
+        {
+            @IllustrationContent
+        }
+        else
+        {
+            @RenderIllustration()
+        }
+    </div>
+
+    @* ── Heading ─────────────────────────────────────── *@
+    <h3 class="fc-empty__heading">
+        @if (Context == "search" && !string.IsNullOrWhiteSpace(SearchQuery))
+        {
+            <span>No results for &ldquo;@SearchQuery&rdquo;</span>
+        }
+        else
+        {
+            @Heading
+        }
+    </h3>
+
+    @* ── Description ─────────────────────────────────── *@
+    @if (!string.IsNullOrEmpty(Description))
+    {
+        <p class="fc-empty__desc">@Description</p>
+    }
+
+    @* ── Search extras (Did you mean / Popular) ───────── *@
+    @if (Context == "search")
+    {
+        <div class="fc-empty__search-meta">
+            @if (Suggestions?.Any() == true)
+            {
+                <div class="fc-empty__suggestions">
+                    <span class="fc-empty__meta-label">Did you mean?</span>
+                    <div class="fc-empty__suggestion-chips">
+                        @foreach (var s in Suggestions)
+                        {
+                            <button class="fc-empty__chip" @onclick="() => OnSuggestionClick.InvokeAsync(s)">@s</button>
+                        }
+                    </div>
+                </div>
+            }
+            @if (PopularLinks?.Any() == true)
+            {
+                <div class="fc-empty__popular">
+                    <span class="fc-empty__meta-label">Popular pages</span>
+                    <ul class="fc-empty__popular-list">
+                        @foreach (var (label, href) in PopularLinks)
+                        {
+                            <li><a href="@href" class="fc-empty__popular-link">@label</a></li>
+                        }
+                    </ul>
+                </div>
+            }
+        </div>
+    }
+
+    @* ── Actions ─────────────────────────────────────── *@
+    @if (HasActions)
+    {
+        <div class="fc-empty__actions">
+            @if (!string.IsNullOrEmpty(PrimaryActionLabel))
+            {
+                @if (!string.IsNullOrEmpty(PrimaryActionHref))
+                {
+                    <a href="@PrimaryActionHref" class="fc-btn fc-btn--gold">@PrimaryActionLabel</a>
+                }
+                else
+                {
+                    <button class="fc-btn fc-btn--gold" @onclick="OnPrimaryAction">@PrimaryActionLabel</button>
+                }
+            }
+            @if (!string.IsNullOrEmpty(SecondaryActionLabel))
+            {
+                @if (!string.IsNullOrEmpty(SecondaryActionHref))
+                {
+                    <a href="@SecondaryActionHref" class="fc-btn fc-btn--ghost">@SecondaryActionLabel</a>
+                }
+                else
+                {
+                    <button class="fc-btn fc-btn--ghost" @onclick="OnSecondaryAction">@SecondaryActionLabel</button>
+                }
+            }
+        </div>
+    }
+
+</div>
+
+@code {
+    // ── Parameters ────────────────────────────────────────
+    /// <summary>Built-in illustration context: generic | tenants | templates | submissions |
+    /// formulas | modules | users | search | permissions | webhooks | invoices | data</summary>
+    [Parameter] public string Context { get; set; } = "generic";
+
+    [Parameter] public string Heading { get; set; } = "Nothing here yet";
+    [Parameter] public string Description { get; set; } = "";
+
+    [Parameter] public string? PrimaryActionLabel { get; set; }
+    [Parameter] public string? PrimaryActionHref { get; set; }
+    [Parameter] public EventCallback OnPrimaryAction { get; set; }
+
+    [Parameter] public string? SecondaryActionLabel { get; set; }
+    [Parameter] public string? SecondaryActionHref { get; set; }
+    [Parameter] public EventCallback OnSecondaryAction { get; set; }
+
+    /// <summary>Override the built-in illustration with custom markup.</summary>
+    [Parameter] public RenderFragment? IllustrationContent { get; set; }
+
+    // Search context
+    [Parameter] public string? SearchQuery { get; set; }
+    [Parameter] public IEnumerable<string>? Suggestions { get; set; }
+    [Parameter] public IEnumerable<(string Label, string Href)>? PopularLinks { get; set; }
+    [Parameter] public EventCallback<string> OnSuggestionClick { get; set; }
+
+    /// <summary>sm | default | lg</summary>
+    [Parameter] public string Size { get; set; } = "default";
+
+    // ── Computed ──────────────────────────────────────────
+    private string SizeClass => Size switch
+    {
+        "sm" => "fc-empty--sm",
+        "lg" => "fc-empty--lg",
+        _    => ""
+    };
+
+    private bool HasActions =>
+        !string.IsNullOrEmpty(PrimaryActionLabel) ||
+        !string.IsNullOrEmpty(SecondaryActionLabel);
+
+    // ── Illustrations ─────────────────────────────────────
+    private RenderFragment RenderIllustration() => Context switch
+    {
+        "tenants"     => Tenants,
+        "templates"   => Templates,
+        "submissions" => Submissions,
+        "formulas"    => Formulas,
+        "modules"     => Modules,
+        "users"       => Users,
+        "search"      => Search,
+        "permissions" => Permissions,
+        "webhooks"    => Webhooks,
+        "invoices"    => Invoices,
+        "data"        => Data,
+        _             => Generic
+    };
+
+    // ── SVG Illustrations (96×96 outline, brand-green via currentColor) ──
+    private static RenderFragment Tenants => __builder =>
+    {
+        <svg viewBox="0 0 96 96" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" width="96" height="96">
+            <!-- Building body -->
+            <rect x="12" y="28" width="72" height="58" rx="3"/>
+            <!-- Roof line -->
+            <polyline points="4,30 48,8 92,30"/>
+            <!-- Door -->
+            <rect x="38" y="58" width="20" height="28" rx="2"/>
+            <!-- Windows row 1 -->
+            <rect x="20" y="38" width="14" height="12" rx="2"/>
+            <rect x="62" y="38" width="14" height="12" rx="2"/>
+            <!-- Windows row 2 -->
+            <rect x="20" y="56" width="14" height="12" rx="2"/>
+            <rect x="62" y="56" width="14" height="12" rx="2"/>
+            <!-- Door knob -->
+            <circle cx="54" cy="74" r="2" fill="currentColor" stroke="none"/>
+        </svg>;
+    };
+
+    private static RenderFragment Templates => __builder =>
+    {
+        <svg viewBox="0 0 96 96" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" width="96" height="96">
+            <!-- Document -->
+            <path d="M20 12 H62 L76 26 V88 H20 Z"/>
+            <!-- Folded corner -->
+            <polyline points="62,12 62,26 76,26"/>
+            <!-- Text lines -->
+            <line x1="32" y1="42" x2="64" y2="42"/>
+            <line x1="32" y1="54" x2="64" y2="54"/>
+            <line x1="32" y1="66" x2="52" y2="66"/>
+            <!-- Formula accent dot -->
+            <circle cx="32" cy="32" r="4" fill="currentColor" stroke="none" opacity="0.3"/>
+        </svg>;
+    };
+
+    private static RenderFragment Submissions => __builder =>
+    {
+        <svg viewBox="0 0 96 96" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" width="96" height="96">
+            <!-- Inbox tray -->
+            <path d="M12 60 H34 L40 72 H56 L62 60 H84 V84 H12 Z"/>
+            <!-- Tray lid -->
+            <rect x="12" y="16" width="72" height="44" rx="3"/>
+            <!-- Down arrow -->
+            <line x1="48" y1="28" x2="48" y2="52"/>
+            <polyline points="38,44 48,54 58,44"/>
+        </svg>;
+    };
+
+    private static RenderFragment Formulas => __builder =>
+    {
+        <svg viewBox="0 0 96 96" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" width="96" height="96">
+            <!-- Circle background -->
+            <circle cx="48" cy="48" r="36"/>
+            <!-- ƒ symbol -->
+            <path d="M36 68 Q36 32 52 28 Q62 26 66 32" />
+            <line x1="30" y1="48" x2="60" y2="48"/>
+            <!-- x subscript -->
+            <line x1="54" y1="60" x2="64" y2="72"/>
+            <line x1="64" y1="60" x2="54" y2="72"/>
+        </svg>;
+    };
+
+    private static RenderFragment Modules => __builder =>
+    {
+        <svg viewBox="0 0 96 96" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" width="96" height="96">
+            <!-- Main puzzle piece -->
+            <path d="M12 12 H48 V30 Q54 24 60 30 Q66 36 60 42 H48 V80 H12 V50 Q6 44 12 38 Q18 32 24 38 Z"/>
+            <!-- Second piece hint (top-right) -->
+            <rect x="54" y="48" width="30" height="32" rx="4" opacity="0.35"/>
+        </svg>;
+    };
+
+    private static RenderFragment Users => __builder =>
+    {
+        <svg viewBox="0 0 96 96" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" width="96" height="96">
+            <!-- Person circle -->
+            <circle cx="40" cy="34" r="18"/>
+            <!-- Body arc -->
+            <path d="M8 86 Q8 64 40 64 Q72 64 72 86"/>
+            <!-- Plus sign -->
+            <circle cx="72" cy="26" r="16" fill="var(--cbn-surface,white)" stroke="currentColor"/>
+            <line x1="72" y1="18" x2="72" y2="34"/>
+            <line x1="64" y1="26" x2="80" y2="26"/>
+        </svg>;
+    };
+
+    private static RenderFragment Search => __builder =>
+    {
+        <svg viewBox="0 0 96 96" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" width="96" height="96">
+            <!-- Magnifying glass -->
+            <circle cx="40" cy="40" r="26"/>
+            <line x1="58" y1="58" x2="82" y2="82"/>
+            <!-- X inside -->
+            <line x1="30" y1="30" x2="50" y2="50"/>
+            <line x1="50" y1="30" x2="30" y2="50"/>
+        </svg>;
+    };
+
+    private static RenderFragment Permissions => __builder =>
+    {
+        <svg viewBox="0 0 96 96" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" width="96" height="96">
+            <!-- Shield -->
+            <path d="M48 8 L84 22 V50 Q84 76 48 88 Q12 76 12 50 V22 Z"/>
+            <!-- X mark -->
+            <line x1="36" y1="42" x2="60" y2="66"/>
+            <line x1="60" y1="42" x2="36" y2="66"/>
+        </svg>;
+    };
+
+    private static RenderFragment Webhooks => __builder =>
+    {
+        <svg viewBox="0 0 96 96" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" width="96" height="96">
+            <!-- Cloud -->
+            <path d="M22 64 Q12 64 12 52 Q12 42 22 40 Q20 22 36 18 Q50 14 56 28 Q68 24 74 34 Q84 36 84 48 Q84 64 70 64 Z"/>
+            <!-- Lightning bolt -->
+            <polyline points="52,36 40,54 56,54 44,72"/>
+        </svg>;
+    };
+
+    private static RenderFragment Invoices => __builder =>
+    {
+        <svg viewBox="0 0 96 96" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" width="96" height="96">
+            <!-- Receipt -->
+            <path d="M16 8 H80 V88 L70 80 L60 88 L48 80 L36 88 L26 80 L16 88 Z"/>
+            <!-- Dollar sign -->
+            <line x1="48" y1="24" x2="48" y2="32"/>
+            <path d="M38 32 Q38 40 48 40 Q58 40 58 50 Q58 60 48 60"/>
+            <line x1="48" y1="60" x2="48" y2="68"/>
+            <!-- Lines -->
+            <line x1="28" y1="74" x2="68" y2="74"/>
+        </svg>;
+    };
+
+    private static RenderFragment Data => __builder =>
+    {
+        <svg viewBox="0 0 96 96" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" width="96" height="96">
+            <!-- Top cylinder -->
+            <ellipse cx="48" cy="24" rx="32" ry="10"/>
+            <line x1="16" y1="24" x2="16" y2="50"/>
+            <line x1="80" y1="24" x2="80" y2="50"/>
+            <ellipse cx="48" cy="50" rx="32" ry="10"/>
+            <!-- Bottom cylinder -->
+            <line x1="16" y1="50" x2="16" y2="76"/>
+            <line x1="80" y1="50" x2="80" y2="76"/>
+            <ellipse cx="48" cy="76" rx="32" ry="10"/>
+        </svg>;
+    };
+
+    private static RenderFragment Generic => __builder =>
+    {
+        <svg viewBox="0 0 96 96" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" width="96" height="96">
+            <!-- Open box -->
+            <path d="M12 48 L12 86 H84 V48"/>
+            <!-- Box flaps open -->
+            <polyline points="4,32 48,52 92,32"/>
+            <polyline points="12,48 4,32 28,20 48,32 68,20 92,32 84,48"/>
+            <!-- Centre seam -->
+            <line x1="48" y1="32" x2="48" y2="52"/>
+        </svg>;
+    };
+}

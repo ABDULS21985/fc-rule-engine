@@ -8,38 +8,23 @@
 
 <PageTitle>Tenant Detail</PageTitle>
 
-<div class="fc-page">
+<PageHeader Title="@(_data?.TenantName ?? "Tenant Detail")"
+            BackUrl="/platform/tenants">
+    <PrimaryAction>
+        @if (_data is not null)
+        {
+            <button class="fc-btn fc-btn--primary" @onclick="Impersonate" type="button">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16" aria-hidden="true"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                Impersonate
+            </button>
+        }
+    </PrimaryAction>
+</PageHeader>
 
-    <!-- Breadcrumb -->
-    <nav class="fc-breadcrumb" aria-label="Breadcrumb">
-        <a href="/">Dashboard</a>
-        <span class="fc-breadcrumb-sep" aria-hidden="true">/</span>
-        <a href="/platform/tenants">Tenants</a>
-        <span class="fc-breadcrumb-sep" aria-hidden="true">/</span>
-        <span class="fc-breadcrumb-current">@(_data?.TenantName ?? "Detail")</span>
-    </nav>
+<div class="fc-page">
 
     @if (_loading)
     {
-        <!-- Skeleton Header -->
-        <div class="fc-page-header">
-            <div class="fc-page-header-top">
-                <div>
-                    <h1><div class="fc-skel fc-skel-text" style="width:220px;height:28px;"></div></h1>
-                    <p class="fc-page-header-subtitle"><div class="fc-skel fc-skel-text" style="width:320px;height:16px;"></div></p>
-                </div>
-                <div style="display:flex;gap:0.5rem;">
-                    <div class="fc-skel" style="width:80px;height:36px;border-radius:6px;"></div>
-                    <div class="fc-skel" style="width:110px;height:36px;border-radius:6px;"></div>
-                </div>
-            </div>
-            <div class="fc-chip-group">
-                @for (var i = 0; i < 4; i++)
-                {
-                    <span class="fc-chip"><div class="fc-skel fc-skel-text" style="width:80px;height:16px;"></div></span>
-                }
-            </div>
-        </div>
 
         <!-- Skeleton Tabs -->
         <div class="fc-tabs">
@@ -76,43 +61,6 @@
     }
     else
     {
-        <!-- Page Header -->
-        <div class="fc-page-header">
-            <div class="fc-page-header-top">
-                <div>
-                    <h1>@_data.TenantName</h1>
-                    <p class="fc-page-header-subtitle"><code>@_data.TenantSlug</code> &middot; @_data.CurrentPlanName (@_data.CurrentPlanCode)</p>
-                </div>
-                <div style="display:flex;gap:0.5rem;">
-                    <button class="fc-btn fc-btn--outline" @onclick="Back" type="button">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16" aria-hidden="true"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
-                        Back
-                    </button>
-                    <button class="fc-btn fc-btn--primary" @onclick="Impersonate" type="button">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16" aria-hidden="true"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-                        Impersonate
-                    </button>
-                </div>
-            </div>
-
-            <!-- Summary Chips -->
-            <div class="fc-chip-group">
-                <span class="fc-chip">
-                    <span class="fc-chip__dot @(_data.Status == TenantStatus.Active ? "fc-chip__dot--active" : "")" aria-hidden="true"></span>
-                    @_data.Status
-                </span>
-                <span class="fc-chip">
-                    <span class="fc-chip__count">@_data.Usage.UsersUsed / @_data.Usage.UsersLimit</span> Users
-                </span>
-                <span class="fc-chip">
-                    <span class="fc-chip__count">@_data.Usage.ModulesUsed / @_data.Usage.ModulesLimit</span> Modules
-                </span>
-                <span class="fc-chip">
-                    <span class="fc-chip__count">@_data.CreatedAt.ToString("dd MMM yyyy")</span> Created
-                </span>
-            </div>
-        </div>
-
         <!-- Tabs -->
         <div class="fc-tabs">
             <button class="fc-tab @(_tab == "overview" ? "fc-tab-active" : "")" @onclick='() => SetTab("overview")'>Overview</button>

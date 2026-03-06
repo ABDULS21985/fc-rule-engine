@@ -11,58 +11,17 @@
 @inject ToastService Toast
 @inject DialogService Dialog
 
+<PageHeader Title="User Management"
+            Subtitle="Manage platform identities, roles, and access across the FC Engine administrative portal.">
+    <PrimaryAction>
+        <button class="fc-btn fc-btn--primary" @onclick="OpenCreateModal" type="button">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            Add User
+        </button>
+    </PrimaryAction>
+</PageHeader>
+
 <div class="fc-page">
-
-    <!-- Breadcrumb -->
-    <nav class="fc-breadcrumb" aria-label="Breadcrumb">
-        <a href="/">Dashboard</a>
-        <span class="fc-breadcrumb-sep" aria-hidden="true">/</span>
-        <span class="fc-breadcrumb-current">Users</span>
-    </nav>
-
-    <!-- Page Header -->
-    <div class="fc-page-header">
-        <div class="fc-page-header-top">
-            <div>
-                <h1>User Management</h1>
-                <p class="fc-page-header-subtitle">Manage platform identities, roles, and access across the FC Engine administrative portal.</p>
-            </div>
-            <button class="fc-btn fc-btn--primary" @onclick="OpenCreateModal" type="button">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                Add User
-            </button>
-        </div>
-
-        <!-- Summary Chips -->
-        <div class="fc-chip-group">
-            <span class="fc-chip">
-                <span class="fc-chip__count">@_users.Count</span> Total Users
-            </span>
-            <span class="fc-chip">
-                <span class="fc-chip__dot fc-chip__dot--active" aria-hidden="true"></span>
-                <span class="fc-chip__count">@_users.Count(u => u.IsActive)</span> Active
-            </span>
-            @if (_users.Any(u => !u.IsActive))
-            {
-                <span class="fc-chip">
-                    <span class="fc-chip__dot fc-chip__dot--inactive" aria-hidden="true"></span>
-                    <span class="fc-chip__count">@_users.Count(u => !u.IsActive)</span> Inactive
-                </span>
-            }
-            <span class="fc-chip">
-                <span class="fc-chip__dot fc-chip__dot--admin" aria-hidden="true"></span>
-                <span class="fc-chip__count">@_users.Count(u => u.Role == PortalRole.Admin)</span> Admins
-            </span>
-            <span class="fc-chip">
-                <span class="fc-chip__dot fc-chip__dot--approver" aria-hidden="true"></span>
-                <span class="fc-chip__count">@_users.Count(u => u.Role == PortalRole.Approver)</span> Approvers
-            </span>
-            <span class="fc-chip">
-                <span class="fc-chip__dot fc-chip__dot--viewer" aria-hidden="true"></span>
-                <span class="fc-chip__count">@_users.Count(u => u.Role == PortalRole.Viewer)</span> Viewers
-            </span>
-        </div>
-    </div>
 
     <!-- Toolbar -->
     <div class="fc-toolbar">

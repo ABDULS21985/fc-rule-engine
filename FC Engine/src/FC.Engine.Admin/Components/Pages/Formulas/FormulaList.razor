@@ -12,22 +12,122 @@
 @inject ToastService Toast
 @inject DialogService Dialog
 
-<div class="fc-list-page">
-    <div class="fc-list-page-header">
-        <div class="fc-list-page-header-text">
-            <h1>
-                Intra-Sheet Formulas
-                @if (!_loading)
-                {
-                    <span class="fc-list-count-chip">@_allFormulas.Count</span>
-                }
-            </h1>
-            <p>View and manage validation formulas across all templates. Formulas define how computed fields are validated.</p>
-        </div>
-    </div>
+<PageHeader Title="Intra-Sheet Formulas"
+            Subtitle="View and manage validation formulas across all templates. Formulas define how computed fields are validated."
+            CountBadge="@(!_loading ? _allFormulas.Count : null)" />
 
-    <div class="fc-list-card">
-        <div class="fc-list-toolbar">
+<div class="fc-list-page">
+
+    @if (_showAddForm)
+    {
+        <div class="fc-list-inline-form">
+            <h3>@(_editFormulaId.HasValue ? "Edit Formula" : "Add Intra-Sheet Formula")</h3>
+            <div class="grid-2">
+                <div class="form-group">
+                    <label>Template</label>
+                    <select class="form-control" @bind="_addTemplateCode" @bind:after="OnTemplateSelected" disabled="@(_editFormulaId.HasValue)">
+                        <option value="">Select template...</option>
+                        @foreach (var rc in _returnCodes)
+                        {
+                            <option value="@rc">@rc</option>
+                        }
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Rule Code</label>
+                    <input class="form-control" @bind="_addRuleCode" placeholder="e.g. MFCR300-SUM-001" disabled="@(_editFormulaId.HasValue)" />
+                </div>
+                <div class="form-group">
+                    <label>Rule Name / Description</label>
+                    <input class="form-control" @bind="_addRuleName" placeholder="e.g. TOTAL CASH = Notes + Coins" />
+                </div>
+                <div class="form-group">
+                    <label>Formula Type</label>
+                    <select class="form-control" @bind="_addFormulaType">
+                        @foreach (var ft in Enum.GetValues<FormulaType>())
+                        {
+                            <option value="@ft">@ft</option>
+                        }
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Target Field</label>
+                    @if (_selectedTemplateFields.Any())
+                    {
+                        <select class="form-control" @bind="_addTargetField">
+                            <option value="">Select field...</option>
+                            @foreach (var f in _selectedTemplateFields)
+                            {
+                                <option value="@f">@f</option>
+                            }
+                        </select>
+                    }
+                    else
+                    {
+                        <input class="form-control" @bind="_addTargetField" placeholder="e.g. total_cash" />
+                    }
+                </div>
+                <div class="form-group">
+                    <label>Target Line Code (Item Code)</label>
+                    <input class="form-control" @bind="_addTargetLineCode" placeholder="e.g. 10140" />
+                </div>
+                <div class="form-group">
+                    <label>Operand Fields (comma-separated)</label>
+                    <input class="form-control" @bind="_addOperandFields" placeholder="e.g. cash_notes,cash_coins" />
+                </div>
+                @if (_addFormulaType == FormulaType.Custom)
+                {
+                    <div class="form-group">
+                        <label>Custom Expression (item-code formula)</label>
+                        <input class="form-control" @bind="_addExpression" placeholder="e.g. 10420+10430+10440-10510" />
+                    </div>
+                }
+                <div class="form-group">
+                    <label>Tolerance</label>
+                    <input type="number" step="0.01" class="form-control" @bind="_addTolerance" />
+                </div>
+                <div class="form-group">
+                    <label>Severity</label>
+                    <select class="form-control" @bind="_addSeverity">
+                        @foreach (var s in Enum.GetValues<ValidationSeverity>())
+                        {
+                            <option value="@s">@s</option>
+                        }
+                    </select>
+                </div>
+            </div>
+            @if (_selectedTemplateFields.Any())
+            {
+                <div style="margin-top:var(--space-2);color:var(--cbn-text-secondary);font-size:var(--text-body-sm);">
+                    Available fields: @string.Join(", ", _selectedTemplateFields.Take(20))@(_selectedTemplateFields.Count > 20 ? $"... (+{_selectedTemplateFields.Count - 20} more)" : "")
+                </div>
+            }
+            <div class="fc-list-form-actions">
+                @if (_editFormulaId.HasValue)
+                {
+                    <button class="fc-btn fc-btn--primary fc-btn--sm" @onclick="UpdateFormula">Update</button>
+                }
+                else
+                {
+                    <button class="fc-btn fc-btn--primary fc-btn--sm" @onclick="AddFormula">Add</button>
+                }
+                <button class="fc-btn fc-btn--outline fc-btn--sm" @onclick="CancelForm">Cancel</button>
+            </div>
+        </div>
+    }
+
+    <DataTable TItem="(string ReturnCode, IntraSheetFormula Formula)"
+               Items="@FilteredFormulas.ToList()"
+               Loading="_loading"
+               PageSize="30"
+               ShowPagination="true"
+               ShowPageSizeSelector="true"
+               Sortable="true"
+               EmptyTitle="No formulas found"
+               EmptyText="Try adjusting your search criteria or filters. You can also add a new formula to get started."
+               SkeletonRows="8"
+               ShowExport="false">
+        <ToolbarContent>
             <div class="fc-list-toolbar-filters">
                 <div class="fc-list-search-wrap">
                     <svg class="fc-list-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
@@ -58,221 +158,74 @@
                     </Authorized>
                 </AuthorizeView>
             </div>
-        </div>
-
-        @if (_showAddForm)
-        {
-            <div class="fc-list-inline-form">
-                <h3>@(_editFormulaId.HasValue ? "Edit Formula" : "Add Intra-Sheet Formula")</h3>
-                <div class="grid-2">
-                    <div class="form-group">
-                        <label>Template</label>
-                        <select class="form-control" @bind="_addTemplateCode" @bind:after="OnTemplateSelected" disabled="@(_editFormulaId.HasValue)">
-                            <option value="">Select template...</option>
-                            @foreach (var rc in _returnCodes)
-                            {
-                                <option value="@rc">@rc</option>
-                            }
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label>Rule Code</label>
-                        <input class="form-control" @bind="_addRuleCode" placeholder="e.g. MFCR300-SUM-001" disabled="@(_editFormulaId.HasValue)" />
-                    </div>
-                    <div class="form-group">
-                        <label>Rule Name / Description</label>
-                        <input class="form-control" @bind="_addRuleName" placeholder="e.g. TOTAL CASH = Notes + Coins" />
-                    </div>
-                    <div class="form-group">
-                        <label>Formula Type</label>
-                        <select class="form-control" @bind="_addFormulaType">
-                            @foreach (var ft in Enum.GetValues<FormulaType>())
-                            {
-                                <option value="@ft">@ft</option>
-                            }
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label>Target Field</label>
-                        @if (_selectedTemplateFields.Any())
-                        {
-                            <select class="form-control" @bind="_addTargetField">
-                                <option value="">Select field...</option>
-                                @foreach (var f in _selectedTemplateFields)
-                                {
-                                    <option value="@f">@f</option>
-                                }
-                            </select>
-                        }
-                        else
-                        {
-                            <input class="form-control" @bind="_addTargetField" placeholder="e.g. total_cash" />
-                        }
-                    </div>
-                    <div class="form-group">
-                        <label>Target Line Code (Item Code)</label>
-                        <input class="form-control" @bind="_addTargetLineCode" placeholder="e.g. 10140" />
-                    </div>
-                    <div class="form-group">
-                        <label>Operand Fields (comma-separated)</label>
-                        <input class="form-control" @bind="_addOperandFields" placeholder="e.g. cash_notes,cash_coins" />
-                    </div>
-                    @if (_addFormulaType == FormulaType.Custom)
+        </ToolbarContent>
+        <ChildContent>
+            <DataColumn TItem="(string ReturnCode, IntraSheetFormula Formula)" Title="Template" SortKey="x => x.ReturnCode" Width="100px">
+                <CellTemplate>
+                    <a class="fc-list-cell-link" href="/templates/@context.ReturnCode">@context.ReturnCode</a>
+                </CellTemplate>
+            </DataColumn>
+            <DataColumn TItem="(string ReturnCode, IntraSheetFormula Formula)" Title="Rule Code" SortKey="x => x.Formula.RuleCode" Width="160px">
+                <CellTemplate>
+                    <span class="fc-list-cell-code">@context.Formula.RuleCode</span>
+                </CellTemplate>
+            </DataColumn>
+            <DataColumn TItem="(string ReturnCode, IntraSheetFormula Formula)" Title="Name" SortKey="x => x.Formula.RuleName">
+                <CellTemplate>
+                    <span class="fc-list-cell-truncate" title="@context.Formula.RuleName">@context.Formula.RuleName</span>
+                </CellTemplate>
+            </DataColumn>
+            <DataColumn TItem="(string ReturnCode, IntraSheetFormula Formula)" Title="Type" Width="90px">
+                <CellTemplate>
+                    <span class="fc-badge @FormulaBadge(context.Formula.FormulaType.ToString())">@context.Formula.FormulaType</span>
+                </CellTemplate>
+            </DataColumn>
+            <DataColumn TItem="(string ReturnCode, IntraSheetFormula Formula)" Title="Target" Width="130px">
+                <CellTemplate>
+                    <span class="fc-list-cell-code">@context.Formula.TargetFieldName</span>
+                    @if (!string.IsNullOrEmpty(context.Formula.TargetLineCode))
                     {
-                        <div class="form-group">
-                            <label>Custom Expression (item-code formula)</label>
-                            <input class="form-control" @bind="_addExpression" placeholder="e.g. 10420+10430+10440-10510" />
-                        </div>
+                        <br /><span class="fc-list-cell-muted">@context.Formula.TargetLineCode</span>
                     }
-                    <div class="form-group">
-                        <label>Tolerance</label>
-                        <input type="number" step="0.01" class="form-control" @bind="_addTolerance" />
-                    </div>
-                    <div class="form-group">
-                        <label>Severity</label>
-                        <select class="form-control" @bind="_addSeverity">
-                            @foreach (var s in Enum.GetValues<ValidationSeverity>())
-                            {
-                                <option value="@s">@s</option>
-                            }
-                        </select>
-                    </div>
-                </div>
-                @if (_selectedTemplateFields.Any())
-                {
-                    <div style="margin-top:var(--space-2);color:var(--cbn-text-secondary);font-size:var(--text-body-sm);">
-                        Available fields: @string.Join(", ", _selectedTemplateFields.Take(20))@(_selectedTemplateFields.Count > 20 ? $"... (+{_selectedTemplateFields.Count - 20} more)" : "")
-                    </div>
-                }
-                <div class="fc-list-form-actions">
-                    @if (_editFormulaId.HasValue)
+                </CellTemplate>
+            </DataColumn>
+            <DataColumn TItem="(string ReturnCode, IntraSheetFormula Formula)" Title="Formula / Operands">
+                <CellTemplate>
+                    @if (context.Formula.FormulaType == FormulaType.Custom && !string.IsNullOrEmpty(context.Formula.CustomExpression))
                     {
-                        <button class="fc-btn fc-btn--primary fc-btn--sm" @onclick="UpdateFormula">Update</button>
+                        <span class="fc-list-cell-code fc-list-cell-truncate" title="@context.Formula.CustomExpression">@TruncateExpression(context.Formula.CustomExpression, 50)</span>
                     }
                     else
                     {
-                        <button class="fc-btn fc-btn--primary fc-btn--sm" @onclick="AddFormula">Add</button>
+                        <span class="fc-list-cell-code fc-list-cell-truncate" title="@context.Formula.OperandFields">@FormatOperands(context.Formula.OperandFields, context.Formula.FormulaType)</span>
                     }
-                    <button class="fc-btn fc-btn--outline fc-btn--sm" @onclick="CancelForm">Cancel</button>
-                </div>
-            </div>
-        }
+                </CellTemplate>
+            </DataColumn>
+            <DataColumn TItem="(string ReturnCode, IntraSheetFormula Formula)" Title="Tolerance" Width="90px">
+                <CellTemplate>
+                    <span class="fc-list-cell-muted">@context.Formula.ToleranceAmount</span>
+                </CellTemplate>
+            </DataColumn>
+            <DataColumn TItem="(string ReturnCode, IntraSheetFormula Formula)" Title="Severity" Width="90px">
+                <CellTemplate>
+                    <span class="fc-badge @StatusBadge(context.Formula.Severity.ToString())">@context.Formula.Severity</span>
+                </CellTemplate>
+            </DataColumn>
+            <DataColumn TItem="(string ReturnCode, IntraSheetFormula Formula)" Title="Actions" Width="110px">
+                <CellTemplate>
+                    <AuthorizeView Roles="Admin,Approver">
+                        <Authorized Context="editAuth">
+                            <div class="fc-list-row-actions">
+                                <button class="fc-btn fc-btn--ghost fc-btn--xs" @onclick="() => EditFormula(context.ReturnCode, context.Formula)" @onclick:stopPropagation="true">Edit</button>
+                                <button class="fc-btn fc-btn--ghost fc-btn--xs fc-btn--danger" @onclick="() => DeleteFormula(context.Formula)" @onclick:stopPropagation="true">Delete</button>
+                            </div>
+                        </Authorized>
+                    </AuthorizeView>
+                </CellTemplate>
+            </DataColumn>
+        </ChildContent>
+    </DataTable>
 
-        @if (_loading)
-        {
-            <div class="fc-list-skeleton">
-                @for (var i = 0; i < 8; i++)
-                {
-                    <div class="fc-list-skeleton-row">
-                        <div class="fc-list-skeleton-cell" style="width:80px;"></div>
-                        <div class="fc-list-skeleton-cell" style="width:120px;"></div>
-                        <div class="fc-list-skeleton-cell" style="flex:1;"></div>
-                        <div class="fc-list-skeleton-cell" style="width:60px;"></div>
-                        <div class="fc-list-skeleton-cell" style="width:80px;"></div>
-                        <div class="fc-list-skeleton-cell" style="width:40px;"></div>
-                    </div>
-                }
-            </div>
-        }
-        else if (!FilteredFormulas.Any())
-        {
-            <div class="fc-list-empty">
-                <svg class="fc-list-empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4.745 3A23.933 23.933 0 0 0 3 12c0 3.183.62 6.22 1.745 9M19.255 3C20.38 5.78 21 8.817 21 12s-.62 6.22-1.745 9M12 3v18"/><circle cx="12" cy="12" r="3"/></svg>
-                <h3 class="fc-list-empty-title">No formulas found</h3>
-                <p class="fc-list-empty-text">Try adjusting your search criteria or filters. You can also add a new formula to get started.</p>
-            </div>
-        }
-        else
-        {
-            <div class="fc-table-wrap">
-                <table class="fc-table" role="table">
-                    <thead>
-                        <tr>
-                            <th scope="col">Template</th>
-                            <th scope="col">Rule Code</th>
-                            <th scope="col">Name</th>
-                            <th scope="col">Type</th>
-                            <th scope="col">Target</th>
-                            <th scope="col">Formula / Operands</th>
-                            <th scope="col">Tolerance</th>
-                            <th scope="col">Severity</th>
-                            <th scope="col">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @foreach (var (rc, f) in PagedFormulas)
-                        {
-                            <tr>
-                                <td><a class="fc-list-cell-link" href="/templates/@rc">@rc</a></td>
-                                <td class="fc-list-cell-code">@f.RuleCode</td>
-                                <td class="fc-list-cell-truncate" title="@f.RuleName">@f.RuleName</td>
-                                <td>
-                                    <span class="fc-badge @FormulaBadge(f.FormulaType.ToString())">@f.FormulaType</span>
-                                </td>
-                                <td>
-                                    <span class="fc-list-cell-code">@f.TargetFieldName</span>
-                                    @if (!string.IsNullOrEmpty(f.TargetLineCode))
-                                    {
-                                        <br/><span class="fc-list-cell-muted">@f.TargetLineCode</span>
-                                    }
-                                </td>
-                                <td class="fc-list-cell-truncate">
-                                    @if (f.FormulaType == FormulaType.Custom && !string.IsNullOrEmpty(f.CustomExpression))
-                                    {
-                                        <span class="fc-list-cell-code" title="@f.CustomExpression">@TruncateExpression(f.CustomExpression, 50)</span>
-                                    }
-                                    else
-                                    {
-                                        <span class="fc-list-cell-code" title="@f.OperandFields">@FormatOperands(f.OperandFields, f.FormulaType)</span>
-                                    }
-                                </td>
-                                <td class="fc-list-cell-muted">@f.ToleranceAmount</td>
-                                <td>
-                                    <span class="fc-badge @StatusBadge(f.Severity.ToString())">@f.Severity</span>
-                                </td>
-                                <td>
-                                    <AuthorizeView Roles="Admin,Approver">
-                                        <Authorized Context="editAuth">
-                                            <div class="fc-list-row-actions">
-                                                <button class="fc-btn fc-btn--ghost fc-btn--xs" @onclick="() => EditFormula(rc, f)">Edit</button>
-                                                <button class="fc-btn fc-btn--ghost fc-btn--xs fc-btn--danger" @onclick="() => DeleteFormula(f)">Delete</button>
-                                            </div>
-                                        </Authorized>
-                                    </AuthorizeView>
-                                </td>
-                            </tr>
-                        }
-                    </tbody>
-                </table>
-            </div>
-
-            <div class="fc-list-footer">
-                <div class="fc-list-footer-summary">
-                    Showing <strong>@PagedFormulas.Count()</strong> of <strong>@FilteredFormulas.Count()</strong> formulas
-                    @if (!string.IsNullOrEmpty(_templateFilter))
-                    {
-                        <span> &mdash; filtered to <strong>@_templateFilter</strong></span>
-                    }
-                    @if (TotalPages > 1)
-                    {
-                        <span> &mdash; Page @_currentPage of @TotalPages</span>
-                    }
-                </div>
-                @if (TotalPages > 1)
-                {
-                    <div class="fc-list-pagination">
-                        <button class="fc-list-page-btn" disabled="@(_currentPage <= 1)" @onclick="() => _currentPage--">&laquo;</button>
-                        @for (var p = Math.Max(1, _currentPage - 2); p <= Math.Min(TotalPages, _currentPage + 2); p++)
-                        {
-                            var page = p;
-                            <button class="fc-list-page-btn @(page == _currentPage ? "fc-list-page-btn-active" : "")" @onclick="() => _currentPage = page">@(page)</button>
-                        }
-                        <button class="fc-list-page-btn" disabled="@(_currentPage >= TotalPages)" @onclick="() => _currentPage++">&raquo;</button>
-                    </div>
-                }
-            </div>
-        }
-    </div>
 </div>
 
 @code {
@@ -280,8 +233,6 @@
     private string _search = "", _typeFilter = "", _templateFilter = "";
     private List<string> _returnCodes = new();
     private List<(string ReturnCode, IntraSheetFormula Formula)> _allFormulas = new();
-    private int _currentPage = 1;
-    private const int PageSize = 30;
 
     // Add/Edit form state
     private bool _showAddForm;
@@ -303,12 +254,6 @@
                         x.Formula.RuleName.Contains(_search, StringComparison.OrdinalIgnoreCase))
             .Where(x => string.IsNullOrEmpty(_typeFilter) || x.Formula.FormulaType.ToString() == _typeFilter)
             .Where(x => string.IsNullOrEmpty(_templateFilter) || x.ReturnCode == _templateFilter);
-
-    private IEnumerable<(string ReturnCode, IntraSheetFormula Formula)> PagedFormulas => FilteredFormulas
-        .Skip((_currentPage - 1) * PageSize)
-        .Take(PageSize);
-
-    private int TotalPages => Math.Max(1, (int)Math.Ceiling(FilteredFormulas.Count() / (double)PageSize));
 
     protected override async Task OnInitializedAsync()
     {

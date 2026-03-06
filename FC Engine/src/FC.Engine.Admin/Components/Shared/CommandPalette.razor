@@ -56,13 +56,12 @@
                 }
                 else
                 {
-                    @{ var flatIdx = 0; }
                     @foreach (var group in _groups)
                     {
                         <div class="cmd-palette-category">@group.Title</div>
                         @foreach (var item in group.Items)
                         {
-                            var idx = flatIdx;
+                            var idx = GetFlatIndex(group, item);
                             var isSelected = idx == _selectedIndex;
                             <div id="cmd-item-@idx"
                                  class="cmd-palette-item @(isSelected ? "cmd-palette-item-selected" : "")"
@@ -103,7 +102,6 @@
                                     <span class="cmd-palette-item-badge">Action</span>
                                 }
                             </div>
-                            flatIdx++;
                         }
                     }
                 }
@@ -301,6 +299,21 @@
 
         if (!string.IsNullOrEmpty(item.Url))
             Navigation.NavigateTo(item.Url);
+    }
+
+    private int GetFlatIndex(CommandGroup targetGroup, CommandItem targetItem)
+    {
+        var idx = 0;
+        foreach (var g in _groups)
+        {
+            foreach (var item in g.Items)
+            {
+                if (ReferenceEquals(g, targetGroup) && ReferenceEquals(item, targetItem))
+                    return idx;
+                idx++;
+            }
+        }
+        return 0;
     }
 
     private void UpdateSelectedItem()

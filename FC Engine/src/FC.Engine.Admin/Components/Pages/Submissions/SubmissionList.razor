@@ -7,23 +7,66 @@
 @inject ISubmissionRepository SubmissionRepo
 @inject NavigationManager Nav
 
-<div class="fc-list-page">
-    <div class="fc-list-page-header">
-        <div class="fc-list-page-header-text">
-            <h1>
-                Submissions
-                @if (_submissions.Any())
-                {
-                    <span class="fc-list-count-chip">@_submissions.Count</span>
-                }
-            </h1>
-            <p>View all return submissions and their validation results</p>
-        </div>
-    </div>
+<PageHeader Title="Submissions"
+            Subtitle="View all return submissions and their validation results"
+            CountBadge="@(_submissions.Any() ? _submissions.Count : null)">
+    <PrimaryAction>
+        <a href="/submissions/kanban" class="fc-btn fc-btn--outline fc-btn--sm">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14" aria-hidden="true"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+            Kanban View
+        </a>
+    </PrimaryAction>
+</PageHeader>
 
-    <div class="fc-list-card">
-        <div class="fc-list-toolbar">
-            <div class="fc-list-toolbar-filters">
+<div class="fc-list-page">
+
+    @if (!_searched && !_loading)
+    {
+        <div class="fc-list-card">
+            <div class="fc-list-toolbar">
+                <div class="fc-list-toolbar-filters">
+                    <div class="fc-list-search-wrap">
+                        <svg class="fc-list-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+                        <input class="fc-list-search-input" placeholder="Search by return code or institution..." @bind="_searchTerm" @bind:event="oninput" />
+                    </div>
+                    <input class="fc-list-filter-select" type="number" placeholder="Institution ID" @bind="_institutionId" style="max-width:160px;" />
+                    <select class="fc-list-filter-select" @bind="_statusFilter">
+                        <option value="">All Statuses</option>
+                        @foreach (var s in Enum.GetValues<SubmissionStatus>())
+                        {
+                            <option value="@s">@FormatStatus(s)</option>
+                        }
+                    </select>
+                    <button class="fc-btn fc-btn--primary fc-btn--sm" @onclick="Search">Search</button>
+                </div>
+            </div>
+
+            @if (_error != null)
+            {
+                <div class="alert alert-error" style="margin:var(--space-4) var(--space-5);border-radius:var(--radius-sm);">@_error</div>
+            }
+
+            <div class="fc-list-empty">
+                <svg class="fc-list-empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+                <h3 class="fc-list-empty-title">Search for submissions</h3>
+                <p class="fc-list-empty-text">Enter an Institution ID and click Search to view submission records and validation results.</p>
+            </div>
+        </div>
+    }
+    else
+    {
+        <DataTable TItem="Submission"
+                   Items="@FilteredSubmissions.ToList()"
+                   Loading="_loading"
+                   PageSize="20"
+                   ShowPagination="true"
+                   Sortable="true"
+                   Clickable="true"
+                   OnRowClick="@(item => ViewSubmission(item.Id))"
+                   EmptyTitle="No submissions found"
+                   EmptyText="No submissions match your search criteria."
+                   SkeletonRows="6">
+            <ToolbarContent>
                 <div class="fc-list-search-wrap">
                     <svg class="fc-list-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
                     <input class="fc-list-search-input" placeholder="Search by return code or institution..." @bind="_searchTerm" @bind:event="oninput" />
@@ -37,123 +80,60 @@
                     }
                 </select>
                 <button class="fc-btn fc-btn--primary fc-btn--sm" @onclick="Search">Search</button>
-            </div>
-            <div class="fc-list-toolbar-actions">
                 @if (_submissions.Any())
                 {
                     <button class="fc-btn fc-btn--outline fc-btn--sm" @onclick="ClearResults">Clear</button>
                 }
-            </div>
-        </div>
-
-        @if (_error != null)
-        {
-            <div class="alert alert-error" style="margin:var(--space-4) var(--space-5);border-radius:var(--radius-sm);">@_error</div>
-        }
-
-        @if (_loading)
-        {
-            <div class="fc-list-skeleton">
-                @for (var i = 0; i < 6; i++)
+                @if (_error != null)
                 {
-                    <div class="fc-list-skeleton-row">
-                        <div class="fc-list-skeleton-cell" style="width:40px;"></div>
-                        <div class="fc-list-skeleton-cell" style="width:80px;"></div>
-                        <div class="fc-list-skeleton-cell" style="flex:1;"></div>
-                        <div class="fc-list-skeleton-cell" style="width:100px;"></div>
-                        <div class="fc-list-skeleton-cell" style="width:70px;"></div>
-                        <div class="fc-list-skeleton-cell" style="width:120px;"></div>
-                    </div>
+                    <div class="alert alert-error" style="margin:var(--space-4) var(--space-5);border-radius:var(--radius-sm);">@_error</div>
                 }
-            </div>
-        }
-        else if (!_searched)
-        {
-            <div class="fc-list-empty">
-                <svg class="fc-list-empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
-                <h3 class="fc-list-empty-title">Search for submissions</h3>
-                <p class="fc-list-empty-text">Enter an Institution ID and click Search to view submission records and validation results.</p>
-            </div>
-        }
-        else if (!FilteredSubmissions.Any())
-        {
-            <div class="fc-list-empty">
-                <svg class="fc-list-empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/></svg>
-                <h3 class="fc-list-empty-title">No submissions found</h3>
-                <p class="fc-list-empty-text">No submissions match your search criteria. Try a different Institution ID or adjust filters.</p>
-            </div>
-        }
-        else
-        {
-            <div class="fc-table-wrap">
-                <table class="fc-table" role="table">
-                    <thead>
-                        <tr>
-                            <th scope="col">ID</th>
-                            <th scope="col">Return Code</th>
-                            <th scope="col">Institution</th>
-                            <th scope="col">Period</th>
-                            <th scope="col">Status</th>
-                            <th scope="col">Submitted</th>
-                            <th scope="col">Errors</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @foreach (var s in PagedSubmissions)
-                        {
-                            <tr class="fc-list-row-clickable" @onclick="() => ViewSubmission(s.Id)">
-                                <td><a class="fc-list-cell-link" href="/submissions/@s.Id">@s.Id</a></td>
-                                <td><a class="fc-list-cell-link" href="/templates/@s.ReturnCode">@s.ReturnCode</a></td>
-                                <td class="fc-list-cell-strong">@(s.Institution?.InstitutionName ?? "—")</td>
-                                <td class="fc-list-cell-muted">@(s.ReturnPeriod?.ReportingDate.ToString("yyyy-MM-dd") ?? "—")</td>
-                                <td>
-                                    <span class="fc-badge @StatusBadge(GetStatusClass(s.Status))">
-                                        @FormatStatus(s.Status)
-                                    </span>
-                                </td>
-                                <td class="fc-list-cell-muted">@s.CreatedAt.ToString("yyyy-MM-dd HH:mm")</td>
-                                <td>
-                                    @{
-                                        var errCount = s.ValidationReport?.Errors.Count ?? 0;
-                                    }
-                                    @if (errCount > 0)
-                                    {
-                                        <span class="fc-badge fc-badge--danger">@errCount</span>
-                                    }
-                                    else
-                                    {
-                                        <span class="fc-list-cell-muted">0</span>
-                                    }
-                                </td>
-                            </tr>
+            </ToolbarContent>
+            <ChildContent>
+                <DataColumn TItem="Submission" Title="ID" SortKey="x => x.Id">
+                    <CellTemplate>
+                        <a class="fc-list-cell-link" href="/submissions/@context.Id">@context.Id</a>
+                    </CellTemplate>
+                </DataColumn>
+                <DataColumn TItem="Submission" Title="Return Code" SortKey="x => x.ReturnCode">
+                    <CellTemplate>
+                        <a class="fc-list-cell-link" href="/templates/@context.ReturnCode">@context.ReturnCode</a>
+                    </CellTemplate>
+                </DataColumn>
+                <DataColumn TItem="Submission" Title="Institution" SortKey="x => x.Institution!.InstitutionName" CellClass="fc-list-cell-strong">
+                    <CellTemplate>@(context.Institution?.InstitutionName ?? "—")</CellTemplate>
+                </DataColumn>
+                <DataColumn TItem="Submission" Title="Period" SortKey="x => x.ReturnPeriod!.ReportingDate" CellClass="fc-list-cell-muted">
+                    <CellTemplate>@(context.ReturnPeriod?.ReportingDate.ToString("yyyy-MM-dd") ?? "—")</CellTemplate>
+                </DataColumn>
+                <DataColumn TItem="Submission" Title="Status" SortKey="x => x.Status">
+                    <CellTemplate>
+                        <span class="fc-badge @StatusBadge(GetStatusClass(context.Status))">
+                            @FormatStatus(context.Status)
+                        </span>
+                    </CellTemplate>
+                </DataColumn>
+                <DataColumn TItem="Submission" Title="Submitted" SortKey="x => x.CreatedAt" CellClass="fc-list-cell-muted">
+                    <CellTemplate>@context.CreatedAt.ToString("yyyy-MM-dd HH:mm")</CellTemplate>
+                </DataColumn>
+                <DataColumn TItem="Submission" Title="Errors" SortKey="x => x.ValidationReport!.Errors.Count">
+                    <CellTemplate>
+                        @{
+                            var errCount = context.ValidationReport?.Errors.Count ?? 0;
                         }
-                    </tbody>
-                </table>
-            </div>
-
-            <div class="fc-list-footer">
-                <div class="fc-list-footer-summary">
-                    Showing <strong>@PagedSubmissions.Count()</strong> of <strong>@FilteredSubmissions.Count()</strong> submissions
-                    @if (TotalPages > 1)
-                    {
-                        <span> &mdash; Page @_currentPage of @TotalPages</span>
-                    }
-                </div>
-                @if (TotalPages > 1)
-                {
-                    <div class="fc-list-pagination">
-                        <button class="fc-list-page-btn" disabled="@(_currentPage <= 1)" @onclick="() => _currentPage--">&laquo;</button>
-                        @for (var p = Math.Max(1, _currentPage - 2); p <= Math.Min(TotalPages, _currentPage + 2); p++)
+                        @if (errCount > 0)
                         {
-                            var page = p;
-                            <button class="fc-list-page-btn @(page == _currentPage ? "fc-list-page-btn-active" : "")" @onclick="() => _currentPage = page">@(page)</button>
+                            <span class="fc-badge fc-badge--danger">@errCount</span>
                         }
-                        <button class="fc-list-page-btn" disabled="@(_currentPage >= TotalPages)" @onclick="() => _currentPage++">&raquo;</button>
-                    </div>
-                }
-            </div>
-        }
-    </div>
+                        else
+                        {
+                            <span class="fc-list-cell-muted">0</span>
+                        }
+                    </CellTemplate>
+                </DataColumn>
+            </ChildContent>
+        </DataTable>
+    }
 </div>
 
 @code {
@@ -163,8 +143,6 @@
     private string? _error;
     private string _searchTerm = "";
     private string _statusFilter = "";
-    private int _currentPage = 1;
-    private const int PageSize = 20;
     private List<Submission> _submissions = new();
 
     private IEnumerable<Submission> FilteredSubmissions => _submissions
@@ -173,17 +151,10 @@
                     (s.Institution?.InstitutionName?.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase) ?? false))
         .Where(s => string.IsNullOrEmpty(_statusFilter) || s.Status.ToString() == _statusFilter);
 
-    private IEnumerable<Submission> PagedSubmissions => FilteredSubmissions
-        .Skip((_currentPage - 1) * PageSize)
-        .Take(PageSize);
-
-    private int TotalPages => Math.Max(1, (int)Math.Ceiling(FilteredSubmissions.Count() / (double)PageSize));
-
     private async Task Search()
     {
         _error = null;
         _searched = true;
-        _currentPage = 1;
         _loading = true;
         try
         {
@@ -209,7 +180,6 @@
         _error = null;
         _searchTerm = "";
         _statusFilter = "";
-        _currentPage = 1;
     }
 
     private void ViewSubmission(int id) => Nav.NavigateTo($"/submissions/{id}");

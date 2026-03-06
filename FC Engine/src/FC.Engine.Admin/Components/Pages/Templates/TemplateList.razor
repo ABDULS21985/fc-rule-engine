@@ -10,22 +10,80 @@
 @inject NavigationManager Nav
 @inject ToastService Toast
 
-<div class="fc-list-page">
-    <div class="fc-list-page-header">
-        <div class="fc-list-page-header-text">
-            <h1>
-                Return Templates
-                @if (!_loading)
-                {
-                    <span class="fc-list-count-chip">@_templates.Count</span>
-                }
-            </h1>
-            <p>Manage all published return templates, their fields, formulas, and physical table mappings</p>
-        </div>
-    </div>
+<PageHeader Title="Return Templates"
+            Subtitle="Manage all published return templates, their fields, formulas, and physical table mappings"
+            CountBadge="@(!_loading ? _templates.Count : null)">
+    <PrimaryAction>
+        <AuthorizeView Roles="Admin,Approver">
+            <Authorized>
+                <button class="fc-btn fc-btn--gold" @onclick="ShowCreateForm">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16" aria-hidden="true"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
+                    New Template
+                </button>
+            </Authorized>
+        </AuthorizeView>
+    </PrimaryAction>
+</PageHeader>
 
-    <div class="fc-list-card">
-        <div class="fc-list-toolbar">
+<div class="fc-list-page">
+
+    @if (_showCreateForm)
+    {
+        <div class="fc-list-inline-form">
+            <h3>Create New Template</h3>
+            <div class="grid-2">
+                <div class="form-group">
+                    <label>Return Code</label>
+                    <input class="form-control" @bind="_createRequest.ReturnCode" placeholder="e.g. MFCR 999" />
+                </div>
+                <div class="form-group">
+                    <label>Name</label>
+                    <input class="form-control" @bind="_createRequest.Name" placeholder="e.g. New Return Template" />
+                </div>
+                <div class="form-group">
+                    <label>Frequency</label>
+                    <select class="form-control" @bind="_createFrequency">
+                        @foreach (var f in Enum.GetValues<ReturnFrequency>())
+                        {
+                            <option value="@f">@f</option>
+                        }
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Structural Category</label>
+                    <select class="form-control" @bind="_createCategory">
+                        @foreach (var c in Enum.GetValues<StructuralCategory>())
+                        {
+                            <option value="@c">@c</option>
+                        }
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Description</label>
+                    <input class="form-control" @bind="_createRequest.Description" placeholder="Optional description" />
+                </div>
+            </div>
+            <div class="fc-list-form-actions">
+                <button class="fc-btn fc-btn--primary fc-btn--sm" @onclick="CreateTemplate">Create</button>
+                <button class="fc-btn fc-btn--outline fc-btn--sm" @onclick="CancelCreate">Cancel</button>
+            </div>
+        </div>
+    }
+
+    <DataTable TItem="CachedTemplate"
+               Items="@FilteredTemplates.ToList()"
+               Loading="_loading"
+               PageSize="25"
+               ShowPagination="true"
+               ShowPageSizeSelector="true"
+               Sortable="true"
+               Clickable="true"
+               OnRowClick="(t) => ViewTemplate(t.ReturnCode)"
+               EmptyTitle="No templates found"
+               EmptyText="Try adjusting your search criteria or filters to find what you're looking for."
+               SkeletonRows="6"
+               ShowExport="false">
+        <ToolbarContent>
             <div class="fc-list-toolbar-filters">
                 <div class="fc-list-search-wrap">
                     <svg class="fc-list-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
@@ -45,152 +103,57 @@
                     <option value="ItemCoded">ItemCoded</option>
                 </select>
             </div>
-            <div class="fc-list-toolbar-actions">
-                <AuthorizeView Roles="Admin,Approver">
-                    <Authorized Context="createAuth">
-                        <button class="fc-btn fc-btn--gold" @onclick="ShowCreateForm">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
-                            New Template
+        </ToolbarContent>
+        <ChildContent>
+            <DataColumn TItem="CachedTemplate" Title="Return Code" SortKey="x => x.ReturnCode" Width="120px">
+                <CellTemplate>
+                    <span class="fc-list-cell-code">@context.ReturnCode</span>
+                </CellTemplate>
+            </DataColumn>
+            <DataColumn TItem="CachedTemplate" Title="Name" SortKey="x => x.Name">
+                <CellTemplate>
+                    <span class="fc-list-cell-strong">@context.Name</span>
+                </CellTemplate>
+            </DataColumn>
+            <DataColumn TItem="CachedTemplate" Title="Category" Width="110px">
+                <CellTemplate>
+                    <span class="fc-badge @CategoryBadge(context.StructuralCategory)">
+                        @context.StructuralCategory
+                    </span>
+                </CellTemplate>
+            </DataColumn>
+            <DataColumn TItem="CachedTemplate" Title="Frequency" Width="110px">
+                <CellTemplate>
+                    <span class="fc-list-cell-muted">@GetFrequency(context.ReturnCode)</span>
+                </CellTemplate>
+            </DataColumn>
+            <DataColumn TItem="CachedTemplate" Title="Fields" Width="60px">
+                <CellTemplate>
+                    @context.CurrentVersion.Fields.Count
+                </CellTemplate>
+            </DataColumn>
+            <DataColumn TItem="CachedTemplate" Title="Formulas" Width="80px">
+                <CellTemplate>
+                    @context.CurrentVersion.IntraSheetFormulas.Count
+                </CellTemplate>
+            </DataColumn>
+            <DataColumn TItem="CachedTemplate" Title="Physical Table" Width="150px">
+                <CellTemplate>
+                    <span class="fc-list-cell-code">@context.PhysicalTableName</span>
+                </CellTemplate>
+            </DataColumn>
+            <DataColumn TItem="CachedTemplate" Title="" Width="60px">
+                <CellTemplate>
+                    <div class="fc-list-row-actions">
+                        <button class="fc-btn fc-btn--ghost fc-btn--xs" @onclick="() => ViewTemplate(context.ReturnCode)" @onclick:stopPropagation="true">
+                            View
                         </button>
-                    </Authorized>
-                </AuthorizeView>
-            </div>
-        </div>
+                    </div>
+                </CellTemplate>
+            </DataColumn>
+        </ChildContent>
+    </DataTable>
 
-        @if (_showCreateForm)
-        {
-            <div class="fc-list-inline-form">
-                <h3>Create New Template</h3>
-                <div class="grid-2">
-                    <div class="form-group">
-                        <label>Return Code</label>
-                        <input class="form-control" @bind="_createRequest.ReturnCode" placeholder="e.g. MFCR 999" />
-                    </div>
-                    <div class="form-group">
-                        <label>Name</label>
-                        <input class="form-control" @bind="_createRequest.Name" placeholder="e.g. New Return Template" />
-                    </div>
-                    <div class="form-group">
-                        <label>Frequency</label>
-                        <select class="form-control" @bind="_createFrequency">
-                            @foreach (var f in Enum.GetValues<ReturnFrequency>())
-                            {
-                                <option value="@f">@f</option>
-                            }
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label>Structural Category</label>
-                        <select class="form-control" @bind="_createCategory">
-                            @foreach (var c in Enum.GetValues<StructuralCategory>())
-                            {
-                                <option value="@c">@c</option>
-                            }
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label>Description</label>
-                        <input class="form-control" @bind="_createRequest.Description" placeholder="Optional description" />
-                    </div>
-                </div>
-                <div class="fc-list-form-actions">
-                    <button class="fc-btn fc-btn--primary fc-btn--sm" @onclick="CreateTemplate">Create</button>
-                    <button class="fc-btn fc-btn--outline fc-btn--sm" @onclick="CancelCreate">Cancel</button>
-                </div>
-            </div>
-        }
-
-        @if (_loading)
-        {
-            <div class="fc-list-skeleton">
-                @for (var i = 0; i < 6; i++)
-                {
-                    <div class="fc-list-skeleton-row">
-                        <div class="fc-list-skeleton-cell" style="width:80px;"></div>
-                        <div class="fc-list-skeleton-cell" style="flex:1;"></div>
-                        <div class="fc-list-skeleton-cell" style="width:70px;"></div>
-                        <div class="fc-list-skeleton-cell" style="width:40px;"></div>
-                        <div class="fc-list-skeleton-cell" style="width:40px;"></div>
-                        <div class="fc-list-skeleton-cell" style="width:120px;"></div>
-                    </div>
-                }
-            </div>
-        }
-        else if (!FilteredTemplates.Any())
-        {
-            <div class="fc-list-empty">
-                <svg class="fc-list-empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M12 18v-6"/><path d="m9 15 3-3 3 3"/></svg>
-                <h3 class="fc-list-empty-title">No templates found</h3>
-                <p class="fc-list-empty-text">Try adjusting your search criteria or filters to find what you're looking for.</p>
-            </div>
-        }
-        else
-        {
-            <div class="fc-table-wrap">
-                <table class="fc-table" role="table">
-                    <thead>
-                        <tr>
-                            <th scope="col">Return Code</th>
-                            <th scope="col">Name</th>
-                            <th scope="col">Category</th>
-                            <th scope="col">Frequency</th>
-                            <th scope="col">Fields</th>
-                            <th scope="col">Formulas</th>
-                            <th scope="col">Physical Table</th>
-                            <th scope="col"></th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @foreach (var t in PagedTemplates)
-                        {
-                            <tr class="fc-list-row-clickable" @onclick="() => ViewTemplate(t.ReturnCode)">
-                                <td class="fc-list-cell-code">@t.ReturnCode</td>
-                                <td class="fc-list-cell-strong">@t.Name</td>
-                                <td>
-                                    <span class="fc-badge @CategoryBadge(t.StructuralCategory)">
-                                        @t.StructuralCategory
-                                    </span>
-                                </td>
-                                <td class="fc-list-cell-muted">@GetFrequency(t.ReturnCode)</td>
-                                <td>@t.CurrentVersion.Fields.Count</td>
-                                <td>@t.CurrentVersion.IntraSheetFormulas.Count</td>
-                                <td class="fc-list-cell-code">@t.PhysicalTableName</td>
-                                <td>
-                                    <div class="fc-list-row-actions">
-                                        <button class="fc-btn fc-btn--ghost fc-btn--xs" @onclick="() => ViewTemplate(t.ReturnCode)" @onclick:stopPropagation="true">
-                                            View
-                                        </button>
-                                    </div>
-                                </td>
-                            </tr>
-                        }
-                    </tbody>
-                </table>
-            </div>
-
-            <div class="fc-list-footer">
-                <div class="fc-list-footer-summary">
-                    Showing <strong>@PagedTemplates.Count()</strong> of <strong>@FilteredTemplates.Count()</strong> templates
-                    @if (TotalPages > 1)
-                    {
-                        <span> &mdash; Page @_currentPage of @TotalPages</span>
-                    }
-                </div>
-                @if (TotalPages > 1)
-                {
-                    <div class="fc-list-pagination">
-                        <button class="fc-list-page-btn" disabled="@(_currentPage <= 1)" @onclick="() => _currentPage--">&laquo;</button>
-                        @for (var p = 1; p <= TotalPages; p++)
-                        {
-                            var page = p;
-                            <button class="fc-list-page-btn @(page == _currentPage ? "fc-list-page-btn-active" : "")" @onclick="() => _currentPage = page">@(page)</button>
-                        }
-                        <button class="fc-list-page-btn" disabled="@(_currentPage >= TotalPages)" @onclick="() => _currentPage++">&raquo;</button>
-                    </div>
-                }
-            </div>
-        }
-    </div>
 </div>
 
 @code {
@@ -199,8 +162,6 @@
     private string _searchTerm = "";
     private string _frequencyFilter = "";
     private string _categoryFilter = "";
-    private int _currentPage = 1;
-    private const int PageSize = 25;
 
     // Create form
     private bool _showCreateForm;
@@ -215,12 +176,6 @@
         .Where(t => string.IsNullOrEmpty(_categoryFilter) || t.StructuralCategory == _categoryFilter)
         .Where(t => string.IsNullOrEmpty(_frequencyFilter) || GetFrequency(t.ReturnCode) == _frequencyFilter)
         .OrderBy(t => t.ReturnCode);
-
-    private IEnumerable<CachedTemplate> PagedTemplates => FilteredTemplates
-        .Skip((_currentPage - 1) * PageSize)
-        .Take(PageSize);
-
-    private int TotalPages => (int)Math.Ceiling(FilteredTemplates.Count() / (double)PageSize);
 
     protected override async Task OnInitializedAsync()
     {

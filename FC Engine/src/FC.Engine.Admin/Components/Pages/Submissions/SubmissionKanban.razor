@@ -1,0 +1,239 @@
+@page "/submissions/kanban"
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize]
+@using FC.Engine.Domain.Abstractions
+@using FC.Engine.Domain.Entities
+@using FC.Engine.Domain.Enums
+@inject ISubmissionRepository SubmissionRepo
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+@implements IAsyncDisposable
+
+<PageTitle>Submissions — Kanban View</PageTitle>
+
+<PageHeader Title="Submissions"
+            Subtitle="Kanban view — drag cards between columns to update status">
+    <PrimaryAction>
+        <a href="/submissions" class="fc-btn fc-btn--outline fc-btn--sm">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14" aria-hidden="true"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+            List View
+        </a>
+    </PrimaryAction>
+</PageHeader>
+
+@if (_loading)
+{
+    <div class="fc-kanban-skeleton" aria-label="Loading submissions kanban" role="status">
+        @for (var col = 0; col < 5; col++)
+        {
+            <div class="fc-kanban-skeleton-col">
+                <div class="fc-skel" style="width:120px;height:18px;border-radius:4px;margin-bottom:12px;"></div>
+                @for (var card = 0; card < 3; card++)
+                {
+                    <div class="fc-skel" style="width:100%;height:80px;border-radius:8px;margin-bottom:8px;"></div>
+                }
+            </div>
+        }
+    </div>
+}
+else if (_error != null)
+{
+    <div class="fc-alert fc-alert--inline fc-alert--error" style="margin:var(--space-4) var(--space-6);">@_error</div>
+}
+else
+{
+    <div class="fc-kanban" @ref="_boardRef" aria-label="Submissions Kanban board">
+        @foreach (var col in _columns)
+        {
+            <div class="fc-kanban-col" data-kanban-col="@col.Status" aria-label="@col.Label column, @(CardsByStatus(col.Status).Count) items">
+                <div class="fc-kanban-col-header">
+                    <span class="fc-kanban-col-title">@col.Label</span>
+                    <span class="fc-kanban-col-count">@CardsByStatus(col.Status).Count</span>
+                </div>
+
+                <div class="fc-kanban-cards">
+                    @foreach (var sub in CardsByStatus(col.Status))
+                    {
+                        <div class="fc-kanban-card"
+                             data-kanban-card="@sub.Id"
+                             tabindex="0"
+                             role="button"
+                             aria-label="Submission @sub.Id: @sub.ReturnCode, @(sub.Institution?.InstitutionName ?? "Unknown"). Press Enter to view details."
+                             @onclick="() => ViewSubmission(sub.Id)"
+                             @onkeydown="(e) => HandleCardKey(e, sub.Id)">
+                            <div class="fc-kanban-card-header">
+                                <span class="fc-kanban-card-code">@sub.ReturnCode</span>
+                                <span class="fc-kanban-card-id">#@sub.Id</span>
+                            </div>
+                            <div class="fc-kanban-card-inst">
+                                @(sub.Institution?.InstitutionName ?? "—")
+                            </div>
+                            @if (sub.ReturnPeriod != null)
+                            {
+                                <div class="fc-kanban-card-period">
+                                    @sub.ReturnPeriod.ReportingDate.ToString("MMM yyyy")
+                                </div>
+                            }
+                            @{
+                                var errCount = sub.ValidationReport?.Errors.Count ?? 0;
+                                var warnCount = sub.ValidationReport?.WarningCount ?? 0;
+                            }
+                            @if (errCount > 0 || warnCount > 0)
+                            {
+                                <div class="fc-kanban-card-footer">
+                                    @if (errCount > 0)
+                                    {
+                                        <span class="fc-kanban-badge fc-kanban-badge-danger">
+                                            @errCount error@(errCount != 1 ? "s" : "")
+                                        </span>
+                                    }
+                                    @if (warnCount > 0)
+                                    {
+                                        <span class="fc-kanban-badge fc-kanban-badge-warning">
+                                            @warnCount warning@(warnCount != 1 ? "s" : "")
+                                        </span>
+                                    }
+                                </div>
+                            }
+                            <time class="fc-kanban-card-time" datetime="@sub.CreatedAt.ToString("yyyy-MM-dd")">
+                                @FormatTimeAgo(sub.CreatedAt)
+                            </time>
+                        </div>
+                    }
+
+                    @if (!CardsByStatus(col.Status).Any())
+                    {
+                        <div class="fc-kanban-empty" aria-hidden="true">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="24" height="24">
+                                <rect x="3" y="3" width="18" height="18" rx="2"/>
+                                <line x1="3" y1="9" x2="21" y2="9"/>
+                                <line x1="9" y1="21" x2="9" y2="9"/>
+                            </svg>
+                            <span>Empty</span>
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+    </div>
+
+    @if (_movedCardId.HasValue)
+    {
+        <div class="fc-toast-inline" role="status" aria-live="polite">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
+            Submission #@_movedCardId moved to @_movedToColumn
+        </div>
+    }
+}
+
+@code {
+    private record KanbanColumn(string Status, string Label, string Color);
+
+    private static readonly List<KanbanColumn> _columns = new()
+    {
+        new("Draft",                 "Draft",       "var(--cbn-gray-400)"),
+        new("Submitted",             "Submitted",   "var(--cbn-accent)"),
+        new("Validating,Parsing",    "In Review",   "#8b5cf6"),
+        new("Accepted,AcceptedWithWarnings", "Approved",  "var(--cbn-primary)"),
+        new("Rejected",              "Rejected",    "var(--cbn-danger)")
+    };
+
+    private bool _loading = true;
+    private string? _error;
+    private List<Submission> _submissions = new();
+    private DotNetObjectReference<SubmissionKanban>? _dotNetRef;
+    private ElementReference _boardRef;
+    private int? _movedCardId;
+    private string? _movedToColumn;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var recent = await SubmissionRepo.GetRecent(200);
+            _submissions = recent.ToList();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        _loading = false;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && !_loading)
+        {
+            _dotNetRef = DotNetObjectReference.Create(this);
+            await JS.InvokeVoidAsync("fcDragDrop.initKanban", _boardRef, _dotNetRef);
+        }
+    }
+
+    private List<Submission> CardsByStatus(string statusKey)
+    {
+        var statuses = statusKey.Split(',');
+        return _submissions
+            .Where(s => statuses.Any(st => s.Status.ToString().Equals(st.Trim(), StringComparison.OrdinalIgnoreCase)))
+            .OrderByDescending(s => s.CreatedAt)
+            .Take(50)
+            .ToList();
+    }
+
+    [JSInvokable]
+    public async Task OnCardMoved(string cardId, string newColumnStatus)
+    {
+        if (!int.TryParse(cardId, out var id)) return;
+        var sub = _submissions.FirstOrDefault(s => s.Id == id);
+        if (sub == null) return;
+
+        // Map column key to actual SubmissionStatus
+        var targetStatus = newColumnStatus switch
+        {
+            "Draft"          => SubmissionStatus.Draft,
+            "Submitted"      => SubmissionStatus.PendingApproval,
+            "Validating,Parsing" => SubmissionStatus.Validating,
+            "Accepted,AcceptedWithWarnings" => SubmissionStatus.Accepted,
+            "Rejected"       => SubmissionStatus.Rejected,
+            _                => sub.Status
+        };
+
+        if (targetStatus == sub.Status) return;
+
+        // Optimistic UI update
+        var colLabel = _columns.FirstOrDefault(c => c.Status == newColumnStatus)?.Label ?? newColumnStatus;
+        _movedCardId  = id;
+        _movedToColumn = colLabel;
+        sub.Status = targetStatus;
+        await InvokeAsync(StateHasChanged);
+
+        // Clear notification after 3s
+        await Task.Delay(3000);
+        _movedCardId = null;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private void ViewSubmission(int id) => Nav.NavigateTo($"/submissions/{id}");
+
+    private void HandleCardKey(KeyboardEventArgs e, int id)
+    {
+        if (e.Key is "Enter" or " ")
+            ViewSubmission(id);
+    }
+
+    private static string FormatTimeAgo(DateTime utcTime)
+    {
+        var span = DateTime.UtcNow - utcTime;
+        if (span.TotalMinutes < 1) return "just now";
+        if (span.TotalMinutes < 60) return $"{(int)span.TotalMinutes}m ago";
+        if (span.TotalHours < 24) return $"{(int)span.TotalHours}h ago";
+        if (span.TotalDays < 7) return $"{(int)span.TotalDays}d ago";
+        return utcTime.ToString("dd MMM");
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        try { await JS.InvokeVoidAsync("fcDragDrop.destroyKanban", _boardRef); }
+        catch { }
+        _dotNetRef?.Dispose();
+    }
+}

@@ -1,0 +1,359 @@
+@inject NavigationManager Navigation
+@implements IDisposable
+@inject IJSRuntime JS
+
+@* ============================================================
+   PageHeader — Universal sticky page header for admin portal
+   Parameters:
+     Title        — page title (required)
+     Subtitle     — secondary description (hidden in compact mode)
+     CountBadge   — number chip next to title (e.g. 42 templates)
+     StatusBadge  — status label text (e.g. "Active")
+     StatusVariant— "success" | "warning" | "danger" | "info" | "neutral"
+     BackUrl      — show a back chevron link
+     Breadcrumbs  — override auto-generated breadcrumbs (null = auto)
+     PrimaryAction— RenderFragment for primary CTA button(s)
+     SecondaryActions — RenderFragment for overflow menu items
+     Tabs         — tab list for page sections
+     ActiveTabId  — currently selected tab ID
+     OnTabChange  — callback when tab is clicked
+     Sticky       — whether header sticks to top (default true)
+   ============================================================ *@
+
+<div class="fc-ph @(_compact ? "fc-ph--compact" : "") @(Sticky ? "fc-ph--sticky" : "")"
+     @ref="_headerRef"
+     role="banner"
+     aria-label="Page header">
+
+    @* ── Breadcrumb row ───────────────────────────────────── *@
+    @{
+        var crumbs = Breadcrumbs ?? _autoCrumbs;
+    }
+    @if (crumbs.Count > 1)
+    {
+        <nav class="fc-ph__breadcrumb" aria-label="Breadcrumb">
+            @* Mobile: show only last 2 items with ellipsis *@
+            @{
+                var displayCrumbs = crumbs;
+                var hasEllipsis = crumbs.Count > 3;
+                if (hasEllipsis)
+                {
+                    // Show: first + "..." + last 2
+                }
+            }
+            @for (var i = 0; i < crumbs.Count; i++)
+            {
+                var crumb = crumbs[i];
+                var isLast = i == crumbs.Count - 1;
+
+                @if (i == 1 && hasEllipsis && crumbs.Count > 3)
+                {
+                    <span class="fc-ph__bc-ellipsis" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg>
+                    </span>
+                    <span class="fc-ph__bc-sep" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" width="12" height="12"><polyline points="9 18 15 12 9 6"/></svg>
+                    </span>
+                    // Skip middle items — jump to second-to-last
+                    i = crumbs.Count - 3;
+                    continue;
+                }
+
+                @if (i > 0)
+                {
+                    <span class="fc-ph__bc-sep" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" width="12" height="12"><polyline points="9 18 15 12 9 6"/></svg>
+                    </span>
+                }
+
+                @if (!isLast && crumb.Href != null)
+                {
+                    <a href="@crumb.Href" class="fc-ph__bc-link">@crumb.Label</a>
+                }
+                else
+                {
+                    <span class="@(isLast ? "fc-ph__bc-current" : "fc-ph__bc-link")" aria-current="@(isLast ? "page" : null)">@crumb.Label</span>
+                }
+            }
+        </nav>
+    }
+
+    @* ── Main header row ──────────────────────────────────── *@
+    <div class="fc-ph__main">
+        <div class="fc-ph__left">
+            @if (BackUrl != null)
+            {
+                <a href="@BackUrl" class="fc-ph__back" aria-label="Go back">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" width="18" height="18" aria-hidden="true">
+                        <polyline points="15 18 9 12 15 6"/>
+                    </svg>
+                </a>
+            }
+
+            <div class="fc-ph__titles">
+                <div class="fc-ph__title-row">
+                    <h1 class="fc-ph__title">
+                        @Title
+                        @if (CountBadge.HasValue)
+                        {
+                            <span class="fc-ph__count" aria-label="@CountBadge items">@CountBadge</span>
+                        }
+                    </h1>
+                    @if (StatusBadge != null)
+                    {
+                        <span class="fc-ph__badge fc-ph__badge--@(StatusVariant ?? "neutral")" role="status">
+                            <span class="fc-ph__badge-dot" aria-hidden="true"></span>
+                            @StatusBadge
+                        </span>
+                    }
+                </div>
+                @if (Subtitle != null)
+                {
+                    <p class="fc-ph__subtitle">@Subtitle</p>
+                }
+            </div>
+        </div>
+
+        @* ── Actions area ─────────────────────────────────── *@
+        @if (PrimaryAction != null || SecondaryActions != null)
+        {
+            <div class="fc-ph__actions">
+                <div class="fc-ph__actions-primary">
+                    @if (PrimaryAction != null)
+                    {
+                        @PrimaryAction
+                    }
+                </div>
+
+                @if (SecondaryActions != null)
+                {
+                    <div class="fc-ph__overflow-wrap">
+                        <button class="fc-ph__overflow-btn"
+                                @onclick="ToggleOverflow"
+                                aria-label="More actions"
+                                aria-haspopup="true"
+                                aria-expanded="@_overflowOpen.ToString().ToLowerInvariant()">
+                            <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16" aria-hidden="true">
+                                <circle cx="12" cy="5" r="1.5"/>
+                                <circle cx="12" cy="12" r="1.5"/>
+                                <circle cx="12" cy="19" r="1.5"/>
+                            </svg>
+                        </button>
+                        @if (_overflowOpen)
+                        {
+                            <div class="fc-ph__overflow-menu" role="menu" @onclick="CloseOverflow">
+                                @SecondaryActions
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+        }
+    </div>
+
+    @* ── Tab bar ──────────────────────────────────────────── *@
+    @if (Tabs != null && Tabs.Count > 0)
+    {
+        <div class="fc-ph__tabs" role="tablist" aria-label="Page sections">
+            @foreach (var tab in Tabs)
+            {
+                var isActive = tab.Id == (ActiveTabId ?? Tabs[0].Id);
+                @if (tab.Href != null)
+                {
+                    <a href="@tab.Href"
+                       class="fc-ph__tab @(isActive ? "fc-ph__tab--active" : "")"
+                       role="tab"
+                       aria-selected="@isActive.ToString().ToLowerInvariant()">
+                        @if (tab.Icon != null)
+                        {
+                            <span class="fc-ph__tab-icon" aria-hidden="true">@((MarkupString)tab.Icon)</span>
+                        }
+                        @tab.Label
+                        @if (tab.Count.HasValue)
+                        {
+                            <span class="fc-ph__tab-count">@tab.Count</span>
+                        }
+                    </a>
+                }
+                else
+                {
+                    <button class="fc-ph__tab @(isActive ? "fc-ph__tab--active" : "")"
+                            role="tab"
+                            aria-selected="@isActive.ToString().ToLowerInvariant()"
+                            @onclick="() => SelectTab(tab.Id)">
+                        @if (tab.Icon != null)
+                        {
+                            <span class="fc-ph__tab-icon" aria-hidden="true">@((MarkupString)tab.Icon)</span>
+                        }
+                        @tab.Label
+                        @if (tab.Count.HasValue)
+                        {
+                            <span class="fc-ph__tab-count">@tab.Count</span>
+                        }
+                    </button>
+                }
+            }
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public string Title { get; set; } = string.Empty;
+    [Parameter] public string? Subtitle { get; set; }
+    [Parameter] public int? CountBadge { get; set; }
+    [Parameter] public string? StatusBadge { get; set; }
+    [Parameter] public string? StatusVariant { get; set; } = "neutral";
+    [Parameter] public string? BackUrl { get; set; }
+    [Parameter] public List<BreadcrumbItem>? Breadcrumbs { get; set; }
+    [Parameter] public RenderFragment? PrimaryAction { get; set; }
+    [Parameter] public RenderFragment? SecondaryActions { get; set; }
+    [Parameter] public List<TabItem>? Tabs { get; set; }
+    [Parameter] public string? ActiveTabId { get; set; }
+    [Parameter] public EventCallback<string> OnTabChange { get; set; }
+    [Parameter] public bool Sticky { get; set; } = true;
+
+    private List<BreadcrumbItem> _autoCrumbs = new();
+    private bool _compact;
+    private bool _overflowOpen;
+    private ElementReference _headerRef;
+    private DotNetObjectReference<PageHeader>? _dotNetRef;
+
+    protected override void OnInitialized()
+    {
+        Navigation.LocationChanged += OnLocationChanged;
+        BuildAutoBreadcrumbs(Navigation.Uri);
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && Sticky)
+        {
+            _dotNetRef = DotNetObjectReference.Create(this);
+            await JS.InvokeVoidAsync("fcPageHeader.initScroll", _headerRef, _dotNetRef);
+        }
+    }
+
+    [JSInvokable]
+    public Task SetCompact(bool compact)
+    {
+        if (_compact != compact)
+        {
+            _compact = compact;
+            return InvokeAsync(StateHasChanged);
+        }
+        return Task.CompletedTask;
+    }
+
+    private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
+    {
+        BuildAutoBreadcrumbs(e.Location);
+        _overflowOpen = false;
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void BuildAutoBreadcrumbs(string uri)
+    {
+        var path = new Uri(uri).AbsolutePath.TrimStart('/').ToLowerInvariant();
+        _autoCrumbs = BuildCrumbsFromPath(path);
+    }
+
+    private static List<BreadcrumbItem> BuildCrumbsFromPath(string path)
+    {
+        var crumbs = new List<BreadcrumbItem>
+        {
+            new("Home", "/")
+        };
+
+        if (string.IsNullOrEmpty(path)) return crumbs;
+
+        var segments = path.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        if (segments.Length == 0) return crumbs;
+
+        // Build breadcrumbs from route segments with human-readable labels
+        string? parentHref = null;
+        for (var i = 0; i < segments.Length; i++)
+        {
+            var seg = segments[i];
+            var href = "/" + string.Join("/", segments[..( i + 1)]);
+            var isLast = i == segments.Length - 1;
+
+            var label = GetSegmentLabel(segments, i);
+            crumbs.Add(new(label, isLast ? null : href));
+            parentHref = href;
+        }
+
+        return crumbs;
+    }
+
+    private static string GetSegmentLabel(string[] segments, int index) => (index, segments) switch
+    {
+        // Top-level sections
+        (0, _) when segments[0] == "dashboard" => "Dashboard",
+        (0, _) when segments[0] == "templates" => "Return Templates",
+        (0, _) when segments[0] == "modules" => "Modules",
+        (0, _) when segments[0] == "formulas" => "Formulas",
+        (0, _) when segments[0] == "cross-sheet-rules" => "Cross-Sheet Rules",
+        (0, _) when segments[0] == "business-rules" => "Business Rules",
+        (0, _) when segments[0] == "submissions" => "Submissions",
+        (0, _) when segments[0] == "impact-analysis" => "Impact Analysis",
+        (0, _) when segments[0] == "audit" => "Audit Log",
+        (0, _) when segments[0] == "users" => "User Management",
+        (0, _) when segments[0] == "jurisdictions" => "Jurisdictions",
+        (0, _) when segments[0] == "platform" => "Platform",
+        (0, _) when segments[0] == "billing" => "Billing",
+        (0, _) when segments[0] == "privacy" => "Privacy",
+        (0, _) when segments[0] == "account" => "Account",
+
+        // Platform sub-sections
+        (1, _) when segments[0] == "platform" && segments[1] == "tenants" => "Tenants",
+        (1, _) when segments[0] == "platform" && segments[1] == "templates" => "Template Console",
+        (1, _) when segments[0] == "platform" && segments[1] == "billing-ops" => "Billing Operations",
+        (1, _) when segments[0] == "platform" && segments[1] == "health" => "Platform Health",
+        (1, _) when segments[0] == "platform" && segments[1] == "feature-flags" => "Feature Flags",
+        (1, _) when segments[0] == "platform" && segments[1] == "module-analytics" => "Module Analytics",
+        (1, _) when segments[0] == "platform" && segments[1] == "licence-types" => "Licence Types",
+        (1, _) when segments[0] == "platform" && segments[1] == "partner-onboarding" => "Partner Onboarding",
+        (1, _) when segments[0] == "platform" && segments[1] == "dashboard" => "Dashboard",
+
+        // Billing sub-sections
+        (1, _) when segments[0] == "billing" && segments[1] == "plans" => "Plans",
+        (1, _) when segments[0] == "billing" && segments[1] == "revenue" => "Revenue",
+        (1, _) when segments[0] == "billing" && segments[1] == "invoices" => "Invoices",
+        (1, _) when segments[0] == "billing" && segments[1] == "subscriptions" => "Subscriptions",
+
+        // Privacy sub-sections
+        (1, _) when segments[0] == "privacy" && segments[1] == "dpo" => "DPO Dashboard",
+
+        // Account sub-sections
+        (1, _) when segments[0] == "account" && segments[1] == "users" => "User Management",
+
+        // Detail pages (last segment is an ID/code — use it as-is but title-case GUID fragments)
+        (var i, _) when i == segments.Length - 1 => FormatDetailLabel(segments[i]),
+
+        // Fallback
+        _ => FormatDetailLabel(segments[index])
+    };
+
+    private static string FormatDetailLabel(string segment)
+    {
+        // If it looks like a GUID, truncate it
+        if (Guid.TryParse(segment, out var g))
+            return g.ToString("N")[..8].ToUpperInvariant();
+
+        // Humanise kebab-case
+        var words = segment.Split('-');
+        return string.Join(" ", words.Select(w => w.Length > 0
+            ? char.ToUpperInvariant(w[0]) + w[1..]
+            : w));
+    }
+
+    private void ToggleOverflow() => _overflowOpen = !_overflowOpen;
+    private void CloseOverflow() => _overflowOpen = false;
+    private Task SelectTab(string tabId) => OnTabChange.InvokeAsync(tabId);
+
+    public void Dispose()
+    {
+        Navigation.LocationChanged -= OnLocationChanged;
+        _dotNetRef?.Dispose();
+    }
+}

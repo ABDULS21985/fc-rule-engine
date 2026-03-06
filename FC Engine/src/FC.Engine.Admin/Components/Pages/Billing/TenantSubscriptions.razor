@@ -14,190 +14,102 @@
 
 <PageTitle>Tenant Subscriptions</PageTitle>
 
+<PageHeader Title="Tenant Subscriptions"
+            Subtitle="Monitor lifecycle status, adjust plans, and manage subscription operations across all tenants." />
+
 <div class="fc-page">
 
-    <!-- Breadcrumb -->
-    <nav class="fc-detail-breadcrumb" aria-label="Breadcrumb">
-        <a href="/">Dashboard</a>
-        <span class="fc-detail-breadcrumb-sep" aria-hidden="true">/</span>
-        <a href="/billing/plans">Billing</a>
-        <span class="fc-detail-breadcrumb-sep" aria-hidden="true">/</span>
-        <span class="fc-detail-breadcrumb-current">Subscriptions</span>
-    </nav>
+    <DataTable TItem="SubscriptionRow"
+               Items="@FilteredSubscriptions"
+               Loading="_loading"
+               Sortable="true"
+               ShowPagination="true"
+               PageSize="25"
+               EmptyTitle="@(_searchTerm == string.Empty && _statusFilter == "ALL" && _planFilter == "ALL" ? "No subscriptions found" : "No matching subscriptions")"
+               EmptyText="@(_searchTerm == string.Empty && _statusFilter == "ALL" && _planFilter == "ALL" ? "Tenant subscriptions will appear here once tenants are onboarded." : "Try adjusting your search or filters.")"
+               SkeletonRows="5">
+        <ToolbarContent>
+            <div class="fc-toolbar-search">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                <input type="text" placeholder="Search tenant or plan..." @bind="_searchTerm" @bind:event="oninput" aria-label="Search subscriptions" />
+            </div>
+            <div class="fc-toolbar-filter">
+                <select @bind="_statusFilter" aria-label="Filter by status">
+                    <option value="ALL">All Statuses</option>
+                    @foreach (var status in Enum.GetValues<SubscriptionStatus>())
+                    {
+                        <option value="@status.ToString()">@status</option>
+                    }
+                </select>
+                <select @bind="_planFilter" aria-label="Filter by plan">
+                    <option value="ALL">All Plans</option>
+                    @foreach (var plan in _planOptions)
+                    {
+                        <option value="@plan.PlanCode">@plan.PlanName (@plan.PlanCode)</option>
+                    }
+                </select>
+                <button class="fc-btn fc-btn--outline" @onclick="ClearFilters" type="button">Clear</button>
+            </div>
+        </ToolbarContent>
+        <ChildContent>
+            <DataColumn TItem="SubscriptionRow" Title="Tenant" SortKey="r => r.TenantName">
+                <CellTemplate>
+                    <div style="font-weight:600;">@context.TenantName</div>
+                    <small style="color:#64748b;">@context.TenantSlug</small>
+                </CellTemplate>
+            </DataColumn>
+            <DataColumn TItem="SubscriptionRow" Title="Current Plan" SortKey="r => r.PlanCode" Width="140px">
+                <CellTemplate>
+                    <div style="font-weight:500;">@context.PlanCode</div>
+                    <small style="color:#64748b;">Tier @context.PlanTier</small>
+                </CellTemplate>
+            </DataColumn>
+            <DataColumn TItem="SubscriptionRow" Title="Status" SortKey="r => r.Status" Width="120px">
+                <CellTemplate>
+                    <span class="fc-badge @GetStatusBadgeClass(context.Status)">@context.Status</span>
+                </CellTemplate>
+            </DataColumn>
+            <DataColumn TItem="SubscriptionRow" Title="Frequency" Width="110px">
+                <CellTemplate>@context.BillingFrequency</CellTemplate>
+            </DataColumn>
+            <DataColumn TItem="SubscriptionRow" Title="Period" Width="170px">
+                <CellTemplate>
+                    <div>@context.CurrentPeriodStart.ToString("yyyy-MM-dd")</div>
+                    <small style="color:#64748b;">to @context.CurrentPeriodEnd.ToString("yyyy-MM-dd")</small>
+                </CellTemplate>
+            </DataColumn>
+            <DataColumn TItem="SubscriptionRow" Title="Active Modules" SortKey="r => r.ActiveModuleCount" Width="120px">
+                <CellTemplate>@context.ActiveModuleCount</CellTemplate>
+            </DataColumn>
+            <DataColumn TItem="SubscriptionRow" Title="Actions" Align="right" Width="280px">
+                <CellTemplate>
+                    <div style="display:flex;gap:0.35rem;justify-content:flex-end;align-items:center;">
+                        <select class="fc-form-input" style="width:auto;min-width:100px;padding:0.25rem 0.5rem;font-size:0.8rem;" @bind="context.TargetPlanCode" @onclick:stopPropagation="true">
+                            @foreach (var plan in _planOptions)
+                            {
+                                <option value="@plan.PlanCode">@plan.PlanCode</option>
+                            }
+                        </select>
+                        <button class="fc-btn fc-btn--ghost"
+                                disabled="@(_busySubscriptionId == context.SubscriptionId)"
+                                @onclick="() => ChangePlan(context)"
+                                @onclick:stopPropagation="true"
+                                type="button">
+                            Apply Plan
+                        </button>
+                        <button class="fc-btn fc-btn--ghost fc-btn--danger"
+                                disabled="@(_busySubscriptionId == context.SubscriptionId || context.Status is SubscriptionStatus.Cancelled or SubscriptionStatus.Expired)"
+                                @onclick="() => CancelSubscription(context)"
+                                @onclick:stopPropagation="true"
+                                type="button">
+                            Cancel
+                        </button>
+                    </div>
+                </CellTemplate>
+            </DataColumn>
+        </ChildContent>
+    </DataTable>
 
-    <!-- Page Header -->
-    <div class="fc-page-header">
-        <div class="fc-page-header-top">
-            <div>
-                <h1>Tenant Subscriptions</h1>
-                <p class="fc-page-header-subtitle">Monitor lifecycle status, adjust plans, and manage subscription operations across all tenants.</p>
-            </div>
-        </div>
-
-        @if (!_loading && _subscriptions.Any())
-        {
-            <div class="fc-chip-group">
-                <span class="fc-chip">
-                    <span class="fc-chip__count">@_subscriptions.Count</span> Total
-                </span>
-                <span class="fc-chip">
-                    <span class="fc-chip__dot fc-chip__dot--active" aria-hidden="true"></span>
-                    <span class="fc-chip__count">@_subscriptions.Count(s => s.Status == SubscriptionStatus.Active)</span> Active
-                </span>
-                <span class="fc-chip">
-                    <span class="fc-chip__dot" style="background:#f59e0b;" aria-hidden="true"></span>
-                    <span class="fc-chip__count">@_subscriptions.Count(s => s.Status == SubscriptionStatus.PastDue)</span> Past Due
-                </span>
-                <span class="fc-chip">
-                    <span class="fc-chip__dot fc-chip__dot--inactive" aria-hidden="true"></span>
-                    <span class="fc-chip__count">@_subscriptions.Count(s => s.Status is SubscriptionStatus.Suspended or SubscriptionStatus.Cancelled)</span> Suspended/Cancelled
-                </span>
-            </div>
-        }
-    </div>
-
-    <!-- Toolbar -->
-    <div class="fc-toolbar">
-        <div class="fc-toolbar-search">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-            <input type="text" placeholder="Search tenant or plan..." @bind="_searchTerm" @bind:event="oninput" aria-label="Search subscriptions" />
-        </div>
-        <div class="fc-toolbar-filter">
-            <select @bind="_statusFilter" aria-label="Filter by status">
-                <option value="ALL">All Statuses</option>
-                @foreach (var status in Enum.GetValues<SubscriptionStatus>())
-                {
-                    <option value="@status.ToString()">@status</option>
-                }
-            </select>
-            <select @bind="_planFilter" aria-label="Filter by plan">
-                <option value="ALL">All Plans</option>
-                @foreach (var plan in _planOptions)
-                {
-                    <option value="@plan.PlanCode">@plan.PlanName (@plan.PlanCode)</option>
-                }
-            </select>
-            <button class="fc-btn fc-btn--outline" @onclick="ClearFilters" type="button">Clear</button>
-        </div>
-    </div>
-
-    <!-- Content -->
-    @if (_loading)
-    {
-        <div class="fc-card">
-            <div class="fc-card__body" style="padding:0;overflow:auto;">
-                <table class="fc-table">
-                    <thead>
-                        <tr>
-                            <th>Tenant</th>
-                            <th>Current Plan</th>
-                            <th>Status</th>
-                            <th>Frequency</th>
-                            <th>Period</th>
-                            <th>Active Modules</th>
-                            <th>Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @for (var i = 0; i < 5; i++)
-                        {
-                            <tr>
-                                <td><div class="fc-skel fc-skel-text" style="width:130px;"></div><div class="fc-skel fc-skel-text" style="width:80px;margin-top:4px;"></div></td>
-                                <td><div class="fc-skel fc-skel-text" style="width:80px;"></div><div class="fc-skel fc-skel-text" style="width:50px;margin-top:4px;"></div></td>
-                                <td><div class="fc-skel" style="width:60px;height:20px;border-radius:var(--radius-pill);"></div></td>
-                                <td><div class="fc-skel fc-skel-text" style="width:60px;"></div></td>
-                                <td><div class="fc-skel fc-skel-text" style="width:80px;"></div><div class="fc-skel fc-skel-text" style="width:80px;margin-top:4px;"></div></td>
-                                <td><div class="fc-skel fc-skel-text" style="width:24px;"></div></td>
-                                <td><div class="fc-skel" style="width:140px;height:28px;border-radius:6px;"></div></td>
-                            </tr>
-                        }
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    }
-    else if (!FilteredSubscriptions.Any())
-    {
-        <div class="fc-empty">
-            <div class="fc-empty-icon">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
-            </div>
-            @if (_searchTerm == string.Empty && _statusFilter == "ALL" && _planFilter == "ALL")
-            {
-                <h3 class="fc-empty-title">No subscriptions found</h3>
-                <p class="fc-empty-text">Tenant subscriptions will appear here once tenants are onboarded.</p>
-            }
-            else
-            {
-                <h3 class="fc-empty-title">No matching subscriptions</h3>
-                <p class="fc-empty-text">Try adjusting your search or filters.</p>
-            }
-        </div>
-    }
-    else
-    {
-        <div class="fc-card">
-            <div class="fc-card__body" style="padding:0;overflow:auto;">
-                <table class="fc-table">
-                    <thead>
-                        <tr>
-                            <th>Tenant</th>
-                            <th>Current Plan</th>
-                            <th>Status</th>
-                            <th>Frequency</th>
-                            <th>Period</th>
-                            <th>Active Modules</th>
-                            <th style="text-align:right;">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @foreach (var row in FilteredSubscriptions)
-                        {
-                            <tr>
-                                <td>
-                                    <div style="font-weight:600;">@row.TenantName</div>
-                                    <small style="color:#64748b;">@row.TenantSlug</small>
-                                </td>
-                                <td>
-                                    <div style="font-weight:500;">@row.PlanCode</div>
-                                    <small style="color:#64748b;">Tier @row.PlanTier</small>
-                                </td>
-                                <td>
-                                    <span class="fc-badge @GetStatusBadgeClass(row.Status)">@row.Status</span>
-                                </td>
-                                <td>@row.BillingFrequency</td>
-                                <td>
-                                    <div>@row.CurrentPeriodStart.ToString("yyyy-MM-dd")</div>
-                                    <small style="color:#64748b;">to @row.CurrentPeriodEnd.ToString("yyyy-MM-dd")</small>
-                                </td>
-                                <td>@row.ActiveModuleCount</td>
-                                <td>
-                                    <div style="display:flex;gap:0.35rem;justify-content:flex-end;align-items:center;">
-                                        <select class="fc-form-input" style="width:auto;min-width:100px;padding:0.25rem 0.5rem;font-size:0.8rem;" @bind="row.TargetPlanCode">
-                                            @foreach (var plan in _planOptions)
-                                            {
-                                                <option value="@plan.PlanCode">@plan.PlanCode</option>
-                                            }
-                                        </select>
-                                        <button class="fc-btn fc-btn--ghost"
-                                                disabled="@(_busySubscriptionId == row.SubscriptionId)"
-                                                @onclick="() => ChangePlan(row)" type="button">
-                                            Apply Plan
-                                        </button>
-                                        <button class="fc-btn fc-btn--ghost fc-btn--danger"
-                                                disabled="@(_busySubscriptionId == row.SubscriptionId || row.Status is SubscriptionStatus.Cancelled or SubscriptionStatus.Expired)"
-                                                @onclick="() => CancelSubscription(row)" type="button">
-                                            Cancel
-                                        </button>
-                                    </div>
-                                </td>
-                            </tr>
-                        }
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    }
 </div>
 
 @code {
@@ -210,7 +122,7 @@
     private List<SubscriptionRow> _subscriptions = new();
     private List<PlanOption> _planOptions = new();
 
-    private IEnumerable<SubscriptionRow> FilteredSubscriptions => _subscriptions
+    private IReadOnlyList<SubscriptionRow> FilteredSubscriptions => _subscriptions
         .Where(s => string.IsNullOrWhiteSpace(_searchTerm)
             || s.TenantName.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase)
             || s.TenantSlug.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase)
@@ -218,7 +130,8 @@
         .Where(s => _statusFilter == "ALL" || s.Status.ToString() == _statusFilter)
         .Where(s => _planFilter == "ALL" || s.PlanCode == _planFilter)
         .OrderByDescending(s => s.UpdatedAt)
-        .ThenBy(s => s.TenantName);
+        .ThenBy(s => s.TenantName)
+        .ToList();
 
     protected override async Task OnInitializedAsync()
     {

@@ -13,71 +13,14 @@
 
 <PageTitle>Invoices</PageTitle>
 
+<PageHeader Title="Invoices &amp; Collections"
+            Subtitle="Issue invoices, capture payments, and manage overdue exposure across tenants." />
+
 <div class="fc-page">
 
-    <!-- Breadcrumb -->
-    <nav class="fc-detail-breadcrumb" aria-label="Breadcrumb">
-        <a href="/">Dashboard</a>
-        <span class="fc-detail-breadcrumb-sep" aria-hidden="true">/</span>
-        <a href="/billing/plans">Billing</a>
-        <span class="fc-detail-breadcrumb-sep" aria-hidden="true">/</span>
-        <span class="fc-detail-breadcrumb-current">Invoices</span>
-    </nav>
-
-    <!-- Page Header -->
-    <div class="fc-page-header">
-        <div class="fc-page-header-top">
-            <div>
-                <h1>Invoices &amp; Collections</h1>
-                <p class="fc-page-header-subtitle">Issue invoices, capture payments, and manage overdue exposure across tenants.</p>
-            </div>
-        </div>
-
-        @if (!_loading)
-        {
-            <!-- Summary Chips -->
-            <div class="fc-chip-group">
-                <span class="fc-chip">
-                    <span class="fc-chip__count">@FormatCurrency(_outstandingAmount)</span> Outstanding Amount
-                </span>
-                <span class="fc-chip">
-                    <span class="fc-chip__count">@FormatCurrency(_paidThisMonth)</span> Paid This Month
-                </span>
-                <span class="fc-chip">
-                    <span class="fc-chip__count">@_invoices.Count(i => i.Status == InvoiceStatus.Overdue)</span> Overdue
-                </span>
-                <span class="fc-chip">
-                    <span class="fc-chip__count">@_invoices.Count(i => i.Status == InvoiceStatus.Draft)</span> Drafts
-                </span>
-            </div>
-        }
-    </div>
-
-    @if (_loading)
+    <!-- Generate Invoice -->
+    @if (!_loading)
     {
-        <!-- Skeleton Loading State -->
-        <div class="fc-card">
-            <div class="fc-card__body">
-                <div class="fc-skel fc-skel-text" style="width:200px;margin-bottom:1rem;"></div>
-                <div class="fc-skel fc-skel-text" style="width:100%;height:40px;margin-bottom:0.75rem;"></div>
-                @for (var i = 0; i < 5; i++)
-                {
-                    <div style="display:flex;gap:1rem;margin-bottom:0.75rem;">
-                        <div class="fc-skel fc-skel-text" style="width:15%;"></div>
-                        <div class="fc-skel fc-skel-text" style="width:20%;"></div>
-                        <div class="fc-skel fc-skel-text" style="width:10%;"></div>
-                        <div class="fc-skel fc-skel-text" style="width:18%;"></div>
-                        <div class="fc-skel fc-skel-text" style="width:12%;"></div>
-                        <div class="fc-skel fc-skel-text" style="width:12%;"></div>
-                        <div class="fc-skel fc-skel-text" style="width:13%;"></div>
-                    </div>
-                }
-            </div>
-        </div>
-    }
-    else
-    {
-        <!-- Generate Invoice -->
         <div class="fc-card">
             <div class="fc-card__header">
                 <h2 class="fc-card__title">Generate Invoice</h2>
@@ -103,9 +46,19 @@
                 </div>
             </div>
         </div>
+    }
 
-        <!-- Toolbar -->
-        <div class="fc-toolbar">
+    <!-- Invoice Table -->
+    <DataTable TItem="InvoiceRow"
+               Items="@FilteredInvoices"
+               Loading="_loading"
+               Sortable="true"
+               ShowPagination="true"
+               PageSize="25"
+               EmptyTitle="@(string.IsNullOrWhiteSpace(_searchTerm) && _statusFilter == "ALL" ? "No invoices yet" : "No matching invoices")"
+               EmptyText="@(string.IsNullOrWhiteSpace(_searchTerm) && _statusFilter == "ALL" ? "Generate your first invoice using the form above." : "Try adjusting your search or filters.")"
+               SkeletonRows="5">
+        <ToolbarContent>
             <div class="fc-toolbar-search">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
                 <input type="search"
@@ -124,115 +77,85 @@
                 </select>
                 <button class="fc-btn fc-btn--outline" @onclick="ClearFilters" type="button">Clear</button>
             </div>
-        </div>
-
-        <!-- Invoice Table -->
-        <div class="fc-card">
-            <div class="fc-card__header">
-                <h2 class="fc-card__title">Invoices</h2>
-            </div>
-            <div class="fc-card__body" style="padding:0;overflow:auto;">
-                @if (!FilteredInvoices.Any())
-                {
-                    <div class="fc-empty">
-                        <div class="fc-empty-icon">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
-                        </div>
-                        @if (string.IsNullOrWhiteSpace(_searchTerm) && _statusFilter == "ALL")
+        </ToolbarContent>
+        <ChildContent>
+            <DataColumn TItem="InvoiceRow" Title="Invoice" SortKey="i => i.InvoiceNumber">
+                <CellTemplate>
+                    <div style="font-weight:600;">@context.InvoiceNumber</div>
+                    <small style="color:#64748b;">Created @context.CreatedAt.ToString("yyyy-MM-dd")</small>
+                </CellTemplate>
+            </DataColumn>
+            <DataColumn TItem="InvoiceRow" Title="Tenant" SortKey="i => i.TenantName">
+                <CellTemplate>
+                    <div style="font-weight:600;">@context.TenantName</div>
+                    <small style="color:#64748b;">@context.TenantSlug</small>
+                </CellTemplate>
+            </DataColumn>
+            <DataColumn TItem="InvoiceRow" Title="Status" Width="120px">
+                <CellTemplate>
+                    <span class="fc-badge @GetInvoiceBadgeClass(context.Status)">@context.Status</span>
+                </CellTemplate>
+            </DataColumn>
+            <DataColumn TItem="InvoiceRow" Title="Period" Width="160px">
+                <CellTemplate>
+                    <div>@context.PeriodStart.ToString("yyyy-MM-dd")</div>
+                    <small style="color:#64748b;">to @context.PeriodEnd.ToString("yyyy-MM-dd")</small>
+                </CellTemplate>
+            </DataColumn>
+            <DataColumn TItem="InvoiceRow" Title="Total (NGN)" SortKey="i => i.TotalAmount" Width="130px">
+                <CellTemplate>@FormatCurrency(context.TotalAmount)</CellTemplate>
+            </DataColumn>
+            <DataColumn TItem="InvoiceRow" Title="Due" Width="120px">
+                <CellTemplate>
+                    @if (context.DueDate.HasValue)
+                    {
+                        <span>@context.DueDate.Value.ToString("yyyy-MM-dd")</span>
+                    }
+                    else
+                    {
+                        <span style="color:#94a3b8;">-</span>
+                    }
+                </CellTemplate>
+            </DataColumn>
+            <DataColumn TItem="InvoiceRow" Title="Actions" Align="right" Width="200px">
+                <CellTemplate>
+                    <div style="display:flex;gap:0.35rem;flex-wrap:wrap;justify-content:flex-end;">
+                        @if (context.Status == InvoiceStatus.Draft)
                         {
-                            <h3 class="fc-empty-title">No invoices yet</h3>
-                            <p class="fc-empty-text">Generate your first invoice using the form above.</p>
+                            <button class="fc-btn fc-btn--ghost"
+                                    disabled="@(_busyInvoiceId == context.Id)"
+                                    @onclick="() => IssueInvoice(context.Id)"
+                                    @onclick:stopPropagation="true"
+                                    type="button">
+                                Issue
+                            </button>
                         }
-                        else
+                        @if (context.Status is InvoiceStatus.Issued or InvoiceStatus.Overdue)
                         {
-                            <h3 class="fc-empty-title">No matching invoices</h3>
-                            <p class="fc-empty-text">Try adjusting your search or filters.</p>
+                            <button class="fc-btn fc-btn--ghost"
+                                    disabled="@(_busyInvoiceId == context.Id)"
+                                    @onclick="() => RecordManualPayment(context)"
+                                    @onclick:stopPropagation="true"
+                                    type="button">
+                                Mark Paid
+                            </button>
+                        }
+                        @if (context.Status is InvoiceStatus.Draft or InvoiceStatus.Issued or InvoiceStatus.Overdue)
+                        {
+                            <button class="fc-btn fc-btn--ghost fc-btn--danger"
+                                    disabled="@(_busyInvoiceId == context.Id)"
+                                    @onclick="() => VoidInvoice(context.Id)"
+                                    @onclick:stopPropagation="true"
+                                    type="button">
+                                Void
+                            </button>
                         }
                     </div>
-                }
-                else
-                {
-                    <table class="fc-table">
-                        <thead>
-                            <tr>
-                                <th>Invoice</th>
-                                <th>Tenant</th>
-                                <th>Status</th>
-                                <th>Period</th>
-                                <th>Total (NGN)</th>
-                                <th>Due</th>
-                                <th>Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            @foreach (var invoice in FilteredInvoices)
-                            {
-                                <tr>
-                                    <td>
-                                        <div style="font-weight:600;">@invoice.InvoiceNumber</div>
-                                        <small style="color:#64748b;">Created @invoice.CreatedAt.ToString("yyyy-MM-dd")</small>
-                                    </td>
-                                    <td>
-                                        <div style="font-weight:600;">@invoice.TenantName</div>
-                                        <small style="color:#64748b;">@invoice.TenantSlug</small>
-                                    </td>
-                                    <td>
-                                        <span class="fc-badge @GetInvoiceBadgeClass(invoice.Status)">@invoice.Status</span>
-                                    </td>
-                                    <td>
-                                        <div>@invoice.PeriodStart.ToString("yyyy-MM-dd")</div>
-                                        <small style="color:#64748b;">to @invoice.PeriodEnd.ToString("yyyy-MM-dd")</small>
-                                    </td>
-                                    <td>@FormatCurrency(invoice.TotalAmount)</td>
-                                    <td>
-                                        @if (invoice.DueDate.HasValue)
-                                        {
-                                            <span>@invoice.DueDate.Value.ToString("yyyy-MM-dd")</span>
-                                        }
-                                        else
-                                        {
-                                            <span style="color:#94a3b8;">-</span>
-                                        }
-                                    </td>
-                                    <td>
-                                        <div style="display:flex;gap:0.35rem;flex-wrap:wrap;">
-                                            @if (invoice.Status == InvoiceStatus.Draft)
-                                            {
-                                                <button class="fc-btn fc-btn--ghost"
-                                                        disabled="@(_busyInvoiceId == invoice.Id)"
-                                                        @onclick="() => IssueInvoice(invoice.Id)"
-                                                        type="button">
-                                                    Issue
-                                                </button>
-                                            }
-                                            @if (invoice.Status is InvoiceStatus.Issued or InvoiceStatus.Overdue)
-                                            {
-                                                <button class="fc-btn fc-btn--ghost"
-                                                        disabled="@(_busyInvoiceId == invoice.Id)"
-                                                        @onclick="() => RecordManualPayment(invoice)"
-                                                        type="button">
-                                                    Mark Paid
-                                                </button>
-                                            }
-                                            @if (invoice.Status is InvoiceStatus.Draft or InvoiceStatus.Issued or InvoiceStatus.Overdue)
-                                            {
-                                                <button class="fc-btn fc-btn--ghost fc-btn--danger"
-                                                        disabled="@(_busyInvoiceId == invoice.Id)"
-                                                        @onclick="() => VoidInvoice(invoice.Id)"
-                                                        type="button">
-                                                    Void
-                                                </button>
-                                            }
-                                        </div>
-                                    </td>
-                                </tr>
-                            }
-                        </tbody>
-                    </table>
-                }
-            </div>
-        </div>
-    }
+                </CellTemplate>
+            </DataColumn>
+        </ChildContent>
+    </DataTable>
+
 </div>
 
 @code {
@@ -248,14 +171,15 @@
     private List<InvoiceRow> _invoices = new();
     private List<TenantOption> _tenantOptions = new();
 
-    private IEnumerable<InvoiceRow> FilteredInvoices => _invoices
+    private IReadOnlyList<InvoiceRow> FilteredInvoices => _invoices
         .Where(i => string.IsNullOrWhiteSpace(_searchTerm)
             || i.InvoiceNumber.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase)
             || i.TenantName.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase)
             || i.TenantSlug.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase))
         .Where(i => _statusFilter == "ALL" || i.Status.ToString() == _statusFilter)
         .OrderByDescending(i => i.CreatedAt)
-        .ThenByDescending(i => i.InvoiceNumber);
+        .ThenByDescending(i => i.InvoiceNumber)
+        .ToList();
 
     protected override async Task OnInitializedAsync()
     {

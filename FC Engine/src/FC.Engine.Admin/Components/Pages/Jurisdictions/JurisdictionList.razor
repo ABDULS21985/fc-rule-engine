@@ -9,192 +9,93 @@
 
 <PageTitle>Jurisdiction Registry</PageTitle>
 
+<PageHeader Title="Jurisdiction Registry"
+            Subtitle="Multi-Jurisdiction Template Extension Framework — Manage regulatory jurisdictions and their template assignments." />
+
 <div class="fc-page">
 
-    <!-- Breadcrumb -->
-    <nav class="fc-detail-breadcrumb" aria-label="Breadcrumb">
-        <a href="/">Dashboard</a>
-        <span class="fc-detail-breadcrumb-sep" aria-hidden="true">/</span>
-        <a href="/jurisdictions">Platform</a>
-        <span class="fc-detail-breadcrumb-sep" aria-hidden="true">/</span>
-        <span class="fc-detail-breadcrumb-current">Jurisdictions</span>
-    </nav>
-
-    <!-- Page Header -->
-    <div class="fc-page-header">
-        <div class="fc-page-header-top">
-            <div>
-                <h1>Jurisdiction Registry</h1>
-                <p class="fc-page-header-subtitle">Multi-Jurisdiction Template Extension Framework — RG-27</p>
+    <DataTable TItem="JurisdictionListItem"
+               Items="@FilteredJurisdictions"
+               Loading="_loading"
+               ShowPagination="false"
+               Sortable="true"
+               EmptyTitle="@EmptyJurisdictionTitle"
+               EmptyText="@EmptyJurisdictionText"
+               SkeletonRows="5">
+        <ToolbarContent>
+            <div class="fc-toolbar-search">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                <input type="text" placeholder="Search by country name, code, or currency..." @bind="_searchQuery" @bind:event="oninput" aria-label="Search jurisdictions" />
             </div>
-        </div>
-
-        <!-- Summary Chips -->
-        @if (_stats is not null)
-        {
-            <div class="fc-chip-group">
-                <span class="fc-chip">
-                    <span class="fc-chip__count">@_stats.Total</span> Total
-                </span>
-                <span class="fc-chip">
-                    <span class="fc-chip__dot fc-chip__dot--active" aria-hidden="true"></span>
-                    <span class="fc-chip__count">@_stats.Active</span> Active
-                </span>
-                @if (_stats.Planned > 0)
-                {
-                    <span class="fc-chip">
-                        <span class="fc-chip__dot fc-chip__dot--inactive" aria-hidden="true"></span>
-                        <span class="fc-chip__count">@_stats.Planned</span> Planned
-                    </span>
-                }
+            <div class="fc-toolbar-filter">
+                <select @bind="_statusFilter" aria-label="Filter by status">
+                    <option value="">All Status</option>
+                    <option value="active">Active</option>
+                    <option value="planned">Planned</option>
+                </select>
             </div>
-        }
-    </div>
-
-    <!-- Toolbar -->
-    <div class="fc-toolbar">
-        <div class="fc-toolbar-search">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-            <input type="text" placeholder="Search by country name, code, or currency..." @bind="_searchQuery" @bind:event="oninput" aria-label="Search jurisdictions" />
-        </div>
-        <div class="fc-toolbar-filter">
-            <select @bind="_statusFilter" aria-label="Filter by status">
-                <option value="">All Status</option>
-                <option value="active">Active</option>
-                <option value="planned">Planned</option>
-            </select>
-        </div>
-    </div>
-
-    <!-- Content -->
-    @if (_loading)
-    {
-        <div class="fc-card">
-            <div class="fc-card__body" style="padding:0;overflow:auto;">
-                <table class="fc-table">
-                    <thead>
-                        <tr>
-                            <th>Country</th>
-                            <th>Code</th>
-                            <th>Currency</th>
-                            <th>Timezone</th>
-                            <th>Data Residency</th>
-                            <th>Regulators</th>
-                            <th style="text-align:center;">Modules</th>
-                            <th style="text-align:center;">Institutions</th>
-                            <th>Status</th>
-                            <th style="text-align:right;">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @for (var i = 0; i < 5; i++)
+        </ToolbarContent>
+        <ChildContent>
+            <DataColumn TItem="JurisdictionListItem" Title="Country" SortKey="j => j.CountryName">
+                <CellTemplate>
+                    <span style="font-weight:500;">@context.CountryName</span>
+                </CellTemplate>
+            </DataColumn>
+            <DataColumn TItem="JurisdictionListItem" Title="Code" SortKey="j => j.CountryCode" Width="80px">
+                <CellTemplate><code>@context.CountryCode</code></CellTemplate>
+            </DataColumn>
+            <DataColumn TItem="JurisdictionListItem" Title="Currency" SortKey="j => j.Currency" Width="90px">
+                <CellTemplate><code>@context.Currency</code></CellTemplate>
+            </DataColumn>
+            <DataColumn TItem="JurisdictionListItem" Title="Timezone" SortKey="j => j.Timezone" />
+            <DataColumn TItem="JurisdictionListItem" Title="Data Residency" SortKey="j => j.DataResidencyRegion" />
+            <DataColumn TItem="JurisdictionListItem" Title="Regulators">
+                <CellTemplate>@FormatRegulators(context.RegulatoryBodies)</CellTemplate>
+            </DataColumn>
+            <DataColumn TItem="JurisdictionListItem" Title="Modules" Align="center" Width="80px">
+                <CellTemplate>@context.ModuleCount</CellTemplate>
+            </DataColumn>
+            <DataColumn TItem="JurisdictionListItem" Title="Institutions" Align="center" Width="100px">
+                <CellTemplate>@context.InstitutionCount</CellTemplate>
+            </DataColumn>
+            <DataColumn TItem="JurisdictionListItem" Title="Status" SortKey="j => j.IsActive" Width="100px">
+                <CellTemplate>
+                    @if (context.IsActive)
+                    {
+                        <span class="fc-badge fc-badge--success">Active</span>
+                    }
+                    else
+                    {
+                        <span class="fc-badge fc-badge--warning">Planned</span>
+                    }
+                </CellTemplate>
+            </DataColumn>
+            <DataColumn TItem="JurisdictionListItem" Title="Actions" Align="right" Width="200px">
+                <CellTemplate>
+                    <div style="display:flex;gap:0.35rem;justify-content:flex-end;">
+                        <button class="fc-btn fc-btn--ghost" @onclick="() => OpenEditDialog(context)" @onclick:stopPropagation="true" type="button" title="Edit jurisdiction">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                            Edit
+                        </button>
+                        @if (context.IsActive)
                         {
-                            <tr>
-                                <td><div class="fc-skel fc-skel-text" style="width:120px;"></div></td>
-                                <td><div class="fc-skel fc-skel-text" style="width:40px;"></div></td>
-                                <td><div class="fc-skel fc-skel-text" style="width:40px;"></div></td>
-                                <td><div class="fc-skel fc-skel-text" style="width:100px;"></div></td>
-                                <td><div class="fc-skel fc-skel-text" style="width:80px;"></div></td>
-                                <td><div class="fc-skel fc-skel-text" style="width:100px;"></div></td>
-                                <td style="text-align:center;"><div class="fc-skel fc-skel-text" style="width:24px;margin:0 auto;"></div></td>
-                                <td style="text-align:center;"><div class="fc-skel fc-skel-text" style="width:24px;margin:0 auto;"></div></td>
-                                <td><div class="fc-skel" style="width:52px;height:20px;border-radius:var(--radius-pill);"></div></td>
-                                <td style="text-align:right;"><div class="fc-skel" style="width:120px;height:28px;border-radius:6px;margin-left:auto;"></div></td>
-                            </tr>
+                            <button class="fc-btn fc-btn--ghost fc-btn--danger" @onclick="() => ToggleActive(context.Id)" @onclick:stopPropagation="true" type="button" title="Deactivate jurisdiction">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>
+                                Deactivate
+                            </button>
                         }
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    }
-    else if (_jurisdictions is not null && !FilteredJurisdictions.Any())
-    {
-        <div class="fc-empty">
-            <div class="fc-empty-icon">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/></svg>
-            </div>
-            @if (string.IsNullOrEmpty(_searchQuery) && string.IsNullOrEmpty(_statusFilter))
-            {
-                <h3 class="fc-empty-title">No jurisdictions found</h3>
-                <p class="fc-empty-text">No jurisdictions have been configured yet.</p>
-            }
-            else
-            {
-                <h3 class="fc-empty-title">No matching jurisdictions</h3>
-                <p class="fc-empty-text">Try adjusting your search or filters.</p>
-            }
-        </div>
-    }
-    else if (_jurisdictions is not null)
-    {
-        <div class="fc-card">
-            <div class="fc-card__body" style="padding:0;overflow:auto;">
-                <table class="fc-table">
-                    <thead>
-                        <tr>
-                            <th>Country</th>
-                            <th>Code</th>
-                            <th>Currency</th>
-                            <th>Timezone</th>
-                            <th>Data Residency</th>
-                            <th>Regulators</th>
-                            <th style="text-align:center;">Modules</th>
-                            <th style="text-align:center;">Institutions</th>
-                            <th>Status</th>
-                            <th style="text-align:right;">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @foreach (var j in FilteredJurisdictions)
+                        else
                         {
-                            <tr>
-                                <td style="font-weight:500;">@j.CountryName</td>
-                                <td><code>@j.CountryCode</code></td>
-                                <td><code>@j.Currency</code></td>
-                                <td>@j.Timezone</td>
-                                <td>@j.DataResidencyRegion</td>
-                                <td>@FormatRegulators(j.RegulatoryBodies)</td>
-                                <td style="text-align:center;">@j.ModuleCount</td>
-                                <td style="text-align:center;">@j.InstitutionCount</td>
-                                <td>
-                                    @if (j.IsActive)
-                                    {
-                                        <span class="fc-badge fc-badge--success">Active</span>
-                                    }
-                                    else
-                                    {
-                                        <span class="fc-badge fc-badge--warning">Planned</span>
-                                    }
-                                </td>
-                                <td style="text-align:right;">
-                                    <div style="display:flex;gap:0.35rem;justify-content:flex-end;">
-                                        <button class="fc-btn fc-btn--ghost" @onclick="() => OpenEditDialog(j)" type="button" title="Edit jurisdiction">
-                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-                                            Edit
-                                        </button>
-                                        @if (j.IsActive)
-                                        {
-                                            <button class="fc-btn fc-btn--ghost fc-btn--danger" @onclick="() => ToggleActive(j.Id)" type="button" title="Deactivate jurisdiction">
-                                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>
-                                                Deactivate
-                                            </button>
-                                        }
-                                        else
-                                        {
-                                            <button class="fc-btn fc-btn--ghost" @onclick="() => ToggleActive(j.Id)" type="button" title="Activate jurisdiction">
-                                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-                                                Activate
-                                            </button>
-                                        }
-                                    </div>
-                                </td>
-                            </tr>
+                            <button class="fc-btn fc-btn--ghost" @onclick="() => ToggleActive(context.Id)" @onclick:stopPropagation="true" type="button" title="Activate jurisdiction">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                                Activate
+                            </button>
                         }
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    }
+                    </div>
+                </CellTemplate>
+            </DataColumn>
+        </ChildContent>
+    </DataTable>
 
     <!-- FX Rates Section -->
     <div style="margin-top:2rem;">
@@ -379,14 +280,25 @@
     private DateTime _fxRateDate = DateTime.UtcNow.Date;
     private string _fxSource = "Manual";
 
-    private IEnumerable<JurisdictionListItem> FilteredJurisdictions => (_jurisdictions ?? new())
+    private IReadOnlyList<JurisdictionListItem> FilteredJurisdictions => (_jurisdictions ?? new())
         .Where(j => string.IsNullOrEmpty(_searchQuery) ||
                     j.CountryName.Contains(_searchQuery, StringComparison.OrdinalIgnoreCase) ||
                     j.CountryCode.Contains(_searchQuery, StringComparison.OrdinalIgnoreCase) ||
                     j.Currency.Contains(_searchQuery, StringComparison.OrdinalIgnoreCase))
         .Where(j => string.IsNullOrEmpty(_statusFilter) ||
                     (_statusFilter == "active" && j.IsActive) ||
-                    (_statusFilter == "planned" && !j.IsActive));
+                    (_statusFilter == "planned" && !j.IsActive))
+        .ToList();
+
+    private string EmptyJurisdictionTitle =>
+        string.IsNullOrEmpty(_searchQuery) && string.IsNullOrEmpty(_statusFilter)
+            ? "No jurisdictions found"
+            : "No matching jurisdictions";
+
+    private string EmptyJurisdictionText =>
+        string.IsNullOrEmpty(_searchQuery) && string.IsNullOrEmpty(_statusFilter)
+            ? "No jurisdictions have been configured yet."
+            : "Try adjusting your search or filters.";
 
     protected override async Task OnInitializedAsync()
     {

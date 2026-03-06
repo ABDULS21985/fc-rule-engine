@@ -220,7 +220,6 @@
                 <NavLink href="@item.Href"
                          Match="@(item.Href == "/" ? NavLinkMatch.All : NavLinkMatch.Prefix)"
                          class="fc-nav__item"
-                         @oncontextmenu:preventDefault="true"
                          @oncontextmenu="(e) => OnRightClick(e, item)"
                          @onmouseenter="() => ShowTooltip(item)"
                          @onmouseleave="HideTooltip"
@@ -506,7 +505,7 @@
     private async Task OnRightClick(MouseEventArgs e, NavItemModel item)
     {
         if (_contextMenu == null) return;
-        var ctxItem = new NavContextItem(item.Label, item.Href, item.IconPath, item.QuickActions);
+        var ctxItem = new NavContextMenu.NavContextItem(item.Label, item.Href, item.IconPath, item.QuickActions);
         await _contextMenu.ShowAsync(e.ClientX, e.ClientY, ctxItem,
             SidebarState.IsFavorite(item.Href));
     }
@@ -571,6 +570,6 @@
         string IconPath,
         int BadgeCount,
         bool IsLocked,
-        List<NavQuickAction> QuickActions,
+        List<NavContextMenu.NavQuickAction> QuickActions,
         string GroupId);
 }

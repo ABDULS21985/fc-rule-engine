@@ -167,7 +167,7 @@ public sealed class CommandPaletteService
     public void AddRecentSearch(CommandItem item)
     {
         _recentSearches.RemoveAll(r => r.ItemId == item.Id);
-        _recentSearches.Insert(0, new RecentSearch(item.Id, item.Label, item.Description, item.Url, item.Icon, DateTime.UtcNow));
+        _recentSearches.Insert(0, new RecentSearch(item.Id, item.Label, item.Description, item.Url, item.IconPath, DateTime.UtcNow));
         if (_recentSearches.Count > MaxRecent)
             _recentSearches.RemoveAt(_recentSearches.Count - 1);
     }

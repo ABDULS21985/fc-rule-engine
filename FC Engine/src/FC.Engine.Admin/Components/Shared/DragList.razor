@@ -1,0 +1,122 @@
+@typeparam TItem
+@inject IJSRuntime JS
+@implements IAsyncDisposable
+
+@* ================================================================
+   DragList<TItem> — Sortable drag-and-drop list component
+
+   Usage:
+     <DragList Items="@_myList" IdSelector="x => x.Id.ToString()" OnReorder="HandleReorder">
+       <ItemTemplate Context="item">
+         <div>@item.Name</div>
+       </ItemTemplate>
+     </DragList>
+
+   The drag handle is the entire item by default.
+   To use a custom handle, put data-drag-handle on the handle element
+   inside ItemTemplate.
+   ================================================================ *@
+
+<div class="fc-drag-list @CssClass"
+     id="@_containerId"
+     data-sortable="@_containerId"
+     aria-label="@(AriaLabel ?? "Sortable list. Use Space to select an item, then arrow keys to move it, Space again to confirm.")"
+     role="list">
+    @if (Items != null)
+    {
+        @foreach (var item in Items)
+        {
+            <div class="fc-drag-item"
+                 data-drag-item
+                 data-drag-id="@IdSelector(item)"
+                 tabindex="0"
+                 role="listitem"
+                 aria-label="@(ItemAriaLabel?.Invoke(item) ?? "Drag to reorder")">
+                @* Drag handle indicator *@
+                <span class="fc-drag-handle" data-drag-handle aria-hidden="true" title="Drag to reorder">
+                    <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16">
+                        <circle cx="9" cy="5" r="1.5"/>
+                        <circle cx="9" cy="12" r="1.5"/>
+                        <circle cx="9" cy="19" r="1.5"/>
+                        <circle cx="15" cy="5" r="1.5"/>
+                        <circle cx="15" cy="12" r="1.5"/>
+                        <circle cx="15" cy="19" r="1.5"/>
+                    </svg>
+                </span>
+                <div class="fc-drag-item-content">
+                    @ItemTemplate(item)
+                </div>
+            </div>
+        }
+    }
+</div>
+
+@code {
+    /// <summary>Items to display and sort.</summary>
+    [Parameter] public IList<TItem>? Items { get; set; }
+
+    /// <summary>Function to extract a unique string ID from each item.</summary>
+    [Parameter, EditorRequired] public Func<TItem, string> IdSelector { get; set; } = null!;
+
+    /// <summary>Template for each item's content.</summary>
+    [Parameter, EditorRequired] public RenderFragment<TItem> ItemTemplate { get; set; } = null!;
+
+    /// <summary>Called when the user drops an item in a new position.</summary>
+    [Parameter] public EventCallback<DragReorderEventArgs<TItem>> OnReorder { get; set; }
+
+    /// <summary>Additional CSS class for the container.</summary>
+    [Parameter] public string? CssClass { get; set; }
+
+    /// <summary>Aria label for the list container.</summary>
+    [Parameter] public string? AriaLabel { get; set; }
+
+    /// <summary>Function to generate aria-label for each item.</summary>
+    [Parameter] public Func<TItem, string>? ItemAriaLabel { get; set; }
+
+    private string _containerId = $"fc-drag-{Guid.NewGuid():N}";
+    private DotNetObjectReference<DragList<TItem>>? _dotNetRef;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _dotNetRef = DotNetObjectReference.Create(this);
+            await JS.InvokeVoidAsync("fcDragDrop.initSortable", _containerId, _dotNetRef, new
+            {
+                itemSelector = "[data-drag-item]",
+                handleSelector = "[data-drag-handle]"
+            });
+        }
+    }
+
+    [JSInvokable("OnReorder")]
+    public async Task HandleJsReorder(string[] newIdOrder, int newIndex, int oldIndex)
+    {
+        if (Items == null || !OnReorder.HasDelegate) return;
+
+        // Rebuild the Items list in the new order
+        var idMap = Items.ToDictionary(IdSelector);
+        var reordered = newIdOrder
+            .Where(id => idMap.ContainsKey(id))
+            .Select(id => idMap[id])
+            .ToList();
+
+        await OnReorder.InvokeAsync(new DragReorderEventArgs<TItem>
+        {
+            NewOrder = reordered,
+            MovedItem = reordered.Count > newIndex && newIndex >= 0 ? reordered[newIndex] : default,
+            OldIndex = oldIndex,
+            NewIndex = newIndex
+        });
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("fcDragDrop.destroySortable", _containerId);
+        }
+        catch { /* JS may already be disposed */ }
+        _dotNetRef?.Dispose();
+    }
+}

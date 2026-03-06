@@ -12,179 +12,84 @@
 
 <PageTitle>Billing Plans</PageTitle>
 
+<PageHeader Title="Subscription Plans"
+            Subtitle="Manage commercial plans, limits, and base pricing for all tenants."
+            CountBadge="@(!_loading ? _plans.Count : null)" />
+
 <div class="fc-page">
 
-    <!-- Breadcrumb -->
-    <nav class="fc-detail-breadcrumb" aria-label="Breadcrumb">
-        <a href="/">Dashboard</a>
-        <span class="fc-detail-breadcrumb-sep" aria-hidden="true">/</span>
-        <a href="/billing/plans">Billing</a>
-        <span class="fc-detail-breadcrumb-sep" aria-hidden="true">/</span>
-        <span class="fc-detail-breadcrumb-current">Plans</span>
-    </nav>
+    <DataTable TItem="SubscriptionPlan"
+               Items="@FilteredPlans.ToList()"
+               Loading="_loading"
+               Sortable="true"
+               ShowPagination="false"
+               EmptyTitle="@(string.IsNullOrEmpty(_searchTerm) && string.IsNullOrEmpty(_statusFilter) ? "No subscription plans found" : "No matching plans")"
+               EmptyText="@(string.IsNullOrEmpty(_searchTerm) && string.IsNullOrEmpty(_statusFilter) ? "Plans will appear here once they have been configured in the system." : "Try adjusting your search or filters.")"
+               SkeletonRows="5">
+        <ToolbarContent>
+            <div class="fc-toolbar-search">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                <input type="text" placeholder="Search by code, name, or description..." @bind="_searchTerm" @bind:event="oninput" aria-label="Search plans" />
+            </div>
+            <div class="fc-toolbar-filter">
+                <select @bind="_statusFilter" aria-label="Filter by status">
+                    <option value="">All Status</option>
+                    <option value="active">Active</option>
+                    <option value="inactive">Inactive</option>
+                </select>
+            </div>
+        </ToolbarContent>
+        <ChildContent>
+            <DataColumn TItem="SubscriptionPlan" Title="Plan" SortKey="p => p.PlanName">
+                <CellTemplate>
+                    <div style="font-weight:500;">@context.PlanName</div>
+                    <div style="font-size:var(--text-caption);color:var(--cbn-text-muted);">@context.PlanCode</div>
+                </CellTemplate>
+            </DataColumn>
+            <DataColumn TItem="SubscriptionPlan" Title="Tier" SortKey="p => p.Tier" Width="70px">
+                <CellTemplate>@context.Tier</CellTemplate>
+            </DataColumn>
+            <DataColumn TItem="SubscriptionPlan" Title="Monthly" SortKey="p => p.BasePriceMonthly" Width="120px">
+                <CellTemplate>@FormatCurrency(context.BasePriceMonthly)</CellTemplate>
+            </DataColumn>
+            <DataColumn TItem="SubscriptionPlan" Title="Annual" SortKey="p => p.BasePriceAnnual" Width="120px">
+                <CellTemplate>@FormatCurrency(context.BasePriceAnnual)</CellTemplate>
+            </DataColumn>
+            <DataColumn TItem="SubscriptionPlan" Title="Limits" Width="160px">
+                <CellTemplate>
+                    <div style="font-size:var(--text-caption);">Modules: @context.MaxModules</div>
+                    <div style="font-size:var(--text-caption);">Users: @context.MaxUsersPerEntity</div>
+                    <div style="font-size:var(--text-caption);">Entities: @context.MaxEntities</div>
+                </CellTemplate>
+            </DataColumn>
+            <DataColumn TItem="SubscriptionPlan" Title="Features" Width="100px">
+                <CellTemplate>
+                    <span class="fc-badge fc-badge--neutral">@CountFeatures(context.Features)</span>
+                </CellTemplate>
+            </DataColumn>
+            <DataColumn TItem="SubscriptionPlan" Title="Status" SortKey="p => p.IsActive" Width="90px">
+                <CellTemplate>
+                    @if (context.IsActive)
+                    {
+                        <span class="fc-badge fc-badge--success">Active</span>
+                    }
+                    else
+                    {
+                        <span class="fc-badge fc-badge--danger">Inactive</span>
+                    }
+                </CellTemplate>
+            </DataColumn>
+            <DataColumn TItem="SubscriptionPlan" Title="Actions" Align="right" Width="90px">
+                <CellTemplate>
+                    <button class="fc-btn fc-btn--ghost" @onclick="() => BeginEdit(context)" @onclick:stopPropagation="true" type="button" title="Edit plan">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                        Edit
+                    </button>
+                </CellTemplate>
+            </DataColumn>
+        </ChildContent>
+    </DataTable>
 
-    <!-- Page Header -->
-    <div class="fc-page-header">
-        <div class="fc-page-header-top">
-            <div>
-                <h1>Subscription Plans</h1>
-                <p class="fc-page-header-subtitle">Manage commercial plans, limits, and base pricing for all tenants.</p>
-            </div>
-        </div>
-
-        @if (!_loading && _plans.Any())
-        {
-            <div class="fc-chip-group">
-                <span class="fc-chip">
-                    <span class="fc-chip__dot fc-chip__dot--active" aria-hidden="true"></span>
-                    <span class="fc-chip__count">@_plans.Count(p => p.IsActive)</span> Active Plans
-                </span>
-                <span class="fc-chip">
-                    <span class="fc-chip__count">@FormatCurrency(_plans.Any() ? _plans.Average(p => p.BasePriceMonthly) : 0)</span> Avg Monthly Price
-                </span>
-                <span class="fc-chip">
-                    <span class="fc-chip__count">@FormatCurrency(_plans.Any() ? _plans.Max(p => p.BasePriceMonthly) : 0)</span> Highest Price
-                </span>
-                <span class="fc-chip">
-                    <span class="fc-chip__count">@_plans.Sum(p => CountFeatures(p.Features))</span> Feature Flags
-                </span>
-            </div>
-        }
-    </div>
-
-    <!-- Toolbar -->
-    <div class="fc-toolbar">
-        <div class="fc-toolbar-search">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-            <input type="text" placeholder="Search by code, name, or description..." @bind="_searchTerm" @bind:event="oninput" aria-label="Search plans" />
-        </div>
-        <div class="fc-toolbar-filter">
-            <select @bind="_statusFilter" aria-label="Filter by status">
-                <option value="">All Status</option>
-                <option value="active">Active</option>
-                <option value="inactive">Inactive</option>
-            </select>
-        </div>
-    </div>
-
-    <!-- Content -->
-    @if (_loading)
-    {
-        <div class="fc-card">
-            <div class="fc-card__body" style="padding:0;overflow:auto;">
-                <table class="fc-table">
-                    <thead>
-                        <tr>
-                            <th>Plan</th>
-                            <th>Tier</th>
-                            <th>Monthly</th>
-                            <th>Annual</th>
-                            <th>Limits</th>
-                            <th>Features</th>
-                            <th>Status</th>
-                            <th style="text-align:right;">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @for (var i = 0; i < 5; i++)
-                        {
-                            <tr>
-                                <td>
-                                    <div class="fc-skel fc-skel-text" style="width:120px;"></div>
-                                    <div class="fc-skel fc-skel-text" style="width:80px;margin-top:4px;"></div>
-                                </td>
-                                <td><div class="fc-skel fc-skel-text" style="width:30px;"></div></td>
-                                <td><div class="fc-skel fc-skel-text" style="width:70px;"></div></td>
-                                <td><div class="fc-skel fc-skel-text" style="width:70px;"></div></td>
-                                <td>
-                                    <div class="fc-skel fc-skel-text" style="width:90px;"></div>
-                                    <div class="fc-skel fc-skel-text" style="width:80px;margin-top:4px;"></div>
-                                </td>
-                                <td><div class="fc-skel fc-skel-text" style="width:24px;"></div></td>
-                                <td><div class="fc-skel" style="width:52px;height:20px;border-radius:var(--radius-pill);"></div></td>
-                                <td style="text-align:right;"><div class="fc-skel" style="width:50px;height:28px;border-radius:6px;"></div></td>
-                            </tr>
-                        }
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    }
-    else if (!FilteredPlans.Any())
-    {
-        <div class="fc-empty">
-            <div class="fc-empty-icon">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
-            </div>
-            @if (string.IsNullOrEmpty(_searchTerm) && string.IsNullOrEmpty(_statusFilter))
-            {
-                <h3 class="fc-empty-title">No subscription plans found</h3>
-                <p class="fc-empty-text">Plans will appear here once they have been configured in the system.</p>
-            }
-            else
-            {
-                <h3 class="fc-empty-title">No matching plans</h3>
-                <p class="fc-empty-text">Try adjusting your search or filters.</p>
-            }
-        </div>
-    }
-    else
-    {
-        <div class="fc-card">
-            <div class="fc-card__body" style="padding:0;overflow:auto;">
-                <table class="fc-table">
-                    <thead>
-                        <tr>
-                            <th>Plan</th>
-                            <th>Tier</th>
-                            <th>Monthly</th>
-                            <th>Annual</th>
-                            <th>Limits</th>
-                            <th>Features</th>
-                            <th>Status</th>
-                            <th style="text-align:right;">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @foreach (var plan in FilteredPlans)
-                        {
-                            <tr>
-                                <td>
-                                    <div style="font-weight:500;">@plan.PlanName</div>
-                                    <div style="font-size:var(--text-caption);color:var(--cbn-text-muted);">@plan.PlanCode</div>
-                                </td>
-                                <td>@plan.Tier</td>
-                                <td>@FormatCurrency(plan.BasePriceMonthly)</td>
-                                <td>@FormatCurrency(plan.BasePriceAnnual)</td>
-                                <td>
-                                    <div style="font-size:var(--text-caption);">Modules: @plan.MaxModules</div>
-                                    <div style="font-size:var(--text-caption);">Users: @plan.MaxUsersPerEntity</div>
-                                    <div style="font-size:var(--text-caption);">Entities: @plan.MaxEntities</div>
-                                </td>
-                                <td><span class="fc-badge fc-badge--neutral">@CountFeatures(plan.Features)</span></td>
-                                <td>
-                                    @if (plan.IsActive)
-                                    {
-                                        <span class="fc-badge fc-badge--success">Active</span>
-                                    }
-                                    else
-                                    {
-                                        <span class="fc-badge fc-badge--danger">Inactive</span>
-                                    }
-                                </td>
-                                <td style="text-align:right;">
-                                    <button class="fc-btn fc-btn--ghost" @onclick="() => BeginEdit(plan)" type="button" title="Edit plan">
-                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-                                        Edit
-                                    </button>
-                                </td>
-                            </tr>
-                        }
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    }
 </div>
 
 <!-- Edit Plan Modal -->

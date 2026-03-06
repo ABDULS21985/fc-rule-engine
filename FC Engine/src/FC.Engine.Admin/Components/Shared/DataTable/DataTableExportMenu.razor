@@ -1,0 +1,89 @@
+@* Export dropdown menu. *@
+
+<div class="fc-dt-export-wrap" @onfocusout="OnFocusOut">
+    <button class="fc-btn fc-btn--outline fc-btn--sm"
+            type="button"
+            @onclick="Toggle"
+            aria-haspopup="menu"
+            aria-expanded="@_open"
+            title="Export data">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round" width="14" height="14" aria-hidden="true">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+            <polyline points="7 10 12 15 17 10"/>
+            <line x1="12" y1="15" x2="12" y2="3"/>
+        </svg>
+        Export
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round" width="12" height="12" aria-hidden="true">
+            <polyline points="6 9 12 15 18 9"/>
+        </svg>
+    </button>
+
+    @if (_open)
+    {
+        <div class="fc-dt-export-dropdown" role="menu">
+            <button class="fc-dt-export-item" role="menuitem" type="button"
+                    @onclick="ExportCsvClick" @onclick:stopPropagation="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                     stroke-linecap="round" stroke-linejoin="round" width="14" height="14" aria-hidden="true">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/>
+                    <path d="M14 2v6h6"/>
+                    <path d="M8 13h2"/><path d="M8 17h2"/><path d="M14 13h2"/><path d="M14 17h2"/>
+                </svg>
+                Export as CSV
+            </button>
+            <button class="fc-dt-export-item" role="menuitem" type="button"
+                    @onclick="ExportExcelClick" @onclick:stopPropagation="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                     stroke-linecap="round" stroke-linejoin="round" width="14" height="14" aria-hidden="true">
+                    <rect x="3" y="3" width="18" height="18" rx="2"/>
+                    <path d="m9 9 6 6M15 9l-6 6"/>
+                </svg>
+                Export as Excel
+            </button>
+            <button class="fc-dt-export-item" role="menuitem" type="button"
+                    @onclick="ExportPdfClick" @onclick:stopPropagation="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                     stroke-linecap="round" stroke-linejoin="round" width="14" height="14" aria-hidden="true">
+                    <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/>
+                    <polyline points="14 2 14 8 20 8"/>
+                </svg>
+                Export as PDF
+            </button>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public EventCallback OnExportCsv { get; set; }
+    [Parameter] public EventCallback OnExportExcel { get; set; }
+    [Parameter] public EventCallback OnExportPdf { get; set; }
+
+    private bool _open;
+    private void Toggle() => _open = !_open;
+
+    private async Task ExportCsvClick()
+    {
+        _open = false;
+        await OnExportCsv.InvokeAsync();
+    }
+
+    private async Task ExportExcelClick()
+    {
+        _open = false;
+        await OnExportExcel.InvokeAsync();
+    }
+
+    private async Task ExportPdfClick()
+    {
+        _open = false;
+        await OnExportPdf.InvokeAsync();
+    }
+
+    private async Task OnFocusOut(FocusEventArgs e)
+    {
+        await Task.Delay(150);
+        _open = false;
+    }
+}

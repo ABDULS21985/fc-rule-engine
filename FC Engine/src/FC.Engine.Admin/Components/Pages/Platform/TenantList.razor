@@ -9,12 +9,8 @@
 
 <PageTitle>Tenant List</PageTitle>
 
-<header class="fc-dash-header" role="banner">
-    <div class="fc-dash-header-text">
-        <h1>Global Tenant List</h1>
-        <p>Search, filter, sort, export, and take quick tenant actions.</p>
-    </div>
-</header>
+<PageHeader Title="Global Tenant List"
+            Subtitle="Search, filter, sort, export, and take quick tenant actions." />
 
 @if (!string.IsNullOrWhiteSpace(_message))
 {
@@ -94,66 +90,66 @@
     </div>
 </div>
 
-@if (_loading)
-{
-    <div class="fc-card"><div class="fc-card__body">Loading tenants...</div></div>
-}
-else
-{
-    <div class="fc-card">
-        <div class="fc-card__body" style="padding:0; overflow:auto;">
-            <table class="fc-table">
-                <thead>
-                    <tr>
-                        <th>Tenant Name</th>
-                        <th>Slug</th>
-                        <th>Status</th>
-                        <th>Plan</th>
-                        <th>Active Modules</th>
-                        <th>Users</th>
-                        <th>Entities</th>
-                        <th>MRR</th>
-                        <th>Created</th>
-                        <th>Actions</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @foreach (var tenant in _data.Tenants)
+<DataTable TItem="PlatformTenantListItem"
+           Items="@_data.Tenants"
+           Loading="_loading"
+           Sortable="false"
+           ShowPagination="true"
+           PageSize="25"
+           EmptyTitle="No tenants found"
+           EmptyText="Try adjusting your search or filters and click Apply."
+           SkeletonRows="5">
+    <ChildContent>
+        <DataColumn TItem="PlatformTenantListItem" Title="Tenant Name" Width="200px">
+            <CellTemplate>
+                <div style="font-weight:600;">@context.TenantName</div>
+                <small style="color:#64748b;">@(context.ContactEmail ?? "-")</small>
+            </CellTemplate>
+        </DataColumn>
+        <DataColumn TItem="PlatformTenantListItem" Title="Slug" Width="140px">
+            <CellTemplate><code>@context.TenantSlug</code></CellTemplate>
+        </DataColumn>
+        <DataColumn TItem="PlatformTenantListItem" Title="Status" Width="120px">
+            <CellTemplate>
+                <span class="fc-badge @GetStatusBadge(context.Status)">@context.Status</span>
+            </CellTemplate>
+        </DataColumn>
+        <DataColumn TItem="PlatformTenantListItem" Title="Plan" Width="120px">
+            <CellTemplate>@context.PlanName</CellTemplate>
+        </DataColumn>
+        <DataColumn TItem="PlatformTenantListItem" Title="Active Modules" Width="120px">
+            <CellTemplate>@context.ActiveModules</CellTemplate>
+        </DataColumn>
+        <DataColumn TItem="PlatformTenantListItem" Title="Users" Width="80px">
+            <CellTemplate>@context.Users</CellTemplate>
+        </DataColumn>
+        <DataColumn TItem="PlatformTenantListItem" Title="Entities" Width="80px">
+            <CellTemplate>@context.Entities</CellTemplate>
+        </DataColumn>
+        <DataColumn TItem="PlatformTenantListItem" Title="MRR" Width="120px">
+            <CellTemplate>NGN @context.Mrr.ToString("N2")</CellTemplate>
+        </DataColumn>
+        <DataColumn TItem="PlatformTenantListItem" Title="Created" Width="120px">
+            <CellTemplate>@context.CreatedAt.ToString("dd MMM yyyy")</CellTemplate>
+        </DataColumn>
+        <DataColumn TItem="PlatformTenantListItem" Title="Actions" Align="right" Width="220px">
+            <CellTemplate>
+                <div style="display:flex; gap:0.35rem; flex-wrap:wrap; justify-content:flex-end;">
+                    <button class="fc-btn fc-btn--outline fc-btn--xs" @onclick="() => OpenTenant(context.TenantId)" @onclick:stopPropagation="true">View</button>
+                    <button class="fc-btn fc-btn--outline fc-btn--xs" @onclick="() => ImpersonateTenant(context.TenantId)" @onclick:stopPropagation="true">Impersonate</button>
+                    @if (context.Status == TenantStatus.Active)
                     {
-                        <tr>
-                            <td>
-                                <div style="font-weight:600;">@tenant.TenantName</div>
-                                <small style="color:#64748b;">@(tenant.ContactEmail ?? "-")</small>
-                            </td>
-                            <td><code>@tenant.TenantSlug</code></td>
-                            <td><span class="fc-badge @GetStatusBadge(tenant.Status)">@tenant.Status</span></td>
-                            <td>@tenant.PlanName</td>
-                            <td>@tenant.ActiveModules</td>
-                            <td>@tenant.Users</td>
-                            <td>@tenant.Entities</td>
-                            <td>NGN @tenant.Mrr.ToString("N2")</td>
-                            <td>@tenant.CreatedAt.ToString("dd MMM yyyy")</td>
-                            <td>
-                                <div style="display:flex; gap:0.35rem; flex-wrap:wrap;">
-                                    <button class="fc-btn fc-btn--outline fc-btn--xs" @onclick="() => OpenTenant(tenant.TenantId)">View</button>
-                                    <button class="fc-btn fc-btn--outline fc-btn--xs" @onclick="() => ImpersonateTenant(tenant.TenantId)">Impersonate</button>
-                                    @if (tenant.Status == TenantStatus.Active)
-                                    {
-                                        <button class="fc-btn fc-btn--xs" style="background:#b91c1c;color:#fff;" @onclick="() => SuspendTenant(tenant.TenantId)">Suspend</button>
-                                    }
-                                    else if (tenant.Status == TenantStatus.PendingActivation || tenant.Status == TenantStatus.Suspended)
-                                    {
-                                        <button class="fc-btn fc-btn--xs" style="background:#166534;color:#fff;" @onclick="() => ActivateTenant(tenant.TenantId)">Activate</button>
-                                    }
-                                </div>
-                            </td>
-                        </tr>
+                        <button class="fc-btn fc-btn--xs" style="background:#b91c1c;color:#fff;" @onclick="() => SuspendTenant(context.TenantId)" @onclick:stopPropagation="true">Suspend</button>
                     }
-                </tbody>
-            </table>
-        </div>
-    </div>
-}
+                    else if (context.Status == TenantStatus.PendingActivation || context.Status == TenantStatus.Suspended)
+                    {
+                        <button class="fc-btn fc-btn--xs" style="background:#166534;color:#fff;" @onclick="() => ActivateTenant(context.TenantId)" @onclick:stopPropagation="true">Activate</button>
+                    }
+                </div>
+            </CellTemplate>
+        </DataColumn>
+    </ChildContent>
+</DataTable>
 
 @code {
     [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }

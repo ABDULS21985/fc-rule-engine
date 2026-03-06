@@ -55,9 +55,9 @@
                         var page = p;
                         <button class="fc-list-page-btn @(page == CurrentPage ? "fc-list-page-btn-active" : "")"
                                 @onclick="() => OnPageChanged.InvokeAsync(page)"
-                                aria-label="Page @page"
-                                aria-current="@(page == CurrentPage ? "page" : null)">
-                            @page
+                                aria-label="Page @(page)"
+                                aria-current="@GetAriaCurrent(page)">
+                            @(page)
                         </button>
                     }
                 }
@@ -125,4 +125,7 @@
         if (int.TryParse(e.Value?.ToString(), out var size))
             await OnPageSizeChanged.InvokeAsync(size);
     }
+
+    // "page" string literal in @(...) inside aria-current causes Razor to confuse it with @page directive
+    private string? GetAriaCurrent(int p) => p == CurrentPage ? "page" : null;
 }

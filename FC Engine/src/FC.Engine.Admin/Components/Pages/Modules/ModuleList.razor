@@ -9,161 +9,91 @@
 
 <PageTitle>Module Registry</PageTitle>
 
+<PageHeader Title="Module Registry"
+            Subtitle="Operational overview of all regulatory packs loaded into the universal template engine."
+            CountBadge="@(!_loading ? _rows.Count : null)">
+    <PrimaryAction>
+        <button class="fc-btn fc-btn--primary" @onclick="OpenImport" type="button">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16" aria-hidden="true"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            Import Module
+        </button>
+    </PrimaryAction>
+</PageHeader>
+
 <div class="fc-page">
 
-    <!-- Breadcrumb -->
-    <nav class="fc-detail-breadcrumb" aria-label="Breadcrumb">
-        <a href="/">Dashboard</a>
-        <span class="fc-detail-breadcrumb-sep" aria-hidden="true">/</span>
-        <span class="fc-detail-breadcrumb-current">Modules</span>
-    </nav>
-
-    <!-- Page Header -->
-    <div class="fc-page-header">
-        <div class="fc-page-header-top">
-            <div>
-                <h1>Module Registry</h1>
-                <p class="fc-page-header-subtitle">Operational overview of all regulatory packs loaded into the universal template engine.</p>
+    <DataTable TItem="ModuleListRow"
+               Items="@FilteredModules.ToList()"
+               Loading="_loading"
+               ShowPagination="true"
+               Sortable="true"
+               EmptyTitle="No modules found"
+               EmptyText="Try adjusting your search or filters, or import a new module."
+               SkeletonRows="5">
+        <ToolbarContent>
+            <div class="fc-toolbar-search">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                <input type="text" placeholder="Search by code, name, or regulator..." @bind="_searchQuery" @bind:event="oninput" aria-label="Search modules" />
             </div>
-            <button class="fc-btn fc-btn--primary" @onclick="OpenImport" type="button">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-                Import Module
-            </button>
-        </div>
-
-        <!-- Summary Chips -->
-        <div class="fc-chip-group">
-            <span class="fc-chip">
-                <span class="fc-chip__count">@_rows.Count</span> Total
-            </span>
-            <span class="fc-chip">
-                <span class="fc-chip__dot fc-chip__dot--active" aria-hidden="true"></span>
-                <span class="fc-chip__count">@_rows.Count(r => r.IsActive)</span> Active
-            </span>
-            @if (_rows.Any(r => !r.IsActive))
-            {
-                <span class="fc-chip">
-                    <span class="fc-chip__dot fc-chip__dot--inactive" aria-hidden="true"></span>
-                    <span class="fc-chip__count">@_rows.Count(r => !r.IsActive)</span> Inactive
-                </span>
-            }
-            <span class="fc-chip">
-                <span class="fc-chip__count">@_rows.Sum(r => r.ActiveTenants)</span> Tenant Deployments
-            </span>
-        </div>
-    </div>
-
-    <!-- Toolbar -->
-    <div class="fc-toolbar">
-        <div class="fc-toolbar-search">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-            <input type="text" placeholder="Search by code, name, or regulator..." @bind="_searchQuery" @bind:event="oninput" aria-label="Search modules" />
-        </div>
-        <div class="fc-toolbar-filter">
-            <select @bind="_statusFilter" aria-label="Filter by status">
-                <option value="">All Status</option>
-                <option value="active">Active</option>
-                <option value="inactive">Inactive</option>
-            </select>
-        </div>
-    </div>
-
-    <!-- Content -->
-    @if (_loading)
-    {
-        <div class="fc-card">
-            <div class="fc-card__body" style="padding:0;overflow:auto;">
-                <table class="fc-table">
-                    <thead>
-                        <tr><th>Code</th><th>Name</th><th>Regulator</th><th>Sheets</th><th>Version</th><th>Status</th><th>Tenants</th><th></th></tr>
-                    </thead>
-                    <tbody>
-                        @for (var i = 0; i < 5; i++)
-                        {
-                            <tr>
-                                <td><div class="fc-skel fc-skel-text" style="width:60px;"></div></td>
-                                <td><div class="fc-skel fc-skel-text" style="width:160px;"></div></td>
-                                <td><div class="fc-skel fc-skel-text" style="width:40px;"></div></td>
-                                <td><div class="fc-skel fc-skel-text" style="width:24px;"></div></td>
-                                <td><div class="fc-skel fc-skel-text" style="width:40px;"></div></td>
-                                <td><div class="fc-skel" style="width:52px;height:20px;border-radius:var(--radius-pill);"></div></td>
-                                <td><div class="fc-skel fc-skel-text" style="width:24px;"></div></td>
-                                <td><div class="fc-skel" style="width:50px;height:28px;border-radius:6px;"></div></td>
-                            </tr>
-                        }
-                    </tbody>
-                </table>
+            <div class="fc-toolbar-filter">
+                <select @bind="_statusFilter" aria-label="Filter by status">
+                    <option value="">All Status</option>
+                    <option value="active">Active</option>
+                    <option value="inactive">Inactive</option>
+                </select>
             </div>
-        </div>
-    }
-    else if (!FilteredModules.Any())
-    {
-        <div class="fc-empty">
-            <div class="fc-empty-icon">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
-            </div>
-            @if (string.IsNullOrEmpty(_searchQuery) && string.IsNullOrEmpty(_statusFilter))
-            {
-                <h3 class="fc-empty-title">No modules found</h3>
-                <p class="fc-empty-text">Import your first module to begin building regulatory templates.</p>
-            }
-            else
-            {
-                <h3 class="fc-empty-title">No matching modules</h3>
-                <p class="fc-empty-text">Try adjusting your search or filters.</p>
-            }
-        </div>
-    }
-    else
-    {
-        <div class="fc-card">
-            <div class="fc-card__body" style="padding:0;overflow:auto;">
-                <table class="fc-table">
-                    <thead>
-                        <tr><th>Code</th><th>Name</th><th>Regulator</th><th>Sheets</th><th>Version</th><th>Status</th><th>Tenants</th><th style="text-align:right;">Actions</th></tr>
-                    </thead>
-                    <tbody>
-                        @foreach (var row in FilteredModules)
-                        {
-                            <tr>
-                                <td><code>@row.ModuleCode</code></td>
-                                <td style="font-weight:500;">@row.ModuleName</td>
-                                <td>@row.RegulatorCode</td>
-                                <td><span class="fc-badge fc-badge--neutral">@row.SheetCount</span></td>
-                                <td>
-                                    @if (row.CurrentVersion is not null)
-                                    {
-                                        <span class="fc-badge fc-badge--success">@row.CurrentVersion</span>
-                                    }
-                                    else
-                                    {
-                                        <span style="color:#94a3b8;">—</span>
-                                    }
-                                </td>
-                                <td>
-                                    @if (row.IsActive)
-                                    {
-                                        <span class="fc-badge fc-badge--success">Active</span>
-                                    }
-                                    else
-                                    {
-                                        <span class="fc-badge fc-badge--danger">Inactive</span>
-                                    }
-                                </td>
-                                <td><span class="fc-badge fc-badge--neutral">@row.ActiveTenants</span></td>
-                                <td style="text-align:right;">
-                                    <button class="fc-btn fc-btn--ghost" @onclick="() => OpenDetail(row.ModuleCode)" type="button" title="View module details">
-                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-                                        View
-                                    </button>
-                                </td>
-                            </tr>
-                        }
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    }
+        </ToolbarContent>
+        <ChildContent>
+            <DataColumn TItem="ModuleListRow" Title="Code" SortKey="x => x.ModuleCode" Width="100px">
+                <CellTemplate><code>@context.ModuleCode</code></CellTemplate>
+            </DataColumn>
+            <DataColumn TItem="ModuleListRow" Title="Name" SortKey="x => x.ModuleName">
+                <CellTemplate><span style="font-weight:500;">@context.ModuleName</span></CellTemplate>
+            </DataColumn>
+            <DataColumn TItem="ModuleListRow" Title="Regulator" SortKey="x => x.RegulatorCode" Width="100px">
+                <CellTemplate>@context.RegulatorCode</CellTemplate>
+            </DataColumn>
+            <DataColumn TItem="ModuleListRow" Title="Sheets" Width="80px">
+                <CellTemplate><span class="fc-badge fc-badge--neutral">@context.SheetCount</span></CellTemplate>
+            </DataColumn>
+            <DataColumn TItem="ModuleListRow" Title="Version" Width="80px">
+                <CellTemplate>
+                    @if (context.CurrentVersion is not null)
+                    {
+                        <span class="fc-badge fc-badge--success">@context.CurrentVersion</span>
+                    }
+                    else
+                    {
+                        <span style="color:#94a3b8;">—</span>
+                    }
+                </CellTemplate>
+            </DataColumn>
+            <DataColumn TItem="ModuleListRow" Title="Status" Width="80px">
+                <CellTemplate>
+                    @if (context.IsActive)
+                    {
+                        <span class="fc-badge fc-badge--success">Active</span>
+                    }
+                    else
+                    {
+                        <span class="fc-badge fc-badge--danger">Inactive</span>
+                    }
+                </CellTemplate>
+            </DataColumn>
+            <DataColumn TItem="ModuleListRow" Title="Tenants" Width="80px">
+                <CellTemplate><span class="fc-badge fc-badge--neutral">@context.ActiveTenants</span></CellTemplate>
+            </DataColumn>
+            <DataColumn TItem="ModuleListRow" Title="Actions" Width="100px" Align="right">
+                <CellTemplate>
+                    <button class="fc-btn fc-btn--ghost" @onclick:stopPropagation="true" @onclick="() => OpenDetail(context.ModuleCode)" type="button" title="View module details">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                        View
+                    </button>
+                </CellTemplate>
+            </DataColumn>
+        </ChildContent>
+    </DataTable>
+
 </div>
 
 @code {

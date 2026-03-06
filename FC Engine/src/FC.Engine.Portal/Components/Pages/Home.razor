@@ -1,8 +1,9 @@
 @page "/"
 @attribute [Authorize]
+@using FC.Engine.Domain.Enums
+@using FC.Engine.Infrastructure.Charts
 @inject DashboardService DashboardService
 @inject ChartJsInterop Charts
-@using FC.Engine.Domain.Enums
 
 <PageTitle>Dashboard — FC Engine Portal</PageTitle>
 
@@ -72,7 +73,7 @@ else if (data is not null)
                     <div class="portal-hero-card-header">
                         <span class="portal-hero-label">@metric.Label</span>
                         <span class="portal-hero-trend @(metric.IsPositiveTrend ? "portal-trend-up" : "portal-trend-down")"
-                              aria-label="@(metric.IsPositiveTrend ? "Up" : "Down") @Math.Abs(metric.ChangePercent)@metric.Suffix vs previous period">
+                              aria-label="@GetTrendAriaLabel(metric)">
                             @if (metric.IsPositiveTrend)
                             {
                                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
@@ -623,6 +624,13 @@ else
         SubmissionStatus.Validating           => "Validating",
         _                                     => status.ToString()
     };
+
+    private static string GetTrendAriaLabel(HeroMetric metric)
+    {
+        var dir = metric.IsPositiveTrend ? "Up" : "Down";
+        var change = Math.Abs(metric.ChangePercent);
+        return $"{dir} {change}{metric.Suffix} vs previous period";
+    }
 
     private static MarkupString GetActivitySvg(string icon) => icon switch
     {

@@ -1,0 +1,186 @@
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+
+<div>
+    <div id="@_zoneId" class="fc-file-upload">
+        <div class="fc-file-upload__icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" width="40" height="40" aria-hidden="true">
+                <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" />
+            </svg>
+        </div>
+        <p class="fc-file-upload__text">
+            Drag and drop files here, or <strong>browse</strong>
+        </p>
+        <p class="fc-file-upload__hint">
+            @if (!string.IsNullOrEmpty(Accept))
+            {
+                <span>Accepted: @Accept</span>
+            }
+            @if (MaxSizeMb > 0)
+            {
+                <span> &middot; Max @MaxSizeMb MB</span>
+            }
+        </p>
+
+        <InputFile class="fc-file-upload__input"
+                   OnChange="HandleFileSelection"
+                   multiple="@Multiple"
+                   accept="@Accept"
+                   aria-label="Upload files" />
+    </div>
+
+    @if (_files.Any())
+    {
+        <div class="fc-file-upload__files">
+            @foreach (var file in _files)
+            {
+                <div class="fc-file-upload__file">
+                    @if (file.PreviewUrl != null)
+                    {
+                        <img class="fc-file-upload__preview" src="@file.PreviewUrl" alt="Preview of @file.Name" />
+                    }
+                    else
+                    {
+                        <svg class="fc-file-upload__file-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" /><polyline points="14 2 14 8 20 8" />
+                        </svg>
+                    }
+                    <div class="fc-file-upload__file-info">
+                        <div class="fc-file-upload__file-name">@file.Name</div>
+                        <div class="fc-file-upload__file-size">@FormatSize(file.Size)</div>
+                        @if (file.Progress < 100 && file.Progress > 0)
+                        {
+                            <div class="fc-file-upload__progress">
+                                <div class="fc-file-upload__progress-bar" style="width:@file.Progress%"></div>
+                            </div>
+                        }
+                        @if (!string.IsNullOrEmpty(file.Error))
+                        {
+                            <div class="fc-file-upload__error">@file.Error</div>
+                        }
+                    </div>
+                    <button class="fc-file-upload__file-remove" type="button" @onclick="() => RemoveFile(file)" aria-label="Remove @file.Name">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+                    </button>
+                </div>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    private string _zoneId = $"fc-fu-{Guid.NewGuid():N}";
+    private List<FileEntry> _files = new();
+    private bool _initialized;
+
+    [Parameter] public string? Accept { get; set; }
+    [Parameter] public int MaxSizeMb { get; set; } = 10;
+    [Parameter] public bool Multiple { get; set; }
+    [Parameter] public bool ShowPreview { get; set; } = true;
+    [Parameter] public EventCallback<List<IBrowserFile>> OnFilesSelected { get; set; }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            try { await JS.InvokeVoidAsync("FCForms.initDropZone", _zoneId, null); }
+            catch (JSDisconnectedException) { }
+            _initialized = true;
+        }
+    }
+
+    private async Task HandleFileSelection(InputFileChangeEventArgs e)
+    {
+        var validFiles = new List<IBrowserFile>();
+
+        foreach (var file in e.GetMultipleFiles(20))
+        {
+            var entry = new FileEntry
+            {
+                Name = file.Name,
+                Size = file.Size,
+                ContentType = file.ContentType,
+                BrowserFile = file
+            };
+
+            // Validate size
+            if (MaxSizeMb > 0 && file.Size > MaxSizeMb * 1024L * 1024L)
+            {
+                entry.Error = $"File exceeds {MaxSizeMb} MB limit";
+                _files.Add(entry);
+                continue;
+            }
+
+            // Validate type
+            if (!string.IsNullOrEmpty(Accept) && !IsAcceptedType(file))
+            {
+                entry.Error = "File type not accepted";
+                _files.Add(entry);
+                continue;
+            }
+
+            // Generate preview for images
+            if (ShowPreview && file.ContentType.StartsWith("image/") && file.Size < 5 * 1024 * 1024)
+            {
+                try
+                {
+                    var buffer = new byte[file.Size];
+                    await file.OpenReadStream(5 * 1024 * 1024).ReadExactlyAsync(buffer);
+                    entry.PreviewUrl = $"data:{file.ContentType};base64,{Convert.ToBase64String(buffer)}";
+                }
+                catch { /* skip preview on error */ }
+            }
+
+            entry.Progress = 100;
+            _files.Add(entry);
+            validFiles.Add(file);
+        }
+
+        if (validFiles.Any())
+        {
+            await OnFilesSelected.InvokeAsync(validFiles);
+        }
+    }
+
+    private bool IsAcceptedType(IBrowserFile file)
+    {
+        if (string.IsNullOrEmpty(Accept)) return true;
+        var accepted = Accept.Split(',').Select(a => a.Trim().ToLower());
+        var ext = Path.GetExtension(file.Name).ToLower();
+        var mime = file.ContentType.ToLower();
+
+        return accepted.Any(a =>
+            a == ext ||
+            a == mime ||
+            (a.EndsWith("/*") && mime.StartsWith(a.Replace("/*", "/")))
+        );
+    }
+
+    private void RemoveFile(FileEntry file)
+    {
+        _files.Remove(file);
+    }
+
+    private static string FormatSize(long bytes)
+    {
+        if (bytes < 1024) return $"{bytes} B";
+        if (bytes < 1024 * 1024) return $"{bytes / 1024.0:F1} KB";
+        return $"{bytes / (1024.0 * 1024.0):F1} MB";
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        await ValueTask.CompletedTask;
+    }
+
+    private sealed class FileEntry
+    {
+        public string Name { get; set; } = "";
+        public long Size { get; set; }
+        public string ContentType { get; set; } = "";
+        public string? PreviewUrl { get; set; }
+        public int Progress { get; set; }
+        public string? Error { get; set; }
+        public IBrowserFile? BrowserFile { get; set; }
+    }
+}

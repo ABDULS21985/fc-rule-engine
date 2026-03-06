@@ -1,0 +1,166 @@
+@* In-page loading failure component with optional exponential-backoff auto-retry.
+   Drop this wherever a data-load fails instead of showing a raw error string. *@
+@implements IAsyncDisposable
+
+<div class="fc-error-state @SizeClass" role="alert" aria-live="assertive">
+
+    @* ── Countdown ring + exclamation ────────────────── *@
+    <div class="fc-error-state__ring" aria-hidden="true">
+        @{
+            double radius = 28;
+            double circ   = 2 * Math.PI * radius;
+            double dash   = AutoRetry ? circ * (1 - (double)_countdown / _currentMax) : 0;
+        }
+        <svg viewBox="0 0 72 72" width="72" height="72">
+            <circle class="fc-error-state__ring-track"
+                    cx="36" cy="36" r="@radius"
+                    fill="none" stroke-width="4"/>
+            @if (AutoRetry)
+            {
+                <circle class="fc-error-state__ring-fill"
+                        cx="36" cy="36" r="@radius"
+                        fill="none" stroke-width="4"
+                        stroke-dasharray="@circ.ToString("F2")"
+                        stroke-dashoffset="@dash.ToString("F2")"
+                        transform="rotate(-90 36 36)"/>
+            }
+            <!-- Exclamation icon -->
+            <line x1="36" y1="22" x2="36" y2="42" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
+            <circle cx="36" cy="50" r="2" fill="currentColor" stroke="none"/>
+        </svg>
+    </div>
+
+    @* ── Message ──────────────────────────────────────── *@
+    <p class="fc-error-state__msg">@Message</p>
+
+    @if (!string.IsNullOrEmpty(Detail))
+    {
+        <p class="fc-error-state__detail">@Detail</p>
+    }
+
+    @* ── Actions ─────────────────────────────────────── *@
+    <div class="fc-error-state__actions">
+        @if (OnRetry.HasDelegate)
+        {
+            <button class="fc-btn fc-btn--ghost fc-btn--sm" @onclick="DoRetry" disabled="@_retrying">
+                @if (_retrying)
+                {
+                    <span class="fc-btn__spinner" aria-hidden="true"></span>
+                    <span>Retrying…</span>
+                }
+                else
+                {
+                    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14" aria-hidden="true">
+                        <polyline points="1,4 1,10 7,10"/>
+                        <path d="M3.51 15A9 9 0 1 0 2.05 6.05L1 10"/>
+                    </svg>
+                    <span>Retry now</span>
+                }
+            </button>
+        }
+        @if (AutoRetry && _countdown > 0)
+        {
+            <span class="fc-error-state__countdown">
+                Retrying in @_countdown&thinsp;s
+            </span>
+        }
+    </div>
+
+</div>
+
+@code {
+    [Parameter] public string Message { get; set; } = "Failed to load data";
+    [Parameter] public string? Detail { get; set; }
+    [Parameter] public EventCallback OnRetry { get; set; }
+
+    /// <summary>If true, counts down and auto-retries with exponential backoff.</summary>
+    [Parameter] public bool AutoRetry { get; set; } = false;
+
+    /// <summary>Initial seconds before first auto-retry. Doubles each attempt (max 60s).</summary>
+    [Parameter] public int RetryAfterSeconds { get; set; } = 5;
+
+    /// <summary>sm | default</summary>
+    [Parameter] public string Size { get; set; } = "default";
+
+    // ── State ──────────────────────────────────────────────
+    private int  _countdown    = 0;
+    private int  _currentMax   = 5;
+    private int  _attempt      = 0;
+    private bool _retrying     = false;
+    private PeriodicTimer? _timer;
+    private CancellationTokenSource? _cts;
+
+    private string SizeClass => Size == "sm" ? "fc-error-state--sm" : "";
+
+    // ── Lifecycle ──────────────────────────────────────────
+    protected override void OnParametersSet()
+    {
+        if (AutoRetry && _attempt == 0)
+            StartCountdown();
+    }
+
+    private void StartCountdown()
+    {
+        _cts?.Cancel();
+        _cts?.Dispose();
+        _cts = new CancellationTokenSource();
+
+        _currentMax = Math.Min(RetryAfterSeconds * (int)Math.Pow(2, _attempt), 60);
+        _countdown  = _currentMax;
+
+        _ = RunCountdownAsync(_cts.Token);
+    }
+
+    private async Task RunCountdownAsync(CancellationToken ct)
+    {
+        _timer = new PeriodicTimer(TimeSpan.FromSeconds(1));
+        try
+        {
+            while (await _timer.WaitForNextTickAsync(ct))
+            {
+                _countdown--;
+                await InvokeAsync(StateHasChanged);
+
+                if (_countdown <= 0)
+                {
+                    await DoRetry();
+                    break;
+                }
+            }
+        }
+        catch (OperationCanceledException) { }
+        finally
+        {
+            _timer.Dispose();
+            _timer = null;
+        }
+    }
+
+    private async Task DoRetry()
+    {
+        _cts?.Cancel();
+        _retrying = true;
+        _attempt++;
+        StateHasChanged();
+
+        try
+        {
+            await OnRetry.InvokeAsync();
+        }
+        finally
+        {
+            _retrying = false;
+            if (AutoRetry)
+                StartCountdown();
+            StateHasChanged();
+        }
+    }
+
+    public ValueTask DisposeAsync()
+    {
+        _cts?.Cancel();
+        _cts?.Dispose();
+        _timer?.Dispose();
+        return ValueTask.CompletedTask;
+    }
+}

@@ -10,22 +10,104 @@
 @inject ITemplateMetadataCache Cache
 @inject ToastService Toast
 
-<div class="fc-list-page">
-    <div class="fc-list-page-header">
-        <div class="fc-list-page-header-text">
-            <h1>
-                Cross-Sheet Validation Rules
-                @if (!_loading)
-                {
-                    <span class="fc-list-count-chip">@_rules.Count</span>
-                }
-            </h1>
-            <p>Rules that validate relationships between different return templates</p>
-        </div>
-    </div>
+<PageHeader Title="Cross-Sheet Validation Rules"
+            Subtitle="Rules that validate relationships between different return templates"
+            CountBadge="@(!_loading ? _rules.Count : null)" />
 
-    <div class="fc-list-card">
-        <div class="fc-list-toolbar">
+<div class="fc-list-page">
+
+    @if (_showAddForm)
+    {
+        <div class="fc-list-inline-form">
+            <h3>Add Cross-Sheet Rule</h3>
+            <div class="grid-2">
+                <div class="form-group">
+                    <label>Rule Code</label>
+                    <input class="form-control" @bind="_addCode" placeholder="e.g. XS-100" />
+                </div>
+                <div class="form-group">
+                    <label>Rule Name</label>
+                    <input class="form-control" @bind="_addName" placeholder="e.g. Loan Reconciliation" />
+                </div>
+                <div class="form-group" style="grid-column:1/-1;">
+                    <label>Description</label>
+                    <input class="form-control" @bind="_addDescription" placeholder="Description of the validation rule" />
+                </div>
+            </div>
+
+            <h4 style="margin-top:var(--space-4);font-size:var(--text-h4);font-weight:var(--font-weight-semibold);color:var(--cbn-text);">Operands</h4>
+            @for (int i = 0; i < _addOperands.Count; i++)
+            {
+                var idx = i;
+                <div class="grid-2" style="margin-bottom:var(--space-2);padding:var(--space-3);background:var(--cbn-surface-elevated);border:1px solid var(--cbn-border);border-radius:var(--radius-sm);">
+                    <div class="form-group">
+                        <label>Alias</label>
+                        <input class="form-control" @bind="_addOperands[idx].Alias" placeholder="A, B, C..." />
+                    </div>
+                    <div class="form-group">
+                        <label>Template Return Code</label>
+                        <input class="form-control" @bind="_addOperands[idx].ReturnCode" placeholder="e.g. MFCR 300" />
+                    </div>
+                    <div class="form-group">
+                        <label>Field Name</label>
+                        <input class="form-control" @bind="_addOperands[idx].FieldName" placeholder="e.g. total_assets" />
+                    </div>
+                    <div class="form-group">
+                        <label>Aggregate (optional)</label>
+                        <select class="form-control" @bind="_addOperands[idx].Aggregate">
+                            <option value="">None</option>
+                            <option value="SUM">SUM</option>
+                            <option value="COUNT">COUNT</option>
+                            <option value="MAX">MAX</option>
+                            <option value="MIN">MIN</option>
+                            <option value="AVG">AVG</option>
+                        </select>
+                    </div>
+                </div>
+            }
+            <button class="fc-btn fc-btn--outline fc-btn--sm" @onclick="AddOperandRow" style="margin-top:var(--space-2);">+ Add Operand</button>
+
+            <h4 style="margin-top:var(--space-4);font-size:var(--text-h4);font-weight:var(--font-weight-semibold);color:var(--cbn-text);">Expression</h4>
+            <div class="grid-2">
+                <div class="form-group">
+                    <label>Expression</label>
+                    <input class="form-control" @bind="_addExpression" placeholder="e.g. A = B + C" />
+                </div>
+                <div class="form-group">
+                    <label>Tolerance</label>
+                    <input type="number" step="0.01" class="form-control" @bind="_addTolerance" />
+                </div>
+                <div class="form-group">
+                    <label>Severity</label>
+                    <select class="form-control" @bind="_addSeverity">
+                        @foreach (var s in Enum.GetValues<ValidationSeverity>())
+                        {
+                            <option value="@s">@s</option>
+                        }
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Error Message</label>
+                    <input class="form-control" @bind="_addErrorMessage" placeholder="e.g. Balance sheet does not balance" />
+                </div>
+            </div>
+            <div class="fc-list-form-actions">
+                <button class="fc-btn fc-btn--primary fc-btn--sm" @onclick="AddRule">Create Rule</button>
+                <button class="fc-btn fc-btn--outline fc-btn--sm" @onclick="CancelAdd">Cancel</button>
+            </div>
+        </div>
+    }
+
+    <DataTable TItem="CrossSheetRule"
+               Items="@FilteredRules"
+               Loading="_loading"
+               ShowPagination="false"
+               Sortable="true"
+               EmptyTitle="No cross-sheet rules found"
+               EmptyText="No rules match your current filters. Try adjusting your search or create a new cross-sheet validation rule."
+               SkeletonRows="5"
+               ExportFileName="cross-sheet-rules">
+        <ToolbarContent>
             <div class="fc-list-toolbar-filters">
                 <div class="fc-list-search-wrap">
                     <svg class="fc-list-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
@@ -54,180 +136,76 @@
                     </Authorized>
                 </AuthorizeView>
             </div>
-        </div>
-
-        @if (_showAddForm)
-        {
-            <div class="fc-list-inline-form">
-                <h3>Add Cross-Sheet Rule</h3>
-                <div class="grid-2">
-                    <div class="form-group">
-                        <label>Rule Code</label>
-                        <input class="form-control" @bind="_addCode" placeholder="e.g. XS-100" />
-                    </div>
-                    <div class="form-group">
-                        <label>Rule Name</label>
-                        <input class="form-control" @bind="_addName" placeholder="e.g. Loan Reconciliation" />
-                    </div>
-                    <div class="form-group" style="grid-column:1/-1;">
-                        <label>Description</label>
-                        <input class="form-control" @bind="_addDescription" placeholder="Description of the validation rule" />
-                    </div>
-                </div>
-
-                <h4 style="margin-top:var(--space-4);font-size:var(--text-h4);font-weight:var(--font-weight-semibold);color:var(--cbn-text);">Operands</h4>
-                @for (int i = 0; i < _addOperands.Count; i++)
-                {
-                    var idx = i;
-                    <div class="grid-2" style="margin-bottom:var(--space-2);padding:var(--space-3);background:var(--cbn-surface-elevated);border:1px solid var(--cbn-border);border-radius:var(--radius-sm);">
-                        <div class="form-group">
-                            <label>Alias</label>
-                            <input class="form-control" @bind="_addOperands[idx].Alias" placeholder="A, B, C..." />
-                        </div>
-                        <div class="form-group">
-                            <label>Template Return Code</label>
-                            <input class="form-control" @bind="_addOperands[idx].ReturnCode" placeholder="e.g. MFCR 300" />
-                        </div>
-                        <div class="form-group">
-                            <label>Field Name</label>
-                            <input class="form-control" @bind="_addOperands[idx].FieldName" placeholder="e.g. total_assets" />
-                        </div>
-                        <div class="form-group">
-                            <label>Aggregate (optional)</label>
-                            <select class="form-control" @bind="_addOperands[idx].Aggregate">
-                                <option value="">None</option>
-                                <option value="SUM">SUM</option>
-                                <option value="COUNT">COUNT</option>
-                                <option value="MAX">MAX</option>
-                                <option value="MIN">MIN</option>
-                                <option value="AVG">AVG</option>
-                            </select>
-                        </div>
-                    </div>
-                }
-                <button class="fc-btn fc-btn--outline fc-btn--sm" @onclick="AddOperandRow" style="margin-top:var(--space-2);">+ Add Operand</button>
-
-                <h4 style="margin-top:var(--space-4);font-size:var(--text-h4);font-weight:var(--font-weight-semibold);color:var(--cbn-text);">Expression</h4>
-                <div class="grid-2">
-                    <div class="form-group">
-                        <label>Expression</label>
-                        <input class="form-control" @bind="_addExpression" placeholder="e.g. A = B + C" />
-                    </div>
-                    <div class="form-group">
-                        <label>Tolerance</label>
-                        <input type="number" step="0.01" class="form-control" @bind="_addTolerance" />
-                    </div>
-                    <div class="form-group">
-                        <label>Severity</label>
-                        <select class="form-control" @bind="_addSeverity">
-                            @foreach (var s in Enum.GetValues<ValidationSeverity>())
+        </ToolbarContent>
+        <ChildContent>
+            <DataColumn TItem="CrossSheetRule"
+                        Title="Rule Code"
+                        SortKey="x => x.RuleCode"
+                        CellClass="fc-list-cell-code">
+                <CellTemplate>
+                    <a class="fc-list-cell-link" href="/cross-sheet-rules/@context.Id">@context.RuleCode</a>
+                </CellTemplate>
+            </DataColumn>
+            <DataColumn TItem="CrossSheetRule"
+                        Title="Name"
+                        SortKey="x => x.RuleName"
+                        CellClass="fc-list-cell-strong">
+                <CellTemplate>
+                    <a class="fc-list-cell-link" style="color:inherit;font-weight:inherit;" href="/cross-sheet-rules/@context.Id">@context.RuleName</a>
+                </CellTemplate>
+            </DataColumn>
+            <DataColumn TItem="CrossSheetRule"
+                        Title="Description"
+                        CellClass="fc-list-cell-truncate fc-list-cell-muted">
+                <CellTemplate>
+                    <span title="@context.Description">@(context.Description ?? "—")</span>
+                </CellTemplate>
+            </DataColumn>
+            <DataColumn TItem="CrossSheetRule"
+                        Title="Operands">
+                <CellTemplate>
+                    @foreach (var op in context.Operands)
+                    {
+                        <div style="font-size:var(--text-body-sm);margin-bottom:2px;">
+                            <span class="fc-list-cell-code">@op.OperandAlias</span>
+                            <span class="fc-list-cell-muted"> = @op.TemplateReturnCode.@op.FieldName</span>
+                            @if (!string.IsNullOrEmpty(op.AggregateFunction))
                             {
-                                <option value="@s">@s</option>
+                                <span class="fc-badge fc-badge--info" style="font-size:10px;padding:1px 6px;margin-left:4px;">@op.AggregateFunction</span>
                             }
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label>Error Message</label>
-                        <input class="form-control" @bind="_addErrorMessage" placeholder="e.g. Balance sheet does not balance" />
-                    </div>
-                </div>
-                <div class="fc-list-form-actions">
-                    <button class="fc-btn fc-btn--primary fc-btn--sm" @onclick="AddRule">Create Rule</button>
-                    <button class="fc-btn fc-btn--outline fc-btn--sm" @onclick="CancelAdd">Cancel</button>
-                </div>
-            </div>
-        }
+                        </div>
+                    }
+                </CellTemplate>
+            </DataColumn>
+            <DataColumn TItem="CrossSheetRule"
+                        Title="Expression"
+                        CellClass="fc-list-cell-code">
+                <CellTemplate>
+                    @context.Expression?.Expression
+                </CellTemplate>
+            </DataColumn>
+            <DataColumn TItem="CrossSheetRule"
+                        Title="Severity">
+                <CellTemplate>
+                    <span class="fc-badge @StatusBadge(context.Severity.ToString())">@context.Severity</span>
+                </CellTemplate>
+            </DataColumn>
+            <DataColumn TItem="CrossSheetRule"
+                        Title="Status">
+                <CellTemplate>
+                    @if (context.IsActive)
+                    {
+                        <span class="fc-badge fc-badge--success">Active</span>
+                    }
+                    else
+                    {
+                        <span class="fc-badge fc-badge--muted">Inactive</span>
+                    }
+                </CellTemplate>
+            </DataColumn>
+        </ChildContent>
+    </DataTable>
 
-        @if (_loading)
-        {
-            <div class="fc-list-skeleton">
-                @for (var i = 0; i < 5; i++)
-                {
-                    <div class="fc-list-skeleton-row">
-                        <div class="fc-list-skeleton-cell" style="width:80px;"></div>
-                        <div class="fc-list-skeleton-cell" style="flex:1;"></div>
-                        <div class="fc-list-skeleton-cell" style="width:200px;"></div>
-                        <div class="fc-list-skeleton-cell" style="width:120px;"></div>
-                        <div class="fc-list-skeleton-cell" style="width:60px;"></div>
-                    </div>
-                }
-            </div>
-        }
-        else if (!FilteredRules.Any())
-        {
-            <div class="fc-list-empty">
-                <svg class="fc-list-empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M16 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V8Z"/><path d="M15 3v4a2 2 0 0 0 2 2h4"/></svg>
-                <h3 class="fc-list-empty-title">No cross-sheet rules found</h3>
-                <p class="fc-list-empty-text">No rules match your current filters. Try adjusting your search or create a new cross-sheet validation rule.</p>
-            </div>
-        }
-        else
-        {
-            <div class="fc-table-wrap">
-                <table class="fc-table" role="table">
-                    <thead>
-                        <tr>
-                            <th scope="col">Rule Code</th>
-                            <th scope="col">Name</th>
-                            <th scope="col">Description</th>
-                            <th scope="col">Operands</th>
-                            <th scope="col">Expression</th>
-                            <th scope="col">Severity</th>
-                            <th scope="col">Status</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @foreach (var rule in FilteredRules)
-                        {
-                            <tr>
-                                <td class="fc-list-cell-code">
-                                    <a class="fc-list-cell-link" href="/cross-sheet-rules/@rule.Id">@rule.RuleCode</a>
-                                </td>
-                                <td class="fc-list-cell-strong">
-                                    <a class="fc-list-cell-link" style="color:inherit;font-weight:inherit;" href="/cross-sheet-rules/@rule.Id">@rule.RuleName</a>
-                                </td>
-                                <td class="fc-list-cell-truncate fc-list-cell-muted" title="@rule.Description">@(rule.Description ?? "—")</td>
-                                <td>
-                                    @foreach (var op in rule.Operands)
-                                    {
-                                        <div style="font-size:var(--text-body-sm);margin-bottom:2px;">
-                                            <span class="fc-list-cell-code">@op.OperandAlias</span>
-                                            <span class="fc-list-cell-muted"> = @op.TemplateReturnCode.@op.FieldName</span>
-                                            @if (!string.IsNullOrEmpty(op.AggregateFunction))
-                                            {
-                                                <span class="fc-badge fc-badge--info" style="font-size:10px;padding:1px 6px;margin-left:4px;">@op.AggregateFunction</span>
-                                            }
-                                        </div>
-                                    }
-                                </td>
-                                <td class="fc-list-cell-code">@rule.Expression?.Expression</td>
-                                <td>
-                                    <span class="fc-badge @StatusBadge(rule.Severity.ToString())">@rule.Severity</span>
-                                </td>
-                                <td>
-                                    @if (rule.IsActive)
-                                    {
-                                        <span class="fc-badge fc-badge--success">Active</span>
-                                    }
-                                    else
-                                    {
-                                        <span class="fc-badge fc-badge--muted">Inactive</span>
-                                    }
-                                </td>
-                            </tr>
-                        }
-                    </tbody>
-                </table>
-            </div>
-
-            <div class="fc-list-footer">
-                <div class="fc-list-footer-summary">
-                    Showing <strong>@FilteredRules.Count()</strong> of <strong>@_rules.Count</strong> cross-sheet rules
-                    &mdash; <strong>@_rules.Count(r => r.IsActive)</strong> active
-                </div>
-            </div>
-        }
-    </div>
 </div>
 
 @code {
@@ -243,7 +221,7 @@
     private ValidationSeverity _addSeverity = ValidationSeverity.Error;
     private List<OperandModel> _addOperands = new();
 
-    private IEnumerable<CrossSheetRule> FilteredRules => _rules
+    private IReadOnlyList<CrossSheetRule> FilteredRules => _rules
         .Where(r => string.IsNullOrEmpty(_search) ||
                     r.RuleCode.Contains(_search, StringComparison.OrdinalIgnoreCase) ||
                     r.RuleName.Contains(_search, StringComparison.OrdinalIgnoreCase) ||
@@ -251,7 +229,8 @@
         .Where(r => string.IsNullOrEmpty(_severityFilter) || r.Severity.ToString() == _severityFilter)
         .Where(r => string.IsNullOrEmpty(_statusFilter) ||
                     (_statusFilter == "Active" && r.IsActive) ||
-                    (_statusFilter == "Inactive" && !r.IsActive));
+                    (_statusFilter == "Inactive" && !r.IsActive))
+        .ToList();
 
     protected override async Task OnInitializedAsync()
     {

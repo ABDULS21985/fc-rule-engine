@@ -2236,7 +2236,7 @@ textarea.form-control {
     color: var(--cbn-gray-500);
 }
 
-/* Password Toggle */
+/* Password Toggle — overridden by premium section below */
 .password-toggle {
     position: absolute;
     right: 0.875rem;
@@ -2251,22 +2251,6 @@ textarea.form-control {
     display: flex;
     align-items: center;
     border-radius: var(--radius-xs);
-}
-
-.password-toggle:hover {
-    color: var(--cbn-green-dark);
-}
-
-.password-toggle .eye-closed {
-    display: none;
-}
-
-.password-toggle.active .eye-open {
-    display: none;
-}
-
-.password-toggle.active .eye-closed {
-    display: block;
 }
 
 /* Field validation states */
@@ -9978,3 +9962,1679 @@ code.cmd-palette-preview-val {
         padding: var(--space-3) var(--space-5);
     }
 }
+
+
+/* ==================================================================
+   PREMIUM LOGIN ENHANCEMENTS — v2
+   ================================================================== */
+
+/* ------------------------------------------------------------------
+   1. Floating Orbs — Brand Panel Background
+   ------------------------------------------------------------------ */
+.fc-brand-orbs {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+    overflow: hidden;
+}
+
+.fc-brand-orb {
+    position: absolute;
+    border-radius: 50%;
+    will-change: transform;
+    animation: fcOrbFloat linear infinite;
+}
+
+.fc-brand-orb:nth-child(1) {
+    width: 320px; height: 320px;
+    top: -80px; left: -100px;
+    background: radial-gradient(circle, rgba(200, 164, 21, 0.09) 0%, transparent 65%);
+    animation-duration: 24s;
+    animation-delay: 0s;
+}
+
+.fc-brand-orb:nth-child(2) {
+    width: 240px; height: 240px;
+    bottom: 15%; right: -70px;
+    background: radial-gradient(circle, rgba(0, 107, 63, 0.12) 0%, transparent 65%);
+    animation-duration: 19s;
+    animation-delay: -7s;
+}
+
+.fc-brand-orb:nth-child(3) {
+    width: 180px; height: 180px;
+    top: 55%; left: 5%;
+    background: radial-gradient(circle, rgba(200, 164, 21, 0.07) 0%, transparent 65%);
+    animation-duration: 27s;
+    animation-delay: -13s;
+}
+
+.fc-brand-orb:nth-child(4) {
+    width: 110px; height: 110px;
+    top: 22%; right: 12%;
+    background: radial-gradient(circle, rgba(255, 255, 255, 0.04) 0%, transparent 65%);
+    animation-duration: 33s;
+    animation-delay: -5s;
+}
+
+@keyframes fcOrbFloat {
+    0%, 100% { transform: translateY(0)   translateX(0)   scale(1);    }
+    25%       { transform: translateY(-28px) translateX(14px)  scale(1.04); }
+    50%       { transform: translateY(-18px) translateX(-12px) scale(0.96); }
+    75%       { transform: translateY(12px)  translateX(18px)  scale(1.02); }
+}
+
+/* ------------------------------------------------------------------
+   2. Staggered Entrance — Login Card
+   ------------------------------------------------------------------ */
+.fc-anim-entrance {
+    opacity: 0;
+    animation: fcFadeInUp 0.55s cubic-bezier(0.0, 0.0, 0.2, 1) var(--anim-delay, 0s) both;
+}
+
+/* ------------------------------------------------------------------
+   3. Password Strength Meter
+   ------------------------------------------------------------------ */
+.fc-pwd-strength {
+    max-height: 0;
+    overflow: hidden;
+    opacity: 0;
+    transition: max-height 0.35s cubic-bezier(0.0, 0.0, 0.2, 1),
+                opacity 0.25s cubic-bezier(0.0, 0.0, 0.2, 1),
+                margin 0.25s cubic-bezier(0.0, 0.0, 0.2, 1);
+    margin-top: 0;
+}
+
+.fc-pwd-strength.is-visible {
+    max-height: 140px;
+    opacity: 1;
+    margin-top: var(--space-2);
+    margin-bottom: var(--space-1);
+}
+
+.fc-pwd-strength-track {
+    display: flex;
+    gap: 4px;
+    height: 4px;
+    margin-bottom: var(--space-2);
+}
+
+.fc-pwd-strength-seg {
+    flex: 1;
+    border-radius: var(--radius-pill);
+    background: var(--cbn-gray-200);
+    transition: background 0.35s cubic-bezier(0.0, 0.0, 0.2, 1);
+}
+
+/* Strength levels fill segments left-to-right */
+.fc-pwd-strength[data-strength="1"] .fc-pwd-strength-seg:nth-child(1) { background: #ef4444; }
+.fc-pwd-strength[data-strength="2"] .fc-pwd-strength-seg:nth-child(-n+2) { background: #f97316; }
+.fc-pwd-strength[data-strength="3"] .fc-pwd-strength-seg:nth-child(-n+3) { background: #eab308; }
+.fc-pwd-strength[data-strength="4"] .fc-pwd-strength-seg { background: #22c55e; }
+
+.fc-pwd-strength-meta {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: var(--space-2);
+}
+
+.fc-pwd-strength-lbl {
+    font-size: 0.68rem;
+    font-weight: var(--font-weight-semibold);
+    text-transform: uppercase;
+    letter-spacing: var(--tracking-wider);
+    transition: color 0.3s;
+}
+
+.fc-pwd-strength[data-strength="0"] .fc-pwd-strength-lbl { color: var(--cbn-gray-400); }
+.fc-pwd-strength[data-strength="1"] .fc-pwd-strength-lbl { color: #ef4444; }
+.fc-pwd-strength[data-strength="2"] .fc-pwd-strength-lbl { color: #f97316; }
+.fc-pwd-strength[data-strength="3"] .fc-pwd-strength-lbl { color: #ca8a04; }
+.fc-pwd-strength[data-strength="4"] .fc-pwd-strength-lbl { color: #16a34a; }
+
+.fc-pwd-reqs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.2rem 0.75rem;
+}
+
+.fc-pwd-req {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.68rem;
+    color: var(--cbn-gray-400);
+    transition: color 0.2s;
+    white-space: nowrap;
+}
+
+.fc-pwd-req.met { color: #16a34a; }
+
+.fc-pwd-req-dot {
+    width: 5px; height: 5px;
+    border-radius: 50%;
+    border: 1.5px solid currentColor;
+    flex-shrink: 0;
+    transition: background 0.2s, border-color 0.2s;
+}
+
+.fc-pwd-req.met .fc-pwd-req-dot { background: currentColor; }
+
+/* ------------------------------------------------------------------
+   4. Password Toggle — Crossfade
+   ------------------------------------------------------------------ */
+.password-toggle {
+    position: absolute;
+    right: 0.875rem;
+    top: 50%;
+    transform: translateY(-50%);
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: var(--space-1);
+    color: var(--cbn-gray-400);
+    transition: color var(--transition-fast) var(--ease-standard);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--radius-xs);
+    width: 28px;
+    height: 28px;
+}
+
+.password-toggle:hover { color: var(--cbn-green-dark); }
+
+.password-toggle .eye-open,
+.password-toggle .eye-closed {
+    position: absolute;
+    transition: opacity 0.2s cubic-bezier(0.0, 0.0, 0.2, 1);
+}
+
+.password-toggle .eye-open  { opacity: 1; }
+.password-toggle .eye-closed { opacity: 0; }
+.password-toggle.active .eye-open  { opacity: 0; }
+.password-toggle.active .eye-closed { opacity: 1; }
+
+/* ------------------------------------------------------------------
+   5. Submit Button — Loading & Success States
+   ------------------------------------------------------------------ */
+.fc-btn--gold-submit {
+    position: relative;
+    overflow: hidden;
+}
+
+.fc-btn-label,
+.fc-btn-loading,
+.fc-btn-success {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-2);
+    transition: opacity 0.22s cubic-bezier(0.0, 0.0, 0.2, 1),
+                transform 0.22s cubic-bezier(0.0, 0.0, 0.2, 1);
+    pointer-events: none;
+}
+
+.fc-btn-loading,
+.fc-btn-success {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    transform: translateY(10px);
+}
+
+/* Loading state */
+.fc-btn--gold-submit.is-loading .fc-btn-label   { opacity: 0; transform: translateY(-10px); }
+.fc-btn--gold-submit.is-loading .fc-btn-loading { opacity: 1; transform: translateY(0);     }
+
+/* Success state */
+.fc-btn--gold-submit.is-success .fc-btn-label   { opacity: 0; transform: translateY(-10px); }
+.fc-btn--gold-submit.is-success .fc-btn-loading { opacity: 0; transform: translateY(-10px); }
+.fc-btn--gold-submit.is-success .fc-btn-success { opacity: 1; transform: translateY(0);     }
+
+.fc-btn--gold-submit.is-success {
+    background: linear-gradient(135deg, var(--cbn-success) 0%, #16a34a 100%);
+    box-shadow: 0 2px 8px rgba(5, 150, 105, 0.35), 0 1px 2px rgba(0, 0, 0, 0.06);
+    transition: background 0.4s cubic-bezier(0.0, 0.0, 0.2, 1),
+                box-shadow 0.4s cubic-bezier(0.0, 0.0, 0.2, 1);
+}
+
+/* Checkmark draw-on animation */
+.fc-check-path {
+    stroke-dasharray: 30;
+    stroke-dashoffset: 30;
+    transition: none;
+}
+
+.fc-btn--gold-submit.is-success .fc-check-path {
+    animation: fcDrawCheck 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) 0.08s forwards;
+}
+
+@keyframes fcDrawCheck {
+    to { stroke-dashoffset: 0; }
+}
+
+/* ------------------------------------------------------------------
+   6. Field Shake — Error Animation
+   ------------------------------------------------------------------ */
+@keyframes fcShake {
+    0%, 100% { transform: translateX(0); }
+    15%       { transform: translateX(-7px); }
+    30%       { transform: translateX(6px); }
+    45%       { transform: translateX(-5px); }
+    60%       { transform: translateX(4px); }
+    75%       { transform: translateX(-2px); }
+    90%       { transform: translateX(1px); }
+}
+
+.fc-shake { animation: fcShake 0.5s cubic-bezier(0.4, 0.0, 0.2, 1) both; }
+
+/* Error alert slide-in */
+.fc-alert--inline {
+    animation: fcAlertSlideIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+@keyframes fcAlertSlideIn {
+    from { opacity: 0; transform: translateY(-6px) scaleY(0.9); }
+    to   { opacity: 1; transform: translateY(0)    scaleY(1);   }
+}
+
+/* ------------------------------------------------------------------
+   7. MFA — Premium 6-Digit Code Input
+   ------------------------------------------------------------------ */
+.fc-mfa-header {
+    text-align: center;
+    margin-bottom: var(--space-6);
+}
+
+.fc-mfa-header svg {
+    color: var(--cbn-accent);
+    margin-bottom: var(--space-3);
+}
+
+.fc-mfa-header h3 {
+    font-size: 1.1rem;
+    font-weight: var(--font-weight-bold);
+    color: var(--cbn-green-dark);
+    margin-bottom: var(--space-1);
+    font-family: var(--font-heading);
+}
+
+.fc-mfa-header p {
+    font-size: var(--text-body-sm);
+    color: var(--cbn-gray-500);
+}
+
+.fc-mfa-code-wrap {
+    margin-bottom: var(--space-5);
+}
+
+.fc-mfa-code-label {
+    display: block;
+    font-size: 0.68rem;
+    font-weight: var(--font-weight-semibold);
+    color: var(--cbn-text-secondary);
+    text-transform: uppercase;
+    letter-spacing: var(--tracking-wider);
+    text-align: center;
+    margin-bottom: var(--space-3);
+}
+
+.fc-mfa-digits {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-2);
+}
+
+.fc-mfa-digit {
+    width: 50px;
+    height: 58px;
+    border: 2px solid var(--cbn-border-strong);
+    border-radius: var(--radius-lg);
+    background: var(--cbn-gray-50);
+    font-size: 1.6rem;
+    font-weight: var(--font-weight-bold);
+    font-family: var(--font-mono);
+    text-align: center;
+    color: var(--cbn-green-dark);
+    outline: none;
+    -webkit-appearance: none;
+    appearance: none;
+    caret-color: transparent;
+    transition: border-color 0.18s cubic-bezier(0.0, 0.0, 0.2, 1),
+                background   0.18s cubic-bezier(0.0, 0.0, 0.2, 1),
+                box-shadow   0.18s cubic-bezier(0.0, 0.0, 0.2, 1),
+                transform    0.15s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.fc-mfa-digit:focus {
+    border-color: var(--cbn-primary);
+    background: var(--cbn-surface-elevated);
+    box-shadow: 0 0 0 3px var(--cbn-focus-ring);
+    transform: translateY(-2px) scale(1.06);
+}
+
+.fc-mfa-digit.is-filled {
+    border-color: var(--cbn-primary);
+    background: var(--cbn-primary-subtle);
+    color: var(--cbn-green-darker);
+}
+
+.fc-mfa-digit.fc-shake {
+    border-color: var(--cbn-danger);
+    background: var(--cbn-danger-light);
+}
+
+.fc-mfa-sep {
+    color: var(--cbn-gray-300);
+    font-size: 1.4rem;
+    line-height: 1;
+    flex-shrink: 0;
+    margin: 0 var(--space-1);
+    align-self: center;
+    user-select: none;
+}
+
+.fc-mfa-hint {
+    text-align: center;
+    margin-top: var(--space-3);
+    font-size: 0.7rem;
+    color: var(--cbn-text-muted);
+    letter-spacing: var(--tracking-wide);
+}
+
+/* ------------------------------------------------------------------
+   8. Biometric Hint
+   ------------------------------------------------------------------ */
+.fc-biometric-row {
+    display: none; /* shown via JS when supported */
+}
+
+.fc-biometric-row.is-visible {
+    display: block;
+}
+
+.fc-biometric-divider {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    margin: var(--space-4) 0 var(--space-3);
+}
+
+.fc-biometric-line {
+    flex: 1;
+    height: 1px;
+    background: var(--cbn-border-subtle);
+}
+
+.fc-biometric-or {
+    font-size: 0.68rem;
+    color: var(--cbn-text-muted);
+    letter-spacing: var(--tracking-wide);
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+.fc-biometric-btn {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-2);
+    padding: 0.7rem var(--space-4);
+    border: 1.5px solid var(--cbn-border-strong);
+    border-radius: var(--radius-lg);
+    background: var(--cbn-surface-elevated);
+    font-size: var(--text-body-sm);
+    font-weight: var(--font-weight-medium);
+    color: var(--cbn-text-secondary);
+    cursor: pointer;
+    font-family: var(--font-sans);
+    transition: background 0.2s, border-color 0.2s, color 0.2s, box-shadow 0.2s;
+}
+
+.fc-biometric-btn:hover {
+    background: var(--cbn-gray-50);
+    border-color: var(--cbn-primary);
+    color: var(--cbn-green-dark);
+    box-shadow: 0 0 0 3px var(--cbn-focus-ring);
+}
+
+.fc-biometric-btn svg { flex-shrink: 0; color: var(--cbn-primary); }
+
+/* ------------------------------------------------------------------
+   9. TOTP Backup Code Field (collapsible)
+   ------------------------------------------------------------------ */
+.fc-backup-toggle {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 0.72rem;
+    color: var(--cbn-text-muted);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    padding: 0;
+    font-family: var(--font-sans);
+    display: block;
+    margin: 0 auto var(--space-4);
+    transition: color 0.2s;
+}
+
+.fc-backup-toggle:hover { color: var(--cbn-primary); }
+
+.fc-backup-field {
+    max-height: 0;
+    overflow: hidden;
+    opacity: 0;
+    transition: max-height 0.3s cubic-bezier(0.0, 0.0, 0.2, 1),
+                opacity     0.25s cubic-bezier(0.0, 0.0, 0.2, 1);
+}
+
+.fc-backup-field.is-open {
+    max-height: 120px;
+    opacity: 1;
+}
+
+
+/* ============================================================
+   PAGE HEADER SYSTEM  (fc-ph)
+   Sticky, blur-backdrop, compact-on-scroll, tab bar, breadcrumb
+   ============================================================ */
+
+/* ── Container ─────────────────────────────────────────────── */
+.fc-ph {
+    position: relative;
+    background: var(--cbn-surface);
+    border-bottom: 1px solid var(--cbn-border);
+    padding: var(--space-4) var(--space-6) 0;
+    transition: padding var(--motion-normal) var(--ease-out),
+                box-shadow var(--motion-normal) var(--ease-out);
+    z-index: 40;
+}
+
+.fc-ph--sticky {
+    position: sticky;
+    top: 0;
+}
+
+/* Compact mode — triggered after scroll */
+.fc-ph--compact {
+    padding-top: var(--space-3);
+    box-shadow: var(--shadow-level-2);
+    backdrop-filter: blur(12px) saturate(1.4);
+    -webkit-backdrop-filter: blur(12px) saturate(1.4);
+    background: color-mix(in srgb, var(--cbn-surface) 92%, transparent);
+}
+
+/* ── Breadcrumb row ─────────────────────────────────────────── */
+.fc-ph__breadcrumb {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+    flex-wrap: wrap;
+    margin-bottom: var(--space-3);
+    font-size: var(--text-caption);
+    color: var(--cbn-text-muted);
+    min-height: 18px;
+}
+
+.fc-ph__bc-link {
+    color: var(--cbn-text-secondary);
+    text-decoration: none;
+    transition: color var(--motion-fast) var(--ease-out);
+}
+
+.fc-ph__bc-link:hover {
+    color: var(--cbn-primary);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
+
+.fc-ph__bc-current {
+    color: var(--cbn-text);
+    font-weight: 500;
+}
+
+.fc-ph__bc-sep {
+    display: inline-flex;
+    align-items: center;
+    color: var(--cbn-gray-300);
+    flex-shrink: 0;
+}
+
+.fc-ph__bc-ellipsis {
+    display: inline-flex;
+    align-items: center;
+    color: var(--cbn-gray-300);
+}
+
+/* Hide middle breadcrumb segments on small screens */
+@media (max-width: 600px) {
+    .fc-ph__breadcrumb > *:not(:nth-last-child(-n+3)) {
+        display: none;
+    }
+}
+
+/* ── Main row ───────────────────────────────────────────────── */
+.fc-ph__main {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--space-4);
+    padding-bottom: var(--space-4);
+}
+
+/* ── Left side: back + titles ───────────────────────────────── */
+.fc-ph__left {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-3);
+    min-width: 0;
+    flex: 1;
+}
+
+.fc-ph__back {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    min-width: 32px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--cbn-border);
+    color: var(--cbn-text-secondary);
+    background: var(--cbn-surface);
+    text-decoration: none;
+    margin-top: 4px;
+    transition: background var(--motion-fast) var(--ease-out),
+                color var(--motion-fast) var(--ease-out),
+                border-color var(--motion-fast) var(--ease-out);
+}
+
+.fc-ph__back:hover {
+    background: var(--cbn-surface-hover);
+    color: var(--cbn-primary);
+    border-color: var(--cbn-primary);
+}
+
+.fc-ph__titles {
+    min-width: 0;
+    flex: 1;
+}
+
+.fc-ph__title-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    flex-wrap: wrap;
+}
+
+.fc-ph__title {
+    font-size: var(--text-h1);
+    font-weight: 700;
+    font-family: var(--font-heading);
+    color: var(--cbn-text);
+    line-height: 1.2;
+    margin: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+    transition: font-size var(--motion-normal) var(--ease-out);
+}
+
+.fc-ph--compact .fc-ph__title {
+    font-size: var(--text-h2);
+}
+
+.fc-ph__count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 22px;
+    height: 22px;
+    padding: 0 var(--space-2);
+    background: var(--cbn-gray-100);
+    color: var(--cbn-text-secondary);
+    font-size: var(--text-caption);
+    font-weight: 600;
+    font-family: var(--font-sans);
+    border-radius: 100px;
+    margin-left: var(--space-2);
+    vertical-align: middle;
+}
+
+.fc-ph__badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px var(--space-2);
+    border-radius: 100px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.fc-ph__badge-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    display: inline-block;
+    background: currentColor;
+}
+
+.fc-ph__badge--success {
+    background: #dcfce7;
+    color: #15803d;
+}
+
+.fc-ph__badge--warning {
+    background: #fef9c3;
+    color: #a16207;
+}
+
+.fc-ph__badge--danger {
+    background: #fee2e2;
+    color: #b91c1c;
+}
+
+.fc-ph__badge--info {
+    background: #dbeafe;
+    color: #1d4ed8;
+}
+
+.fc-ph__badge--neutral {
+    background: var(--cbn-gray-100);
+    color: var(--cbn-text-secondary);
+}
+
+.fc-ph__badge--gold {
+    background: #fef3c7;
+    color: #92400e;
+}
+
+.fc-ph__subtitle {
+    font-size: var(--text-body);
+    color: var(--cbn-text-secondary);
+    margin: var(--space-1) 0 0;
+    line-height: 1.5;
+    max-width: 600px;
+    /* Slide up + fade out in compact mode */
+    overflow: hidden;
+    max-height: 3rem;
+    opacity: 1;
+    transition: max-height var(--motion-normal) var(--ease-out),
+                opacity var(--motion-normal) var(--ease-out),
+                margin var(--motion-normal) var(--ease-out);
+}
+
+.fc-ph--compact .fc-ph__subtitle {
+    max-height: 0;
+    opacity: 0;
+    margin: 0;
+}
+
+/* ── Actions ────────────────────────────────────────────────── */
+.fc-ph__actions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    flex-shrink: 0;
+    padding-top: 4px;
+}
+
+.fc-ph__actions-primary {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+}
+
+/* Overflow "..." button */
+.fc-ph__overflow-wrap {
+    position: relative;
+}
+
+.fc-ph__overflow-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border: 1px solid var(--cbn-border);
+    border-radius: var(--radius-sm);
+    background: var(--cbn-surface);
+    color: var(--cbn-text-secondary);
+    cursor: pointer;
+    transition: background var(--motion-fast) var(--ease-out),
+                color var(--motion-fast) var(--ease-out);
+}
+
+.fc-ph__overflow-btn:hover {
+    background: var(--cbn-surface-hover);
+    color: var(--cbn-text);
+}
+
+.fc-ph__overflow-menu {
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 0;
+    min-width: 180px;
+    background: var(--cbn-surface);
+    border: 1px solid var(--cbn-border);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-level-3);
+    z-index: 200;
+    overflow: hidden;
+    animation: fc-ph-menu-in var(--motion-fast) var(--ease-out);
+}
+
+@keyframes fc-ph-menu-in {
+    from { opacity: 0; transform: translateY(-6px) scale(0.97); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* Items inside overflow menu — user provides buttons/links */
+.fc-ph__overflow-menu button,
+.fc-ph__overflow-menu a {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    width: 100%;
+    padding: var(--space-2) var(--space-3);
+    background: none;
+    border: none;
+    color: var(--cbn-text);
+    font-size: var(--text-body);
+    font-family: var(--font-sans);
+    text-align: left;
+    text-decoration: none;
+    cursor: pointer;
+    transition: background var(--motion-fast) var(--ease-out);
+}
+
+.fc-ph__overflow-menu button:hover,
+.fc-ph__overflow-menu a:hover {
+    background: var(--cbn-surface-hover);
+}
+
+.fc-ph__overflow-menu button.danger,
+.fc-ph__overflow-menu a.danger {
+    color: var(--cbn-danger);
+}
+
+/* Mobile: collapse primary actions into overflow */
+@media (max-width: 600px) {
+    .fc-ph__actions-primary {
+        display: none;
+    }
+
+    .fc-ph__actions-primary.mobile-visible {
+        display: flex;
+    }
+}
+
+/* ── Tab bar ────────────────────────────────────────────────── */
+.fc-ph__tabs {
+    display: flex;
+    align-items: flex-end;
+    gap: 0;
+    margin: 0 calc(-1 * var(--space-6));
+    padding: 0 var(--space-6);
+    overflow-x: auto;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+    border-top: 1px solid var(--cbn-border-subtle, var(--cbn-border));
+    margin-top: var(--space-1);
+}
+
+.fc-ph__tabs::-webkit-scrollbar { display: none; }
+
+.fc-ph__tab {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-3) var(--space-3);
+    font-size: var(--text-body);
+    font-weight: 500;
+    color: var(--cbn-text-secondary);
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    cursor: pointer;
+    text-decoration: none;
+    white-space: nowrap;
+    margin-bottom: -1px;
+    transition: color var(--motion-fast) var(--ease-out),
+                border-color var(--motion-fast) var(--ease-out);
+}
+
+.fc-ph__tab:hover {
+    color: var(--cbn-text);
+    border-bottom-color: var(--cbn-gray-200);
+}
+
+.fc-ph__tab--active {
+    color: var(--cbn-primary);
+    border-bottom-color: var(--cbn-primary);
+    font-weight: 600;
+}
+
+.fc-ph__tab-count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 5px;
+    background: var(--cbn-gray-100);
+    color: var(--cbn-text-secondary);
+    font-size: 0.68rem;
+    font-weight: 600;
+    border-radius: 100px;
+}
+
+.fc-ph__tab--active .fc-ph__tab-count {
+    background: color-mix(in srgb, var(--cbn-primary) 12%, transparent);
+    color: var(--cbn-primary);
+}
+
+.fc-ph__tab-icon {
+    display: inline-flex;
+    align-items: center;
+    opacity: 0.7;
+}
+
+.fc-ph__tab--active .fc-ph__tab-icon {
+    opacity: 1;
+}
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+    .fc-ph, .fc-ph__subtitle, .fc-ph__title { transition: none; }
+    @keyframes fc-ph-menu-in { from { opacity: 1; } }
+}
+
+
+/* ============================================================
+   DataTable<TItem> Component — fc-dt-* namespace
+   Builds on existing .fc-table, .fc-list-*, .fc-skel, .fc-empty
+   ============================================================ */
+
+/* ── Wrapper ────────────────────────────────────────────────── */
+.fc-dt-wrapper {
+    display: flex;
+    flex-direction: column;
+    background: var(--cbn-surface-elevated);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-level-2);
+    border: 1px solid var(--cbn-border-subtle);
+    overflow: hidden;
+}
+
+/* ── Toolbar ────────────────────────────────────────────────── */
+.fc-dt-toolbar {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-3) var(--space-4);
+    border-bottom: 1px solid var(--cbn-border-subtle);
+    background: var(--cbn-surface-elevated);
+    flex-wrap: wrap;
+}
+
+.fc-dt-toolbar-left {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    flex: 1;
+    flex-wrap: wrap;
+    min-width: 0;
+}
+
+.fc-dt-toolbar-right {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    flex-shrink: 0;
+}
+
+/* ── Sortable Column Headers ────────────────────────────────── */
+.fc-dt-th { position: relative; }
+
+.fc-dt-sortable {
+    cursor: pointer;
+    user-select: none;
+    padding-right: calc(var(--space-4) + 18px) !important;
+    transition: background var(--transition-fast) var(--ease-standard);
+}
+
+.fc-dt-sortable:hover { background: rgba(200, 164, 21, 0.15); }
+
+.fc-dt-sort-icon {
+    position: absolute;
+    right: var(--space-2);
+    top: 50%;
+    transform: translateY(-50%);
+    width: 14px;
+    height: 14px;
+    opacity: 0.25;
+    transition: opacity var(--transition-fast) var(--ease-standard),
+                transform var(--transition-fast) var(--ease-standard);
+    pointer-events: none;
+}
+
+.fc-dt-sortable:hover .fc-dt-sort-icon { opacity: 0.55; }
+
+.fc-dt-sort-asc .fc-dt-sort-icon {
+    opacity: 1;
+    color: var(--cbn-primary);
+}
+
+.fc-dt-sort-desc .fc-dt-sort-icon {
+    opacity: 1;
+    color: var(--cbn-primary);
+    transform: translateY(-50%) rotate(180deg);
+}
+
+/* ── Column Resize Handle ────────────────────────────────────── */
+.fc-dt-resize-handle {
+    position: absolute;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    width: 5px;
+    cursor: col-resize;
+    background: transparent;
+    z-index: 2;
+    transition: background var(--transition-fast) var(--ease-standard);
+}
+
+.fc-dt-resize-handle:hover,
+.fc-dt-resize-handle.fc-dt-resizing {
+    background: var(--cbn-primary);
+    opacity: 0.6;
+}
+
+/* ── Checkbox Column ─────────────────────────────────────────── */
+.fc-dt-checkbox-cell {
+    width: 44px !important;
+    min-width: 44px !important;
+    padding: var(--space-2) var(--space-3) !important;
+    text-align: center !important;
+    vertical-align: middle !important;
+}
+
+/* ── Row States ─────────────────────────────────────────────── */
+.fc-dt-row-selected { background: rgba(0, 107, 63, 0.07) !important; }
+
+.fc-dt-row-focused,
+.fc-table tbody tr:focus-visible {
+    outline: 2px solid var(--cbn-primary);
+    outline-offset: -2px;
+    position: relative;
+    z-index: 1;
+}
+
+/* ── Alignment Helpers ──────────────────────────────────────── */
+.fc-dt-align-center { text-align: center; }
+.fc-dt-align-right  { text-align: right; }
+
+/* ── Table Variant — No Stripe ──────────────────────────────── */
+.fc-table--no-stripe tbody tr:nth-child(even) { background: transparent; }
+
+/* ── Bulk Actions Bar ────────────────────────────────────────── */
+.fc-dt-bulk-bar {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-2) var(--space-5);
+    background: rgba(0, 107, 63, 0.06);
+    border-bottom: 1px solid rgba(0, 107, 63, 0.15);
+    animation: fcBulkSlideIn var(--transition-base) var(--ease-decelerate);
+    flex-wrap: wrap;
+}
+
+.fc-dt-bulk-bar-count {
+    font-size: var(--text-body-sm);
+    color: var(--cbn-primary);
+    font-weight: var(--font-weight-semibold);
+    margin-right: auto;
+}
+
+@keyframes fcBulkSlideIn {
+    from { transform: translateY(-100%); opacity: 0; }
+    to   { transform: translateY(0);     opacity: 1; }
+}
+
+/* ── Column Visibility Toggle ────────────────────────────────── */
+.fc-dt-col-toggle { position: relative; display: inline-block; }
+.fc-dt-col-toggle-btn { gap: var(--space-1) !important; }
+
+.fc-dt-col-toggle-dropdown {
+    position: absolute;
+    right: 0;
+    top: calc(100% + var(--space-1));
+    min-width: 200px;
+    background: var(--cbn-surface-elevated);
+    border: 1px solid var(--cbn-border);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-level-3);
+    padding: var(--space-1);
+    z-index: 50;
+    animation: fcDropdownOpen 0.12s var(--ease-decelerate);
+}
+
+.fc-dt-col-toggle-item {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-3);
+    font-size: var(--text-body-sm);
+    color: var(--cbn-text);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: background var(--transition-fast) var(--ease-standard);
+    user-select: none;
+}
+
+.fc-dt-col-toggle-item:hover { background: var(--cbn-gray-50); }
+
+.fc-dt-col-toggle-item input[type="checkbox"] {
+    cursor: pointer;
+    accent-color: var(--cbn-primary);
+    width: 14px;
+    height: 14px;
+    flex-shrink: 0;
+}
+
+/* ── Export Menu ─────────────────────────────────────────────── */
+.fc-dt-export-wrap { position: relative; display: inline-block; }
+
+.fc-dt-export-dropdown {
+    position: absolute;
+    right: 0;
+    top: calc(100% + var(--space-1));
+    min-width: 180px;
+    background: var(--cbn-surface-elevated);
+    border: 1px solid var(--cbn-border);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-level-3);
+    padding: var(--space-1);
+    z-index: 50;
+    animation: fcDropdownOpen 0.12s var(--ease-decelerate);
+}
+
+.fc-dt-export-item {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-3);
+    font-size: var(--text-body-sm);
+    color: var(--cbn-text);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    border: none;
+    background: none;
+    width: 100%;
+    text-align: left;
+    font-family: inherit;
+    transition: background var(--transition-fast) var(--ease-standard);
+}
+
+.fc-dt-export-item:hover { background: var(--cbn-gray-50); }
+
+@keyframes fcDropdownOpen {
+    from { opacity: 0; transform: translateY(-4px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Pagination Footer extras ───────────────────────────────── */
+.fc-list-pagination-wrap {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+}
+
+.fc-dt-page-size-select {
+    min-width: auto !important;
+    padding: var(--space-1) var(--space-2) !important;
+    font-size: var(--text-caption) !important;
+}
+
+.fc-list-page-btn--ellipsis {
+    border: none !important;
+    cursor: default !important;
+    pointer-events: none;
+    min-width: 1.5rem !important;
+}
+
+.fc-list-footer-filtered {
+    color: var(--cbn-text-secondary);
+    font-size: var(--text-caption);
+}
+
+/* ── Mobile Card Layout ──────────────────────────────────────── */
+.fc-dt-cards { display: none; }
+
+@media (max-width: 767px) {
+    .fc-dt-responsive .fc-table-wrap { display: none; }
+    .fc-dt-responsive .fc-dt-cards {
+        display: block;
+        padding: var(--space-3);
+        background: var(--cbn-surface);
+    }
+}
+
+.fc-dt-card {
+    background: var(--cbn-surface-elevated);
+    border: 1px solid var(--cbn-border-subtle);
+    border-radius: var(--radius-lg);
+    padding: var(--space-3) var(--space-4);
+    margin-bottom: var(--space-3);
+    transition: box-shadow var(--transition-fast) var(--ease-standard),
+                border-color var(--transition-fast) var(--ease-standard);
+}
+
+.fc-dt-card--clickable { cursor: pointer; }
+.fc-dt-card--clickable:hover {
+    box-shadow: var(--shadow-level-2);
+    border-color: var(--cbn-border);
+}
+
+.fc-dt-card--selected {
+    border-color: var(--cbn-primary);
+    background: rgba(0, 107, 63, 0.04);
+}
+
+.fc-dt-card-select {
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: var(--space-1);
+}
+
+.fc-dt-card-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: var(--space-3);
+    padding: var(--space-1) 0;
+    border-bottom: 1px solid var(--cbn-border-subtle);
+    font-size: var(--text-body-sm);
+}
+
+.fc-dt-card-row:last-child { border-bottom: none; }
+
+.fc-dt-card-label {
+    color: var(--cbn-text-secondary);
+    font-size: var(--text-caption);
+    text-transform: uppercase;
+    letter-spacing: var(--tracking-wider);
+    font-weight: var(--font-weight-medium);
+    flex-shrink: 0;
+    padding-top: 2px;
+}
+
+.fc-dt-card-value {
+    color: var(--cbn-text);
+    text-align: right;
+    flex: 1;
+    min-width: 0;
+}
+
+/* ── Template detail meta strip ─────────────────────────────── */
+.fc-detail-meta-strip {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-4) var(--space-6);
+    padding: var(--space-3) var(--space-6);
+    background: var(--cbn-surface-alt, var(--cbn-gray-50));
+    border-bottom: 1px solid var(--cbn-border);
+    margin-bottom: var(--space-4);
+}
+
+.fc-detail-meta-item {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.fc-detail-meta-label {
+    font-size: 0.68rem;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--cbn-text-muted);
+}
+
+.fc-detail-meta-value {
+    font-size: var(--text-body);
+    font-weight: 500;
+    color: var(--cbn-text);
+}
+
+
+/* ============================================================
+   DRAG-AND-DROP SYSTEM  (fc-dnd-*, fc-drag-*, fc-drop-*, fc-kanban-*)
+   ============================================================ */
+
+/* ── Ghost element (floating copy while dragging) ──────────── */
+.fc-dnd-ghost {
+    border-radius: var(--radius-md);
+    cursor: grabbing !important;
+}
+
+/* ── Dragging source (placeholder slot) ─────────────────────── */
+.fc-dnd-dragging {
+    opacity: 0;
+    pointer-events: none;
+}
+
+/* ── Drop placeholder ────────────────────────────────────────── */
+.fc-dnd-placeholder {
+    background: color-mix(in srgb, var(--cbn-primary) 8%, transparent);
+    border: 2px dashed var(--cbn-primary);
+    border-radius: var(--radius-md);
+    margin: 4px 0;
+    transition: height var(--motion-fast) var(--ease-out);
+}
+
+/* ── Keyboard selection ──────────────────────────────────────── */
+.fc-dnd-kb-selected {
+    outline: 2px solid var(--cbn-primary);
+    outline-offset: 2px;
+}
+
+/* ──────────────────────────────────────────────────────────────
+   SORTABLE DRAG LIST
+   ────────────────────────────────────────────────────────────── */
+.fc-drag-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+}
+
+.fc-drag-item {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-3) var(--space-4);
+    background: var(--cbn-surface);
+    border: 1px solid var(--cbn-border);
+    border-radius: var(--radius-md);
+    margin-bottom: var(--space-1);
+    cursor: default;
+    transition: background var(--motion-fast) var(--ease-out),
+                box-shadow var(--motion-fast) var(--ease-out);
+    animation: fc-drag-item-in var(--motion-normal) var(--ease-out);
+}
+
+@keyframes fc-drag-item-in {
+    from { opacity: 0; transform: translateY(-4px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+.fc-drag-item:hover {
+    background: var(--cbn-surface-hover);
+    box-shadow: var(--shadow-level-1);
+}
+
+.fc-drag-item:focus-visible {
+    outline: 2px solid var(--cbn-primary);
+    outline-offset: 2px;
+}
+
+.fc-drag-handle {
+    display: inline-flex;
+    align-items: center;
+    color: var(--cbn-gray-300);
+    cursor: grab;
+    padding: 2px;
+    flex-shrink: 0;
+    transition: color var(--motion-fast) var(--ease-out);
+}
+
+.fc-drag-handle:hover {
+    color: var(--cbn-text-secondary);
+}
+
+.fc-drag-handle:active {
+    cursor: grabbing;
+}
+
+.fc-drag-item-content {
+    flex: 1;
+    min-width: 0;
+}
+
+/* ──────────────────────────────────────────────────────────────
+   FILE DROP ZONE
+   ────────────────────────────────────────────────────────────── */
+.fc-drop-zone {
+    position: relative;
+    border: 2px dashed var(--cbn-border);
+    border-radius: var(--radius-lg);
+    background: var(--cbn-surface);
+    transition: border-color var(--motion-fast) var(--ease-out),
+                background  var(--motion-fast) var(--ease-out);
+    overflow: hidden;
+    cursor: pointer;
+}
+
+.fc-drop-zone:hover {
+    border-color: var(--cbn-primary);
+    background: color-mix(in srgb, var(--cbn-primary) 3%, var(--cbn-surface));
+}
+
+.fc-drop-zone.fc-drop-active {
+    border-color: var(--cbn-primary);
+    border-style: solid;
+    background: color-mix(in srgb, var(--cbn-primary) 5%, var(--cbn-surface));
+}
+
+.fc-drop-zone-inner {
+    position: relative;
+    padding: var(--space-8) var(--space-6);
+    text-align: center;
+}
+
+.fc-drop-zone-input {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    opacity: 0;
+    overflow: hidden;
+    clip: rect(0,0,0,0);
+    white-space: nowrap;
+}
+
+/* Invisible full-area label for click-to-browse */
+.fc-drop-zone-browse-full {
+    position: absolute;
+    inset: 0;
+    cursor: pointer;
+}
+
+.fc-drop-zone-icon {
+    color: var(--cbn-gray-300);
+    margin-bottom: var(--space-3);
+    transition: color var(--motion-fast) var(--ease-out);
+}
+
+.fc-drop-zone:hover .fc-drop-zone-icon,
+.fc-drop-zone.fc-drop-active .fc-drop-zone-icon {
+    color: var(--cbn-primary);
+}
+
+.fc-drop-zone-label {
+    font-size: var(--text-body);
+    color: var(--cbn-text-secondary);
+    margin: 0 0 var(--space-2);
+}
+
+.fc-drop-zone-browse {
+    color: var(--cbn-primary);
+    font-weight: 600;
+    cursor: pointer;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    position: relative;
+    z-index: 1;
+}
+
+.fc-drop-zone-hint {
+    font-size: var(--text-caption);
+    color: var(--cbn-text-muted);
+    margin: 0;
+}
+
+/* Drop overlay (shown while file is over zone) */
+.fc-drop-zone-overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-2);
+    background: color-mix(in srgb, var(--cbn-primary) 10%, var(--cbn-surface));
+    color: var(--cbn-primary);
+    font-weight: 600;
+    font-size: var(--text-body-lg);
+    pointer-events: none;
+    animation: fc-drop-overlay-in var(--motion-fast) var(--ease-out);
+}
+
+@keyframes fc-drop-overlay-in {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+}
+
+/* ──────────────────────────────────────────────────────────────
+   KANBAN BOARD
+   ────────────────────────────────────────────────────────────── */
+.fc-kanban {
+    display: flex;
+    gap: var(--space-4);
+    padding: var(--space-4) var(--space-6) var(--space-8);
+    overflow-x: auto;
+    align-items: flex-start;
+    min-height: calc(100vh - 200px);
+    scrollbar-width: thin;
+}
+
+.fc-kanban-col {
+    flex: 0 0 260px;
+    min-width: 220px;
+    background: var(--cbn-gray-50);
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--cbn-border);
+    display: flex;
+    flex-direction: column;
+    max-height: calc(100vh - 200px);
+    transition: border-color var(--motion-fast) var(--ease-out),
+                background   var(--motion-fast) var(--ease-out);
+}
+
+/* Drop target highlight when dragging */
+.fc-kanban-drop-target {
+    border-color: transparent;
+}
+
+.fc-kanban-col-over {
+    border-color: var(--cbn-primary) !important;
+    background: color-mix(in srgb, var(--cbn-primary) 4%, var(--cbn-gray-50));
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--cbn-primary) 30%, transparent);
+}
+
+.fc-kanban-col-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--space-3) var(--space-4);
+    border-bottom: 1px solid var(--cbn-border);
+}
+
+.fc-kanban-col-title {
+    font-size: var(--text-body);
+    font-weight: 600;
+    color: var(--cbn-text);
+}
+
+.fc-kanban-col-count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 20px;
+    height: 20px;
+    padding: 0 var(--space-2);
+    background: var(--cbn-gray-200);
+    color: var(--cbn-text-secondary);
+    font-size: 0.68rem;
+    font-weight: 600;
+    border-radius: 100px;
+}
+
+.fc-kanban-cards {
+    flex: 1;
+    overflow-y: auto;
+    padding: var(--space-3);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    scrollbar-width: thin;
+}
+
+.fc-kanban-card {
+    background: var(--cbn-surface);
+    border: 1px solid var(--cbn-border);
+    border-radius: var(--radius-md);
+    padding: var(--space-3);
+    cursor: grab;
+    transition: box-shadow var(--motion-fast) var(--ease-out),
+                transform  var(--motion-fast) var(--ease-out);
+    animation: fc-kanban-card-in var(--motion-normal) var(--ease-out);
+}
+
+@keyframes fc-kanban-card-in {
+    from { opacity: 0; transform: translateY(6px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+.fc-kanban-card:hover {
+    box-shadow: var(--shadow-level-2);
+    transform: translateY(-1px);
+}
+
+.fc-kanban-card:focus-visible {
+    outline: 2px solid var(--cbn-primary);
+    outline-offset: 2px;
+}
+
+.fc-kanban-card:active {
+    cursor: grabbing;
+}
+
+.fc-kanban-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: var(--space-1);
+}
+
+.fc-kanban-card-code {
+    font-size: var(--text-caption);
+    font-weight: 600;
+    font-family: var(--font-mono, monospace);
+    color: var(--cbn-primary);
+}
+
+.fc-kanban-card-id {
+    font-size: 0.68rem;
+    color: var(--cbn-text-muted);
+}
+
+.fc-kanban-card-inst {
+    font-size: var(--text-body);
+    font-weight: 500;
+    color: var(--cbn-text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-bottom: 2px;
+}
+
+.fc-kanban-card-period {
+    font-size: var(--text-caption);
+    color: var(--cbn-text-muted);
+    margin-bottom: var(--space-2);
+}
+
+.fc-kanban-card-footer {
+    display: flex;
+    gap: var(--space-1);
+    flex-wrap: wrap;
+    margin-bottom: var(--space-2);
+}
+
+.fc-kanban-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 1px 6px;
+    border-radius: 100px;
+    font-size: 0.65rem;
+    font-weight: 600;
+}
+
+.fc-kanban-badge-danger  { background: #fee2e2; color: #b91c1c; }
+.fc-kanban-badge-warning { background: #fef9c3; color: #a16207; }
+
+.fc-kanban-card-time {
+    display: block;
+    font-size: 0.65rem;
+    color: var(--cbn-text-muted);
+}
+
+.fc-kanban-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-6) var(--space-4);
+    color: var(--cbn-gray-300);
+    font-size: var(--text-caption);
+}
+
+/* Kanban skeleton */
+.fc-kanban-skeleton {
+    display: flex;
+    gap: var(--space-4);
+    padding: var(--space-4) var(--space-6);
+    overflow-x: auto;
+}
+
+.fc-kanban-skeleton-col {
+    flex: 0 0 220px;
+    padding: var(--space-3);
+}
+
+/* Toast inline (move confirmation) */
+.fc-toast-inline {
+    position: fixed;
+    bottom: var(--space-6);
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--cbn-text);
+    color: #fff;
+    padding: var(--space-2) var(--space-4);
+    border-radius: 100px;
+    font-size: var(--text-body);
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    box-shadow: var(--shadow-level-3);
+    z-index: 500;
+    animation: fc-toast-in var(--motion-normal) var(--ease-spring);
+}
+
+@keyframes fc-toast-in {
+    from { opacity: 0; transform: translate(-50%, 10px); }
+    to   { opacity: 1; transform: translate(-50%, 0); }
+}
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+    .fc-drag-item,
+    .fc-kanban-card,
+    .fc-drop-zone,
+    .fc-drop-zone-overlay {
+        animation: none;
+        transition: none;
+    }
+}
+
