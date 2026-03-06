@@ -18,6 +18,9 @@ public class MetadataDbContext : DbContext
 
     // Multi-tenancy
     public DbSet<Tenant> Tenants => Set<Tenant>();
+    public DbSet<Jurisdiction> Jurisdictions => Set<Jurisdiction>();
+    public DbSet<JurisdictionFxRate> JurisdictionFxRates => Set<JurisdictionFxRate>();
+    public DbSet<ConsolidationAdjustment> ConsolidationAdjustments => Set<ConsolidationAdjustment>();
 
     // Licensing & modules
     public DbSet<LicenceType> LicenceTypes => Set<LicenceType>();
@@ -43,6 +46,7 @@ public class MetadataDbContext : DbContext
     public DbSet<ReturnTemplate> ReturnTemplates => Set<ReturnTemplate>();
     public DbSet<TemplateVersion> TemplateVersions => Set<TemplateVersion>();
     public DbSet<TemplateField> TemplateFields => Set<TemplateField>();
+    public DbSet<FieldLocalisation> FieldLocalisations => Set<FieldLocalisation>();
     public DbSet<TemplateItemCode> TemplateItemCodes => Set<TemplateItemCode>();
     public DbSet<TemplateSection> TemplateSections => Set<TemplateSection>();
     public DbSet<IntraSheetFormula> IntraSheetFormulas => Set<IntraSheetFormula>();

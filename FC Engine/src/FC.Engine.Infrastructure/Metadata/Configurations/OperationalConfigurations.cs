@@ -36,6 +36,7 @@ public class InstitutionConfiguration : IEntityTypeConfiguration<Institution>
         builder.ToTable("institutions");
         builder.HasKey(i => i.Id);
         builder.Property(i => i.TenantId).IsRequired();
+        builder.Property(i => i.JurisdictionId).HasDefaultValue(1).IsRequired();
         builder.Property(i => i.InstitutionCode).HasMaxLength(20).IsRequired();
         builder.Property(i => i.InstitutionName).HasMaxLength(255).IsRequired();
         builder.Property(i => i.LicenseType).HasMaxLength(100);
@@ -52,6 +53,11 @@ public class InstitutionConfiguration : IEntityTypeConfiguration<Institution>
             .HasForeignKey(i => i.ParentInstitutionId)
             .OnDelete(DeleteBehavior.Restrict);
 
+        builder.HasOne(i => i.Jurisdiction)
+            .WithMany(j => j.Institutions)
+            .HasForeignKey(i => i.JurisdictionId)
+            .OnDelete(DeleteBehavior.Restrict);
+
         // ── FI Portal Extensions ──
         builder.Property(i => i.ContactEmail).HasMaxLength(256);
         builder.Property(i => i.ContactPhone).HasMaxLength(50);
@@ -64,6 +70,7 @@ public class InstitutionConfiguration : IEntityTypeConfiguration<Institution>
         // Navigation to Tenant is configured in TenantConfiguration
 
         builder.HasIndex(i => i.TenantId);
+        builder.HasIndex(i => i.JurisdictionId);
     }
 }
 

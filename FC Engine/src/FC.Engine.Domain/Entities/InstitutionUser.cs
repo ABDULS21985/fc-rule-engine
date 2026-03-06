@@ -34,6 +34,9 @@ public class InstitutionUser
     /// <summary>Force password change on first login.</summary>
     public bool MustChangePassword { get; set; } = true;
 
+    /// <summary>Preferred UI language for localised field labels/help text.</summary>
+    public string PreferredLanguage { get; set; } = "en";
+
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     public DateTime? LastLoginAt { get; set; }

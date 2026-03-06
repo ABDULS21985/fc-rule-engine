@@ -6,6 +6,7 @@ namespace FC.Engine.Domain.Entities;
 public class Module
 {
     public int Id { get; set; }
+    public int? JurisdictionId { get; set; }
     public string ModuleCode { get; set; } = string.Empty;
     public string ModuleName { get; set; } = string.Empty;
     public string RegulatorCode { get; set; } = string.Empty;
@@ -21,6 +22,7 @@ public class Module
     public DateTime CreatedAt { get; set; }
 
     // Navigation
+    public Jurisdiction? Jurisdiction { get; set; }
     public List<LicenceModuleMatrix> LicenceModuleEntries { get; set; } = new();
     public List<PlanModulePricing> PlanModulePricing { get; set; } = new();
     public List<SubscriptionModule> SubscriptionModules { get; set; } = new();

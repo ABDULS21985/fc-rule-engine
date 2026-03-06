@@ -9,6 +9,9 @@ public class Institution
     /// <summary>FK to Tenant. Every institution belongs to exactly one tenant.</summary>
     public Guid TenantId { get; set; }
 
+    /// <summary>Regulatory jurisdiction this institution belongs to.</summary>
+    public int JurisdictionId { get; set; } = 1;
+
     public string InstitutionCode { get; set; } = string.Empty;
     public string InstitutionName { get; set; } = string.Empty;
     public string? LicenseType { get; set; }
@@ -62,6 +65,9 @@ public class Institution
 
     /// <summary>The tenant that owns this institution.</summary>
     public Tenant? Tenant { get; set; }
+
+    /// <summary>Regulatory jurisdiction profile (country/currency/timezone).</summary>
+    public Jurisdiction? Jurisdiction { get; set; }
 
     /// <summary>Parent institution in the hierarchy.</summary>
     public Institution? ParentInstitution { get; set; }

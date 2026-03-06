@@ -11,6 +11,7 @@ public class ModuleConfiguration : IEntityTypeConfiguration<Module>
         builder.ToTable("modules");
 
         builder.HasKey(e => e.Id);
+        builder.Property(e => e.JurisdictionId);
         builder.Property(e => e.ModuleCode).HasMaxLength(30).IsRequired();
         builder.Property(e => e.ModuleName).HasMaxLength(200).IsRequired();
         builder.Property(e => e.RegulatorCode).HasMaxLength(20).IsRequired();
@@ -21,7 +22,12 @@ public class ModuleConfiguration : IEntityTypeConfiguration<Module>
         builder.Property(e => e.DisplayOrder).HasDefaultValue(0);
         builder.Property(e => e.CreatedAt).HasDefaultValueSql("SYSUTCDATETIME()");
 
-        builder.HasIndex(e => e.ModuleCode).IsUnique();
+        builder.HasIndex(e => new { e.ModuleCode, e.JurisdictionId }).IsUnique();
+
+        builder.HasOne(e => e.Jurisdiction)
+            .WithMany(j => j.Modules)
+            .HasForeignKey(e => e.JurisdictionId)
+            .OnDelete(DeleteBehavior.Restrict);
     }
 }
 
