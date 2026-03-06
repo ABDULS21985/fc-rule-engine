@@ -80,6 +80,7 @@ public class MetadataDbContext : DbContext
     public DbSet<ImportJob> ImportJobs => Set<ImportJob>();
     public DbSet<ImportMapping> ImportMappings => Set<ImportMapping>();
     public DbSet<MigrationModuleSignOff> MigrationModuleSignOffs => Set<MigrationModuleSignOff>();
+    public DbSet<KnowledgeBaseArticle> KnowledgeBaseArticles => Set<KnowledgeBaseArticle>();
 
     // Regulator portal (RG-25)
     public DbSet<RegulatorReceipt> RegulatorReceipts => Set<RegulatorReceipt>();

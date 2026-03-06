@@ -90,6 +90,7 @@ public class TemplateFieldConfiguration : IEntityTypeConfiguration<TemplateField
         builder.Property(f => f.ReferenceTable).HasMaxLength(128);
         builder.Property(f => f.ReferenceColumn).HasMaxLength(128);
         builder.Property(f => f.HelpText).HasMaxLength(500);
+        builder.Property(f => f.RegulatoryReference).HasMaxLength(300);
         builder.Property(f => f.DataClassification).HasMaxLength(30).HasConversion<string>().HasDefaultValue(FC.Engine.Domain.Enums.DataClassification.Internal);
 
         builder.HasIndex(f => new { f.TemplateVersionId, f.FieldName }).IsUnique();

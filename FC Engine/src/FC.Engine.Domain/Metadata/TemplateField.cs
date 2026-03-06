@@ -26,6 +26,7 @@ public class TemplateField
     public string? ReferenceTable { get; set; }
     public string? ReferenceColumn { get; set; }
     public string? HelpText { get; set; }
+    public string? RegulatoryReference { get; set; }
     public bool IsYtdField { get; set; }
     public int? YtdSourceFieldId { get; set; }
     public DataClassification DataClassification { get; set; } = DataClassification.Internal;
@@ -55,6 +56,7 @@ public class TemplateField
             ReferenceTable = ReferenceTable,
             ReferenceColumn = ReferenceColumn,
             HelpText = HelpText,
+            RegulatoryReference = RegulatoryReference,
             IsYtdField = IsYtdField,
             DataClassification = DataClassification,
             CreatedAt = DateTime.UtcNow

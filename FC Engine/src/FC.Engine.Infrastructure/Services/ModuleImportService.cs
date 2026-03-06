@@ -378,6 +378,7 @@ public partial class ModuleImportService : IModuleImportService
                         MaxValue = fieldDef.MaxValue?.ToString(),
                         AllowedValues = fieldDef.EnumValues,
                         HelpText = fieldDef.ValidationNote ?? fieldDef.HelpText,
+                        RegulatoryReference = fieldDef.RegulatoryReference,
                         IsYtdField = fieldDef.CarryForward,
                         DataClassification = classification,
                         CreatedAt = now

@@ -6,5 +6,6 @@ public enum TenantType
     Regulator = 1,
     HoldingGroup = 2,
     ConsultingFirm = 3,
-    WhiteLabelPartner = 4
+    WhiteLabelPartner = 4,
+    Sandbox = 5
 }
