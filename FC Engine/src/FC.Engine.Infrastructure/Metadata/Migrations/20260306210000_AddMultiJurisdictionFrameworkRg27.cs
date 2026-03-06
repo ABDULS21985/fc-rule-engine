@@ -84,7 +84,9 @@ public partial class AddMultiJurisdictionFrameworkRg27 : Migration
                 ALTER TABLE meta.institution_users
                     ADD PreferredLanguage NVARCHAR(10) NOT NULL
                         CONSTRAINT DF_institution_users_PreferredLanguage DEFAULT 'en';
+        ");
 
+        migrationBuilder.Sql(@"
             IF EXISTS (SELECT 1 FROM dbo.modules WHERE JurisdictionId IS NULL AND ModuleCode NOT IN ('FATF_EVAL', 'ESG_CLIMATE'))
                 UPDATE dbo.modules
                 SET JurisdictionId = 1
