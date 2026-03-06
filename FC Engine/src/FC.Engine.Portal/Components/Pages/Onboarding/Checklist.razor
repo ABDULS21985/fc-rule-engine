@@ -1,6 +1,8 @@
+@page "/onboarding/checklist"
 @page "/onboarding/checklist/{TenantId:guid}"
 @layout LoginLayout
 @inject OnboardingWizardService WizardService
+@inject ITenantContext TenantContext
 
 <PageTitle>Onboarding Checklist — FC Engine Portal</PageTitle>
 
@@ -84,7 +86,12 @@
 
     protected override async Task OnInitializedAsync()
     {
-        _snapshot = await WizardService.GetChecklist(TenantId);
+        var effectiveTenantId = TenantId != Guid.Empty
+            ? TenantId
+            : TenantContext.CurrentTenantId ?? Guid.Empty;
+        _snapshot = effectiveTenantId == Guid.Empty
+            ? null
+            : await WizardService.GetChecklist(effectiveTenantId);
         _tempPassword = string.IsNullOrWhiteSpace(tempPasswordEncoded)
             ? null
             : Uri.UnescapeDataString(tempPasswordEncoded);

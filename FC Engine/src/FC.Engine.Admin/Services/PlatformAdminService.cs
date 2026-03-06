@@ -23,7 +23,7 @@ public class PlatformAdminService
     private readonly TemplateVersioningService _templateVersioningService;
     private readonly IAuditLogger _auditLogger;
     private readonly INotificationOrchestrator _notificationOrchestrator;
-    private readonly FeatureFlagService _featureFlagService;
+    private readonly IFeatureFlagService _featureFlagService;
 
     public PlatformAdminService(
         MetadataDbContext db,
@@ -33,7 +33,7 @@ public class PlatformAdminService
         TemplateVersioningService templateVersioningService,
         IAuditLogger auditLogger,
         INotificationOrchestrator notificationOrchestrator,
-        FeatureFlagService featureFlagService)
+        IFeatureFlagService featureFlagService)
     {
         _db = db;
         _dashboardService = dashboardService;

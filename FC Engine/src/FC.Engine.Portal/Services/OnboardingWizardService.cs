@@ -56,7 +56,7 @@ public class OnboardingWizardService
                 Code = x.Code,
                 Name = x.Name,
                 Regulator = x.Regulator,
-                Description = x.Description
+                Description = x.Description ?? string.Empty
             })
             .ToListAsync(ct);
 
@@ -609,10 +609,13 @@ public class OnboardingWizardService
     private async Task ApplyBranding(Guid tenantId, OnboardingWizardRequest request, CancellationToken ct)
     {
         var config = await _brandingService.GetBrandingConfig(tenantId, ct);
+        var primaryFallback = config.PrimaryColor ?? "#006B3F";
+        var secondaryFallback = config.SecondaryColor ?? "#C8A415";
+        var accentFallback = config.AccentColor ?? "#1A73E8";
         config.CompanyName = request.Profile.InstitutionName.Trim();
-        config.PrimaryColor = NormalizeColor(request.Branding.PrimaryColor, config.PrimaryColor);
-        config.SecondaryColor = NormalizeColor(request.Branding.SecondaryColor, config.SecondaryColor);
-        config.AccentColor = NormalizeColor(request.Branding.AccentColor, config.AccentColor);
+        config.PrimaryColor = NormalizeColor(request.Branding.PrimaryColor, primaryFallback);
+        config.SecondaryColor = NormalizeColor(request.Branding.SecondaryColor, secondaryFallback);
+        config.AccentColor = NormalizeColor(request.Branding.AccentColor, accentFallback);
 
         await _brandingService.UpdateBrandingConfig(tenantId, config, ct);
 

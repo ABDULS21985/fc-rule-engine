@@ -12,25 +12,19 @@ public class ApiKeyMiddleware
     private const string AuthorizationHeaderName = "Authorization";
     private readonly RequestDelegate _next;
     private readonly string? _legacyApiKey;
-    private readonly IApiKeyService _apiKeyService;
-    private readonly IJwtTokenService _jwtTokenService;
     private readonly ILogger<ApiKeyMiddleware> _logger;
 
     public ApiKeyMiddleware(
         RequestDelegate next,
-        IApiKeyService apiKeyService,
-        IJwtTokenService jwtTokenService,
         IConfiguration configuration,
         ILogger<ApiKeyMiddleware> logger)
     {
         _next = next;
-        _apiKeyService = apiKeyService;
-        _jwtTokenService = jwtTokenService;
         _legacyApiKey = configuration["ApiKey"];
         _logger = logger;
     }
 
-    public async Task InvokeAsync(HttpContext context)
+    public async Task InvokeAsync(HttpContext context, IApiKeyService apiKeyService, IJwtTokenService jwtTokenService)
     {
         // Skip auth for health, metrics, Swagger and auth bootstrap endpoints.
         var path = context.Request.Path.Value ?? "";
@@ -49,7 +43,7 @@ public class ApiKeyMiddleware
         {
             try
             {
-                var principal = _jwtTokenService.ValidateAccessToken(bearerToken!);
+                var principal = jwtTokenService.ValidateAccessToken(bearerToken!);
                 context.User = principal;
 
                 var tenantClaim = principal.FindFirst("tid")?.Value
@@ -77,7 +71,7 @@ public class ApiKeyMiddleware
             return;
         }
 
-        var apiKeyResult = await _apiKeyService.ValidateApiKey(
+        var apiKeyResult = await apiKeyService.ValidateApiKey(
             extractedApiKey.ToString(),
             context.Connection.RemoteIpAddress?.ToString(),
             context.RequestAborted);
