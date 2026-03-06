@@ -283,6 +283,33 @@ CREATE TABLE meta.publish_queue (
     CONSTRAINT CK_queue_status CHECK (status IN ('Pending', 'Processing', 'Completed', 'Failed'))
 );
 
+-- Saved Reports (user-created report definitions with optional scheduling)
+IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = 'saved_reports')
+CREATE TABLE dbo.saved_reports (
+    Id                  INT IDENTITY(1,1) PRIMARY KEY,
+    TenantId            UNIQUEIDENTIFIER NOT NULL,
+    InstitutionId       INT NOT NULL,
+    Name                NVARCHAR(200) NOT NULL,
+    Description         NVARCHAR(500) NULL,
+    Definition          NVARCHAR(MAX) NOT NULL DEFAULT '{}',
+    IsShared            BIT NOT NULL DEFAULT 0,
+    CreatedByUserId     INT NOT NULL,
+    ScheduleCron        NVARCHAR(100) NULL,
+    ScheduleFormat      NVARCHAR(10) NULL,
+    ScheduleRecipients  NVARCHAR(MAX) NULL,
+    IsScheduleActive    BIT NOT NULL DEFAULT 0,
+    LastRunAt           DATETIME2 NULL,
+    CreatedAt           DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(),
+    UpdatedAt           DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME()
+);
+
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_saved_reports_TenantId')
+    CREATE INDEX IX_saved_reports_TenantId ON dbo.saved_reports(TenantId);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_saved_reports_TenantId_InstitutionId')
+    CREATE INDEX IX_saved_reports_TenantId_InstitutionId ON dbo.saved_reports(TenantId, InstitutionId);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_saved_reports_IsScheduleActive_LastRunAt')
+    CREATE INDEX IX_saved_reports_IsScheduleActive_LastRunAt ON dbo.saved_reports(IsScheduleActive, LastRunAt);
+
 -- ============================================================================
 -- D. OPERATIONAL TABLE ENHANCEMENTS
 -- ============================================================================

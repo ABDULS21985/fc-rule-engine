@@ -30,101 +30,111 @@
         </div>
     </div>
 
-    <!-- Onboarding Form -->
-    <div class="admin-form-grid">
-
-        <!-- Partner Details Section -->
-        <div class="admin-form-section-label">Partner Details</div>
-
-        <div class="admin-form-group">
-            <label class="admin-form-label admin-form-label-required">Partner Name</label>
-            <input class="admin-form-input" @bind="_request.TenantName" placeholder="e.g. Acme Financial Services" />
-        </div>
-        <div class="admin-form-group">
-            <label class="admin-form-label admin-form-label-required">Tenant Slug</label>
-            <input class="admin-form-input" @bind="_request.TenantSlug" placeholder="e.g. acme-financial" />
-        </div>
-        <div class="admin-form-group">
-            <label class="admin-form-label admin-form-label-required">Contact Email</label>
-            <input class="admin-form-input" type="email" @bind="_request.ContactEmail" placeholder="e.g. contact@acme.com" />
-        </div>
-        <div class="admin-form-group">
-            <label class="admin-form-label">Contact Phone</label>
-            <input class="admin-form-input" type="tel" @bind="_request.ContactPhone" placeholder="e.g. +234 800 000 0000" />
-        </div>
-        <div class="admin-form-group">
-            <label class="admin-form-label">RC Number</label>
-            <input class="admin-form-input" @bind="_request.RcNumber" placeholder="e.g. RC123456" />
-        </div>
-        <div class="admin-form-group">
-            <label class="admin-form-label">Tax ID</label>
-            <input class="admin-form-input" @bind="_request.TaxId" placeholder="e.g. TIN-00000000-0001" />
-        </div>
-
-        <!-- Subscription & Tier Section -->
-        <div class="admin-form-section-label">Subscription &amp; Tier</div>
-
-        <div class="admin-form-group">
-            <label class="admin-form-label admin-form-label-required">Subscription Plan</label>
-            <input class="admin-form-input" @bind="_request.SubscriptionPlanCode" placeholder="e.g. ENTERPRISE" />
-        </div>
-        <div class="admin-form-group">
-            <label class="admin-form-label admin-form-label-required">Partner Tier</label>
-            <select class="admin-form-input" @bind="_request.PartnerTier">
-                @foreach (var tier in Enum.GetValues<PartnerTier>())
-                {
-                    <option value="@tier">@tier</option>
-                }
-            </select>
-        </div>
-        <div class="admin-form-group">
-            <label class="admin-form-label admin-form-label-required">Billing Model</label>
-            <select class="admin-form-input" @bind="_request.BillingModel">
-                @foreach (var model in Enum.GetValues<PartnerBillingModel>())
-                {
-                    <option value="@model">@model</option>
-                }
-            </select>
-        </div>
-        <div class="admin-form-group">
-            <label class="admin-form-label">Commission Rate</label>
-            <input class="admin-form-input" type="number" step="0.0001" @bind="_request.CommissionRate" placeholder="e.g. 0.05" />
-        </div>
-        <div class="admin-form-group">
-            <label class="admin-form-label">Wholesale Discount</label>
-            <input class="admin-form-input" type="number" step="0.0001" @bind="_request.WholesaleDiscount" placeholder="e.g. 0.10" />
-        </div>
-        <div class="admin-form-group">
-            <label class="admin-form-label">Max Sub-Tenants</label>
-            <input class="admin-form-input" type="number" min="1" @bind="_request.MaxSubTenants" />
-        </div>
-
-        <!-- Agreement & Admin Section -->
-        <div class="admin-form-section-label">Agreement &amp; Admin</div>
-
-        <div class="admin-form-group">
-            <label class="admin-form-label admin-form-label-required">Agreement Version</label>
-            <input class="admin-form-input" @bind="_request.AgreementVersion" placeholder="e.g. v1" />
-        </div>
-        <div class="admin-form-group">
-            <label class="admin-form-label admin-form-label-required">Admin Email</label>
-            <input class="admin-form-input" type="email" @bind="_request.AdminEmail" placeholder="e.g. admin@acme.com" />
-        </div>
-        <div class="admin-form-group">
-            <label class="admin-form-label admin-form-label-required">Admin Full Name</label>
-            <input class="admin-form-input" @bind="_request.AdminFullName" placeholder="e.g. John Doe" />
+    <!-- Partner Details -->
+    <div class="portal-card">
+        <div class="portal-card-header"><h2 class="portal-card-title">Partner Details</h2></div>
+        <div class="portal-card-body">
+            <div class="admin-form-grid">
+                <div class="admin-form-group">
+                    <label class="admin-form-label admin-form-label-required">Partner Name</label>
+                    <input class="admin-form-input" @bind="_request.TenantName" placeholder="e.g. Acme Financial Services" />
+                </div>
+                <div class="admin-form-group">
+                    <label class="admin-form-label admin-form-label-required">Tenant Slug</label>
+                    <input class="admin-form-input" @bind="_request.TenantSlug" placeholder="e.g. acme-financial" />
+                </div>
+                <div class="admin-form-group">
+                    <label class="admin-form-label admin-form-label-required">Contact Email</label>
+                    <input class="admin-form-input" type="email" @bind="_request.ContactEmail" placeholder="e.g. contact@acme.com" />
+                </div>
+                <div class="admin-form-group">
+                    <label class="admin-form-label">Contact Phone</label>
+                    <input class="admin-form-input" type="tel" @bind="_request.ContactPhone" placeholder="e.g. +234 800 000 0000" />
+                </div>
+                <div class="admin-form-group">
+                    <label class="admin-form-label">RC Number</label>
+                    <input class="admin-form-input" @bind="_request.RcNumber" placeholder="e.g. RC123456" />
+                </div>
+                <div class="admin-form-group">
+                    <label class="admin-form-label">Tax ID</label>
+                    <input class="admin-form-input" @bind="_request.TaxId" placeholder="e.g. TIN-00000000-0001" />
+                </div>
+            </div>
         </div>
     </div>
 
-    <!-- Submit Button -->
-    <div style="margin-top:var(--space-6);">
-        <button class="admin-btn-primary" @onclick="OnboardAsync" disabled="@_busy" type="button">
-            @if (_busy)
-            {
-                <span class="spinner" style="width:16px;height:16px;"></span>
-            }
-            Onboard Partner
-        </button>
+    <!-- Subscription & Tier -->
+    <div class="portal-card">
+        <div class="portal-card-header"><h2 class="portal-card-title">Subscription &amp; Tier</h2></div>
+        <div class="portal-card-body">
+            <div class="admin-form-grid">
+                <div class="admin-form-group">
+                    <label class="admin-form-label admin-form-label-required">Subscription Plan</label>
+                    <input class="admin-form-input" @bind="_request.SubscriptionPlanCode" placeholder="e.g. ENTERPRISE" />
+                </div>
+                <div class="admin-form-group">
+                    <label class="admin-form-label admin-form-label-required">Partner Tier</label>
+                    <select class="admin-form-input" @bind="_request.PartnerTier">
+                        @foreach (var tier in Enum.GetValues<PartnerTier>())
+                        {
+                            <option value="@tier">@tier</option>
+                        }
+                    </select>
+                </div>
+                <div class="admin-form-group">
+                    <label class="admin-form-label admin-form-label-required">Billing Model</label>
+                    <select class="admin-form-input" @bind="_request.BillingModel">
+                        @foreach (var model in Enum.GetValues<PartnerBillingModel>())
+                        {
+                            <option value="@model">@model</option>
+                        }
+                    </select>
+                </div>
+                <div class="admin-form-group">
+                    <label class="admin-form-label">Commission Rate</label>
+                    <input class="admin-form-input" type="number" step="0.0001" @bind="_request.CommissionRate" placeholder="e.g. 0.05" />
+                </div>
+                <div class="admin-form-group">
+                    <label class="admin-form-label">Wholesale Discount</label>
+                    <input class="admin-form-input" type="number" step="0.0001" @bind="_request.WholesaleDiscount" placeholder="e.g. 0.10" />
+                </div>
+                <div class="admin-form-group">
+                    <label class="admin-form-label">Max Sub-Tenants</label>
+                    <input class="admin-form-input" type="number" min="1" @bind="_request.MaxSubTenants" />
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Agreement & Admin -->
+    <div class="portal-card">
+        <div class="portal-card-header"><h2 class="portal-card-title">Agreement &amp; Admin</h2></div>
+        <div class="portal-card-body">
+            <div class="admin-form-grid">
+                <div class="admin-form-group">
+                    <label class="admin-form-label admin-form-label-required">Agreement Version</label>
+                    <input class="admin-form-input" @bind="_request.AgreementVersion" placeholder="e.g. v1" />
+                </div>
+                <div class="admin-form-group">
+                    <label class="admin-form-label admin-form-label-required">Admin Email</label>
+                    <input class="admin-form-input" type="email" @bind="_request.AdminEmail" placeholder="e.g. admin@acme.com" />
+                </div>
+                <div class="admin-form-group">
+                    <label class="admin-form-label admin-form-label-required">Admin Full Name</label>
+                    <input class="admin-form-input" @bind="_request.AdminFullName" placeholder="e.g. John Doe" />
+                </div>
+            </div>
+
+            <div style="margin-top:var(--space-6);display:flex;gap:var(--space-3);">
+                <button class="admin-btn-primary" @onclick="OnboardAsync" disabled="@_busy" type="button">
+                    @if (_busy)
+                    {
+                        <span class="spinner" style="width:16px;height:16px;"></span>
+                    }
+                    Onboard Partner
+                </button>
+            </div>
+        </div>
     </div>
 
 </div>
