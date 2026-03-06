@@ -48,7 +48,7 @@ public class ApiKeyMiddlewareTests
             return Task.CompletedTask;
         }, apiKeyService, jwtService, "legacy-key");
 
-        await middleware.InvokeAsync(context);
+        await middleware.InvokeAsync(context, apiKeyService, jwtService);
 
         nextCalled.Should().BeTrue();
         apiKeyService.Calls.Should().Be(0);
@@ -80,7 +80,7 @@ public class ApiKeyMiddlewareTests
         context.Request.Path = "/api/submissions/1";
         context.Request.Headers["X-Api-Key"] = "regos_live_valid";
 
-        await middleware.InvokeAsync(context);
+        await middleware.InvokeAsync(context, apiKeyService, jwtService);
 
         nextCalled.Should().BeTrue();
         context.Items["TenantId"].Should().Be(tenantId);
@@ -110,7 +110,7 @@ public class ApiKeyMiddlewareTests
         context.Request.Headers["X-Api-Key"] = "legacy-key";
         context.Request.Headers["X-Tenant-Id"] = legacyTenantId.ToString();
 
-        await middleware.InvokeAsync(context);
+        await middleware.InvokeAsync(context, apiKeyService, jwtService);
 
         nextCalled.Should().BeTrue();
         context.Items["TenantId"].Should().Be(legacyTenantId);
@@ -130,7 +130,7 @@ public class ApiKeyMiddlewareTests
         context.Request.Path = "/api/submissions/1";
         context.Request.Headers["X-Api-Key"] = "legacy-key";
 
-        await middleware.InvokeAsync(context);
+        await middleware.InvokeAsync(context, apiKeyService, jwtService);
 
         context.Response.StatusCode.Should().Be(StatusCodes.Status403Forbidden);
     }
@@ -150,8 +150,6 @@ public class ApiKeyMiddlewareTests
 
         return new ApiKeyMiddleware(
             next,
-            apiKeyService,
-            jwtTokenService,
             configuration,
             NullLogger<ApiKeyMiddleware>.Instance);
     }
