@@ -48,7 +48,7 @@
             <div class="list-toolbar-actions">
                 <AuthorizeView Roles="Admin,Approver">
                     <Authorized Context="createAuth">
-                        <button class="btn-gold" @onclick="ShowCreateForm">
+                        <button class="fc-btn fc-btn--gold" @onclick="ShowCreateForm">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
                             New Template
                         </button>
@@ -94,8 +94,8 @@
                     </div>
                 </div>
                 <div class="list-form-actions">
-                    <button class="btn btn-primary btn-sm" @onclick="CreateTemplate">Create</button>
-                    <button class="btn btn-outline btn-sm" @onclick="CancelCreate">Cancel</button>
+                    <button class="fc-btn fc-btn--primary fc-btn--sm" @onclick="CreateTemplate">Create</button>
+                    <button class="fc-btn fc-btn--outline fc-btn--sm" @onclick="CancelCreate">Cancel</button>
                 </div>
             </div>
         }
@@ -147,7 +147,7 @@
                                 <td class="list-cell-code">@t.ReturnCode</td>
                                 <td class="list-cell-strong">@t.Name</td>
                                 <td>
-                                    <span class="list-badge list-badge-@t.StructuralCategory.ToLowerInvariant()">
+                                    <span class="fc-badge @CategoryBadge(t.StructuralCategory)">
                                         @t.StructuralCategory
                                     </span>
                                 </td>
@@ -157,7 +157,7 @@
                                 <td class="list-cell-code">@t.PhysicalTableName</td>
                                 <td>
                                     <div class="list-row-actions">
-                                        <button class="list-action-btn list-action-btn-view" @onclick="() => ViewTemplate(t.ReturnCode)" @onclick:stopPropagation="true">
+                                        <button class="fc-btn fc-btn--ghost fc-btn--xs" @onclick="() => ViewTemplate(t.ReturnCode)" @onclick:stopPropagation="true">
                                             View
                                         </button>
                                     </div>
@@ -255,6 +255,14 @@
             Toast.Error(ex.Message, "Create Failed");
         }
     }
+
+    private static string CategoryBadge(string cat) => cat.ToLowerInvariant() switch
+    {
+        "fixedrow" => "fc-badge--purple",
+        "multirow" => "fc-badge--teal",
+        "itemcoded" => "fc-badge--pink",
+        _ => "fc-badge--neutral"
+    };
 
     private static string GetFrequency(string rc) =>
         rc.StartsWith("MFCR") ? "Monthly" :

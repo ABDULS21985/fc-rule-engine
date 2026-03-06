@@ -109,6 +109,10 @@ public class MetadataDbContext : DbContext
     // Reports (RG-18)
     public DbSet<SavedReport> SavedReports => Set<SavedReport>();
 
+    // Webhooks (RG-30)
+    public DbSet<WebhookEndpoint> WebhookEndpoints => Set<WebhookEndpoint>();
+    public DbSet<WebhookDelivery> WebhookDeliveries => Set<WebhookDelivery>();
+
     // Audit
     public DbSet<AuditLogEntry> AuditLog => Set<AuditLogEntry>();
     public DbSet<FieldChangeHistory> FieldChangeHistory => Set<FieldChangeHistory>();

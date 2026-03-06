@@ -18,15 +18,15 @@
 
 @if (!string.IsNullOrWhiteSpace(_message))
 {
-    <div class="portal-alert portal-alert-success">@_message</div>
+    <div class="fc-alert fc-alert--inline fc-alert--success">@_message</div>
 }
 @if (!string.IsNullOrWhiteSpace(_error))
 {
-    <div class="portal-alert portal-alert-danger">@_error</div>
+    <div class="fc-alert fc-alert--inline fc-alert--error">@_error</div>
 }
 
-<div class="portal-card" style="margin-bottom:1rem;">
-    <div class="portal-card-body">
+<div class="fc-card" style="margin-bottom:1rem;">
+    <div class="fc-card__body">
         <div class="portal-grid portal-grid-3">
             <div class="portal-form-row">
                 <label>Search</label>
@@ -86,9 +86,9 @@
                 <input type="checkbox" @bind="_query.SortDescending" />
                 Descending
             </label>
-            <button class="portal-btn portal-btn-primary" @onclick="LoadAsync" disabled="@_loading">Apply</button>
-            <button class="portal-btn portal-btn-outline" @onclick="ResetFilters" disabled="@_loading">Reset</button>
-            <button class="portal-btn portal-btn-outline" @onclick="Export" disabled="@_loading">Export Excel</button>
+            <button class="fc-btn fc-btn--primary" @onclick="LoadAsync" disabled="@_loading">Apply</button>
+            <button class="fc-btn fc-btn--outline" @onclick="ResetFilters" disabled="@_loading">Reset</button>
+            <button class="fc-btn fc-btn--outline" @onclick="Export" disabled="@_loading">Export Excel</button>
             <span style="margin-left:auto; color:#64748b; font-size:0.9rem;">@_data.Tenants.Count tenant(s)</span>
         </div>
     </div>
@@ -96,12 +96,12 @@
 
 @if (_loading)
 {
-    <div class="portal-card"><div class="portal-card-body">Loading tenants...</div></div>
+    <div class="fc-card"><div class="fc-card__body">Loading tenants...</div></div>
 }
 else
 {
-    <div class="portal-card">
-        <div class="portal-card-body" style="padding:0; overflow:auto;">
+    <div class="fc-card">
+        <div class="fc-card__body" style="padding:0; overflow:auto;">
             <table class="portal-table">
                 <thead>
                     <tr>
@@ -126,7 +126,7 @@ else
                                 <small style="color:#64748b;">@(tenant.ContactEmail ?? "-")</small>
                             </td>
                             <td><code>@tenant.TenantSlug</code></td>
-                            <td><span class="portal-badge @GetStatusBadge(tenant.Status)">@tenant.Status</span></td>
+                            <td><span class="fc-badge @GetStatusBadge(tenant.Status)">@tenant.Status</span></td>
                             <td>@tenant.PlanName</td>
                             <td>@tenant.ActiveModules</td>
                             <td>@tenant.Users</td>
@@ -135,15 +135,15 @@ else
                             <td>@tenant.CreatedAt.ToString("dd MMM yyyy")</td>
                             <td>
                                 <div style="display:flex; gap:0.35rem; flex-wrap:wrap;">
-                                    <button class="portal-btn portal-btn-xs portal-btn-outline" @onclick="() => OpenTenant(tenant.TenantId)">View</button>
-                                    <button class="portal-btn portal-btn-xs portal-btn-outline" @onclick="() => ImpersonateTenant(tenant.TenantId)">Impersonate</button>
+                                    <button class="fc-btn fc-btn--outline fc-btn--xs" @onclick="() => OpenTenant(tenant.TenantId)">View</button>
+                                    <button class="fc-btn fc-btn--outline fc-btn--xs" @onclick="() => ImpersonateTenant(tenant.TenantId)">Impersonate</button>
                                     @if (tenant.Status == TenantStatus.Active)
                                     {
-                                        <button class="portal-btn portal-btn-xs" style="background:#b91c1c;color:#fff;" @onclick="() => SuspendTenant(tenant.TenantId)">Suspend</button>
+                                        <button class="fc-btn fc-btn--xs" style="background:#b91c1c;color:#fff;" @onclick="() => SuspendTenant(tenant.TenantId)">Suspend</button>
                                     }
                                     else if (tenant.Status == TenantStatus.PendingActivation || tenant.Status == TenantStatus.Suspended)
                                     {
-                                        <button class="portal-btn portal-btn-xs" style="background:#166534;color:#fff;" @onclick="() => ActivateTenant(tenant.TenantId)">Activate</button>
+                                        <button class="fc-btn fc-btn--xs" style="background:#166534;color:#fff;" @onclick="() => ActivateTenant(tenant.TenantId)">Activate</button>
                                     }
                                 </div>
                             </td>
@@ -268,10 +268,10 @@ else
 
     private static string GetStatusBadge(TenantStatus status) => status switch
     {
-        TenantStatus.Active => "portal-badge-success",
-        TenantStatus.PendingActivation => "portal-badge-warning",
-        TenantStatus.Suspended => "portal-badge-danger",
-        TenantStatus.Deactivated => "portal-badge-neutral",
-        _ => "portal-badge-neutral"
+        TenantStatus.Active => "fc-badge--success",
+        TenantStatus.PendingActivation => "fc-badge--warning",
+        TenantStatus.Suspended => "fc-badge--danger",
+        TenantStatus.Deactivated => "fc-badge--neutral",
+        _ => "fc-badge--neutral"
     };
 }

@@ -56,7 +56,7 @@
     }
     else if (_detail == null)
     {
-        <div class="detail-alert detail-alert-error">
+        <div class="fc-alert fc-alert--inline fc-alert--error">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
             Template not found: @ReturnCode
         </div>
@@ -112,7 +112,7 @@
                 {
                     <AuthorizeView Roles="Admin,Approver" Context="submitAuth">
                         <Authorized Context="sAuth">
-                            <button class="btn btn-outline btn-sm" @onclick="SubmitForReview">
+                            <button class="fc-btn fc-btn--outline fc-btn--sm" @onclick="SubmitForReview">
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16" aria-hidden="true"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
                                 Submit for Review
                             </button>
@@ -123,11 +123,11 @@
                 {
                     <AuthorizeView Roles="Admin" Context="publishAuth">
                         <Authorized Context="pAuth">
-                            <button class="btn btn-outline btn-sm" @onclick="PreviewDdl">
+                            <button class="fc-btn fc-btn--outline fc-btn--sm" @onclick="PreviewDdl">
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16" aria-hidden="true"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
                                 Preview DDL
                             </button>
-                            <button class="btn btn-primary btn-sm" @onclick="PublishVersion">
+                            <button class="fc-btn fc-btn--primary fc-btn--sm" @onclick="PublishVersion">
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16" aria-hidden="true"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
                                 Publish
                             </button>
@@ -138,7 +138,7 @@
                 {
                     <AuthorizeView Roles="Admin,Approver" Context="versionAuth">
                         <Authorized Context="vAuth">
-                            <button class="btn btn-primary btn-sm" @onclick="CreateDraftVersion">
+                            <button class="fc-btn fc-btn--primary fc-btn--sm" @onclick="CreateDraftVersion">
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16" aria-hidden="true"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                                 New Draft
                             </button>
@@ -209,7 +209,7 @@
                         <div class="detail-info-item">
                             <span class="detail-info-label">Structural Category</span>
                             <span class="detail-info-value">
-                                <span class="list-badge list-badge-@_detail.StructuralCategory.ToLowerInvariant()">@_detail.StructuralCategory</span>
+                                <span class="fc-badge @CategoryBadge(_detail.StructuralCategory)">@_detail.StructuralCategory</span>
                             </span>
                         </div>
                         <div class="detail-info-item">
@@ -299,7 +299,7 @@
                     </h3>
                     @if (_activeVersion?.Status == "Draft")
                     {
-                        <button class="btn btn-primary btn-sm" @onclick="ShowAddField">
+                        <button class="fc-btn fc-btn--primary fc-btn--sm" @onclick="ShowAddField">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
                             Add Field
                         </button>
@@ -353,11 +353,11 @@
                             </div>
                         </div>
                         <div class="detail-add-actions">
-                            <button class="btn btn-primary btn-sm" @onclick="AddField">
+                            <button class="fc-btn fc-btn--primary fc-btn--sm" @onclick="AddField">
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
                                 Add Field
                             </button>
-                            <button class="btn btn-outline btn-sm" @onclick="() => _showAddField = false">Cancel</button>
+                            <button class="fc-btn fc-btn--outline fc-btn--sm" @onclick="() => _showAddField = false">Cancel</button>
                         </div>
                     </div>
                 }
@@ -390,7 +390,7 @@
                                         <td><code>@f.FieldName</code></td>
                                         <td>@f.DisplayName</td>
                                         <td>@f.LineCode</td>
-                                        <td><span class="list-badge list-badge-info">@f.DataType</span></td>
+                                        <td><span class="fc-badge fc-badge--info">@f.DataType</span></td>
                                         <td><code>@f.SqlType</code></td>
                                         <td>
                                             @if (f.IsRequired)
@@ -400,8 +400,8 @@
                                         </td>
                                         <td>
                                             <div style="display:flex;gap:4px;">
-                                                @if (f.IsKeyField) { <span class="list-badge list-badge-published">Key</span> }
-                                                @if (f.IsComputed) { <span class="list-badge list-badge-review">Computed</span> }
+                                                @if (f.IsKeyField) { <span class="fc-badge fc-badge--success">Key</span> }
+                                                @if (f.IsComputed) { <span class="fc-badge fc-badge--review">Computed</span> }
                                             </div>
                                         </td>
                                     </tr>
@@ -429,7 +429,7 @@
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="4" y1="9" x2="20" y2="9"/><line x1="4" y1="15" x2="20" y2="15"/><line x1="10" y1="3" x2="8" y2="21"/><line x1="16" y1="3" x2="14" y2="21"/></svg>
                         Intra-Sheet Formulas
                     </h3>
-                    <a href="/formulas" class="btn btn-outline btn-sm">
+                    <a href="/formulas" class="fc-btn fc-btn--outline fc-btn--sm">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16" aria-hidden="true"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
                         Manage Formulas
                     </a>
@@ -455,10 +455,10 @@
                                         <tr>
                                             <td><code>@f.RuleCode</code></td>
                                             <td>@f.RuleName</td>
-                                            <td><span class="list-badge list-badge-@f.FormulaType.ToString().ToLowerInvariant()">@f.FormulaType</span></td>
+                                            <td><span class="fc-badge @FormulaBadge(f.FormulaType.ToString())">@f.FormulaType</span></td>
                                             <td><code>@f.TargetFieldName</code></td>
                                             <td>
-                                                <span class="list-badge @(f.Severity == ValidationSeverity.Error ? "list-badge-error" : f.Severity == ValidationSeverity.Warning ? "list-badge-warning" : "list-badge-info")">
+                                                <span class="fc-badge @(f.Severity == ValidationSeverity.Error ? "fc-badge--danger" : f.Severity == ValidationSeverity.Warning ? "fc-badge--warning" : "fc-badge--info")">
                                                     @f.Severity
                                                 </span>
                                             </td>
@@ -516,7 +516,7 @@
                                             <td><code>@r.RuleCode</code></td>
                                             <td>@r.RuleName</td>
                                             <td>
-                                                <span class="list-badge @(r.Severity == ValidationSeverity.Error ? "list-badge-error" : r.Severity == ValidationSeverity.Warning ? "list-badge-warning" : "list-badge-info")">
+                                                <span class="fc-badge @(r.Severity == ValidationSeverity.Error ? "fc-badge--danger" : r.Severity == ValidationSeverity.Warning ? "fc-badge--warning" : "fc-badge--info")">
                                                     @r.Severity
                                                 </span>
                                             </td>
@@ -590,7 +590,7 @@
                     <div style="display:flex;gap:var(--space-2);flex-wrap:wrap;">
                         @foreach (var v in _detail.Versions.OrderByDescending(v => v.VersionNumber))
                         {
-                            <button class="btn @(v.Id == _activeVersion?.Id ? "btn-primary" : "btn-outline") btn-sm"
+                            <button class="fc-btn @(v.Id == _activeVersion?.Id ? "fc-btn--primary" : "fc-btn--outline") fc-btn--sm"
                                     @onclick="() => SelectVersion(v)">
                                 v@(v.VersionNumber)
                                 <span class="detail-status detail-status-@v.Status.ToLowerInvariant()" style="font-size:0.65rem;padding:1px 8px;">
@@ -611,7 +611,7 @@
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
                             DDL Preview
                         </h3>
-                        <button class="btn btn-outline btn-sm" @onclick="() => _showDdlPreview = false">Hide</button>
+                        <button class="fc-btn fc-btn--outline fc-btn--sm" @onclick="() => _showDdlPreview = false">Hide</button>
                     </div>
                     <div class="detail-section-body">
                         <pre class="detail-code-block">@_ddlPreview</pre>
@@ -691,7 +691,7 @@
                         <div class="detail-info-item">
                             <span class="detail-info-label">XSD Schema</span>
                             <span class="detail-info-value">
-                                <button class="btn btn-outline btn-sm" @onclick="ToggleXsd">
+                                <button class="fc-btn fc-btn--outline fc-btn--sm" @onclick="ToggleXsd">
                                     @(_showXsd ? "Hide" : "Show") XSD
                                 </button>
                             </span>
@@ -871,4 +871,23 @@
     {
         _errorMessage = msg;
     }
+
+    private static string CategoryBadge(string cat) => cat.ToLowerInvariant() switch
+    {
+        "fixedrow" => "fc-badge--purple",
+        "multirow" => "fc-badge--teal",
+        "itemcoded" => "fc-badge--pink",
+        _ => "fc-badge--neutral"
+    };
+
+    private static string FormulaBadge(string type) => type.ToLowerInvariant() switch
+    {
+        "sum" => "fc-badge--success",
+        "difference" => "fc-badge--info",
+        "equals" => "fc-badge--purple",
+        "custom" => "fc-badge--warning",
+        "ratio" => "fc-badge--pink",
+        "required" => "fc-badge--danger",
+        _ => "fc-badge--info"
+    };
 }

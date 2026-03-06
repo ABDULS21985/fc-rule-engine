@@ -25,15 +25,15 @@
 
         @if (!_loading && _entries.Any())
         {
-            <div class="admin-summary-chips">
-                <span class="admin-chip">
-                    <span class="admin-chip-count">@FilteredEntries.Count()</span> Events Shown
+            <div class="fc-chip-group">
+                <span class="fc-chip">
+                    <span class="fc-chip__count">@FilteredEntries.Count()</span> Events Shown
                 </span>
                 @foreach (var group in _entries.GroupBy(e => e.Action).OrderByDescending(g => g.Count()).Take(4))
                 {
-                    <span class="admin-chip">
-                        <span class="admin-chip-dot @GetChipDotClass(group.Key)" aria-hidden="true"></span>
-                        <span class="admin-chip-count">@group.Count()</span> @group.Key
+                    <span class="fc-chip">
+                        <span class="fc-chip__dot @GetChipDotClass(group.Key)" aria-hidden="true"></span>
+                        <span class="fc-chip__count">@group.Count()</span> @group.Key
                     </span>
                 }
             </div>
@@ -68,11 +68,11 @@
             <input type="date" @bind="_dateTo" aria-label="To date" />
         </div>
         <div class="admin-toolbar-actions">
-            <button class="admin-btn-outline" @onclick="ClearFilters" type="button">
+            <button class="fc-btn fc-btn--outline" @onclick="ClearFilters" type="button">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
                 Clear
             </button>
-            <button class="admin-btn-gold" @onclick="LoadAuditLog" type="button">
+            <button class="fc-btn fc-btn--gold" @onclick="LoadAuditLog" type="button">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
                 Refresh
             </button>
@@ -275,11 +275,11 @@
 
     private static string GetChipDotClass(string action) => NormalizeAction(action) switch
     {
-        "created" => "admin-chip-dot-active",
-        "updated" => "admin-chip-dot-approver",
-        "deleted" or "archived" => "admin-chip-dot-inactive",
-        "published" or "approved" => "admin-chip-dot-approver",
-        _ => "admin-chip-dot-viewer"
+        "created" => "fc-chip__dot--active",
+        "updated" => "fc-chip__dot--approver",
+        "deleted" or "archived" => "fc-chip__dot--inactive",
+        "published" or "approved" => "fc-chip__dot--approver",
+        _ => "fc-chip__dot--viewer"
     };
 
     private static string NormalizeAction(string action) =>

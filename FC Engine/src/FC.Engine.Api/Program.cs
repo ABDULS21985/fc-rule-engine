@@ -295,6 +295,7 @@ v1.MapSchemaEndpoints("v1");
 v1.MapFilingCalendarEndpoints();
 v1.MapPrivacyEndpoints();
 v1.MapHistoricalMigrationEndpoints();
+v1.MapWebhookEndpoints();
 
 // v2 endpoints (future — same implementations for now, diverge later)
 var v2 = app.MapGroup("/api/v2")

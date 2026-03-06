@@ -36,12 +36,12 @@
                         <option value="@s">@FormatStatus(s)</option>
                     }
                 </select>
-                <button class="btn btn-primary btn-sm" @onclick="Search">Search</button>
+                <button class="fc-btn fc-btn--primary fc-btn--sm" @onclick="Search">Search</button>
             </div>
             <div class="list-toolbar-actions">
                 @if (_submissions.Any())
                 {
-                    <button class="btn btn-outline btn-sm" @onclick="ClearResults">Clear</button>
+                    <button class="fc-btn fc-btn--outline fc-btn--sm" @onclick="ClearResults">Clear</button>
                 }
             </div>
         </div>
@@ -107,7 +107,7 @@
                                 <td class="list-cell-strong">@(s.Institution?.InstitutionName ?? "—")</td>
                                 <td class="list-cell-muted">@(s.ReturnPeriod?.ReportingDate.ToString("yyyy-MM-dd") ?? "—")</td>
                                 <td>
-                                    <span class="list-badge list-badge-@GetStatusClass(s.Status)">
+                                    <span class="fc-badge @StatusBadge(GetStatusClass(s.Status))">
                                         @FormatStatus(s.Status)
                                     </span>
                                 </td>
@@ -118,7 +118,7 @@
                                     }
                                     @if (errCount > 0)
                                     {
-                                        <span class="list-badge list-badge-error">@errCount</span>
+                                        <span class="fc-badge fc-badge--danger">@errCount</span>
                                     }
                                     else
                                     {
@@ -232,5 +232,17 @@
         SubmissionStatus.Validating => "validating",
         SubmissionStatus.Parsing => "parsing",
         _ => "draft"
+    };
+
+    private static string StatusBadge(string status) => status.ToLowerInvariant() switch
+    {
+        "published" or "active" or "accepted" => "fc-badge--success",
+        "draft" or "pending" => "fc-badge--warning",
+        "review" or "inreview" => "fc-badge--review",
+        "deprecated" or "retired" or "disabled" or "archived" => "fc-badge--muted",
+        "rejected" or "failed" or "error" => "fc-badge--danger",
+        "processing" or "validating" or "parsing" => "fc-badge--info",
+        "acceptedwithwarnings" or "warnings" or "warning" => "fc-badge--warning",
+        _ => "fc-badge--neutral"
     };
 }

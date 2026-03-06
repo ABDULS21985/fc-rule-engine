@@ -33,10 +33,10 @@
                     <div class="skel" style="width:110px;height:36px;border-radius:6px;"></div>
                 </div>
             </div>
-            <div class="admin-summary-chips">
+            <div class="fc-chip-group">
                 @for (var i = 0; i < 4; i++)
                 {
-                    <span class="admin-chip"><div class="skel skel-text" style="width:80px;height:16px;"></div></span>
+                    <span class="fc-chip"><div class="skel skel-text" style="width:80px;height:16px;"></div></span>
                 }
             </div>
         </div>
@@ -53,8 +53,8 @@
         <div class="portal-grid portal-grid-3">
             @for (var i = 0; i < 3; i++)
             {
-                <div class="portal-card">
-                    <div class="portal-card-body">
+                <div class="fc-card">
+                    <div class="fc-card__body">
                         <div class="skel skel-text" style="width:100%;height:14px;margin-bottom:0.75rem;"></div>
                         <div class="skel skel-text" style="width:70%;height:14px;"></div>
                     </div>
@@ -71,7 +71,7 @@
             </div>
             <h3 class="admin-empty-title">Tenant not found</h3>
             <p class="admin-empty-text">The requested tenant could not be located. It may have been removed or the ID is invalid.</p>
-            <button class="admin-btn-outline" @onclick="Back" type="button">Back to Tenants</button>
+            <button class="fc-btn fc-btn--outline" @onclick="Back" type="button">Back to Tenants</button>
         </div>
     }
     else
@@ -84,11 +84,11 @@
                     <p class="admin-header-subtitle"><code>@_data.TenantSlug</code> &middot; @_data.CurrentPlanName (@_data.CurrentPlanCode)</p>
                 </div>
                 <div style="display:flex;gap:0.5rem;">
-                    <button class="admin-btn-outline" @onclick="Back" type="button">
+                    <button class="fc-btn fc-btn--outline" @onclick="Back" type="button">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16" aria-hidden="true"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
                         Back
                     </button>
-                    <button class="admin-btn-primary" @onclick="Impersonate" type="button">
+                    <button class="fc-btn fc-btn--primary" @onclick="Impersonate" type="button">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16" aria-hidden="true"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
                         Impersonate
                     </button>
@@ -96,19 +96,19 @@
             </div>
 
             <!-- Summary Chips -->
-            <div class="admin-summary-chips">
-                <span class="admin-chip">
-                    <span class="admin-chip-dot @(_data.Status == TenantStatus.Active ? "admin-chip-dot-active" : "")" aria-hidden="true"></span>
+            <div class="fc-chip-group">
+                <span class="fc-chip">
+                    <span class="fc-chip__dot @(_data.Status == TenantStatus.Active ? "fc-chip__dot--active" : "")" aria-hidden="true"></span>
                     @_data.Status
                 </span>
-                <span class="admin-chip">
-                    <span class="admin-chip-count">@_data.Usage.UsersUsed / @_data.Usage.UsersLimit</span> Users
+                <span class="fc-chip">
+                    <span class="fc-chip__count">@_data.Usage.UsersUsed / @_data.Usage.UsersLimit</span> Users
                 </span>
-                <span class="admin-chip">
-                    <span class="admin-chip-count">@_data.Usage.ModulesUsed / @_data.Usage.ModulesLimit</span> Modules
+                <span class="fc-chip">
+                    <span class="fc-chip__count">@_data.Usage.ModulesUsed / @_data.Usage.ModulesLimit</span> Modules
                 </span>
-                <span class="admin-chip">
-                    <span class="admin-chip-count">@_data.CreatedAt.ToString("dd MMM yyyy")</span> Created
+                <span class="fc-chip">
+                    <span class="fc-chip__count">@_data.CreatedAt.ToString("dd MMM yyyy")</span> Created
                 </span>
             </div>
         </div>
@@ -128,38 +128,38 @@
         @if (_tab == "overview")
         {
             <div class="portal-grid portal-grid-3" style="margin-bottom:1rem;">
-                <div class="portal-card">
-                    <div class="portal-card-body">
+                <div class="fc-card">
+                    <div class="fc-card__body">
                         <div class="portal-kv"><span>Status</span><strong>
                             @if (_data.Status == TenantStatus.Active)
                             {
-                                <span class="portal-badge portal-badge-success">@_data.Status</span>
+                                <span class="fc-badge fc-badge--success">@_data.Status</span>
                             }
                             else
                             {
-                                <span class="portal-badge portal-badge-danger">@_data.Status</span>
+                                <span class="fc-badge fc-badge--danger">@_data.Status</span>
                             }
                         </strong></div>
                         <div class="portal-kv"><span>Created</span><strong>@_data.CreatedAt.ToString("dd MMM yyyy")</strong></div>
                     </div>
                 </div>
-                <div class="portal-card">
-                    <div class="portal-card-body">
+                <div class="fc-card">
+                    <div class="fc-card__body">
                         <div class="portal-kv"><span>Timezone</span><strong>@_data.Timezone</strong></div>
                         <div class="portal-kv"><span>Currency</span><strong>@_data.DefaultCurrency</strong></div>
                     </div>
                 </div>
-                <div class="portal-card">
-                    <div class="portal-card-body">
+                <div class="fc-card">
+                    <div class="fc-card__body">
                         <div class="portal-kv"><span>Users</span><strong>@_data.Usage.UsersUsed / @_data.Usage.UsersLimit</strong></div>
                         <div class="portal-kv"><span>Modules</span><strong>@_data.Usage.ModulesUsed / @_data.Usage.ModulesLimit</strong></div>
                     </div>
                 </div>
             </div>
 
-            <div class="portal-card">
-                <div class="portal-card-header"><h2 class="portal-card-title">Contact</h2></div>
-                <div class="portal-card-body">
+            <div class="fc-card">
+                <div class="fc-card__header"><h2 class="fc-card__title">Contact</h2></div>
+                <div class="fc-card__body">
                     <div class="portal-kv"><span>Email</span><strong>@(_data.ContactEmail ?? "-")</strong></div>
                     <div class="portal-kv"><span>Phone</span><strong>@(_data.ContactPhone ?? "-")</strong></div>
                     <div class="portal-kv"><span>Address</span><strong>@(_data.Address ?? "-")</strong></div>
@@ -170,9 +170,9 @@
         <!-- Subscription Tab -->
         @if (_tab == "subscription")
         {
-            <div class="portal-card" style="margin-bottom:1rem;">
-                <div class="portal-card-header"><h2 class="portal-card-title">Subscription History</h2></div>
-                <div class="portal-card-body" style="padding:0;overflow:auto;">
+            <div class="fc-card" style="margin-bottom:1rem;">
+                <div class="fc-card__header"><h2 class="fc-card__title">Subscription History</h2></div>
+                <div class="fc-card__body" style="padding:0;overflow:auto;">
                     <table class="portal-table">
                         <thead>
                             <tr>
@@ -189,7 +189,7 @@
                                 <tr>
                                     <td>@row.PlanName (@row.PlanCode)</td>
                                     <td>
-                                        <span class="portal-badge @(row.Status == "Active" ? "portal-badge-success" : row.Status == "Cancelled" ? "portal-badge-danger" : "portal-badge-neutral")">
+                                        <span class="fc-badge @(row.Status == "Active" ? "fc-badge--success" : row.Status == "Cancelled" ? "fc-badge--danger" : "fc-badge--neutral")">
                                             @row.Status
                                         </span>
                                     </td>
@@ -204,9 +204,9 @@
             </div>
 
             <div class="portal-grid portal-grid-2">
-                <div class="portal-card">
-                    <div class="portal-card-header"><h2 class="portal-card-title">Invoices</h2></div>
-                    <div class="portal-card-body" style="padding:0;overflow:auto;max-height:420px;">
+                <div class="fc-card">
+                    <div class="fc-card__header"><h2 class="fc-card__title">Invoices</h2></div>
+                    <div class="fc-card__body" style="padding:0;overflow:auto;max-height:420px;">
                         <table class="portal-table">
                             <thead>
                                 <tr>
@@ -222,7 +222,7 @@
                                     <tr>
                                         <td>@row.InvoiceNumber</td>
                                         <td>
-                                            <span class="portal-badge @(row.Status == "Paid" ? "portal-badge-success" : row.Status == "Overdue" ? "portal-badge-danger" : "portal-badge-warning")">
+                                            <span class="fc-badge @(row.Status == "Paid" ? "fc-badge--success" : row.Status == "Overdue" ? "fc-badge--danger" : "fc-badge--warning")">
                                                 @row.Status
                                             </span>
                                         </td>
@@ -234,9 +234,9 @@
                         </table>
                     </div>
                 </div>
-                <div class="portal-card">
-                    <div class="portal-card-header"><h2 class="portal-card-title">Payments</h2></div>
-                    <div class="portal-card-body" style="padding:0;overflow:auto;max-height:420px;">
+                <div class="fc-card">
+                    <div class="fc-card__header"><h2 class="fc-card__title">Payments</h2></div>
+                    <div class="fc-card__body" style="padding:0;overflow:auto;max-height:420px;">
                         <table class="portal-table">
                             <thead>
                                 <tr>
@@ -253,7 +253,7 @@
                                         <td>#@row.PaymentId</td>
                                         <td>#@row.InvoiceId</td>
                                         <td>
-                                            <span class="portal-badge @(row.Status == "Completed" || row.Status == "Succeeded" ? "portal-badge-success" : row.Status == "Failed" ? "portal-badge-danger" : "portal-badge-warning")">
+                                            <span class="fc-badge @(row.Status == "Completed" || row.Status == "Succeeded" ? "fc-badge--success" : row.Status == "Failed" ? "fc-badge--danger" : "fc-badge--warning")">
                                                 @row.Status
                                             </span>
                                         </td>
@@ -270,9 +270,9 @@
         <!-- Users Tab -->
         @if (_tab == "users")
         {
-            <div class="portal-card">
-                <div class="portal-card-header"><h2 class="portal-card-title">Users</h2></div>
-                <div class="portal-card-body" style="padding:0;overflow:auto;">
+            <div class="fc-card">
+                <div class="fc-card__header"><h2 class="fc-card__title">Users</h2></div>
+                <div class="fc-card__body" style="padding:0;overflow:auto;">
                     <table class="portal-table">
                         <thead>
                             <tr>
@@ -289,15 +289,15 @@
                                 <tr>
                                     <td>@user.DisplayName</td>
                                     <td>@user.Email</td>
-                                    <td><span class="portal-badge portal-badge-neutral">@user.Role</span></td>
+                                    <td><span class="fc-badge fc-badge--neutral">@user.Role</span></td>
                                     <td>
                                         @if (user.MfaEnabled)
                                         {
-                                            <span class="portal-badge portal-badge-success">Enabled</span>
+                                            <span class="fc-badge fc-badge--success">Enabled</span>
                                         }
                                         else
                                         {
-                                            <span class="portal-badge portal-badge-warning">Disabled</span>
+                                            <span class="fc-badge fc-badge--warning">Disabled</span>
                                         }
                                     </td>
                                     <td>@(user.LastLoginAt?.ToString("dd MMM yyyy HH:mm") ?? "Never")</td>
@@ -312,9 +312,9 @@
         <!-- Entities Tab -->
         @if (_tab == "entities")
         {
-            <div class="portal-card">
-                <div class="portal-card-header"><h2 class="portal-card-title">Entities</h2></div>
-                <div class="portal-card-body" style="padding:0;overflow:auto;">
+            <div class="fc-card">
+                <div class="fc-card__header"><h2 class="fc-card__title">Entities</h2></div>
+                <div class="fc-card__body" style="padding:0;overflow:auto;">
                     <table class="portal-table">
                         <thead>
                             <tr>
@@ -333,17 +333,17 @@
                                 <tr>
                                     <td><code>@row.InstitutionCode</code></td>
                                     <td>@row.InstitutionName</td>
-                                    <td><span class="portal-badge portal-badge-neutral">@row.EntityType</span></td>
+                                    <td><span class="fc-badge fc-badge--neutral">@row.EntityType</span></td>
                                     <td>@(row.ParentInstitutionName ?? "-")</td>
                                     <td>@row.BranchCount</td>
                                     <td>
                                         @if (row.IsActive)
                                         {
-                                            <span class="portal-badge portal-badge-success">Active</span>
+                                            <span class="fc-badge fc-badge--success">Active</span>
                                         }
                                         else
                                         {
-                                            <span class="portal-badge portal-badge-danger">Inactive</span>
+                                            <span class="fc-badge fc-badge--danger">Inactive</span>
                                         }
                                     </td>
                                     <td>@(row.ContactEmail ?? "-")</td>
@@ -358,9 +358,9 @@
         <!-- Filings Tab -->
         @if (_tab == "filings")
         {
-            <div class="portal-card">
-                <div class="portal-card-header"><h2 class="portal-card-title">Filing Matrix</h2></div>
-                <div class="portal-card-body" style="padding:0;overflow:auto;">
+            <div class="fc-card">
+                <div class="fc-card__header"><h2 class="fc-card__title">Filing Matrix</h2></div>
+                <div class="fc-card__body" style="padding:0;overflow:auto;">
                     <table class="portal-table">
                         <thead>
                             <tr>
@@ -379,12 +379,12 @@
                                     <td>@row.PeriodLabel</td>
                                     <td>@row.Deadline.ToString("dd MMM yyyy")</td>
                                     <td>
-                                        <span class="portal-badge @(row.RagStatus == "Red" ? "portal-badge-danger" : row.RagStatus == "Amber" ? "portal-badge-warning" : "portal-badge-success")">
+                                        <span class="fc-badge @(row.RagStatus == "Red" ? "fc-badge--danger" : row.RagStatus == "Amber" ? "fc-badge--warning" : "fc-badge--success")">
                                             @row.RagStatus
                                         </span>
                                     </td>
                                     <td>
-                                        <span class="portal-badge @(row.SubmissionStatus == "Submitted" ? "portal-badge-success" : row.SubmissionStatus == "Overdue" ? "portal-badge-danger" : "portal-badge-neutral")">
+                                        <span class="fc-badge @(row.SubmissionStatus == "Submitted" ? "fc-badge--success" : row.SubmissionStatus == "Overdue" ? "fc-badge--danger" : "fc-badge--neutral")">
                                             @row.SubmissionStatus
                                         </span>
                                     </td>
@@ -399,9 +399,9 @@
         <!-- Audit Tab -->
         @if (_tab == "audit")
         {
-            <div class="portal-card">
-                <div class="portal-card-header"><h2 class="portal-card-title">Audit Log</h2></div>
-                <div class="portal-card-body" style="padding:0;overflow:auto;max-height:560px;">
+            <div class="fc-card">
+                <div class="fc-card__header"><h2 class="fc-card__title">Audit Log</h2></div>
+                <div class="fc-card__body" style="padding:0;overflow:auto;max-height:560px;">
                     <table class="portal-table">
                         <thead>
                             <tr>
@@ -430,9 +430,9 @@
         <!-- Support Tab -->
         @if (_tab == "support")
         {
-            <div class="portal-card">
-                <div class="portal-card-header"><h2 class="portal-card-title">Support Tickets</h2></div>
-                <div class="portal-card-body" style="padding:0;overflow:auto;">
+            <div class="fc-card">
+                <div class="fc-card__header"><h2 class="fc-card__title">Support Tickets</h2></div>
+                <div class="fc-card__body" style="padding:0;overflow:auto;">
                     <table class="portal-table">
                         <thead>
                             <tr>
@@ -450,12 +450,12 @@
                                     <td>#@row.TicketId</td>
                                     <td>@row.Title</td>
                                     <td>
-                                        <span class="portal-badge @(row.Priority == "High" || row.Priority == "Critical" ? "portal-badge-danger" : row.Priority == "Medium" ? "portal-badge-warning" : "portal-badge-neutral")">
+                                        <span class="fc-badge @(row.Priority == "High" || row.Priority == "Critical" ? "fc-badge--danger" : row.Priority == "Medium" ? "fc-badge--warning" : "fc-badge--neutral")">
                                             @row.Priority
                                         </span>
                                     </td>
                                     <td>
-                                        <span class="portal-badge @(row.Status == "Resolved" || row.Status == "Closed" ? "portal-badge-success" : row.Status == "Open" ? "portal-badge-warning" : "portal-badge-neutral")">
+                                        <span class="fc-badge @(row.Status == "Resolved" || row.Status == "Closed" ? "fc-badge--success" : row.Status == "Open" ? "fc-badge--warning" : "fc-badge--neutral")">
                                             @row.Status
                                         </span>
                                     </td>
@@ -500,7 +500,7 @@
     private void SetTab(string tab) => _tab = tab;
 
     private string TabClass(string tab)
-        => _tab == tab ? "portal-btn-primary" : "portal-btn-outline";
+        => _tab == tab ? "fc-btn--primary" : "fc-btn--outline";
 
     private void Back() => Navigation.NavigateTo("/platform/tenants");
 

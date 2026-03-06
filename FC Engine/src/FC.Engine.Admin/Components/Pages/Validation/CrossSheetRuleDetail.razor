@@ -36,7 +36,7 @@
     }
     else if (_rule == null)
     {
-        <div class="detail-alert detail-alert-error">
+        <div class="fc-alert fc-alert--inline fc-alert--error">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
             Cross-sheet rule not found.
         </div>
@@ -47,14 +47,14 @@
             <div class="detail-hero-left">
                 <div class="detail-hero-title-row">
                     <h1 class="detail-hero-title">@_rule.RuleName</h1>
-                    <span class="list-badge list-badge-@_rule.Severity.ToString().ToLowerInvariant()">@_rule.Severity</span>
+                    <span class="fc-badge @StatusBadge(_rule.Severity.ToString())">@_rule.Severity</span>
                     @if (_rule.IsActive)
                     {
-                        <span class="list-badge list-badge-active">Active</span>
+                        <span class="fc-badge fc-badge--success">Active</span>
                     }
                     else
                     {
-                        <span class="list-badge list-badge-disabled">Inactive</span>
+                        <span class="fc-badge fc-badge--muted">Inactive</span>
                     }
                 </div>
 
@@ -91,7 +91,7 @@
             </div>
 
             <div class="detail-hero-actions">
-                <a href="/cross-sheet-rules" class="btn btn-outline btn-sm">
+                <a href="/cross-sheet-rules" class="fc-btn fc-btn--outline fc-btn--sm">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16" aria-hidden="true"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
                     Back to Rules
                 </a>
@@ -181,7 +181,7 @@
                 }
                 else
                 {
-                    <div class="detail-alert detail-alert-error">
+                    <div class="fc-alert fc-alert--inline fc-alert--error">
                         This rule has no configured operands.
                     </div>
                 }
@@ -205,7 +205,7 @@
                     <div style="display:flex;flex-wrap:wrap;gap:var(--space-2);">
                         @foreach (var template in ReferencedTemplates)
                         {
-                            <a href="/templates/@template" class="list-badge list-badge-review" style="text-decoration:none;">
+                            <a href="/templates/@template" class="fc-badge fc-badge--review" style="text-decoration:none;">
                                 @template
                             </a>
                         }
@@ -242,6 +242,18 @@
         _rule = await FormulaRepo.GetCrossSheetRuleById(Id);
         _loading = false;
     }
+
+    private static string StatusBadge(string status) => status.ToLowerInvariant() switch
+    {
+        "published" or "active" or "accepted" => "fc-badge--success",
+        "draft" or "pending" => "fc-badge--warning",
+        "review" or "inreview" => "fc-badge--review",
+        "deprecated" or "retired" or "disabled" or "archived" => "fc-badge--muted",
+        "rejected" or "failed" or "error" => "fc-badge--danger",
+        "processing" or "validating" or "parsing" => "fc-badge--info",
+        "acceptedwithwarnings" or "warnings" or "warning" => "fc-badge--warning",
+        _ => "fc-badge--neutral"
+    };
 
     private static string FormatUtc(DateTime dateTime)
     {

@@ -1,6 +1,7 @@
 using FC.Engine.Domain.Abstractions;
 using FC.Engine.Domain.Entities;
 using FC.Engine.Domain.Enums;
+using FC.Engine.Domain.Events;
 using FC.Engine.Domain.Notifications;
 using FC.Engine.Infrastructure.Metadata;
 using Microsoft.EntityFrameworkCore;
@@ -15,18 +16,21 @@ public class SubscriptionService : ISubscriptionService
     private readonly MetadataDbContext _db;
     private readonly IEntitlementService _entitlementService;
     private readonly INotificationOrchestrator? _notificationOrchestrator;
+    private readonly IDomainEventPublisher? _domainEventPublisher;
     private readonly ILogger<SubscriptionService> _logger;
 
     public SubscriptionService(
         MetadataDbContext db,
         IEntitlementService entitlementService,
         ILogger<SubscriptionService> logger,
-        INotificationOrchestrator? notificationOrchestrator = null)
+        INotificationOrchestrator? notificationOrchestrator = null,
+        IDomainEventPublisher? domainEventPublisher = null)
     {
         _db = db;
         _entitlementService = entitlementService;
         _logger = logger;
         _notificationOrchestrator = notificationOrchestrator;
+        _domainEventPublisher = domainEventPublisher;
     }
 
     public async Task<Subscription> CreateSubscription(
@@ -175,6 +179,18 @@ public class SubscriptionService : ISubscriptionService
             {
                 _logger.LogWarning(ex, "Failed to emit module activation notification for tenant {TenantId}", tenantId);
             }
+        }
+
+        // Publish domain event for webhook/event bus (RG-30)
+        if (_domainEventPublisher is not null)
+        {
+            try
+            {
+                await _domainEventPublisher.PublishAsync(new ModuleActivatedEvent(
+                    tenantId, module.ModuleCode, module.ModuleName,
+                    DateTime.UtcNow, DateTime.UtcNow, Guid.NewGuid()), ct);
+            }
+            catch { }
         }
 
         return existing;
@@ -692,6 +708,20 @@ public class SubscriptionService : ISubscriptionService
         await _db.SaveChangesAsync(ct);
 
         await _entitlementService.InvalidateCache(tenantId);
+
+        // Publish domain event for webhook/event bus (RG-30)
+        if (_domainEventPublisher is not null)
+        {
+            try
+            {
+                var changeType = isUpgrade ? "Upgraded" : "Downgraded";
+                await _domainEventPublisher.PublishAsync(new SubscriptionChangedEvent(
+                    tenantId, changeType, currentPlan.PlanCode, newPlan.PlanCode,
+                    DateTime.UtcNow, DateTime.UtcNow, Guid.NewGuid()), ct);
+            }
+            catch { }
+        }
+
         subscription.Plan = newPlan;
         return subscription;
     }

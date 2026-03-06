@@ -3,6 +3,7 @@ using FC.Engine.Application.DTOs;
 using FC.Engine.Domain.Abstractions;
 using FC.Engine.Domain.Entities;
 using FC.Engine.Domain.Enums;
+using FC.Engine.Domain.Events;
 using FC.Engine.Domain.Notifications;
 
 namespace FC.Engine.Application.Services;
@@ -19,6 +20,7 @@ public class IngestionOrchestrator
     private readonly ITenantContext? _tenantContext;
     private readonly IInterModuleDataFlowEngine? _dataFlowEngine;
     private readonly INotificationOrchestrator? _notificationOrchestrator;
+    private readonly IDomainEventPublisher? _domainEventPublisher;
 
     public IngestionOrchestrator(
         ITemplateMetadataCache cache,
@@ -30,7 +32,8 @@ public class IngestionOrchestrator
         IEntitlementService? entitlementService = null,
         ITenantContext? tenantContext = null,
         IInterModuleDataFlowEngine? dataFlowEngine = null,
-        INotificationOrchestrator? notificationOrchestrator = null)
+        INotificationOrchestrator? notificationOrchestrator = null,
+        IDomainEventPublisher? domainEventPublisher = null)
     {
         _cache = cache;
         _xsdGenerator = xsdGenerator;
@@ -42,6 +45,7 @@ public class IngestionOrchestrator
         _tenantContext = tenantContext;
         _dataFlowEngine = dataFlowEngine;
         _notificationOrchestrator = notificationOrchestrator;
+        _domainEventPublisher = domainEventPublisher;
     }
 
     public Task<SubmissionResultDto> Process(
@@ -177,6 +181,41 @@ public class IngestionOrchestrator
                     template,
                     reviewNotificationContext,
                     ct);
+            }
+
+            // Publish domain events for webhook/event bus (RG-30)
+            if (_domainEventPublisher is not null && tenantId.HasValue && tenantId.Value != Guid.Empty)
+            {
+                try
+                {
+                    var moduleCode = template.ModuleCode ?? string.Empty;
+                    var correlationId = Guid.NewGuid();
+
+                    await _domainEventPublisher.PublishAsync(new ReturnCreatedEvent(
+                        tenantId.Value, submission.Id, moduleCode, returnCode,
+                        reviewNotificationContext?.PeriodLabel ?? string.Empty,
+                        submission.CreatedAt, DateTime.UtcNow, correlationId), ct);
+
+                    if (submission.Status == SubmissionStatus.Accepted
+                        || submission.Status == SubmissionStatus.AcceptedWithWarnings)
+                    {
+                        await _domainEventPublisher.PublishAsync(new ReturnSubmittedEvent(
+                            tenantId.Value, submission.Id, moduleCode, returnCode,
+                            reviewNotificationContext?.PeriodLabel ?? string.Empty,
+                            reviewNotificationContext?.SubmittedByName ?? "system",
+                            DateTime.UtcNow, DateTime.UtcNow, correlationId), ct);
+                    }
+
+                    await _domainEventPublisher.PublishAsync(new ValidationCompletedEvent(
+                        tenantId.Value, submission.Id, moduleCode,
+                        submission.ValidationReport?.ErrorCount ?? 0,
+                        submission.ValidationReport?.WarningCount ?? 0,
+                        DateTime.UtcNow, DateTime.UtcNow, correlationId), ct);
+                }
+                catch
+                {
+                    // Domain event publishing must not block submission processing
+                }
             }
 
             return MapResult(submission);

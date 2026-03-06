@@ -29,7 +29,7 @@
                 <h1>Module Import</h1>
                 <p class="admin-header-subtitle">Upload a module definition JSON, validate it, import metadata, and publish draft templates.</p>
             </div>
-            <button class="admin-btn-outline" @onclick="BackToList" type="button">
+            <button class="fc-btn fc-btn--outline" @onclick="BackToList" type="button">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
                 Back to Modules
             </button>
@@ -37,8 +37,8 @@
     </div>
 
     <!-- Upload & Editor -->
-    <div class="portal-card" style="margin-bottom:1rem;">
-        <div class="portal-card-body">
+    <div class="fc-card" style="margin-bottom:1rem;">
+        <div class="fc-card__body">
             <div class="admin-form-grid">
                 <div class="admin-form-group">
                     <label class="admin-form-label">Definition File (JSON)</label>
@@ -52,18 +52,18 @@
             </div>
 
             <div style="display:flex;gap:0.5rem;margin-top:var(--space-4);flex-wrap:wrap;">
-                <button class="admin-btn-outline" disabled="@_busy" @onclick="Validate" type="button">
+                <button class="fc-btn fc-btn--outline" disabled="@_busy" @onclick="Validate" type="button">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
                     Validate
                 </button>
-                <button class="admin-btn-primary" disabled="@(_busy || !_canImport)" @onclick="Import" type="button">
+                <button class="fc-btn fc-btn--primary" disabled="@(_busy || !_canImport)" @onclick="Import" type="button">
                     @if (_busy && _canImport)
                     {
                         <span class="spinner" style="width:16px;height:16px;"></span>
                     }
                     Import
                 </button>
-                <button class="admin-btn-gold" disabled="@(_busy || string.IsNullOrWhiteSpace(_moduleCode))" @onclick="Publish" type="button">
+                <button class="fc-btn fc-btn--gold" disabled="@(_busy || string.IsNullOrWhiteSpace(_moduleCode))" @onclick="Publish" type="button">
                     Publish
                 </button>
             </div>
@@ -73,14 +73,14 @@
     <!-- Validation Result -->
     @if (_validationResult != null)
     {
-        <div class="portal-card" style="margin-bottom:1rem;">
-            <div class="portal-card-header"><h2 class="portal-card-title">Validation Summary</h2></div>
-            <div class="portal-card-body">
-                <div class="admin-summary-chips" style="margin-bottom:1rem;">
-                    <span class="admin-chip"><span class="admin-chip-count">@_validationResult.TemplateCount</span> Templates</span>
-                    <span class="admin-chip"><span class="admin-chip-count">@_validationResult.FieldCount</span> Fields</span>
-                    <span class="admin-chip"><span class="admin-chip-count">@_validationResult.FormulaCount</span> Formulas</span>
-                    <span class="admin-chip"><span class="admin-chip-count">@_validationResult.CrossSheetRuleCount</span> Cross-Sheet Rules</span>
+        <div class="fc-card" style="margin-bottom:1rem;">
+            <div class="fc-card__header"><h2 class="fc-card__title">Validation Summary</h2></div>
+            <div class="fc-card__body">
+                <div class="fc-chip-group" style="margin-bottom:1rem;">
+                    <span class="fc-chip"><span class="fc-chip__count">@_validationResult.TemplateCount</span> Templates</span>
+                    <span class="fc-chip"><span class="fc-chip__count">@_validationResult.FieldCount</span> Fields</span>
+                    <span class="fc-chip"><span class="fc-chip__count">@_validationResult.FormulaCount</span> Formulas</span>
+                    <span class="fc-chip"><span class="fc-chip__count">@_validationResult.CrossSheetRuleCount</span> Cross-Sheet Rules</span>
                 </div>
 
                 @if (_validationResult.Errors.Count > 0)
@@ -113,17 +113,17 @@
     <!-- Import Result -->
     @if (_importResult != null)
     {
-        <div class="portal-card" style="margin-bottom:1rem;">
-            <div class="portal-card-header"><h2 class="portal-card-title">Import Result</h2></div>
-            <div class="portal-card-body">
+        <div class="fc-card" style="margin-bottom:1rem;">
+            <div class="fc-card__header"><h2 class="fc-card__title">Import Result</h2></div>
+            <div class="fc-card__body">
                 @if (_importResult.Success)
                 {
                     <p style="margin-bottom:0.75rem;">Imported module <code>@_importResult.ModuleCode</code> successfully.</p>
-                    <div class="admin-summary-chips">
-                        <span class="admin-chip"><span class="admin-chip-count">@_importResult.TemplatesCreated</span> Templates</span>
-                        <span class="admin-chip"><span class="admin-chip-count">@_importResult.FieldsCreated</span> Fields</span>
-                        <span class="admin-chip"><span class="admin-chip-count">@_importResult.FormulasCreated</span> Formulas</span>
-                        <span class="admin-chip"><span class="admin-chip-count">@_importResult.CrossSheetRulesCreated</span> Cross-Sheet Rules</span>
+                    <div class="fc-chip-group">
+                        <span class="fc-chip"><span class="fc-chip__count">@_importResult.TemplatesCreated</span> Templates</span>
+                        <span class="fc-chip"><span class="fc-chip__count">@_importResult.FieldsCreated</span> Fields</span>
+                        <span class="fc-chip"><span class="fc-chip__count">@_importResult.FormulasCreated</span> Formulas</span>
+                        <span class="fc-chip"><span class="fc-chip__count">@_importResult.CrossSheetRulesCreated</span> Cross-Sheet Rules</span>
                     </div>
                 }
                 else
@@ -143,9 +143,9 @@
     <!-- Publish Result -->
     @if (_publishResult != null)
     {
-        <div class="portal-card">
-            <div class="portal-card-header"><h2 class="portal-card-title">Publish Result</h2></div>
-            <div class="portal-card-body">
+        <div class="fc-card">
+            <div class="fc-card__header"><h2 class="fc-card__title">Publish Result</h2></div>
+            <div class="fc-card__body">
                 @if (_publishResult.Success)
                 {
                     <p>Published module <code>@_publishResult.ModuleCode</code>. Tables created: <strong>@_publishResult.TablesCreated</strong>.</p>

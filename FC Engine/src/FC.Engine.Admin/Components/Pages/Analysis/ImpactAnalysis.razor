@@ -319,7 +319,7 @@
                             <div class="ia-detail-item">
                                 <span class="ia-detail-label">Structural Category</span>
                                 <span class="ia-detail-value">
-                                    <span class="list-badge list-badge-@_templateDetail.StructuralCategory.ToLowerInvariant()">@_templateDetail.StructuralCategory</span>
+                                    <span class="fc-badge @CategoryBadge(_templateDetail.StructuralCategory)">@_templateDetail.StructuralCategory</span>
                                 </span>
                             </div>
                             <div class="ia-detail-item">
@@ -440,7 +440,7 @@
                                             </td>
                                             <td class="ia-cell-code">@(rule.Expression?.Expression ?? "—")</td>
                                             <td>
-                                                <span class="list-badge list-badge-@rule.Severity.ToString().ToLowerInvariant()">@rule.Severity</span>
+                                                <span class="fc-badge @StatusBadge(rule.Severity.ToString())">@rule.Severity</span>
                                             </td>
                                         </tr>
                                     }
@@ -544,10 +544,10 @@
                                             <td class="ia-cell-code">@br.RuleCode</td>
                                             <td class="ia-cell-strong">@br.RuleName</td>
                                             <td>
-                                                <span class="list-badge list-badge-review">@br.RuleType</span>
+                                                <span class="fc-badge fc-badge--review">@br.RuleType</span>
                                             </td>
                                             <td>
-                                                <span class="list-badge list-badge-@br.Severity.ToString().ToLowerInvariant()">@br.Severity</span>
+                                                <span class="fc-badge @StatusBadge(br.Severity.ToString())">@br.Severity</span>
                                             </td>
                                         </tr>
                                     }
@@ -873,4 +873,24 @@
         public Dictionary<string, int> FormulasByType { get; set; } = new();
         public Dictionary<string, int> FieldsBySection { get; set; } = new();
     }
+
+    private static string StatusBadge(string status) => status.ToLowerInvariant() switch
+    {
+        "published" or "active" or "accepted" => "fc-badge--success",
+        "draft" or "pending" => "fc-badge--warning",
+        "review" or "inreview" => "fc-badge--review",
+        "deprecated" or "retired" or "disabled" or "archived" => "fc-badge--muted",
+        "rejected" or "failed" or "error" => "fc-badge--danger",
+        "processing" or "validating" or "parsing" => "fc-badge--info",
+        "acceptedwithwarnings" or "warnings" or "warning" => "fc-badge--warning",
+        _ => "fc-badge--neutral"
+    };
+
+    private static string CategoryBadge(string cat) => cat.ToLowerInvariant() switch
+    {
+        "fixedrow" => "fc-badge--purple",
+        "multirow" => "fc-badge--teal",
+        "itemcoded" => "fc-badge--pink",
+        _ => "fc-badge--neutral"
+    };
 }

@@ -36,21 +36,21 @@
 
         @if (!_loading && _subscriptions.Any())
         {
-            <div class="admin-summary-chips">
-                <span class="admin-chip">
-                    <span class="admin-chip-count">@_subscriptions.Count</span> Total
+            <div class="fc-chip-group">
+                <span class="fc-chip">
+                    <span class="fc-chip__count">@_subscriptions.Count</span> Total
                 </span>
-                <span class="admin-chip">
-                    <span class="admin-chip-dot admin-chip-dot-active" aria-hidden="true"></span>
-                    <span class="admin-chip-count">@_subscriptions.Count(s => s.Status == SubscriptionStatus.Active)</span> Active
+                <span class="fc-chip">
+                    <span class="fc-chip__dot fc-chip__dot--active" aria-hidden="true"></span>
+                    <span class="fc-chip__count">@_subscriptions.Count(s => s.Status == SubscriptionStatus.Active)</span> Active
                 </span>
-                <span class="admin-chip">
-                    <span class="admin-chip-dot" style="background:#f59e0b;" aria-hidden="true"></span>
-                    <span class="admin-chip-count">@_subscriptions.Count(s => s.Status == SubscriptionStatus.PastDue)</span> Past Due
+                <span class="fc-chip">
+                    <span class="fc-chip__dot" style="background:#f59e0b;" aria-hidden="true"></span>
+                    <span class="fc-chip__count">@_subscriptions.Count(s => s.Status == SubscriptionStatus.PastDue)</span> Past Due
                 </span>
-                <span class="admin-chip">
-                    <span class="admin-chip-dot admin-chip-dot-inactive" aria-hidden="true"></span>
-                    <span class="admin-chip-count">@_subscriptions.Count(s => s.Status is SubscriptionStatus.Suspended or SubscriptionStatus.Cancelled)</span> Suspended/Cancelled
+                <span class="fc-chip">
+                    <span class="fc-chip__dot fc-chip__dot--inactive" aria-hidden="true"></span>
+                    <span class="fc-chip__count">@_subscriptions.Count(s => s.Status is SubscriptionStatus.Suspended or SubscriptionStatus.Cancelled)</span> Suspended/Cancelled
                 </span>
             </div>
         }
@@ -77,15 +77,15 @@
                     <option value="@plan.PlanCode">@plan.PlanName (@plan.PlanCode)</option>
                 }
             </select>
-            <button class="admin-btn-outline" @onclick="ClearFilters" type="button">Clear</button>
+            <button class="fc-btn fc-btn--outline" @onclick="ClearFilters" type="button">Clear</button>
         </div>
     </div>
 
     <!-- Content -->
     @if (_loading)
     {
-        <div class="portal-card">
-            <div class="portal-card-body" style="padding:0;overflow:auto;">
+        <div class="fc-card">
+            <div class="fc-card__body" style="padding:0;overflow:auto;">
                 <table class="portal-table">
                     <thead>
                         <tr>
@@ -136,8 +136,8 @@
     }
     else
     {
-        <div class="portal-card">
-            <div class="portal-card-body" style="padding:0;overflow:auto;">
+        <div class="fc-card">
+            <div class="fc-card__body" style="padding:0;overflow:auto;">
                 <table class="portal-table">
                     <thead>
                         <tr>
@@ -163,7 +163,7 @@
                                     <small style="color:#64748b;">Tier @row.PlanTier</small>
                                 </td>
                                 <td>
-                                    <span class="portal-badge @GetStatusBadgeClass(row.Status)">@row.Status</span>
+                                    <span class="fc-badge @GetStatusBadgeClass(row.Status)">@row.Status</span>
                                 </td>
                                 <td>@row.BillingFrequency</td>
                                 <td>
@@ -179,12 +179,12 @@
                                                 <option value="@plan.PlanCode">@plan.PlanCode</option>
                                             }
                                         </select>
-                                        <button class="user-action-btn"
+                                        <button class="fc-btn fc-btn--ghost"
                                                 disabled="@(_busySubscriptionId == row.SubscriptionId)"
                                                 @onclick="() => ChangePlan(row)" type="button">
                                             Apply Plan
                                         </button>
-                                        <button class="user-action-btn user-action-btn-danger"
+                                        <button class="fc-btn fc-btn--ghost fc-btn--danger"
                                                 disabled="@(_busySubscriptionId == row.SubscriptionId || row.Status is SubscriptionStatus.Cancelled or SubscriptionStatus.Expired)"
                                                 @onclick="() => CancelSubscription(row)" type="button">
                                             Cancel
@@ -354,13 +354,13 @@
 
     private static string GetStatusBadgeClass(SubscriptionStatus status) => status switch
     {
-        SubscriptionStatus.Active => "portal-badge-success",
-        SubscriptionStatus.Trial => "portal-badge-warning",
-        SubscriptionStatus.PastDue => "portal-badge-warning",
-        SubscriptionStatus.Suspended => "portal-badge-danger",
-        SubscriptionStatus.Cancelled => "portal-badge-danger",
-        SubscriptionStatus.Expired => "portal-badge-neutral",
-        _ => "portal-badge-neutral"
+        SubscriptionStatus.Active => "fc-badge--success",
+        SubscriptionStatus.Trial => "fc-badge--warning",
+        SubscriptionStatus.PastDue => "fc-badge--warning",
+        SubscriptionStatus.Suspended => "fc-badge--danger",
+        SubscriptionStatus.Cancelled => "fc-badge--danger",
+        SubscriptionStatus.Expired => "fc-badge--neutral",
+        _ => "fc-badge--neutral"
     };
 
     private sealed class PlanOption

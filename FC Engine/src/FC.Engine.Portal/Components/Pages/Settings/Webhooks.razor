@@ -1,0 +1,493 @@
+@page "/settings/webhooks"
+@using System.Security.Claims
+@using System.Text.Json
+@using FC.Engine.Domain.Abstractions
+@using FC.Engine.Domain.Entities
+@using FC.Engine.Domain.Notifications
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Authorization
+@attribute [Authorize(Policy = "InstitutionUser")]
+@inject IWebhookService WebhookService
+@inject ITenantContext TenantContext
+@inject AuthenticationStateProvider AuthStateProvider
+@inject IJSRuntime JsRuntime
+
+<PageTitle>Webhooks - FC Engine Portal</PageTitle>
+
+<div class="portal-page">
+    <div class="portal-page-header">
+        <div class="portal-page-header-main">
+            <h1 class="portal-page-title">Webhooks</h1>
+            <p class="portal-page-subtitle">Configure webhook endpoints to receive real-time event notifications.</p>
+        </div>
+    </div>
+
+    @if (_isLoading)
+    {
+        <div class="portal-card portal-form-section">
+            <p>Loading webhooks...</p>
+        </div>
+    }
+    else
+    {
+        @if (!string.IsNullOrWhiteSpace(_successMessage))
+        {
+            <div class="portal-alert portal-alert-success" role="alert">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
+                </svg>
+                @_successMessage
+            </div>
+        }
+        @if (!string.IsNullOrWhiteSpace(_errorMessage))
+        {
+            <div class="portal-alert portal-alert-error" role="alert">@_errorMessage</div>
+        }
+
+        @* ── Secret display (one-time after creation) ── *@
+        @if (!string.IsNullOrWhiteSpace(_createdSecret))
+        {
+            <div class="portal-alert portal-alert-warning" role="alert">
+                <strong>Webhook Secret (copy now — it will not be shown again):</strong>
+                <br />
+                <code style="word-break: break-all; font-size: 0.85rem;">@_createdSecret</code>
+                <button class="portal-btn portal-btn-ghost portal-btn-xs" style="margin-left: 0.5rem;"
+                        @onclick="CopySecret">Copy</button>
+            </div>
+        }
+
+        @* ── Add Webhook Form ── *@
+        @if (_showAddForm)
+        {
+            <div class="portal-card portal-form-section">
+                <h3 class="portal-form-section-title">Add Webhook Endpoint</h3>
+                <div class="portal-form-grid" style="max-width: 600px;">
+                    <div class="portal-form-group" style="grid-column: 1 / -1;">
+                        <label for="webhookUrl" class="portal-form-label">Endpoint URL <span class="portal-form-required">*</span></label>
+                        <input id="webhookUrl" type="url" class="portal-form-input"
+                               @bind="_newUrl" placeholder="https://example.com/webhook" />
+                        <span class="portal-form-hint">HTTPS URL that will receive POST requests.</span>
+                    </div>
+                    <div class="portal-form-group" style="grid-column: 1 / -1;">
+                        <label for="webhookDesc" class="portal-form-label">Description</label>
+                        <input id="webhookDesc" type="text" class="portal-form-input"
+                               @bind="_newDescription" placeholder="Production webhook" />
+                    </div>
+                    <div class="portal-form-group" style="grid-column: 1 / -1;">
+                        <label class="portal-form-label">Events <span class="portal-form-required">*</span></label>
+                        <div style="display: flex; flex-wrap: wrap; gap: 0.5rem;">
+                            @foreach (var evt in _availableEvents)
+                            {
+                                <label style="display: flex; align-items: center; gap: 0.25rem; font-size: 0.8rem; cursor: pointer;">
+                                    <input type="checkbox" checked="@_selectedEvents.Contains(evt)"
+                                           @onchange="(e) => ToggleEvent(evt, (bool)(e.Value ?? false))" />
+                                    @evt
+                                </label>
+                            }
+                        </div>
+                        <span class="portal-form-hint">Select which events trigger this webhook. Use "*" for all events.</span>
+                    </div>
+                </div>
+                @if (!string.IsNullOrWhiteSpace(_formError))
+                {
+                    <div class="portal-alert portal-alert-error" style="margin-top: 0.75rem;">@_formError</div>
+                }
+                <div style="display: flex; gap: 0.5rem; margin-top: 1rem;">
+                    <button class="portal-btn portal-btn-primary portal-btn-sm" @onclick="CreateEndpoint" disabled="@_isSaving">
+                        @if (_isSaving)
+                        {
+                            <span class="portal-btn-spinner" aria-hidden="true"></span>
+                            <span>Adding...</span>
+                        }
+                        else
+                        {
+                            <span>Add Webhook</span>
+                        }
+                    </button>
+                    <button class="portal-btn portal-btn-ghost portal-btn-sm" @onclick="() => _showAddForm = false">Cancel</button>
+                </div>
+            </div>
+        }
+        else
+        {
+            <div style="display: flex; justify-content: flex-end; margin-bottom: 0.75rem;">
+                <button class="portal-btn portal-btn-primary portal-btn-sm" @onclick="() => { _showAddForm = true; _createdSecret = null; _formError = null; }">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                        <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+                    </svg>
+                    Add Webhook
+                </button>
+            </div>
+        }
+
+        @* ── Endpoints Table ── *@
+        @if (_endpoints.Count > 0)
+        {
+            <div class="portal-card portal-card-flush">
+                <div class="portal-table-responsive">
+                    <table class="portal-table" aria-label="Webhook endpoints">
+                        <thead>
+                            <tr>
+                                <th>URL</th>
+                                <th>Events</th>
+                                <th>Status</th>
+                                <th>Failures</th>
+                                <th>Last Delivery</th>
+                                <th class="portal-table-th-actions">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var ep in _endpoints)
+                            {
+                                <tr class="@(!ep.IsActive ? "portal-table-row-dimmed" : "")">
+                                    <td>
+                                        <code style="word-break: break-all; font-size: 0.8rem;">@ep.Url</code>
+                                        @if (!string.IsNullOrWhiteSpace(ep.Description))
+                                        {
+                                            <br /><span class="portal-text-muted" style="font-size: 0.75rem;">@ep.Description</span>
+                                        }
+                                    </td>
+                                    <td style="font-size: 0.8rem;">@FormatEventTypes(ep.EventTypes)</td>
+                                    <td>
+                                        @if (ep.IsActive)
+                                        {
+                                            <span class="portal-badge portal-badge-success portal-badge-sm">Active</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="portal-badge portal-badge-danger portal-badge-sm"
+                                                  title="@ep.DisabledReason">Disabled</span>
+                                        }
+                                    </td>
+                                    <td style="font-size: 0.8rem;">@ep.FailureCount</td>
+                                    <td class="portal-text-muted" style="font-size: 0.75rem;">
+                                        @(ep.LastDeliveryAt?.ToString("d MMM yyyy HH:mm") ?? "Never")
+                                    </td>
+                                    <td class="portal-table-th-actions">
+                                        <div style="display: flex; gap: 0.25rem; flex-wrap: wrap;">
+                                            <button class="portal-btn portal-btn-ghost portal-btn-xs"
+                                                    title="Send test" @onclick="() => SendTest(ep.Id)">
+                                                Test
+                                            </button>
+                                            <button class="portal-btn portal-btn-ghost portal-btn-xs"
+                                                    title="Rotate secret" @onclick="() => RotateSecret(ep.Id)">
+                                                Rotate
+                                            </button>
+                                            <button class="portal-btn portal-btn-ghost portal-btn-xs"
+                                                    title="@(ep.IsActive ? "Disable" : "Enable")"
+                                                    @onclick="() => ToggleActive(ep)">
+                                                @(ep.IsActive ? "Disable" : "Enable")
+                                            </button>
+                                            <button class="portal-btn portal-btn-ghost portal-btn-xs"
+                                                    title="Delivery log" @onclick="() => ShowDeliveryLog(ep.Id)">
+                                                Log
+                                            </button>
+                                            <button class="portal-btn portal-btn-danger-text portal-btn-xs"
+                                                    title="Delete" @onclick="() => DeleteEndpoint(ep.Id)">
+                                                Delete
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        }
+        else if (!_showAddForm)
+        {
+            <div class="portal-card">
+                <div style="text-align: center; padding: 2rem;">
+                    <p class="portal-text-muted">No webhooks configured. Add one to receive real-time event notifications.</p>
+                </div>
+            </div>
+        }
+
+        @* ── Delivery Log Panel ── *@
+        @if (_showDeliveryLog && _deliveryLogEndpointId.HasValue)
+        {
+            <div class="portal-card portal-form-section" style="margin-top: 1rem;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <h3 class="portal-form-section-title" style="margin-bottom: 0;">Recent Deliveries</h3>
+                    <button class="portal-btn portal-btn-ghost portal-btn-xs" @onclick="() => _showDeliveryLog = false">Close</button>
+                </div>
+                @if (_deliveries.Count > 0)
+                {
+                    <div class="portal-table-responsive" style="margin-top: 0.75rem;">
+                        <table class="portal-table" aria-label="Delivery log">
+                            <thead>
+                                <tr>
+                                    <th>Event</th>
+                                    <th>Status</th>
+                                    <th>HTTP</th>
+                                    <th>Attempts</th>
+                                    <th>Duration</th>
+                                    <th>Time</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var d in _deliveries)
+                                {
+                                    <tr>
+                                        <td style="font-size: 0.8rem;"><code>@d.EventType</code></td>
+                                        <td>
+                                            <span class="portal-badge portal-badge-sm @GetDeliveryStatusBadge(d.Status)">@d.Status</span>
+                                        </td>
+                                        <td style="font-size: 0.8rem;">@(d.HttpStatus?.ToString() ?? "-")</td>
+                                        <td style="font-size: 0.8rem;">@d.AttemptCount / @d.MaxAttempts</td>
+                                        <td style="font-size: 0.8rem;">@(d.DurationMs > 0 ? $"{d.DurationMs}ms" : "-")</td>
+                                        <td class="portal-text-muted" style="font-size: 0.75rem;">@d.CreatedAt.ToString("d MMM HH:mm:ss")</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+                else
+                {
+                    <p class="portal-text-muted" style="margin-top: 0.75rem;">No deliveries recorded yet.</p>
+                }
+            </div>
+        }
+    }
+</div>
+
+@code {
+    private bool _isLoading = true;
+    private bool _isSaving;
+    private bool _showAddForm;
+    private bool _showDeliveryLog;
+    private int? _deliveryLogEndpointId;
+
+    private List<WebhookEndpoint> _endpoints = new();
+    private List<WebhookDelivery> _deliveries = new();
+
+    private string _newUrl = "";
+    private string _newDescription = "";
+    private HashSet<string> _selectedEvents = new(StringComparer.OrdinalIgnoreCase);
+
+    private string? _formError;
+    private string? _successMessage;
+    private string? _errorMessage;
+    private string? _createdSecret;
+    private Guid _tenantId;
+    private int _userId;
+
+    private static readonly string[] _availableEvents =
+    {
+        "*",
+        NotificationEvents.ReturnCreated,
+        NotificationEvents.ReturnSubmittedForReview,
+        NotificationEvents.ReturnApproved,
+        NotificationEvents.ReturnRejected,
+        NotificationEvents.ReturnSubmittedToRegulator,
+        NotificationEvents.ValidationCompleted,
+        NotificationEvents.DeadlineT7,
+        NotificationEvents.DeadlineT1,
+        NotificationEvents.ModuleActivated,
+        NotificationEvents.ExportCompleted,
+        NotificationEvents.UserProvisioned
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+            var user = authState.User;
+            _tenantId = TenantContext.CurrentTenantId ?? Guid.Empty;
+
+            var userIdStr = user.FindFirst(ClaimTypes.NameIdentifier)?.Value
+                ?? user.FindFirst("UserId")?.Value;
+            int.TryParse(userIdStr, out _userId);
+
+            await LoadEndpoints();
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"Failed to load webhooks: {ex.Message}";
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private async Task LoadEndpoints()
+    {
+        _endpoints = await WebhookService.GetEndpointsAsync(_tenantId);
+    }
+
+    private async Task CreateEndpoint()
+    {
+        _formError = null;
+        _createdSecret = null;
+
+        if (string.IsNullOrWhiteSpace(_newUrl))
+        {
+            _formError = "Endpoint URL is required.";
+            return;
+        }
+
+        if (_selectedEvents.Count == 0)
+        {
+            _formError = "Select at least one event type.";
+            return;
+        }
+
+        _isSaving = true;
+        StateHasChanged();
+
+        try
+        {
+            var endpoint = await WebhookService.CreateEndpointAsync(
+                _tenantId, _newUrl.Trim(), _newDescription.Trim(),
+                _selectedEvents.ToList(), _userId);
+
+            _createdSecret = endpoint.SecretKey;
+            _successMessage = "Webhook endpoint created.";
+            _newUrl = "";
+            _newDescription = "";
+            _selectedEvents.Clear();
+            _showAddForm = false;
+            await LoadEndpoints();
+        }
+        catch (Exception ex)
+        {
+            _formError = ex.Message;
+        }
+        finally
+        {
+            _isSaving = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task DeleteEndpoint(int id)
+    {
+        var confirmed = await JsRuntime.InvokeAsync<bool>("confirm", "Delete this webhook endpoint? This cannot be undone.");
+        if (!confirmed) return;
+
+        ClearMessages();
+        try
+        {
+            await WebhookService.DeleteEndpointAsync(id);
+            _successMessage = "Webhook endpoint deleted.";
+            await LoadEndpoints();
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = ex.Message;
+        }
+    }
+
+    private async Task SendTest(int id)
+    {
+        ClearMessages();
+        try
+        {
+            await WebhookService.SendTestWebhookAsync(id);
+            _successMessage = "Test webhook sent.";
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"Test failed: {ex.Message}";
+        }
+    }
+
+    private async Task RotateSecret(int id)
+    {
+        var confirmed = await JsRuntime.InvokeAsync<bool>(
+            "confirm", "Rotate secret? The current secret will be invalidated.");
+        if (!confirmed) return;
+
+        ClearMessages();
+        try
+        {
+            var newSecret = await WebhookService.RotateSecretAsync(id);
+            _createdSecret = newSecret;
+            _successMessage = "Secret rotated. Copy the new secret below.";
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = ex.Message;
+        }
+    }
+
+    private async Task ToggleActive(WebhookEndpoint ep)
+    {
+        ClearMessages();
+        try
+        {
+            await WebhookService.UpdateEndpointAsync(ep.Id, null, null, null, !ep.IsActive);
+            _successMessage = ep.IsActive ? "Webhook disabled." : "Webhook enabled.";
+            await LoadEndpoints();
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = ex.Message;
+        }
+    }
+
+    private async Task ShowDeliveryLog(int endpointId)
+    {
+        _deliveryLogEndpointId = endpointId;
+        _showDeliveryLog = true;
+        try
+        {
+            _deliveries = await WebhookService.GetDeliveryLogAsync(endpointId, 20);
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"Failed to load delivery log: {ex.Message}";
+        }
+    }
+
+    private async Task CopySecret()
+    {
+        if (_createdSecret is not null)
+        {
+            await JsRuntime.InvokeVoidAsync("navigator.clipboard.writeText", _createdSecret);
+        }
+    }
+
+    private void ToggleEvent(string evt, bool isChecked)
+    {
+        if (isChecked)
+            _selectedEvents.Add(evt);
+        else
+            _selectedEvents.Remove(evt);
+    }
+
+    private void ClearMessages()
+    {
+        _successMessage = null;
+        _errorMessage = null;
+        _createdSecret = null;
+    }
+
+    private static string FormatEventTypes(string eventTypesJson)
+    {
+        try
+        {
+            var list = JsonSerializer.Deserialize<List<string>>(eventTypesJson);
+            if (list is null || list.Count == 0) return "None";
+            if (list.Contains("*")) return "All events";
+            return string.Join(", ", list);
+        }
+        catch
+        {
+            return eventTypesJson;
+        }
+    }
+
+    private static string GetDeliveryStatusBadge(string status) => status switch
+    {
+        "Delivered" => "portal-badge-success",
+        "Failed" => "portal-badge-danger",
+        "Exhausted" => "portal-badge-danger",
+        "Pending" => "portal-badge-warning",
+        _ => "portal-badge-info"
+    };
+}

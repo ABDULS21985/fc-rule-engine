@@ -36,18 +36,18 @@
         @if (!_loading)
         {
             <!-- Summary Chips -->
-            <div class="admin-summary-chips">
-                <span class="admin-chip">
-                    <span class="admin-chip-count">@FormatCurrency(_outstandingAmount)</span> Outstanding Amount
+            <div class="fc-chip-group">
+                <span class="fc-chip">
+                    <span class="fc-chip__count">@FormatCurrency(_outstandingAmount)</span> Outstanding Amount
                 </span>
-                <span class="admin-chip">
-                    <span class="admin-chip-count">@FormatCurrency(_paidThisMonth)</span> Paid This Month
+                <span class="fc-chip">
+                    <span class="fc-chip__count">@FormatCurrency(_paidThisMonth)</span> Paid This Month
                 </span>
-                <span class="admin-chip">
-                    <span class="admin-chip-count">@_invoices.Count(i => i.Status == InvoiceStatus.Overdue)</span> Overdue
+                <span class="fc-chip">
+                    <span class="fc-chip__count">@_invoices.Count(i => i.Status == InvoiceStatus.Overdue)</span> Overdue
                 </span>
-                <span class="admin-chip">
-                    <span class="admin-chip-count">@_invoices.Count(i => i.Status == InvoiceStatus.Draft)</span> Drafts
+                <span class="fc-chip">
+                    <span class="fc-chip__count">@_invoices.Count(i => i.Status == InvoiceStatus.Draft)</span> Drafts
                 </span>
             </div>
         }
@@ -56,8 +56,8 @@
     @if (_loading)
     {
         <!-- Skeleton Loading State -->
-        <div class="portal-card">
-            <div class="portal-card-body">
+        <div class="fc-card">
+            <div class="fc-card__body">
                 <div class="skel skel-text" style="width:200px;margin-bottom:1rem;"></div>
                 <div class="skel skel-text" style="width:100%;height:40px;margin-bottom:0.75rem;"></div>
                 @for (var i = 0; i < 5; i++)
@@ -78,11 +78,11 @@
     else
     {
         <!-- Generate Invoice -->
-        <div class="portal-card">
-            <div class="portal-card-header">
-                <h2 class="portal-card-title">Generate Invoice</h2>
+        <div class="fc-card">
+            <div class="fc-card__header">
+                <h2 class="fc-card__title">Generate Invoice</h2>
             </div>
-            <div class="portal-card-body">
+            <div class="fc-card__body">
                 <div style="display:flex;gap:1rem;align-items:flex-end;flex-wrap:wrap;">
                     <div class="admin-form-group" style="flex:1;min-width:240px;">
                         <label class="admin-form-label">Tenant</label>
@@ -94,7 +94,7 @@
                             }
                         </select>
                     </div>
-                    <button class="admin-btn-primary"
+                    <button class="fc-btn fc-btn--primary"
                             disabled="@(_busyInvoiceId.HasValue || string.IsNullOrWhiteSpace(_selectedTenantId))"
                             @onclick="GenerateForTenant"
                             type="button">
@@ -122,16 +122,16 @@
                         <option value="@status.ToString()">@status</option>
                     }
                 </select>
-                <button class="admin-btn-outline" @onclick="ClearFilters" type="button">Clear</button>
+                <button class="fc-btn fc-btn--outline" @onclick="ClearFilters" type="button">Clear</button>
             </div>
         </div>
 
         <!-- Invoice Table -->
-        <div class="portal-card">
-            <div class="portal-card-header">
-                <h2 class="portal-card-title">Invoices</h2>
+        <div class="fc-card">
+            <div class="fc-card__header">
+                <h2 class="fc-card__title">Invoices</h2>
             </div>
-            <div class="portal-card-body" style="padding:0;overflow:auto;">
+            <div class="fc-card__body" style="padding:0;overflow:auto;">
                 @if (!FilteredInvoices.Any())
                 {
                     <div class="admin-empty">
@@ -177,7 +177,7 @@
                                         <small style="color:#64748b;">@invoice.TenantSlug</small>
                                     </td>
                                     <td>
-                                        <span class="portal-badge @GetInvoiceBadgeClass(invoice.Status)">@invoice.Status</span>
+                                        <span class="fc-badge @GetInvoiceBadgeClass(invoice.Status)">@invoice.Status</span>
                                     </td>
                                     <td>
                                         <div>@invoice.PeriodStart.ToString("yyyy-MM-dd")</div>
@@ -198,7 +198,7 @@
                                         <div style="display:flex;gap:0.35rem;flex-wrap:wrap;">
                                             @if (invoice.Status == InvoiceStatus.Draft)
                                             {
-                                                <button class="user-action-btn"
+                                                <button class="fc-btn fc-btn--ghost"
                                                         disabled="@(_busyInvoiceId == invoice.Id)"
                                                         @onclick="() => IssueInvoice(invoice.Id)"
                                                         type="button">
@@ -207,7 +207,7 @@
                                             }
                                             @if (invoice.Status is InvoiceStatus.Issued or InvoiceStatus.Overdue)
                                             {
-                                                <button class="user-action-btn"
+                                                <button class="fc-btn fc-btn--ghost"
                                                         disabled="@(_busyInvoiceId == invoice.Id)"
                                                         @onclick="() => RecordManualPayment(invoice)"
                                                         type="button">
@@ -216,7 +216,7 @@
                                             }
                                             @if (invoice.Status is InvoiceStatus.Draft or InvoiceStatus.Issued or InvoiceStatus.Overdue)
                                             {
-                                                <button class="user-action-btn user-action-btn-danger"
+                                                <button class="fc-btn fc-btn--ghost fc-btn--danger"
                                                         disabled="@(_busyInvoiceId == invoice.Id)"
                                                         @onclick="() => VoidInvoice(invoice.Id)"
                                                         type="button">
@@ -441,12 +441,12 @@
 
     private static string GetInvoiceBadgeClass(InvoiceStatus status) => status switch
     {
-        InvoiceStatus.Draft => "portal-badge-neutral",
-        InvoiceStatus.Issued => "portal-badge-warning",
-        InvoiceStatus.Overdue => "portal-badge-danger",
-        InvoiceStatus.Paid => "portal-badge-success",
-        InvoiceStatus.Voided => "portal-badge-danger",
-        _ => "portal-badge-neutral"
+        InvoiceStatus.Draft => "fc-badge--neutral",
+        InvoiceStatus.Issued => "fc-badge--warning",
+        InvoiceStatus.Overdue => "fc-badge--danger",
+        InvoiceStatus.Paid => "fc-badge--success",
+        InvoiceStatus.Voided => "fc-badge--danger",
+        _ => "fc-badge--neutral"
     };
 
     private sealed class InvoiceRow

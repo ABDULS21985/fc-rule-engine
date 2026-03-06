@@ -27,39 +27,39 @@
                 <h1>User Management</h1>
                 <p class="admin-header-subtitle">Manage platform identities, roles, and access across the FC Engine administrative portal.</p>
             </div>
-            <button class="admin-btn-primary" @onclick="OpenCreateModal" type="button">
+            <button class="fc-btn fc-btn--primary" @onclick="OpenCreateModal" type="button">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
                 Add User
             </button>
         </div>
 
         <!-- Summary Chips -->
-        <div class="admin-summary-chips">
-            <span class="admin-chip">
-                <span class="admin-chip-count">@_users.Count</span> Total Users
+        <div class="fc-chip-group">
+            <span class="fc-chip">
+                <span class="fc-chip__count">@_users.Count</span> Total Users
             </span>
-            <span class="admin-chip">
-                <span class="admin-chip-dot admin-chip-dot-active" aria-hidden="true"></span>
-                <span class="admin-chip-count">@_users.Count(u => u.IsActive)</span> Active
+            <span class="fc-chip">
+                <span class="fc-chip__dot fc-chip__dot--active" aria-hidden="true"></span>
+                <span class="fc-chip__count">@_users.Count(u => u.IsActive)</span> Active
             </span>
             @if (_users.Any(u => !u.IsActive))
             {
-                <span class="admin-chip">
-                    <span class="admin-chip-dot admin-chip-dot-inactive" aria-hidden="true"></span>
-                    <span class="admin-chip-count">@_users.Count(u => !u.IsActive)</span> Inactive
+                <span class="fc-chip">
+                    <span class="fc-chip__dot fc-chip__dot--inactive" aria-hidden="true"></span>
+                    <span class="fc-chip__count">@_users.Count(u => !u.IsActive)</span> Inactive
                 </span>
             }
-            <span class="admin-chip">
-                <span class="admin-chip-dot admin-chip-dot-admin" aria-hidden="true"></span>
-                <span class="admin-chip-count">@_users.Count(u => u.Role == PortalRole.Admin)</span> Admins
+            <span class="fc-chip">
+                <span class="fc-chip__dot fc-chip__dot--admin" aria-hidden="true"></span>
+                <span class="fc-chip__count">@_users.Count(u => u.Role == PortalRole.Admin)</span> Admins
             </span>
-            <span class="admin-chip">
-                <span class="admin-chip-dot admin-chip-dot-approver" aria-hidden="true"></span>
-                <span class="admin-chip-count">@_users.Count(u => u.Role == PortalRole.Approver)</span> Approvers
+            <span class="fc-chip">
+                <span class="fc-chip__dot fc-chip__dot--approver" aria-hidden="true"></span>
+                <span class="fc-chip__count">@_users.Count(u => u.Role == PortalRole.Approver)</span> Approvers
             </span>
-            <span class="admin-chip">
-                <span class="admin-chip-dot admin-chip-dot-viewer" aria-hidden="true"></span>
-                <span class="admin-chip-count">@_users.Count(u => u.Role == PortalRole.Viewer)</span> Viewers
+            <span class="fc-chip">
+                <span class="fc-chip__dot fc-chip__dot--viewer" aria-hidden="true"></span>
+                <span class="fc-chip__count">@_users.Count(u => u.Role == PortalRole.Viewer)</span> Viewers
             </span>
         </div>
     </div>
@@ -166,15 +166,15 @@
                     </div>
 
                     <div class="user-card-actions">
-                        <button class="user-action-btn" @onclick="() => OpenEditModal(user)" type="button" title="Edit user">
+                        <button class="fc-btn fc-btn--ghost" @onclick="() => OpenEditModal(user)" type="button" title="Edit user">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                             Edit
                         </button>
-                        <button class="user-action-btn" @onclick="() => ResetPassword(user)" type="button" title="Reset password">
+                        <button class="fc-btn fc-btn--ghost" @onclick="() => ResetPassword(user)" type="button" title="Reset password">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
                             Reset Password
                         </button>
-                        <button class="user-action-btn @(user.IsActive ? "user-action-btn-danger" : "")"
+                        <button class="fc-btn fc-btn--ghost @(user.IsActive ? "fc-btn--danger" : "")"
                                 @onclick="() => ToggleUserStatus(user)" type="button"
                                 title="@(user.IsActive ? "Disable account" : "Enable account")">
                             @if (user.IsActive)
@@ -270,8 +270,8 @@
         </div>
     </ChildContent>
     <FooterContent>
-        <button class="admin-btn-outline" @onclick="CloseModal" type="button">Cancel</button>
-        <button class="admin-btn-primary" @onclick="SaveUser" disabled="@_saving" type="button">
+        <button class="fc-btn fc-btn--outline" @onclick="CloseModal" type="button">Cancel</button>
+        <button class="fc-btn fc-btn--primary" @onclick="SaveUser" disabled="@_saving" type="button">
             @if (_saving)
             {
                 <span class="spinner" style="width:16px;height:16px;"></span>
@@ -294,8 +294,8 @@
         </div>
     </ChildContent>
     <FooterContent>
-        <button class="admin-btn-outline" @onclick="() => _showPasswordModal = false" type="button">Cancel</button>
-        <button class="admin-btn-primary" @onclick="ConfirmResetPassword" disabled="@_saving" type="button">
+        <button class="fc-btn fc-btn--outline" @onclick="() => _showPasswordModal = false" type="button">Cancel</button>
+        <button class="fc-btn fc-btn--primary" @onclick="ConfirmResetPassword" disabled="@_saving" type="button">
             @if (_saving)
             {
                 <span class="spinner" style="width:16px;height:16px;"></span>

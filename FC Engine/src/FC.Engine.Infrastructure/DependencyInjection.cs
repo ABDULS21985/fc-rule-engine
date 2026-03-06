@@ -19,7 +19,9 @@ using FC.Engine.Infrastructure.Persistence.Repositories;
 using FC.Engine.Infrastructure.Notifications;
 using FC.Engine.Infrastructure.Storage;
 using FC.Engine.Infrastructure.Validation;
+using FC.Engine.Infrastructure.Webhooks;
 using FC.Engine.Infrastructure.Xml;
+using MassTransit;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -217,6 +219,45 @@ public static class DependencyInjection
         services.AddScoped<ISavedReportRepository, SavedReportRepository>();
         services.AddScoped<IReportQueryEngine, ReportQueryEngine>();
         services.AddScoped<IBoardPackGenerator, BoardPackGenerator>();
+
+        // ── Webhook Engine & Event Bus (RG-30) ──
+        services.AddScoped<IWebhookService, WebhookDeliveryService>();
+        services.AddScoped<IDomainEventPublisher, MassTransitDomainEventPublisher>();
+        services.AddHostedService<WebhookRetryJob>();
+        services.AddHttpClient("WebhookClient", client =>
+        {
+            client.Timeout = TimeSpan.FromSeconds(10);
+            client.DefaultRequestHeaders.Add("User-Agent", "RegOS-Webhook/1.0");
+        });
+
+        var rabbitMqEnabled = configuration.GetValue<bool>("RabbitMQ:Enabled");
+        services.AddMassTransit(x =>
+        {
+            x.AddConsumer<WebhookDeliveryConsumer>();
+
+            if (rabbitMqEnabled)
+            {
+                x.UsingRabbitMq((context, cfg) =>
+                {
+                    cfg.Host(
+                        configuration["RabbitMQ:Host"] ?? "localhost",
+                        configuration["RabbitMQ:VirtualHost"] ?? "/",
+                        h =>
+                        {
+                            h.Username(configuration["RabbitMQ:Username"] ?? "guest");
+                            h.Password(configuration["RabbitMQ:Password"] ?? "guest");
+                        });
+                    cfg.ConfigureEndpoints(context);
+                });
+            }
+            else
+            {
+                x.UsingInMemory((context, cfg) =>
+                {
+                    cfg.ConfigureEndpoints(context);
+                });
+            }
+        });
 
         // Billing & subscription background jobs
         services.AddHostedService<UsageTrackingJob>();

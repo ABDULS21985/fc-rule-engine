@@ -16,21 +16,21 @@
 
 @if (!string.IsNullOrWhiteSpace(_message))
 {
-    <div class="portal-alert portal-alert-success">@_message</div>
+    <div class="fc-alert fc-alert--inline fc-alert--success">@_message</div>
 }
 @if (!string.IsNullOrWhiteSpace(_error))
 {
-    <div class="portal-alert portal-alert-danger">@_error</div>
+    <div class="fc-alert fc-alert--inline fc-alert--error">@_error</div>
 }
 
 @if (_loading)
 {
-    <div class="portal-card"><div class="portal-card-body">Loading template console...</div></div>
+    <div class="fc-card"><div class="fc-card__body">Loading template console...</div></div>
 }
 else
 {
-    <div class="portal-card" style="margin-bottom:1rem;">
-        <div class="portal-card-body" style="padding:0; overflow:auto;">
+    <div class="fc-card" style="margin-bottom:1rem;">
+        <div class="fc-card__body" style="padding:0; overflow:auto;">
             <table class="portal-table">
                 <thead>
                     <tr>
@@ -57,16 +57,16 @@ else
                             <td>@row.FormulaCount</td>
                             <td>
                                 <div style="display:flex; gap:0.35rem; flex-wrap:wrap;">
-                                    <a class="portal-btn portal-btn-xs portal-btn-outline" href="/templates/@row.ReturnCode">View</a>
+                                    <a class="fc-btn fc-btn--outline fc-btn--xs" href="/templates/@row.ReturnCode">View</a>
                                     @if (row.DraftVersionId.HasValue)
                                     {
-                                        <button class="portal-btn portal-btn-xs portal-btn-primary" @onclick="() => PublishDraft(row.TemplateId)">Publish Draft</button>
+                                        <button class="fc-btn fc-btn--primary fc-btn--xs" @onclick="() => PublishDraft(row.TemplateId)">Publish Draft</button>
                                     }
                                     @if (row.CurrentVersionId.HasValue)
                                     {
-                                        <button class="portal-btn portal-btn-xs" style="background:#7f1d1d;color:#fff;" @onclick="() => Deprecate(row.TemplateId, row.CurrentVersionId.Value)">Deprecate</button>
+                                        <button class="fc-btn fc-btn--xs" style="background:#7f1d1d;color:#fff;" @onclick="() => Deprecate(row.TemplateId, row.CurrentVersionId.Value)">Deprecate</button>
                                     }
-                                    <button class="portal-btn portal-btn-xs portal-btn-outline" @onclick="() => LoadDiff(row.TemplateId, row.CurrentVersionId, row.DraftVersionId)">Diff</button>
+                                    <button class="fc-btn fc-btn--outline fc-btn--xs" @onclick="() => LoadDiff(row.TemplateId, row.CurrentVersionId, row.DraftVersionId)">Diff</button>
                                 </div>
                             </td>
                         </tr>
@@ -78,11 +78,11 @@ else
 
     @if (_diff is not null)
     {
-        <div class="portal-card">
-            <div class="portal-card-header">
-                <h2 class="portal-card-title">Diff: @_diff.ReturnCode (v@_diff.FromVersionNumber → v@_diff.ToVersionNumber)</h2>
+        <div class="fc-card">
+            <div class="fc-card__header">
+                <h2 class="fc-card__title">Diff: @_diff.ReturnCode (v@_diff.FromVersionNumber → v@_diff.ToVersionNumber)</h2>
             </div>
-            <div class="portal-card-body">
+            <div class="fc-card__body">
                 <div class="portal-grid portal-grid-3">
                     <div>
                         <h4 style="margin-top:0;">Added Fields (@_diff.AddedFields.Count)</h4>

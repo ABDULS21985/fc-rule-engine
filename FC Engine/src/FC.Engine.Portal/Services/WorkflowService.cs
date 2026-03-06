@@ -1,6 +1,7 @@
 using FC.Engine.Domain.Abstractions;
 using FC.Engine.Domain.Entities;
 using FC.Engine.Domain.Enums;
+using FC.Engine.Domain.Events;
 using FC.Engine.Domain.Notifications;
 
 namespace FC.Engine.Portal.Services;
@@ -15,19 +16,22 @@ public class WorkflowService
     private readonly IInstitutionUserRepository _userRepo;
     private readonly INotificationOrchestrator _notificationOrchestrator;
     private readonly IFilingCalendarService _filingCalendarService;
+    private readonly IDomainEventPublisher? _domainEventPublisher;
 
     public WorkflowService(
         ISubmissionRepository submissionRepo,
         ISubmissionApprovalRepository approvalRepo,
         IInstitutionUserRepository userRepo,
         INotificationOrchestrator notificationOrchestrator,
-        IFilingCalendarService filingCalendarService)
+        IFilingCalendarService filingCalendarService,
+        IDomainEventPublisher? domainEventPublisher = null)
     {
         _submissionRepo = submissionRepo;
         _approvalRepo = approvalRepo;
         _userRepo = userRepo;
         _notificationOrchestrator = notificationOrchestrator;
         _filingCalendarService = filingCalendarService;
+        _domainEventPublisher = domainEventPublisher;
     }
 
     public async Task<ApprovalActionResult> Approve(
@@ -101,6 +105,20 @@ public class WorkflowService
             // Notification failures should not block approval flow.
         }
 
+        // Publish domain event for webhook/event bus (RG-30)
+        if (_domainEventPublisher is not null && submission.TenantId != Guid.Empty)
+        {
+            try
+            {
+                await _domainEventPublisher.PublishAsync(new ReturnApprovedEvent(
+                    submission.TenantId, submission.Id,
+                    string.Empty, submission.ReturnCode, string.Empty,
+                    (await _userRepo.GetById(reviewerUserId, ct))?.DisplayName ?? "Reviewer",
+                    DateTime.UtcNow, DateTime.UtcNow, Guid.NewGuid()), ct);
+            }
+            catch { }
+        }
+
         return ApprovalActionResult.Success;
     }
 
@@ -157,6 +175,20 @@ public class WorkflowService
             catch
             {
                 // Notification failures should not block rejection flow.
+            }
+
+            // Publish domain event for webhook/event bus (RG-30)
+            if (_domainEventPublisher is not null && submission.TenantId != Guid.Empty)
+            {
+                try
+                {
+                    await _domainEventPublisher.PublishAsync(new ReturnRejectedEvent(
+                        submission.TenantId, submission.Id,
+                        string.Empty, submission.ReturnCode, string.Empty,
+                        (await _userRepo.GetById(reviewerUserId, ct))?.DisplayName ?? "Reviewer",
+                        comments, DateTime.UtcNow, DateTime.UtcNow, Guid.NewGuid()), ct);
+                }
+                catch { }
             }
         }
 

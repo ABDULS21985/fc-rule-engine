@@ -25,30 +25,30 @@
                 <h1>Module Registry</h1>
                 <p class="admin-header-subtitle">Operational overview of all regulatory packs loaded into the universal template engine.</p>
             </div>
-            <button class="admin-btn-primary" @onclick="OpenImport" type="button">
+            <button class="fc-btn fc-btn--primary" @onclick="OpenImport" type="button">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
                 Import Module
             </button>
         </div>
 
         <!-- Summary Chips -->
-        <div class="admin-summary-chips">
-            <span class="admin-chip">
-                <span class="admin-chip-count">@_rows.Count</span> Total
+        <div class="fc-chip-group">
+            <span class="fc-chip">
+                <span class="fc-chip__count">@_rows.Count</span> Total
             </span>
-            <span class="admin-chip">
-                <span class="admin-chip-dot admin-chip-dot-active" aria-hidden="true"></span>
-                <span class="admin-chip-count">@_rows.Count(r => r.IsActive)</span> Active
+            <span class="fc-chip">
+                <span class="fc-chip__dot fc-chip__dot--active" aria-hidden="true"></span>
+                <span class="fc-chip__count">@_rows.Count(r => r.IsActive)</span> Active
             </span>
             @if (_rows.Any(r => !r.IsActive))
             {
-                <span class="admin-chip">
-                    <span class="admin-chip-dot admin-chip-dot-inactive" aria-hidden="true"></span>
-                    <span class="admin-chip-count">@_rows.Count(r => !r.IsActive)</span> Inactive
+                <span class="fc-chip">
+                    <span class="fc-chip__dot fc-chip__dot--inactive" aria-hidden="true"></span>
+                    <span class="fc-chip__count">@_rows.Count(r => !r.IsActive)</span> Inactive
                 </span>
             }
-            <span class="admin-chip">
-                <span class="admin-chip-count">@_rows.Sum(r => r.ActiveTenants)</span> Tenant Deployments
+            <span class="fc-chip">
+                <span class="fc-chip__count">@_rows.Sum(r => r.ActiveTenants)</span> Tenant Deployments
             </span>
         </div>
     </div>
@@ -71,8 +71,8 @@
     <!-- Content -->
     @if (_loading)
     {
-        <div class="portal-card">
-            <div class="portal-card-body" style="padding:0;overflow:auto;">
+        <div class="fc-card">
+            <div class="fc-card__body" style="padding:0;overflow:auto;">
                 <table class="portal-table">
                     <thead>
                         <tr><th>Code</th><th>Name</th><th>Regulator</th><th>Sheets</th><th>Version</th><th>Status</th><th>Tenants</th><th></th></tr>
@@ -116,8 +116,8 @@
     }
     else
     {
-        <div class="portal-card">
-            <div class="portal-card-body" style="padding:0;overflow:auto;">
+        <div class="fc-card">
+            <div class="fc-card__body" style="padding:0;overflow:auto;">
                 <table class="portal-table">
                     <thead>
                         <tr><th>Code</th><th>Name</th><th>Regulator</th><th>Sheets</th><th>Version</th><th>Status</th><th>Tenants</th><th style="text-align:right;">Actions</th></tr>
@@ -129,11 +129,11 @@
                                 <td><code>@row.ModuleCode</code></td>
                                 <td style="font-weight:500;">@row.ModuleName</td>
                                 <td>@row.RegulatorCode</td>
-                                <td><span class="portal-badge portal-badge-neutral">@row.SheetCount</span></td>
+                                <td><span class="fc-badge fc-badge--neutral">@row.SheetCount</span></td>
                                 <td>
                                     @if (row.CurrentVersion is not null)
                                     {
-                                        <span class="portal-badge portal-badge-success">@row.CurrentVersion</span>
+                                        <span class="fc-badge fc-badge--success">@row.CurrentVersion</span>
                                     }
                                     else
                                     {
@@ -143,16 +143,16 @@
                                 <td>
                                     @if (row.IsActive)
                                     {
-                                        <span class="portal-badge portal-badge-success">Active</span>
+                                        <span class="fc-badge fc-badge--success">Active</span>
                                     }
                                     else
                                     {
-                                        <span class="portal-badge portal-badge-danger">Inactive</span>
+                                        <span class="fc-badge fc-badge--danger">Inactive</span>
                                     }
                                 </td>
-                                <td><span class="portal-badge portal-badge-neutral">@row.ActiveTenants</span></td>
+                                <td><span class="fc-badge fc-badge--neutral">@row.ActiveTenants</span></td>
                                 <td style="text-align:right;">
-                                    <button class="user-action-btn" @onclick="() => OpenDetail(row.ModuleCode)" type="button" title="View module details">
+                                    <button class="fc-btn fc-btn--ghost" @onclick="() => OpenDetail(row.ModuleCode)" type="button" title="View module details">
                                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
                                         View
                                     </button>

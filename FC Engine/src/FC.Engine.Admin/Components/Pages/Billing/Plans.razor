@@ -34,19 +34,19 @@
 
         @if (!_loading && _plans.Any())
         {
-            <div class="admin-summary-chips">
-                <span class="admin-chip">
-                    <span class="admin-chip-dot admin-chip-dot-active" aria-hidden="true"></span>
-                    <span class="admin-chip-count">@_plans.Count(p => p.IsActive)</span> Active Plans
+            <div class="fc-chip-group">
+                <span class="fc-chip">
+                    <span class="fc-chip__dot fc-chip__dot--active" aria-hidden="true"></span>
+                    <span class="fc-chip__count">@_plans.Count(p => p.IsActive)</span> Active Plans
                 </span>
-                <span class="admin-chip">
-                    <span class="admin-chip-count">@FormatCurrency(_plans.Any() ? _plans.Average(p => p.BasePriceMonthly) : 0)</span> Avg Monthly Price
+                <span class="fc-chip">
+                    <span class="fc-chip__count">@FormatCurrency(_plans.Any() ? _plans.Average(p => p.BasePriceMonthly) : 0)</span> Avg Monthly Price
                 </span>
-                <span class="admin-chip">
-                    <span class="admin-chip-count">@FormatCurrency(_plans.Any() ? _plans.Max(p => p.BasePriceMonthly) : 0)</span> Highest Price
+                <span class="fc-chip">
+                    <span class="fc-chip__count">@FormatCurrency(_plans.Any() ? _plans.Max(p => p.BasePriceMonthly) : 0)</span> Highest Price
                 </span>
-                <span class="admin-chip">
-                    <span class="admin-chip-count">@_plans.Sum(p => CountFeatures(p.Features))</span> Feature Flags
+                <span class="fc-chip">
+                    <span class="fc-chip__count">@_plans.Sum(p => CountFeatures(p.Features))</span> Feature Flags
                 </span>
             </div>
         }
@@ -70,8 +70,8 @@
     <!-- Content -->
     @if (_loading)
     {
-        <div class="portal-card">
-            <div class="portal-card-body" style="padding:0;overflow:auto;">
+        <div class="fc-card">
+            <div class="fc-card__body" style="padding:0;overflow:auto;">
                 <table class="portal-table">
                     <thead>
                         <tr>
@@ -130,8 +130,8 @@
     }
     else
     {
-        <div class="portal-card">
-            <div class="portal-card-body" style="padding:0;overflow:auto;">
+        <div class="fc-card">
+            <div class="fc-card__body" style="padding:0;overflow:auto;">
                 <table class="portal-table">
                     <thead>
                         <tr>
@@ -161,19 +161,19 @@
                                     <div style="font-size:var(--text-caption);">Users: @plan.MaxUsersPerEntity</div>
                                     <div style="font-size:var(--text-caption);">Entities: @plan.MaxEntities</div>
                                 </td>
-                                <td><span class="portal-badge portal-badge-neutral">@CountFeatures(plan.Features)</span></td>
+                                <td><span class="fc-badge fc-badge--neutral">@CountFeatures(plan.Features)</span></td>
                                 <td>
                                     @if (plan.IsActive)
                                     {
-                                        <span class="portal-badge portal-badge-success">Active</span>
+                                        <span class="fc-badge fc-badge--success">Active</span>
                                     }
                                     else
                                     {
-                                        <span class="portal-badge portal-badge-danger">Inactive</span>
+                                        <span class="fc-badge fc-badge--danger">Inactive</span>
                                     }
                                 </td>
                                 <td style="text-align:right;">
-                                    <button class="user-action-btn" @onclick="() => BeginEdit(plan)" type="button" title="Edit plan">
+                                    <button class="fc-btn fc-btn--ghost" @onclick="() => BeginEdit(plan)" type="button" title="Edit plan">
                                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                                         Edit
                                     </button>
@@ -266,8 +266,8 @@
         }
     </ChildContent>
     <FooterContent>
-        <button class="admin-btn-outline" @onclick="CancelEdit" type="button">Cancel</button>
-        <button class="admin-btn-primary" @onclick="SaveEdit" disabled="@_saving" type="button">
+        <button class="fc-btn fc-btn--outline" @onclick="CancelEdit" type="button">Cancel</button>
+        <button class="fc-btn fc-btn--primary" @onclick="SaveEdit" disabled="@_saving" type="button">
             @if (_saving)
             {
                 <span class="spinner" style="width:16px;height:16px;"></span>

@@ -31,12 +31,12 @@
 
         @if (_data is not null)
         {
-            <div class="admin-summary-chips">
-                <span class="admin-chip"><span class="admin-chip-count">@_data.Items.Count</span> Modules</span>
-                <span class="admin-chip"><span class="admin-chip-count">@_data.Items.Sum(i => i.TenantCount)</span> Tenant Deployments</span>
-                <span class="admin-chip"><span class="admin-chip-count">@_data.Items.Sum(i => i.ReturnsSubmitted)</span> Returns Filed</span>
-                <span class="admin-chip">
-                    <span class="admin-chip-dot @(_data.Items.Any(i => i.Heat == "red") ? "admin-chip-dot-inactive" : "admin-chip-dot-active")" aria-hidden="true"></span>
+            <div class="fc-chip-group">
+                <span class="fc-chip"><span class="fc-chip__count">@_data.Items.Count</span> Modules</span>
+                <span class="fc-chip"><span class="fc-chip__count">@_data.Items.Sum(i => i.TenantCount)</span> Tenant Deployments</span>
+                <span class="fc-chip"><span class="fc-chip__count">@_data.Items.Sum(i => i.ReturnsSubmitted)</span> Returns Filed</span>
+                <span class="fc-chip">
+                    <span class="fc-chip__dot @(_data.Items.Any(i => i.Heat == "red") ? "fc-chip__dot--inactive" : "fc-chip__dot--active")" aria-hidden="true"></span>
                     @(_data.Items.Count(i => i.Heat == "red")) Hot Modules
                 </span>
             </div>
@@ -46,8 +46,8 @@
     <!-- Content -->
     @if (_loading)
     {
-        <div class="portal-card" style="margin-bottom:1rem;">
-            <div class="portal-card-body" style="padding:0;overflow:auto;">
+        <div class="fc-card" style="margin-bottom:1rem;">
+            <div class="fc-card__body" style="padding:0;overflow:auto;">
                 <table class="portal-table">
                     <thead><tr><th>Module</th><th>Tenants</th><th>Active Users</th><th>Returns</th><th>Error Rate</th><th>Heat</th><th></th></tr></thead>
                     <tbody>
@@ -71,9 +71,9 @@
     else if (_data is not null)
     {
         <!-- Adoption Matrix -->
-        <div class="portal-card" style="margin-bottom:1rem;">
-            <div class="portal-card-header"><h2 class="portal-card-title">Adoption Matrix</h2></div>
-            <div class="portal-card-body" style="padding:0;overflow:auto;">
+        <div class="fc-card" style="margin-bottom:1rem;">
+            <div class="fc-card__header"><h2 class="fc-card__title">Adoption Matrix</h2></div>
+            <div class="fc-card__body" style="padding:0;overflow:auto;">
                 <table class="portal-table">
                     <thead>
                         <tr>
@@ -94,19 +94,19 @@
                                     <div style="font-weight:600;">@row.ModuleName</div>
                                     <small style="color:#64748b;">@row.ModuleCode</small>
                                 </td>
-                                <td><span class="portal-badge portal-badge-neutral">@row.TenantCount</span></td>
+                                <td><span class="fc-badge fc-badge--neutral">@row.TenantCount</span></td>
                                 <td>@row.ActiveUsers</td>
                                 <td>@row.ReturnsSubmitted</td>
                                 <td>
-                                    <span class="portal-badge @(row.ValidationErrorRate > 10 ? "portal-badge-danger" : row.ValidationErrorRate > 5 ? "portal-badge-warning" : "portal-badge-success")">
+                                    <span class="fc-badge @(row.ValidationErrorRate > 10 ? "fc-badge--danger" : row.ValidationErrorRate > 5 ? "fc-badge--warning" : "fc-badge--success")">
                                         @row.ValidationErrorRate.ToString("0.##")%
                                     </span>
                                 </td>
                                 <td>
-                                    <span class="portal-badge @HeatBadge(row.Heat)" style="text-transform:capitalize;">@row.Heat</span>
+                                    <span class="fc-badge @HeatBadge(row.Heat)" style="text-transform:capitalize;">@row.Heat</span>
                                 </td>
                                 <td style="text-align:right;">
-                                    <button class="user-action-btn @(_selected?.ModuleId == row.ModuleId ? "user-action-btn-active" : "")" @onclick="() => SelectModule(row.ModuleId)" type="button" title="Drilldown">
+                                    <button class="fc-btn fc-btn--ghost @(_selected?.ModuleId == row.ModuleId ? "fc-btn--primary" : "")" @onclick="() => SelectModule(row.ModuleId)" type="button" title="Drilldown">
                                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg>
                                         Drilldown
                                     </button>
@@ -119,19 +119,19 @@
         </div>
 
         <!-- Chart -->
-        <div class="portal-card" style="margin-bottom:1rem;">
-            <div class="portal-card-header"><h2 class="portal-card-title">Module Filing Volumes</h2></div>
-            <div class="portal-card-body" style="height:320px;"><canvas id="moduleVolumeChart"></canvas></div>
+        <div class="fc-card" style="margin-bottom:1rem;">
+            <div class="fc-card__header"><h2 class="fc-card__title">Module Filing Volumes</h2></div>
+            <div class="fc-card__body" style="height:320px;"><canvas id="moduleVolumeChart"></canvas></div>
         </div>
 
         <!-- Hotspot Drilldown -->
         @if (_selected is not null)
         {
-            <div class="portal-card">
-                <div class="portal-card-header">
-                    <h2 class="portal-card-title">Error Hotspots: @_selected.ModuleName (@_selected.ModuleCode)</h2>
+            <div class="fc-card">
+                <div class="fc-card__header">
+                    <h2 class="fc-card__title">Error Hotspots: @_selected.ModuleName (@_selected.ModuleCode)</h2>
                 </div>
-                <div class="portal-card-body" style="padding:0;overflow:auto;">
+                <div class="fc-card__body" style="padding:0;overflow:auto;">
                     @if (_selected.Hotspots.Count == 0)
                     {
                         <div style="padding:2rem;text-align:center;color:#94a3b8;">No validation hotspots found for this module.</div>
@@ -146,7 +146,7 @@
                                     <tr>
                                         <td><code>@hotspot.RuleId</code></td>
                                         <td>@hotspot.Field</td>
-                                        <td><span class="portal-badge portal-badge-danger">@hotspot.Count</span></td>
+                                        <td><span class="fc-badge fc-badge--danger">@hotspot.Count</span></td>
                                     </tr>
                                 }
                             </tbody>
@@ -193,9 +193,9 @@
 
     private static string HeatBadge(string heat) => heat.ToLowerInvariant() switch
     {
-        "red" => "portal-badge-danger",
-        "amber" => "portal-badge-warning",
-        _ => "portal-badge-success"
+        "red" => "fc-badge--danger",
+        "amber" => "fc-badge--warning",
+        _ => "fc-badge--success"
     };
 
     private static TrendData BuildVolumeChart(ModuleAnalyticsData data) => new()

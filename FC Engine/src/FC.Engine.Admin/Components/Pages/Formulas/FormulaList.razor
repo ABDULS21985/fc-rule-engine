@@ -51,7 +51,7 @@
             <div class="list-toolbar-actions">
                 <AuthorizeView Roles="Admin,Approver">
                     <Authorized Context="addAuth">
-                        <button class="btn-gold" @onclick="ShowAddFormula">
+                        <button class="fc-btn fc-btn--gold" @onclick="ShowAddFormula">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
                             New Formula
                         </button>
@@ -147,13 +147,13 @@
                 <div class="list-form-actions">
                     @if (_editFormulaId.HasValue)
                     {
-                        <button class="btn btn-primary btn-sm" @onclick="UpdateFormula">Update</button>
+                        <button class="fc-btn fc-btn--primary fc-btn--sm" @onclick="UpdateFormula">Update</button>
                     }
                     else
                     {
-                        <button class="btn btn-primary btn-sm" @onclick="AddFormula">Add</button>
+                        <button class="fc-btn fc-btn--primary fc-btn--sm" @onclick="AddFormula">Add</button>
                     }
-                    <button class="btn btn-outline btn-sm" @onclick="CancelForm">Cancel</button>
+                    <button class="fc-btn fc-btn--outline fc-btn--sm" @onclick="CancelForm">Cancel</button>
                 </div>
             </div>
         }
@@ -207,7 +207,7 @@
                                 <td class="list-cell-code">@f.RuleCode</td>
                                 <td class="list-cell-truncate" title="@f.RuleName">@f.RuleName</td>
                                 <td>
-                                    <span class="list-badge list-badge-@f.FormulaType.ToString().ToLowerInvariant()">@f.FormulaType</span>
+                                    <span class="fc-badge @FormulaBadge(f.FormulaType.ToString())">@f.FormulaType</span>
                                 </td>
                                 <td>
                                     <span class="list-cell-code">@f.TargetFieldName</span>
@@ -228,14 +228,14 @@
                                 </td>
                                 <td class="list-cell-muted">@f.ToleranceAmount</td>
                                 <td>
-                                    <span class="list-badge list-badge-@f.Severity.ToString().ToLowerInvariant()">@f.Severity</span>
+                                    <span class="fc-badge @StatusBadge(f.Severity.ToString())">@f.Severity</span>
                                 </td>
                                 <td>
                                     <AuthorizeView Roles="Admin,Approver">
                                         <Authorized Context="editAuth">
                                             <div class="list-row-actions">
-                                                <button class="list-action-btn list-action-btn-edit" @onclick="() => EditFormula(rc, f)">Edit</button>
-                                                <button class="list-action-btn list-action-btn-delete" @onclick="() => DeleteFormula(f)">Delete</button>
+                                                <button class="fc-btn fc-btn--ghost fc-btn--xs" @onclick="() => EditFormula(rc, f)">Edit</button>
+                                                <button class="fc-btn fc-btn--ghost fc-btn--xs fc-btn--danger" @onclick="() => DeleteFormula(f)">Delete</button>
                                             </div>
                                         </Authorized>
                                     </AuthorizeView>
@@ -499,4 +499,27 @@
     {
         return expr.Length <= maxLen ? expr : expr[..maxLen] + "...";
     }
+
+    private static string FormulaBadge(string type) => type.ToLowerInvariant() switch
+    {
+        "sum" => "fc-badge--success",
+        "difference" => "fc-badge--info",
+        "equals" => "fc-badge--purple",
+        "custom" => "fc-badge--warning",
+        "ratio" => "fc-badge--pink",
+        "required" => "fc-badge--danger",
+        _ => "fc-badge--info"
+    };
+
+    private static string StatusBadge(string status) => status.ToLowerInvariant() switch
+    {
+        "published" or "active" or "accepted" => "fc-badge--success",
+        "draft" or "pending" => "fc-badge--warning",
+        "review" or "inreview" => "fc-badge--review",
+        "deprecated" or "retired" or "disabled" or "archived" => "fc-badge--muted",
+        "rejected" or "failed" or "error" => "fc-badge--danger",
+        "processing" or "validating" or "parsing" => "fc-badge--info",
+        "acceptedwithwarnings" or "warnings" or "warning" => "fc-badge--warning",
+        _ => "fc-badge--neutral"
+    };
 }

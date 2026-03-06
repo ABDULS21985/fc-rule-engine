@@ -48,7 +48,7 @@
             <div class="list-toolbar-actions">
                 <AuthorizeView Roles="Admin,Approver">
                     <Authorized Context="addAuth">
-                        <button class="btn-gold" @onclick="ShowAddRule">
+                        <button class="fc-btn fc-btn--gold" @onclick="ShowAddRule">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
                             New Business Rule
                         </button>
@@ -98,8 +98,8 @@
                     </div>
                 </div>
                 <div class="list-form-actions">
-                    <button class="btn btn-primary btn-sm" @onclick="AddRule">Create</button>
-                    <button class="btn btn-outline btn-sm" @onclick="CancelAdd">Cancel</button>
+                    <button class="fc-btn fc-btn--primary fc-btn--sm" @onclick="AddRule">Create</button>
+                    <button class="fc-btn fc-btn--outline fc-btn--sm" @onclick="CancelAdd">Cancel</button>
                 </div>
             </div>
         }
@@ -149,21 +149,21 @@
                                 <td class="list-cell-code">@rule.RuleCode</td>
                                 <td class="list-cell-strong">@rule.RuleName</td>
                                 <td>
-                                    <span class="list-badge list-badge-review">@rule.RuleType</span>
+                                    <span class="fc-badge fc-badge--review">@rule.RuleType</span>
                                 </td>
                                 <td class="list-cell-code list-cell-truncate" title="@rule.Expression">@(rule.Expression ?? "—")</td>
                                 <td class="list-cell-muted list-cell-truncate" title="@rule.AppliesToTemplates">@(rule.AppliesToTemplates ?? "All")</td>
                                 <td>
-                                    <span class="list-badge list-badge-@rule.Severity.ToString().ToLowerInvariant()">@rule.Severity</span>
+                                    <span class="fc-badge @StatusBadge(rule.Severity.ToString())">@rule.Severity</span>
                                 </td>
                                 <td>
                                     @if (rule.IsActive)
                                     {
-                                        <span class="list-badge list-badge-active">Active</span>
+                                        <span class="fc-badge fc-badge--success">Active</span>
                                     }
                                     else
                                     {
-                                        <span class="list-badge list-badge-disabled">Disabled</span>
+                                        <span class="fc-badge fc-badge--muted">Disabled</span>
                                     }
                                 </td>
                             </tr>
@@ -293,6 +293,18 @@
 
     private void ShowAddRule() => _showAddForm = true;
     private void CancelAdd() => _showAddForm = false;
+
+    private static string StatusBadge(string status) => status.ToLowerInvariant() switch
+    {
+        "published" or "active" or "accepted" => "fc-badge--success",
+        "draft" or "pending" => "fc-badge--warning",
+        "review" or "inreview" => "fc-badge--review",
+        "deprecated" or "retired" or "disabled" or "archived" => "fc-badge--muted",
+        "rejected" or "failed" or "error" => "fc-badge--danger",
+        "processing" or "validating" or "parsing" => "fc-badge--info",
+        "acceptedwithwarnings" or "warnings" or "warning" => "fc-badge--warning",
+        _ => "fc-badge--neutral"
+    };
 
     private async Task AddRule()
     {

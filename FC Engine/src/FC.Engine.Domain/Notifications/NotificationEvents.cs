@@ -39,6 +39,12 @@ public static class NotificationEvents
     // Reports (RG-18)
     public const string ScheduledReportReady = "report.scheduled_ready";
 
+    // Webhooks (RG-30)
+    public const string ValidationCompleted = "validation.completed";
+    public const string ExportCompleted = "export.completed";
+    public const string UserProvisioned = "user.provisioned";
+    public const string WebhookTest = "webhook.test";
+
     public static readonly IReadOnlyList<string> All = new[]
     {
         ReturnCreated,
@@ -65,7 +71,11 @@ public static class NotificationEvents
         DataFlowCompleted,
         BreachDetected,
         BreachEscalation,
-        ScheduledReportReady
+        ScheduledReportReady,
+        ValidationCompleted,
+        ExportCompleted,
+        UserProvisioned,
+        WebhookTest
     };
 }
 

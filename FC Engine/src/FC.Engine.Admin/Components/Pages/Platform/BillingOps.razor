@@ -20,33 +20,33 @@
 
 @if (!string.IsNullOrWhiteSpace(_message))
 {
-    <div class="portal-alert portal-alert-success">@_message</div>
+    <div class="fc-alert fc-alert--inline fc-alert--success">@_message</div>
 }
 @if (!string.IsNullOrWhiteSpace(_error))
 {
-    <div class="portal-alert portal-alert-danger">@_error</div>
+    <div class="fc-alert fc-alert--inline fc-alert--error">@_error</div>
 }
 
 @if (_loading)
 {
-    <div class="portal-card"><div class="portal-card-body">Loading billing operations...</div></div>
+    <div class="fc-card"><div class="fc-card__body">Loading billing operations...</div></div>
 }
 else if (_data is not null)
 {
     <div class="portal-grid portal-grid-4" style="margin-bottom:1rem;">
-        <div class="portal-card"><div class="portal-card-body"><div class="portal-stat-label">MRR</div><div class="portal-stat-value">NGN @_data.Mrr.ToString("N2")</div></div></div>
-        <div class="portal-card"><div class="portal-card-body"><div class="portal-stat-label">ARR</div><div class="portal-stat-value">NGN @_data.Arr.ToString("N2")</div></div></div>
-        <div class="portal-card"><div class="portal-card-body"><div class="portal-stat-label">ARPU</div><div class="portal-stat-value">NGN @_data.Arpu.ToString("N2")</div></div></div>
-        <div class="portal-card"><div class="portal-card-body"><div class="portal-stat-label">Churn</div><div class="portal-stat-value">@_data.ChurnRatePercent.ToString("0.##")%</div><div style="color:#64748b; font-size:0.85rem;">Trailing 3M: @_data.ChurnRateTrailing3MonthsPercent.ToString("0.##")%</div></div></div>
+        <div class="fc-card"><div class="fc-card__body"><div class="portal-stat-label">MRR</div><div class="portal-stat-value">NGN @_data.Mrr.ToString("N2")</div></div></div>
+        <div class="fc-card"><div class="fc-card__body"><div class="portal-stat-label">ARR</div><div class="portal-stat-value">NGN @_data.Arr.ToString("N2")</div></div></div>
+        <div class="fc-card"><div class="fc-card__body"><div class="portal-stat-label">ARPU</div><div class="portal-stat-value">NGN @_data.Arpu.ToString("N2")</div></div></div>
+        <div class="fc-card"><div class="fc-card__body"><div class="portal-stat-label">Churn</div><div class="portal-stat-value">@_data.ChurnRatePercent.ToString("0.##")%</div><div style="color:#64748b; font-size:0.85rem;">Trailing 3M: @_data.ChurnRateTrailing3MonthsPercent.ToString("0.##")%</div></div></div>
     </div>
 
     <div class="portal-grid portal-grid-2" style="margin-bottom:1rem;">
-        <div class="portal-card"><div class="portal-card-header"><h2 class="portal-card-title">Revenue by Plan</h2></div><div class="portal-card-body" style="height:320px;"><canvas id="billingByPlanChart"></canvas></div></div>
-        <div class="portal-card"><div class="portal-card-header"><h2 class="portal-card-title">Revenue by Module</h2></div><div class="portal-card-body" style="height:320px;"><canvas id="billingByModuleChart"></canvas></div></div>
+        <div class="fc-card"><div class="fc-card__header"><h2 class="fc-card__title">Revenue by Plan</h2></div><div class="fc-card__body" style="height:320px;"><canvas id="billingByPlanChart"></canvas></div></div>
+        <div class="fc-card"><div class="fc-card__header"><h2 class="fc-card__title">Revenue by Module</h2></div><div class="fc-card__body" style="height:320px;"><canvas id="billingByModuleChart"></canvas></div></div>
     </div>
 
-    <div class="portal-card" style="margin-bottom:1rem;">
-        <div class="portal-card-body" style="display:flex; gap:0.75rem; align-items:end; flex-wrap:wrap;">
+    <div class="fc-card" style="margin-bottom:1rem;">
+        <div class="fc-card__body" style="display:flex; gap:0.75rem; align-items:end; flex-wrap:wrap;">
             <div class="portal-form-row" style="min-width:220px; margin:0;">
                 <label>Invoice Status</label>
                 <select class="portal-input" @bind="_statusFilter">
@@ -57,13 +57,13 @@ else if (_data is not null)
                     }
                 </select>
             </div>
-            <button class="portal-btn portal-btn-outline" @onclick="ApplyFilter">Apply Filter</button>
+            <button class="fc-btn fc-btn--outline" @onclick="ApplyFilter">Apply Filter</button>
         </div>
     </div>
 
-    <div class="portal-card">
-        <div class="portal-card-header"><h2 class="portal-card-title">Invoice Management</h2></div>
-        <div class="portal-card-body" style="padding:0; overflow:auto;">
+    <div class="fc-card">
+        <div class="fc-card__header"><h2 class="fc-card__title">Invoice Management</h2></div>
+        <div class="fc-card__body" style="padding:0; overflow:auto;">
             <table class="portal-table">
                 <thead>
                     <tr>
@@ -88,11 +88,11 @@ else if (_data is not null)
                                 <div style="display:flex; gap:0.35rem; flex-wrap:wrap;">
                                     @if (invoice.Status != InvoiceStatus.Paid)
                                     {
-                                        <button class="portal-btn portal-btn-xs portal-btn-primary" @onclick="() => RecordPayment(invoice.InvoiceId)">Record Payment</button>
+                                        <button class="fc-btn fc-btn--primary fc-btn--xs" @onclick="() => RecordPayment(invoice.InvoiceId)">Record Payment</button>
                                     }
                                     @if (invoice.Status == InvoiceStatus.Issued || invoice.Status == InvoiceStatus.Overdue)
                                     {
-                                        <button class="portal-btn portal-btn-xs portal-btn-outline" @onclick="() => SendDunning(invoice.InvoiceId)">Send Dunning</button>
+                                        <button class="fc-btn fc-btn--outline fc-btn--xs" @onclick="() => SendDunning(invoice.InvoiceId)">Send Dunning</button>
                                     }
                                 </div>
                             </td>
