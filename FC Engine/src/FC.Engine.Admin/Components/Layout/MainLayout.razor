@@ -9,7 +9,8 @@
 @inject ITenantContext TenantContext
 @inject MetadataDbContext Db
 @inject CommandPaletteService PaletteService
-@implements IDisposable
+@inject SidebarStateService SidebarState
+@implements IAsyncDisposable
 
 <TenantThemeProvider />
 
@@ -21,7 +22,7 @@
     <div class="global-progress-bar"></div>
 </div>
 
-<div class="fc-shell @(_sidebarOpen ? "fc-sidebar-open" : "")">
+<div class="fc-shell @(_sidebarOpen ? "fc-sidebar-open" : "") @(SidebarState.IsCollapsed ? "fc-sidebar-collapsed" : "")">
     <!-- Sidebar -->
     <aside class="fc-shell__sidebar" aria-label="Main navigation" @onkeydown="HandleSidebarKeyDown">
         <div class="fc-sidebar__brand">
@@ -30,6 +31,23 @@
                 <span class="fc-sidebar-brand-name">@_branding.CompanyName</span>
                 <span class="fc-sidebar-brand-sub">Admin Portal</span>
             </div>
+            <button class="fc-sidebar__collapse-btn"
+                    @onclick="ToggleSidebarCollapse"
+                    aria-label="@(SidebarState.IsCollapsed ? "Expand sidebar" : "Collapse sidebar")"
+                    title="@(SidebarState.IsCollapsed ? "Expand sidebar" : "Collapse sidebar")">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14" aria-hidden="true">
+                    @if (SidebarState.IsCollapsed)
+                    {
+                        <polyline points="13 17 18 12 13 7"/>
+                        <polyline points="6 17 11 12 6 7"/>
+                    }
+                    else
+                    {
+                        <polyline points="11 17 6 12 11 7"/>
+                        <polyline points="18 17 13 12 18 7"/>
+                    }
+                </svg>
+            </button>
         </div>
 
         <NavMenu />
@@ -163,6 +181,7 @@
     protected override void OnInitialized()
     {
         Navigation.LocationChanged += OnLocationChanged;
+        SidebarState.OnStateChanged += OnSidebarStateChanged;
         UpdatePageName(Navigation.Uri);
     }
 
@@ -250,6 +269,9 @@
     private void ToggleSidebar() => _sidebarOpen = !_sidebarOpen;
     private void CloseSidebar() => _sidebarOpen = false;
     private void OpenCommandPalette() => PaletteService.Open();
+    private Task ToggleSidebarCollapse() => SidebarState.ToggleCollapsedAsync();
+
+    private void OnSidebarStateChanged() => InvokeAsync(StateHasChanged);
 
     private void HandleSidebarKeyDown(KeyboardEventArgs e)
     {
@@ -266,8 +288,10 @@
         return name[..Math.Min(2, name.Length)].ToUpperInvariant();
     }
 
-    public void Dispose()
+    public ValueTask DisposeAsync()
     {
-        Navigation.LocationChanged -= OnLocationChanged;
+        Navigation.LocationChanged  -= OnLocationChanged;
+        SidebarState.OnStateChanged -= OnSidebarStateChanged;
+        return ValueTask.CompletedTask;
     }
 }
