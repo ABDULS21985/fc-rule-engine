@@ -10,41 +10,41 @@
 @inject ITemplateMetadataCache Cache
 @inject ToastService Toast
 
-<div class="list-page">
-    <div class="list-page-header">
-        <div class="list-page-header-text">
+<div class="fc-list-page">
+    <div class="fc-list-page-header">
+        <div class="fc-list-page-header-text">
             <h1>
                 Cross-Sheet Validation Rules
                 @if (!_loading)
                 {
-                    <span class="list-count-chip">@_rules.Count</span>
+                    <span class="fc-list-count-chip">@_rules.Count</span>
                 }
             </h1>
             <p>Rules that validate relationships between different return templates</p>
         </div>
     </div>
 
-    <div class="list-card">
-        <div class="list-toolbar">
-            <div class="list-toolbar-filters">
-                <div class="list-search-wrap">
-                    <svg class="list-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
-                    <input class="list-search-input" placeholder="Search by rule code, name, or description..." @bind="_search" @bind:event="oninput" />
+    <div class="fc-list-card">
+        <div class="fc-list-toolbar">
+            <div class="fc-list-toolbar-filters">
+                <div class="fc-list-search-wrap">
+                    <svg class="fc-list-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+                    <input class="fc-list-search-input" placeholder="Search by rule code, name, or description..." @bind="_search" @bind:event="oninput" />
                 </div>
-                <select class="list-filter-select" @bind="_severityFilter">
+                <select class="fc-list-filter-select" @bind="_severityFilter">
                     <option value="">All Severities</option>
                     @foreach (var s in Enum.GetValues<ValidationSeverity>())
                     {
                         <option value="@s">@s</option>
                     }
                 </select>
-                <select class="list-filter-select" @bind="_statusFilter">
+                <select class="fc-list-filter-select" @bind="_statusFilter">
                     <option value="">All Statuses</option>
                     <option value="Active">Active</option>
                     <option value="Inactive">Inactive</option>
                 </select>
             </div>
-            <div class="list-toolbar-actions">
+            <div class="fc-list-toolbar-actions">
                 <AuthorizeView Roles="Admin">
                     <Authorized Context="addAuth">
                         <button class="fc-btn fc-btn--gold" @onclick="ShowAddRule">
@@ -58,7 +58,7 @@
 
         @if (_showAddForm)
         {
-            <div class="list-inline-form">
+            <div class="fc-list-inline-form">
                 <h3>Add Cross-Sheet Rule</h3>
                 <div class="grid-2">
                     <div class="form-group">
@@ -131,7 +131,7 @@
                         <input class="form-control" @bind="_addErrorMessage" placeholder="e.g. Balance sheet does not balance" />
                     </div>
                 </div>
-                <div class="list-form-actions">
+                <div class="fc-list-form-actions">
                     <button class="fc-btn fc-btn--primary fc-btn--sm" @onclick="AddRule">Create Rule</button>
                     <button class="fc-btn fc-btn--outline fc-btn--sm" @onclick="CancelAdd">Cancel</button>
                 </div>
@@ -140,31 +140,31 @@
 
         @if (_loading)
         {
-            <div class="list-skeleton">
+            <div class="fc-list-skeleton">
                 @for (var i = 0; i < 5; i++)
                 {
-                    <div class="list-skeleton-row">
-                        <div class="list-skeleton-cell" style="width:80px;"></div>
-                        <div class="list-skeleton-cell" style="flex:1;"></div>
-                        <div class="list-skeleton-cell" style="width:200px;"></div>
-                        <div class="list-skeleton-cell" style="width:120px;"></div>
-                        <div class="list-skeleton-cell" style="width:60px;"></div>
+                    <div class="fc-list-skeleton-row">
+                        <div class="fc-list-skeleton-cell" style="width:80px;"></div>
+                        <div class="fc-list-skeleton-cell" style="flex:1;"></div>
+                        <div class="fc-list-skeleton-cell" style="width:200px;"></div>
+                        <div class="fc-list-skeleton-cell" style="width:120px;"></div>
+                        <div class="fc-list-skeleton-cell" style="width:60px;"></div>
                     </div>
                 }
             </div>
         }
         else if (!FilteredRules.Any())
         {
-            <div class="list-empty">
-                <svg class="list-empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M16 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V8Z"/><path d="M15 3v4a2 2 0 0 0 2 2h4"/></svg>
-                <h3 class="list-empty-title">No cross-sheet rules found</h3>
-                <p class="list-empty-text">No rules match your current filters. Try adjusting your search or create a new cross-sheet validation rule.</p>
+            <div class="fc-list-empty">
+                <svg class="fc-list-empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M16 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V8Z"/><path d="M15 3v4a2 2 0 0 0 2 2h4"/></svg>
+                <h3 class="fc-list-empty-title">No cross-sheet rules found</h3>
+                <p class="fc-list-empty-text">No rules match your current filters. Try adjusting your search or create a new cross-sheet validation rule.</p>
             </div>
         }
         else
         {
-            <div class="list-table-wrap">
-                <table class="list-table" role="table">
+            <div class="fc-table-wrap">
+                <table class="fc-table" role="table">
                     <thead>
                         <tr>
                             <th scope="col">Rule Code</th>
@@ -180,19 +180,19 @@
                         @foreach (var rule in FilteredRules)
                         {
                             <tr>
-                                <td class="list-cell-code">
-                                    <a class="list-cell-link" href="/cross-sheet-rules/@rule.Id">@rule.RuleCode</a>
+                                <td class="fc-list-cell-code">
+                                    <a class="fc-list-cell-link" href="/cross-sheet-rules/@rule.Id">@rule.RuleCode</a>
                                 </td>
-                                <td class="list-cell-strong">
-                                    <a class="list-cell-link" style="color:inherit;font-weight:inherit;" href="/cross-sheet-rules/@rule.Id">@rule.RuleName</a>
+                                <td class="fc-list-cell-strong">
+                                    <a class="fc-list-cell-link" style="color:inherit;font-weight:inherit;" href="/cross-sheet-rules/@rule.Id">@rule.RuleName</a>
                                 </td>
-                                <td class="list-cell-truncate list-cell-muted" title="@rule.Description">@(rule.Description ?? "—")</td>
+                                <td class="fc-list-cell-truncate fc-list-cell-muted" title="@rule.Description">@(rule.Description ?? "—")</td>
                                 <td>
                                     @foreach (var op in rule.Operands)
                                     {
                                         <div style="font-size:var(--text-body-sm);margin-bottom:2px;">
-                                            <span class="list-cell-code">@op.OperandAlias</span>
-                                            <span class="list-cell-muted"> = @op.TemplateReturnCode.@op.FieldName</span>
+                                            <span class="fc-list-cell-code">@op.OperandAlias</span>
+                                            <span class="fc-list-cell-muted"> = @op.TemplateReturnCode.@op.FieldName</span>
                                             @if (!string.IsNullOrEmpty(op.AggregateFunction))
                                             {
                                                 <span class="fc-badge fc-badge--info" style="font-size:10px;padding:1px 6px;margin-left:4px;">@op.AggregateFunction</span>
@@ -200,7 +200,7 @@
                                         </div>
                                     }
                                 </td>
-                                <td class="list-cell-code">@rule.Expression?.Expression</td>
+                                <td class="fc-list-cell-code">@rule.Expression?.Expression</td>
                                 <td>
                                     <span class="fc-badge @StatusBadge(rule.Severity.ToString())">@rule.Severity</span>
                                 </td>
@@ -220,8 +220,8 @@
                 </table>
             </div>
 
-            <div class="list-footer">
-                <div class="list-footer-summary">
+            <div class="fc-list-footer">
+                <div class="fc-list-footer-summary">
                     Showing <strong>@FilteredRules.Count()</strong> of <strong>@_rules.Count</strong> cross-sheet rules
                     &mdash; <strong>@_rules.Count(r => r.IsActive)</strong> active
                 </div>

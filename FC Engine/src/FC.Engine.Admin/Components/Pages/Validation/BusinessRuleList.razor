@@ -9,35 +9,35 @@
 @inject FormulaService FormulaService
 @inject ToastService Toast
 
-<div class="list-page">
-    <div class="list-page-header">
-        <div class="list-page-header-text">
+<div class="fc-list-page">
+    <div class="fc-list-page-header">
+        <div class="fc-list-page-header-text">
             <h1>
                 Business Rules
                 @if (!_loading)
                 {
-                    <span class="list-count-chip">@_rules.Count</span>
+                    <span class="fc-list-count-chip">@_rules.Count</span>
                 }
             </h1>
             <p>Expression-based validation rules with template applicability</p>
         </div>
     </div>
 
-    <div class="list-card">
-        <div class="list-toolbar">
-            <div class="list-toolbar-filters">
-                <div class="list-search-wrap">
-                    <svg class="list-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
-                    <input class="list-search-input" placeholder="Search by rule code or name..." @bind="_search" @bind:event="oninput" @bind:after="ResetPage" />
+    <div class="fc-list-card">
+        <div class="fc-list-toolbar">
+            <div class="fc-list-toolbar-filters">
+                <div class="fc-list-search-wrap">
+                    <svg class="fc-list-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+                    <input class="fc-list-search-input" placeholder="Search by rule code or name..." @bind="_search" @bind:event="oninput" @bind:after="ResetPage" />
                 </div>
-                <select class="list-filter-select" @bind="_typeFilter" @bind:after="ResetPage">
+                <select class="fc-list-filter-select" @bind="_typeFilter" @bind:after="ResetPage">
                     <option value="">All Types</option>
                     <option value="Completeness">Completeness</option>
                     <option value="DateCheck">DateCheck</option>
                     <option value="ThresholdCheck">ThresholdCheck</option>
                     <option value="Custom">Custom</option>
                 </select>
-                <select class="list-filter-select" @bind="_severityFilter" @bind:after="ResetPage">
+                <select class="fc-list-filter-select" @bind="_severityFilter" @bind:after="ResetPage">
                     <option value="">All Severities</option>
                     @foreach (var s in Enum.GetValues<ValidationSeverity>())
                     {
@@ -45,7 +45,7 @@
                     }
                 </select>
             </div>
-            <div class="list-toolbar-actions">
+            <div class="fc-list-toolbar-actions">
                 <AuthorizeView Roles="Admin,Approver">
                     <Authorized Context="addAuth">
                         <button class="fc-btn fc-btn--gold" @onclick="ShowAddRule">
@@ -59,7 +59,7 @@
 
         @if (_showAddForm)
         {
-            <div class="list-inline-form">
+            <div class="fc-list-inline-form">
                 <h3>Add Business Rule</h3>
                 <div class="grid-2">
                     <div class="form-group">
@@ -97,7 +97,7 @@
                         <input class="form-control" @bind="_addAppliesToTemplates" placeholder="e.g. MFCR 300,MFCR 301" />
                     </div>
                 </div>
-                <div class="list-form-actions">
+                <div class="fc-list-form-actions">
                     <button class="fc-btn fc-btn--primary fc-btn--sm" @onclick="AddRule">Create</button>
                     <button class="fc-btn fc-btn--outline fc-btn--sm" @onclick="CancelAdd">Cancel</button>
                 </div>
@@ -106,31 +106,31 @@
 
         @if (_loading)
         {
-            <div class="list-skeleton">
+            <div class="fc-list-skeleton">
                 @for (var i = 0; i < 5; i++)
                 {
-                    <div class="list-skeleton-row">
-                        <div class="list-skeleton-cell" style="width:80px;"></div>
-                        <div class="list-skeleton-cell" style="flex:1;"></div>
-                        <div class="list-skeleton-cell" style="width:80px;"></div>
-                        <div class="list-skeleton-cell" style="width:120px;"></div>
-                        <div class="list-skeleton-cell" style="width:60px;"></div>
+                    <div class="fc-list-skeleton-row">
+                        <div class="fc-list-skeleton-cell" style="width:80px;"></div>
+                        <div class="fc-list-skeleton-cell" style="flex:1;"></div>
+                        <div class="fc-list-skeleton-cell" style="width:80px;"></div>
+                        <div class="fc-list-skeleton-cell" style="width:120px;"></div>
+                        <div class="fc-list-skeleton-cell" style="width:60px;"></div>
                     </div>
                 }
             </div>
         }
         else if (!FilteredRules.Any())
         {
-            <div class="list-empty">
-                <svg class="list-empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 12h6"/><path d="M12 9v6"/><circle cx="12" cy="12" r="10"/></svg>
-                <h3 class="list-empty-title">No business rules found</h3>
-                <p class="list-empty-text">No rules match your current filters. Try adjusting your search or create a new business rule.</p>
+            <div class="fc-list-empty">
+                <svg class="fc-list-empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 12h6"/><path d="M12 9v6"/><circle cx="12" cy="12" r="10"/></svg>
+                <h3 class="fc-list-empty-title">No business rules found</h3>
+                <p class="fc-list-empty-text">No rules match your current filters. Try adjusting your search or create a new business rule.</p>
             </div>
         }
         else
         {
-            <div class="list-table-wrap">
-                <table class="list-table" role="table">
+            <div class="fc-table-wrap">
+                <table class="fc-table" role="table">
                     <thead>
                         <tr>
                             <th scope="col">Rule Code</th>
@@ -146,13 +146,13 @@
                         @foreach (var rule in PagedRules)
                         {
                             <tr>
-                                <td class="list-cell-code">@rule.RuleCode</td>
-                                <td class="list-cell-strong">@rule.RuleName</td>
+                                <td class="fc-list-cell-code">@rule.RuleCode</td>
+                                <td class="fc-list-cell-strong">@rule.RuleName</td>
                                 <td>
                                     <span class="fc-badge fc-badge--review">@rule.RuleType</span>
                                 </td>
-                                <td class="list-cell-code list-cell-truncate" title="@rule.Expression">@(rule.Expression ?? "—")</td>
-                                <td class="list-cell-muted list-cell-truncate" title="@rule.AppliesToTemplates">@(rule.AppliesToTemplates ?? "All")</td>
+                                <td class="fc-list-cell-code fc-list-cell-truncate" title="@rule.Expression">@(rule.Expression ?? "—")</td>
+                                <td class="fc-list-cell-muted fc-list-cell-truncate" title="@rule.AppliesToTemplates">@(rule.AppliesToTemplates ?? "All")</td>
                                 <td>
                                     <span class="fc-badge @StatusBadge(rule.Severity.ToString())">@rule.Severity</span>
                                 </td>
@@ -172,8 +172,8 @@
                 </table>
             </div>
 
-            <div class="list-footer">
-                <div class="list-footer-summary">
+            <div class="fc-list-footer">
+                <div class="fc-list-footer-summary">
                     Showing <strong>@(_startIndex + 1)–@(_startIndex + PagedRules.Count())</strong> of <strong>@_filteredCount</strong> business rules
                     @if (_filteredCount != _rules.Count)
                     {
@@ -182,31 +182,31 @@
                 </div>
                 @if (TotalPages > 1)
                 {
-                    <div class="list-pagination">
-                        <button class="list-page-btn" disabled="@(_currentPage == 1)" @onclick="() => GoToPage(1)" title="First page">
+                    <div class="fc-list-pagination">
+                        <button class="fc-list-page-btn" disabled="@(_currentPage == 1)" @onclick="() => GoToPage(1)" title="First page">
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="11 17 6 12 11 7"/><polyline points="18 17 13 12 18 7"/></svg>
                         </button>
-                        <button class="list-page-btn" disabled="@(_currentPage == 1)" @onclick="() => GoToPage(_currentPage - 1)" title="Previous page">
+                        <button class="fc-list-page-btn" disabled="@(_currentPage == 1)" @onclick="() => GoToPage(_currentPage - 1)" title="Previous page">
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
                         </button>
                         @foreach (var p in VisiblePages)
                         {
                             @if (p == -1)
                             {
-                                <span class="list-page-btn" style="border:none;cursor:default;">…</span>
+                                <span class="fc-list-page-btn" style="border:none;cursor:default;">…</span>
                             }
                             else
                             {
-                                <button class="list-page-btn @(p == _currentPage ? "list-page-btn-active" : "")" @onclick="() => GoToPage(p)">@p</button>
+                                <button class="fc-list-page-btn @(p == _currentPage ? "fc-list-page-btn-active" : "")" @onclick="() => GoToPage(p)">@p</button>
                             }
                         }
-                        <button class="list-page-btn" disabled="@(_currentPage == TotalPages)" @onclick="() => GoToPage(_currentPage + 1)" title="Next page">
+                        <button class="fc-list-page-btn" disabled="@(_currentPage == TotalPages)" @onclick="() => GoToPage(_currentPage + 1)" title="Next page">
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
                         </button>
-                        <button class="list-page-btn" disabled="@(_currentPage == TotalPages)" @onclick="() => GoToPage(TotalPages)" title="Last page">
+                        <button class="fc-list-page-btn" disabled="@(_currentPage == TotalPages)" @onclick="() => GoToPage(TotalPages)" title="Last page">
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="13 17 18 12 13 7"/><polyline points="6 17 11 12 6 7"/></svg>
                         </button>
-                        <select class="list-filter-select" style="margin-left:8px;min-width:auto;padding:4px 8px;font-size:12px;" @bind="_pageSize" @bind:after="OnPageSizeChanged">
+                        <select class="fc-list-filter-select" style="margin-left:8px;min-width:auto;padding:4px 8px;font-size:12px;" @bind="_pageSize" @bind:after="OnPageSizeChanged">
                             <option value="15">15 / page</option>
                             <option value="25">25 / page</option>
                             <option value="50">50 / page</option>
