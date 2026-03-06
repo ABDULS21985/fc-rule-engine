@@ -10,9 +10,9 @@
 
 <PageTitle>Set Up MFA — FC Engine Admin</PageTitle>
 
-<div class="login-container" style="min-height:auto;">
-    <div class="login-card" style="max-width:620px;">
-        <div class="login-card-body">
+<div class="fc-login-container" style="min-height:auto;">
+    <div class="fc-login-card" style="max-width:620px;">
+        <div class="fc-login-card-body">
             @if (!string.IsNullOrWhiteSpace(_error))
             {
                 <div class="fc-alert fc-alert--inline fc-alert--error">@_error</div>
@@ -20,14 +20,14 @@
 
             @if (_step == 1 && _setupResult is not null)
             {
-                <h2 class="login-title">Set Up Two-Factor Authentication</h2>
-                <p class="login-subtitle">Scan the QR code below with your authenticator app.</p>
+                <h2 class="fc-login-title">Set Up Two-Factor Authentication</h2>
+                <p class="fc-login-subtitle">Scan the QR code below with your authenticator app.</p>
                 <img src="@_setupResult.QrCodeDataUri" alt="MFA QR Code" style="max-width: 220px; margin: 12px 0;" />
                 <p>Manual code: <code>@_setupResult.SecretKey</code></p>
 
-                <div class="floating-field" style="margin-top:16px;">
-                    <input id="verificationCode" class="floating-input" @bind="_verificationCode" maxlength="6" placeholder=" " />
-                    <label for="verificationCode" class="floating-label">Verification code</label>
+                <div class="fc-floating-field" style="margin-top:16px;">
+                    <input id="verificationCode" class="fc-floating-input" @bind="_verificationCode" maxlength="6" placeholder=" " />
+                    <label for="verificationCode" class="fc-floating-label">Verification code</label>
                 </div>
 
                 <button class="fc-btn fc-btn--gold-submit" @onclick="VerifyAndActivate" style="margin-top:12px;">
@@ -36,8 +36,8 @@
             }
             else if (_step == 2)
             {
-                <h2 class="login-title">Save Your Backup Codes</h2>
-                <p class="login-subtitle">Store these safely. Each backup code can be used only once.</p>
+                <h2 class="fc-login-title">Save Your Backup Codes</h2>
+                <p class="fc-login-subtitle">Store these safely. Each backup code can be used only once.</p>
                 <div style="display:grid;grid-template-columns:repeat(2,minmax(120px,1fr));gap:8px;">
                     @foreach (var backup in _backupCodes)
                     {

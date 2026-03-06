@@ -8,25 +8,25 @@
 
 <PageTitle>Tenant Detail</PageTitle>
 
-<div class="admin-page">
+<div class="fc-page">
 
     <!-- Breadcrumb -->
-    <nav class="detail-breadcrumb" aria-label="Breadcrumb">
+    <nav class="fc-breadcrumb" aria-label="Breadcrumb">
         <a href="/">Dashboard</a>
-        <span class="detail-breadcrumb-sep" aria-hidden="true">/</span>
+        <span class="fc-breadcrumb-sep" aria-hidden="true">/</span>
         <a href="/platform/tenants">Tenants</a>
-        <span class="detail-breadcrumb-sep" aria-hidden="true">/</span>
-        <span class="detail-breadcrumb-current">@(_data?.TenantName ?? "Detail")</span>
+        <span class="fc-breadcrumb-sep" aria-hidden="true">/</span>
+        <span class="fc-breadcrumb-current">@(_data?.TenantName ?? "Detail")</span>
     </nav>
 
     @if (_loading)
     {
         <!-- Skeleton Header -->
-        <div class="admin-header">
-            <div class="admin-header-top">
+        <div class="fc-page-header">
+            <div class="fc-page-header-top">
                 <div>
-                    <h1><div class="skel skel-text" style="width:220px;height:28px;"></div></h1>
-                    <p class="admin-header-subtitle"><div class="skel skel-text" style="width:320px;height:16px;"></div></p>
+                    <h1><div class="skel fc-skel-text" style="width:220px;height:28px;"></div></h1>
+                    <p class="fc-page-header-subtitle"><div class="skel fc-skel-text" style="width:320px;height:16px;"></div></p>
                 </div>
                 <div style="display:flex;gap:0.5rem;">
                     <div class="skel" style="width:80px;height:36px;border-radius:6px;"></div>
@@ -36,13 +36,13 @@
             <div class="fc-chip-group">
                 @for (var i = 0; i < 4; i++)
                 {
-                    <span class="fc-chip"><div class="skel skel-text" style="width:80px;height:16px;"></div></span>
+                    <span class="fc-chip"><div class="skel fc-skel-text" style="width:80px;height:16px;"></div></span>
                 }
             </div>
         </div>
 
         <!-- Skeleton Tabs -->
-        <div class="detail-tabs">
+        <div class="fc-tabs">
             @for (var i = 0; i < 7; i++)
             {
                 <div class="skel" style="width:80px;height:32px;border-radius:6px;"></div>
@@ -50,13 +50,13 @@
         </div>
 
         <!-- Skeleton Content Cards -->
-        <div class="portal-grid portal-grid-3">
+        <div class="fc-grid fc-grid-3">
             @for (var i = 0; i < 3; i++)
             {
                 <div class="fc-card">
                     <div class="fc-card__body">
-                        <div class="skel skel-text" style="width:100%;height:14px;margin-bottom:0.75rem;"></div>
-                        <div class="skel skel-text" style="width:70%;height:14px;"></div>
+                        <div class="skel fc-skel-text" style="width:100%;height:14px;margin-bottom:0.75rem;"></div>
+                        <div class="skel fc-skel-text" style="width:70%;height:14px;"></div>
                     </div>
                 </div>
             }
@@ -65,23 +65,23 @@
     else if (_data is null)
     {
         <!-- Empty State -->
-        <div class="admin-empty">
-            <div class="admin-empty-icon">
+        <div class="fc-empty">
+            <div class="fc-empty-icon">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
             </div>
-            <h3 class="admin-empty-title">Tenant not found</h3>
-            <p class="admin-empty-text">The requested tenant could not be located. It may have been removed or the ID is invalid.</p>
+            <h3 class="fc-empty-title">Tenant not found</h3>
+            <p class="fc-empty-text">The requested tenant could not be located. It may have been removed or the ID is invalid.</p>
             <button class="fc-btn fc-btn--outline" @onclick="Back" type="button">Back to Tenants</button>
         </div>
     }
     else
     {
         <!-- Page Header -->
-        <div class="admin-header">
-            <div class="admin-header-top">
+        <div class="fc-page-header">
+            <div class="fc-page-header-top">
                 <div>
                     <h1>@_data.TenantName</h1>
-                    <p class="admin-header-subtitle"><code>@_data.TenantSlug</code> &middot; @_data.CurrentPlanName (@_data.CurrentPlanCode)</p>
+                    <p class="fc-page-header-subtitle"><code>@_data.TenantSlug</code> &middot; @_data.CurrentPlanName (@_data.CurrentPlanCode)</p>
                 </div>
                 <div style="display:flex;gap:0.5rem;">
                     <button class="fc-btn fc-btn--outline" @onclick="Back" type="button">
@@ -114,23 +114,23 @@
         </div>
 
         <!-- Tabs -->
-        <div class="detail-tabs">
-            <button class="detail-tab @(_tab == "overview" ? "detail-tab-active" : "")" @onclick='() => SetTab("overview")'>Overview</button>
-            <button class="detail-tab @(_tab == "subscription" ? "detail-tab-active" : "")" @onclick='() => SetTab("subscription")'>Subscription</button>
-            <button class="detail-tab @(_tab == "users" ? "detail-tab-active" : "")" @onclick='() => SetTab("users")'>Users</button>
-            <button class="detail-tab @(_tab == "entities" ? "detail-tab-active" : "")" @onclick='() => SetTab("entities")'>Entities</button>
-            <button class="detail-tab @(_tab == "filings" ? "detail-tab-active" : "")" @onclick='() => SetTab("filings")'>Filings</button>
-            <button class="detail-tab @(_tab == "audit" ? "detail-tab-active" : "")" @onclick='() => SetTab("audit")'>Audit</button>
-            <button class="detail-tab @(_tab == "support" ? "detail-tab-active" : "")" @onclick='() => SetTab("support")'>Support</button>
+        <div class="fc-tabs">
+            <button class="fc-tab @(_tab == "overview" ? "fc-tab-active" : "")" @onclick='() => SetTab("overview")'>Overview</button>
+            <button class="fc-tab @(_tab == "subscription" ? "fc-tab-active" : "")" @onclick='() => SetTab("subscription")'>Subscription</button>
+            <button class="fc-tab @(_tab == "users" ? "fc-tab-active" : "")" @onclick='() => SetTab("users")'>Users</button>
+            <button class="fc-tab @(_tab == "entities" ? "fc-tab-active" : "")" @onclick='() => SetTab("entities")'>Entities</button>
+            <button class="fc-tab @(_tab == "filings" ? "fc-tab-active" : "")" @onclick='() => SetTab("filings")'>Filings</button>
+            <button class="fc-tab @(_tab == "audit" ? "fc-tab-active" : "")" @onclick='() => SetTab("audit")'>Audit</button>
+            <button class="fc-tab @(_tab == "support" ? "fc-tab-active" : "")" @onclick='() => SetTab("support")'>Support</button>
         </div>
 
         <!-- Overview Tab -->
         @if (_tab == "overview")
         {
-            <div class="portal-grid portal-grid-3" style="margin-bottom:1rem;">
+            <div class="fc-grid fc-grid-3" style="margin-bottom:1rem;">
                 <div class="fc-card">
                     <div class="fc-card__body">
-                        <div class="portal-kv"><span>Status</span><strong>
+                        <div class="fc-kv"><span>Status</span><strong>
                             @if (_data.Status == TenantStatus.Active)
                             {
                                 <span class="fc-badge fc-badge--success">@_data.Status</span>
@@ -140,19 +140,19 @@
                                 <span class="fc-badge fc-badge--danger">@_data.Status</span>
                             }
                         </strong></div>
-                        <div class="portal-kv"><span>Created</span><strong>@_data.CreatedAt.ToString("dd MMM yyyy")</strong></div>
+                        <div class="fc-kv"><span>Created</span><strong>@_data.CreatedAt.ToString("dd MMM yyyy")</strong></div>
                     </div>
                 </div>
                 <div class="fc-card">
                     <div class="fc-card__body">
-                        <div class="portal-kv"><span>Timezone</span><strong>@_data.Timezone</strong></div>
-                        <div class="portal-kv"><span>Currency</span><strong>@_data.DefaultCurrency</strong></div>
+                        <div class="fc-kv"><span>Timezone</span><strong>@_data.Timezone</strong></div>
+                        <div class="fc-kv"><span>Currency</span><strong>@_data.DefaultCurrency</strong></div>
                     </div>
                 </div>
                 <div class="fc-card">
                     <div class="fc-card__body">
-                        <div class="portal-kv"><span>Users</span><strong>@_data.Usage.UsersUsed / @_data.Usage.UsersLimit</strong></div>
-                        <div class="portal-kv"><span>Modules</span><strong>@_data.Usage.ModulesUsed / @_data.Usage.ModulesLimit</strong></div>
+                        <div class="fc-kv"><span>Users</span><strong>@_data.Usage.UsersUsed / @_data.Usage.UsersLimit</strong></div>
+                        <div class="fc-kv"><span>Modules</span><strong>@_data.Usage.ModulesUsed / @_data.Usage.ModulesLimit</strong></div>
                     </div>
                 </div>
             </div>
@@ -160,9 +160,9 @@
             <div class="fc-card">
                 <div class="fc-card__header"><h2 class="fc-card__title">Contact</h2></div>
                 <div class="fc-card__body">
-                    <div class="portal-kv"><span>Email</span><strong>@(_data.ContactEmail ?? "-")</strong></div>
-                    <div class="portal-kv"><span>Phone</span><strong>@(_data.ContactPhone ?? "-")</strong></div>
-                    <div class="portal-kv"><span>Address</span><strong>@(_data.Address ?? "-")</strong></div>
+                    <div class="fc-kv"><span>Email</span><strong>@(_data.ContactEmail ?? "-")</strong></div>
+                    <div class="fc-kv"><span>Phone</span><strong>@(_data.ContactPhone ?? "-")</strong></div>
+                    <div class="fc-kv"><span>Address</span><strong>@(_data.Address ?? "-")</strong></div>
                 </div>
             </div>
         }
@@ -173,7 +173,7 @@
             <div class="fc-card" style="margin-bottom:1rem;">
                 <div class="fc-card__header"><h2 class="fc-card__title">Subscription History</h2></div>
                 <div class="fc-card__body" style="padding:0;overflow:auto;">
-                    <table class="portal-table">
+                    <table class="fc-table">
                         <thead>
                             <tr>
                                 <th>Plan</th>
@@ -203,11 +203,11 @@
                 </div>
             </div>
 
-            <div class="portal-grid portal-grid-2">
+            <div class="fc-grid fc-grid-2">
                 <div class="fc-card">
                     <div class="fc-card__header"><h2 class="fc-card__title">Invoices</h2></div>
                     <div class="fc-card__body" style="padding:0;overflow:auto;max-height:420px;">
-                        <table class="portal-table">
+                        <table class="fc-table">
                             <thead>
                                 <tr>
                                     <th>Invoice</th>
@@ -237,7 +237,7 @@
                 <div class="fc-card">
                     <div class="fc-card__header"><h2 class="fc-card__title">Payments</h2></div>
                     <div class="fc-card__body" style="padding:0;overflow:auto;max-height:420px;">
-                        <table class="portal-table">
+                        <table class="fc-table">
                             <thead>
                                 <tr>
                                     <th>Payment</th>
@@ -273,7 +273,7 @@
             <div class="fc-card">
                 <div class="fc-card__header"><h2 class="fc-card__title">Users</h2></div>
                 <div class="fc-card__body" style="padding:0;overflow:auto;">
-                    <table class="portal-table">
+                    <table class="fc-table">
                         <thead>
                             <tr>
                                 <th>Name</th>
@@ -315,7 +315,7 @@
             <div class="fc-card">
                 <div class="fc-card__header"><h2 class="fc-card__title">Entities</h2></div>
                 <div class="fc-card__body" style="padding:0;overflow:auto;">
-                    <table class="portal-table">
+                    <table class="fc-table">
                         <thead>
                             <tr>
                                 <th>Code</th>
@@ -361,7 +361,7 @@
             <div class="fc-card">
                 <div class="fc-card__header"><h2 class="fc-card__title">Filing Matrix</h2></div>
                 <div class="fc-card__body" style="padding:0;overflow:auto;">
-                    <table class="portal-table">
+                    <table class="fc-table">
                         <thead>
                             <tr>
                                 <th>Module</th>
@@ -402,7 +402,7 @@
             <div class="fc-card">
                 <div class="fc-card__header"><h2 class="fc-card__title">Audit Log</h2></div>
                 <div class="fc-card__body" style="padding:0;overflow:auto;max-height:560px;">
-                    <table class="portal-table">
+                    <table class="fc-table">
                         <thead>
                             <tr>
                                 <th>When</th>
@@ -433,7 +433,7 @@
             <div class="fc-card">
                 <div class="fc-card__header"><h2 class="fc-card__title">Support Tickets</h2></div>
                 <div class="fc-card__body" style="padding:0;overflow:auto;">
-                    <table class="portal-table">
+                    <table class="fc-table">
                         <thead>
                             <tr>
                                 <th>Ticket</th>

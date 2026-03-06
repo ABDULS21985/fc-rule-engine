@@ -13,23 +13,23 @@
 
 <PageTitle>Invoices</PageTitle>
 
-<div class="admin-page">
+<div class="fc-page">
 
     <!-- Breadcrumb -->
-    <nav class="detail-breadcrumb" aria-label="Breadcrumb">
+    <nav class="fc-detail-breadcrumb" aria-label="Breadcrumb">
         <a href="/">Dashboard</a>
-        <span class="detail-breadcrumb-sep" aria-hidden="true">/</span>
+        <span class="fc-detail-breadcrumb-sep" aria-hidden="true">/</span>
         <a href="/billing/plans">Billing</a>
-        <span class="detail-breadcrumb-sep" aria-hidden="true">/</span>
-        <span class="detail-breadcrumb-current">Invoices</span>
+        <span class="fc-detail-breadcrumb-sep" aria-hidden="true">/</span>
+        <span class="fc-detail-breadcrumb-current">Invoices</span>
     </nav>
 
     <!-- Page Header -->
-    <div class="admin-header">
-        <div class="admin-header-top">
+    <div class="fc-page-header">
+        <div class="fc-page-header-top">
             <div>
                 <h1>Invoices &amp; Collections</h1>
-                <p class="admin-header-subtitle">Issue invoices, capture payments, and manage overdue exposure across tenants.</p>
+                <p class="fc-page-header-subtitle">Issue invoices, capture payments, and manage overdue exposure across tenants.</p>
             </div>
         </div>
 
@@ -58,18 +58,18 @@
         <!-- Skeleton Loading State -->
         <div class="fc-card">
             <div class="fc-card__body">
-                <div class="skel skel-text" style="width:200px;margin-bottom:1rem;"></div>
-                <div class="skel skel-text" style="width:100%;height:40px;margin-bottom:0.75rem;"></div>
+                <div class="fc-skel fc-skel-text" style="width:200px;margin-bottom:1rem;"></div>
+                <div class="fc-skel fc-skel-text" style="width:100%;height:40px;margin-bottom:0.75rem;"></div>
                 @for (var i = 0; i < 5; i++)
                 {
                     <div style="display:flex;gap:1rem;margin-bottom:0.75rem;">
-                        <div class="skel skel-text" style="width:15%;"></div>
-                        <div class="skel skel-text" style="width:20%;"></div>
-                        <div class="skel skel-text" style="width:10%;"></div>
-                        <div class="skel skel-text" style="width:18%;"></div>
-                        <div class="skel skel-text" style="width:12%;"></div>
-                        <div class="skel skel-text" style="width:12%;"></div>
-                        <div class="skel skel-text" style="width:13%;"></div>
+                        <div class="fc-skel fc-skel-text" style="width:15%;"></div>
+                        <div class="fc-skel fc-skel-text" style="width:20%;"></div>
+                        <div class="fc-skel fc-skel-text" style="width:10%;"></div>
+                        <div class="fc-skel fc-skel-text" style="width:18%;"></div>
+                        <div class="fc-skel fc-skel-text" style="width:12%;"></div>
+                        <div class="fc-skel fc-skel-text" style="width:12%;"></div>
+                        <div class="fc-skel fc-skel-text" style="width:13%;"></div>
                     </div>
                 }
             </div>
@@ -84,9 +84,9 @@
             </div>
             <div class="fc-card__body">
                 <div style="display:flex;gap:1rem;align-items:flex-end;flex-wrap:wrap;">
-                    <div class="admin-form-group" style="flex:1;min-width:240px;">
-                        <label class="admin-form-label">Tenant</label>
-                        <select class="admin-form-input" @bind="_selectedTenantId">
+                    <div class="fc-form-group" style="flex:1;min-width:240px;">
+                        <label class="fc-form-label">Tenant</label>
+                        <select class="fc-form-input" @bind="_selectedTenantId">
                             <option value="">Select tenant</option>
                             @foreach (var tenant in _tenantOptions)
                             {
@@ -105,8 +105,8 @@
         </div>
 
         <!-- Toolbar -->
-        <div class="admin-toolbar">
-            <div class="admin-toolbar-search">
+        <div class="fc-toolbar">
+            <div class="fc-toolbar-search">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
                 <input type="search"
                        placeholder="Search invoice or tenant..."
@@ -114,7 +114,7 @@
                        @bind:event="oninput"
                        aria-label="Search invoices" />
             </div>
-            <div class="admin-toolbar-filter">
+            <div class="fc-toolbar-filter">
                 <select @bind="_statusFilter" aria-label="Filter by status">
                     <option value="ALL">All statuses</option>
                     @foreach (var status in Enum.GetValues<InvoiceStatus>())
@@ -134,25 +134,25 @@
             <div class="fc-card__body" style="padding:0;overflow:auto;">
                 @if (!FilteredInvoices.Any())
                 {
-                    <div class="admin-empty">
-                        <div class="admin-empty-icon">
+                    <div class="fc-empty">
+                        <div class="fc-empty-icon">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
                         </div>
                         @if (string.IsNullOrWhiteSpace(_searchTerm) && _statusFilter == "ALL")
                         {
-                            <h3 class="admin-empty-title">No invoices yet</h3>
-                            <p class="admin-empty-text">Generate your first invoice using the form above.</p>
+                            <h3 class="fc-empty-title">No invoices yet</h3>
+                            <p class="fc-empty-text">Generate your first invoice using the form above.</p>
                         }
                         else
                         {
-                            <h3 class="admin-empty-title">No matching invoices</h3>
-                            <p class="admin-empty-text">Try adjusting your search or filters.</p>
+                            <h3 class="fc-empty-title">No matching invoices</h3>
+                            <p class="fc-empty-text">Try adjusting your search or filters.</p>
                         }
                     </div>
                 }
                 else
                 {
-                    <table class="portal-table">
+                    <table class="fc-table">
                         <thead>
                             <tr>
                                 <th>Invoice</th>

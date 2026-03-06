@@ -5,31 +5,31 @@
 @using FC.Engine.Domain.Validation
 @inject IFormulaRepository FormulaRepo
 
-<div class="detail-page">
+<div class="fc-detail-page">
 
-    <nav class="detail-breadcrumb" aria-label="Breadcrumb">
+    <nav class="fc-breadcrumb" aria-label="Breadcrumb">
         <a href="/">Dashboard</a>
-        <span class="detail-breadcrumb-sep" aria-hidden="true">/</span>
+        <span class="fc-breadcrumb-sep" aria-hidden="true">/</span>
         <a href="/cross-sheet-rules">Cross-Sheet Rules</a>
-        <span class="detail-breadcrumb-sep" aria-hidden="true">/</span>
-        <span class="detail-breadcrumb-current">@(_rule?.RuleCode ?? $"Rule #{Id}")</span>
+        <span class="fc-breadcrumb-sep" aria-hidden="true">/</span>
+        <span class="fc-breadcrumb-current">@(_rule?.RuleCode ?? $"Rule #{Id}")</span>
     </nav>
 
     @if (_loading)
     {
-        <div class="skel-detail" role="status" aria-label="Loading rule details">
-            <div class="skel-detail-hero">
-                <div class="skel skel-text-xl" style="width:240px;"></div>
-                <div class="skel skel-text" style="width:320px;"></div>
+        <div class="fc-skel-detail" role="status" aria-label="Loading rule details">
+            <div class="fc-skel-detail-hero">
+                <div class="skel fc-skel-text-xl" style="width:240px;"></div>
+                <div class="skel fc-skel-text" style="width:320px;"></div>
                 <div style="display:flex;gap:var(--space-3);margin-top:var(--space-2);">
                     <div class="skel" style="width:110px;height:24px;border-radius:var(--radius-pill);"></div>
                     <div class="skel" style="width:80px;height:24px;border-radius:var(--radius-pill);"></div>
                 </div>
             </div>
-            <div class="skel-detail-section">
+            <div class="fc-skel-detail-section">
                 @for (var i = 0; i < 4; i++)
                 {
-                    <div class="skel skel-text" style="width:@(35 + i * 12)%;"></div>
+                    <div class="skel fc-skel-text" style="width:@(35 + i * 12)%;"></div>
                 }
             </div>
         </div>
@@ -43,10 +43,10 @@
     }
     else
     {
-        <section class="detail-hero" role="banner">
-            <div class="detail-hero-left">
-                <div class="detail-hero-title-row">
-                    <h1 class="detail-hero-title">@_rule.RuleName</h1>
+        <section class="fc-detail-hero" role="banner">
+            <div class="fc-detail-hero-left">
+                <div class="fc-detail-hero-title-row">
+                    <h1 class="fc-detail-hero-title">@_rule.RuleName</h1>
                     <span class="fc-badge @StatusBadge(_rule.Severity.ToString())">@_rule.Severity</span>
                     @if (_rule.IsActive)
                     {
@@ -58,39 +58,39 @@
                     }
                 </div>
 
-                <p class="detail-hero-subtitle">
+                <p class="fc-detail-hero-subtitle">
                     @(_rule.Description ?? "No description provided for this cross-sheet rule.")
                 </p>
 
-                <div class="detail-hero-meta">
-                    <div class="detail-meta-item">
-                        <span class="detail-meta-label">Rule Code</span>
-                        <span class="detail-meta-value"><code>@_rule.RuleCode</code></span>
+                <div class="fc-detail-hero-meta">
+                    <div class="fc-detail-meta-item">
+                        <span class="fc-detail-meta-label">Rule Code</span>
+                        <span class="fc-detail-meta-value"><code>@_rule.RuleCode</code></span>
                     </div>
-                    <div class="detail-meta-item">
-                        <span class="detail-meta-label">Rule ID</span>
-                        <span class="detail-meta-value">#@_rule.Id</span>
+                    <div class="fc-detail-meta-item">
+                        <span class="fc-detail-meta-label">Rule ID</span>
+                        <span class="fc-detail-meta-value">#@_rule.Id</span>
                     </div>
-                    <div class="detail-meta-item">
-                        <span class="detail-meta-label">Operands</span>
-                        <span class="detail-meta-value">@SortedOperands.Count()</span>
+                    <div class="fc-detail-meta-item">
+                        <span class="fc-detail-meta-label">Operands</span>
+                        <span class="fc-detail-meta-value">@SortedOperands.Count()</span>
                     </div>
-                    <div class="detail-meta-item">
-                        <span class="detail-meta-label">Templates Referenced</span>
-                        <span class="detail-meta-value">@ReferencedTemplates.Count</span>
+                    <div class="fc-detail-meta-item">
+                        <span class="fc-detail-meta-label">Templates Referenced</span>
+                        <span class="fc-detail-meta-value">@ReferencedTemplates.Count</span>
                     </div>
-                    <div class="detail-meta-item">
-                        <span class="detail-meta-label">Created By</span>
-                        <span class="detail-meta-value">@(_rule.CreatedBy ?? "—")</span>
+                    <div class="fc-detail-meta-item">
+                        <span class="fc-detail-meta-label">Created By</span>
+                        <span class="fc-detail-meta-value">@(_rule.CreatedBy ?? "—")</span>
                     </div>
-                    <div class="detail-meta-item">
-                        <span class="detail-meta-label">Created At</span>
-                        <span class="detail-meta-value">@FormatUtc(_rule.CreatedAt)</span>
+                    <div class="fc-detail-meta-item">
+                        <span class="fc-detail-meta-label">Created At</span>
+                        <span class="fc-detail-meta-value">@FormatUtc(_rule.CreatedAt)</span>
                     </div>
                 </div>
             </div>
 
-            <div class="detail-hero-actions">
+            <div class="fc-detail-hero-actions">
                 <a href="/cross-sheet-rules" class="fc-btn fc-btn--outline fc-btn--sm">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16" aria-hidden="true"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
                     Back to Rules
@@ -98,59 +98,59 @@
             </div>
         </section>
 
-        <div class="detail-section">
-            <div class="detail-section-header">
+        <div class="fc-section">
+            <div class="fc-section-header">
                 <h3>
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
                     Rule Definition
                 </h3>
             </div>
-            <div class="detail-section-body">
-                <div class="detail-info-grid">
-                    <div class="detail-info-item">
-                        <span class="detail-info-label">Expression</span>
-                        <span class="detail-info-value"><code>@(_rule.Expression?.Expression ?? "—")</code></span>
+            <div class="fc-section-body">
+                <div class="fc-detail-info-grid">
+                    <div class="fc-detail-info-item">
+                        <span class="fc-detail-info-label">Expression</span>
+                        <span class="fc-detail-info-value"><code>@(_rule.Expression?.Expression ?? "—")</code></span>
                     </div>
-                    <div class="detail-info-item">
-                        <span class="detail-info-label">Tolerance Amount</span>
-                        <span class="detail-info-value">@(_rule.Expression?.ToleranceAmount.ToString("0.####") ?? "—")</span>
+                    <div class="fc-detail-info-item">
+                        <span class="fc-detail-info-label">Tolerance Amount</span>
+                        <span class="fc-detail-info-value">@(_rule.Expression?.ToleranceAmount.ToString("0.####") ?? "—")</span>
                     </div>
-                    <div class="detail-info-item">
-                        <span class="detail-info-label">Tolerance Percent</span>
-                        <span class="detail-info-value">@(_rule.Expression?.TolerancePercent?.ToString("0.####") ?? "—")</span>
+                    <div class="fc-detail-info-item">
+                        <span class="fc-detail-info-label">Tolerance Percent</span>
+                        <span class="fc-detail-info-value">@(_rule.Expression?.TolerancePercent?.ToString("0.####") ?? "—")</span>
                     </div>
-                    <div class="detail-info-item">
-                        <span class="detail-info-label">Error Message</span>
-                        <span class="detail-info-value">@(_rule.Expression?.ErrorMessage ?? "—")</span>
+                    <div class="fc-detail-info-item">
+                        <span class="fc-detail-info-label">Error Message</span>
+                        <span class="fc-detail-info-value">@(_rule.Expression?.ErrorMessage ?? "—")</span>
                     </div>
                 </div>
             </div>
         </div>
 
-        <div class="detail-section">
-            <div class="detail-section-header">
+        <div class="fc-section">
+            <div class="fc-section-header">
                 <h3>
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
                     Expression Preview
                 </h3>
             </div>
-            <div class="detail-section-body">
-                <pre class="detail-code-block">@BuildExpressionPreview(_rule)</pre>
+            <div class="fc-section-body">
+                <pre class="fc-detail-code-block">@BuildExpressionPreview(_rule)</pre>
             </div>
         </div>
 
-        <div class="detail-section">
-            <div class="detail-section-header">
+        <div class="fc-section">
+            <div class="fc-section-header">
                 <h3>
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
                     Operand Mapping
                 </h3>
             </div>
-            <div class="detail-section-body">
+            <div class="fc-section-body">
                 @if (SortedOperands.Any())
                 {
                     <div style="overflow-x:auto;">
-                        <table class="detail-field-table" role="table">
+                        <table class="fc-detail-field-table" role="table">
                             <thead>
                                 <tr>
                                     <th scope="col">Order</th>
@@ -188,17 +188,17 @@
             </div>
         </div>
 
-        <div class="detail-section">
-            <div class="detail-section-header">
+        <div class="fc-section">
+            <div class="fc-section-header">
                 <h3>
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="7.5 4.21 12 6.81 16.5 4.21"/></svg>
                     Referenced Templates
                 </h3>
             </div>
-            <div class="detail-section-body">
+            <div class="fc-section-body">
                 @if (ReferencedTemplates.Count == 0)
                 {
-                    <span class="detail-info-value">No templates referenced.</span>
+                    <span class="fc-detail-info-value">No templates referenced.</span>
                 }
                 else
                 {

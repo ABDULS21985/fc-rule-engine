@@ -3,11 +3,11 @@
 @inject ToastService ToastService
 @implements IDisposable
 
-<div class="cbn-toast-container" aria-live="polite" aria-label="Notifications">
+<div class="fc-toast-container" aria-live="polite" aria-label="Notifications">
     @foreach (var toast in ToastService.Toasts)
     {
-        <div class="cbn-toast cbn-toast-@GetVariantClass(toast.Variant)" role="status">
-            <div class="cbn-toast-icon" aria-hidden="true">
+        <div class="fc-toast fc-toast-@GetVariantClass(toast.Variant)" role="status">
+            <div class="fc-toast-icon" aria-hidden="true">
                 @switch (toast.Variant)
                 {
                     case ToastVariant.Success:
@@ -39,16 +39,16 @@
                         break;
                 }
             </div>
-            <div class="cbn-toast-content">
+            <div class="fc-toast-content">
                 @if (!string.IsNullOrEmpty(toast.Title))
                 {
-                    <strong class="cbn-toast-title">@toast.Title</strong>
+                    <strong class="fc-toast-title">@toast.Title</strong>
                 }
-                <span class="cbn-toast-message">@toast.Message</span>
+                <span class="fc-toast-message">@toast.Message</span>
             </div>
             @if (toast.Dismissible)
             {
-                <button class="cbn-toast-dismiss" @onclick="() => ToastService.Dismiss(toast.Id)" aria-label="Dismiss notification" type="button">
+                <button class="fc-toast-dismiss" @onclick="() => ToastService.Dismiss(toast.Id)" aria-label="Dismiss notification" type="button">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14" aria-hidden="true">
                         <line x1="18" y1="6" x2="6" y2="18"/>
                         <line x1="6" y1="6" x2="18" y2="18"/>
@@ -57,7 +57,7 @@
             }
             @if (toast.DurationMs > 0)
             {
-                <div class="cbn-toast-progress cbn-toast-progress-@GetVariantClass(toast.Variant)"
+                <div class="fc-toast-progress fc-toast-progress-@GetVariantClass(toast.Variant)"
                      style="animation-duration: @(toast.DurationMs)ms"
                      aria-hidden="true"></div>
             }

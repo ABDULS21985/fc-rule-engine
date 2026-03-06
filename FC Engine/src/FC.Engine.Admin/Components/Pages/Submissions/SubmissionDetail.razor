@@ -7,37 +7,37 @@
 @inject ISubmissionRepository SubmissionRepo
 @inject NavigationManager Nav
 
-<div class="detail-page">
+<div class="fc-detail-page">
 
     <!-- Breadcrumb -->
-    <nav class="detail-breadcrumb" aria-label="Breadcrumb">
+    <nav class="fc-breadcrumb" aria-label="Breadcrumb">
         <a href="/">Dashboard</a>
-        <span class="detail-breadcrumb-sep" aria-hidden="true">/</span>
+        <span class="fc-breadcrumb-sep" aria-hidden="true">/</span>
         <a href="/submissions">Submissions</a>
-        <span class="detail-breadcrumb-sep" aria-hidden="true">/</span>
-        <span class="detail-breadcrumb-current">#@Id</span>
+        <span class="fc-breadcrumb-sep" aria-hidden="true">/</span>
+        <span class="fc-breadcrumb-current">#@Id</span>
     </nav>
 
     @if (_loading)
     {
-        <div class="skel-detail" role="status" aria-label="Loading submission">
-            <div class="skel-detail-hero">
-                <div class="skel skel-text-xl" style="width:180px;"></div>
-                <div class="skel skel-text" style="width:260px;"></div>
+        <div class="fc-skel-detail" role="status" aria-label="Loading submission">
+            <div class="fc-skel-detail-hero">
+                <div class="skel fc-skel-text-xl" style="width:180px;"></div>
+                <div class="skel fc-skel-text" style="width:260px;"></div>
                 <div style="display:flex;gap:var(--space-3);margin-top:var(--space-2);">
                     <div class="skel" style="width:80px;height:24px;border-radius:var(--radius-pill);"></div>
                     <div class="skel" style="width:100px;height:24px;border-radius:var(--radius-pill);"></div>
                 </div>
             </div>
-            <div class="skel-detail-tabs">
-                <div class="skel skel-detail-tab" style="width:70px;"></div>
-                <div class="skel skel-detail-tab" style="width:80px;"></div>
-                <div class="skel skel-detail-tab" style="width:100px;"></div>
+            <div class="fc-skel-detail-tabs">
+                <div class="skel fc-skel-detail-tab" style="width:70px;"></div>
+                <div class="skel fc-skel-detail-tab" style="width:80px;"></div>
+                <div class="skel fc-skel-detail-tab" style="width:100px;"></div>
             </div>
-            <div class="skel-detail-section">
+            <div class="fc-skel-detail-section">
                 @for (var i = 0; i < 5; i++)
                 {
-                    <div class="skel skel-text" style="width:@(30 + i * 15)%;"></div>
+                    <div class="skel fc-skel-text" style="width:@(30 + i * 15)%;"></div>
                 }
             </div>
         </div>
@@ -52,52 +52,52 @@
     else
     {
         <!-- Hero Header -->
-        <section class="detail-hero" role="banner">
-            <div class="detail-hero-left">
-                <div class="detail-hero-title-row">
-                    <h1 class="detail-hero-title">Submission #@Id</h1>
-                    <span class="detail-status detail-status-@_submission.Status.ToString().ToLowerInvariant()">
-                        <span class="detail-status-dot" aria-hidden="true"></span>
+        <section class="fc-detail-hero" role="banner">
+            <div class="fc-detail-hero-left">
+                <div class="fc-detail-hero-title-row">
+                    <h1 class="fc-detail-hero-title">Submission #@Id</h1>
+                    <span class="fc-detail-status fc-detail-status-@_submission.Status.ToString().ToLowerInvariant()">
+                        <span class="fc-detail-status-dot" aria-hidden="true"></span>
                         @FormatStatus(_submission.Status)
                     </span>
                 </div>
-                <p class="detail-hero-subtitle">
+                <p class="fc-detail-hero-subtitle">
                     Return Code <a href="/templates/@_submission.ReturnCode">@_submission.ReturnCode</a>
                     &middot; Submitted @_submission.SubmittedAt.ToString("d MMM yyyy, HH:mm") UTC
                 </p>
 
-                <div class="detail-hero-meta">
-                    <div class="detail-meta-item">
-                        <span class="detail-meta-label">Return Code</span>
-                        <span class="detail-meta-value">
+                <div class="fc-detail-hero-meta">
+                    <div class="fc-detail-meta-item">
+                        <span class="fc-detail-meta-label">Return Code</span>
+                        <span class="fc-detail-meta-value">
                             <a href="/templates/@_submission.ReturnCode" style="text-decoration:none;">
                                 <code>@_submission.ReturnCode</code>
                             </a>
                         </span>
                     </div>
-                    <div class="detail-meta-item">
-                        <span class="detail-meta-label">Institution</span>
-                        <span class="detail-meta-value">@_submission.InstitutionId</span>
+                    <div class="fc-detail-meta-item">
+                        <span class="fc-detail-meta-label">Institution</span>
+                        <span class="fc-detail-meta-value">@_submission.InstitutionId</span>
                     </div>
-                    <div class="detail-meta-item">
-                        <span class="detail-meta-label">Period</span>
-                        <span class="detail-meta-value">@_submission.ReturnPeriodId</span>
+                    <div class="fc-detail-meta-item">
+                        <span class="fc-detail-meta-label">Period</span>
+                        <span class="fc-detail-meta-value">@_submission.ReturnPeriodId</span>
                     </div>
-                    <div class="detail-meta-item">
-                        <span class="detail-meta-label">Processing</span>
-                        <span class="detail-meta-value">@(_submission.ProcessingDurationMs)ms</span>
+                    <div class="fc-detail-meta-item">
+                        <span class="fc-detail-meta-label">Processing</span>
+                        <span class="fc-detail-meta-value">@(_submission.ProcessingDurationMs)ms</span>
                     </div>
                     @if (_submission.TemplateVersionId.HasValue)
                     {
-                        <div class="detail-meta-item">
-                            <span class="detail-meta-label">Template Version</span>
-                            <span class="detail-meta-value">v@(_submission.TemplateVersionId)</span>
+                        <div class="fc-detail-meta-item">
+                            <span class="fc-detail-meta-label">Template Version</span>
+                            <span class="fc-detail-meta-value">v@(_submission.TemplateVersionId)</span>
                         </div>
                     }
                 </div>
             </div>
 
-            <div class="detail-hero-actions">
+            <div class="fc-detail-hero-actions">
                 <a href="/templates/@_submission.ReturnCode" class="fc-btn fc-btn--outline fc-btn--sm">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16" aria-hidden="true"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
                     View Template
@@ -106,81 +106,81 @@
         </section>
 
         <!-- Tabbed Navigation -->
-        <div class="detail-tabs" role="tablist" aria-label="Submission sections">
-            <button class="detail-tab @(_activeTab == "overview" ? "detail-tab-active" : "")"
+        <div class="fc-tabs" role="tablist" aria-label="Submission sections">
+            <button class="fc-tab @(_activeTab == "overview" ? "fc-tab-active" : "")"
                     role="tab" aria-selected="@(_activeTab == "overview")" @onclick='() => _activeTab = "overview"'>
                 Overview
             </button>
-            <button class="detail-tab @(_activeTab == "validation" ? "detail-tab-active" : "")"
+            <button class="fc-tab @(_activeTab == "validation" ? "fc-tab-active" : "")"
                     role="tab" aria-selected="@(_activeTab == "validation")" @onclick='() => _activeTab = "validation"'>
                 Validation
                 @if (_submission.ValidationReport != null)
                 {
-                    <span class="detail-tab-badge">@(_submission.ValidationReport.Errors.Count)</span>
+                    <span class="fc-tab-badge">@(_submission.ValidationReport.Errors.Count)</span>
                 }
             </button>
-            <button class="detail-tab @(_activeTab == "data" ? "detail-tab-active" : "")"
+            <button class="fc-tab @(_activeTab == "data" ? "fc-tab-active" : "")"
                     role="tab" aria-selected="@(_activeTab == "data")" @onclick='() => _activeTab = "data"'>
                 Submission Data
             </button>
         </div>
 
         <!-- Tab: Overview -->
-        <div class="detail-tab-content @(_activeTab == "overview" ? "detail-tab-content-active" : "")" role="tabpanel">
-            <div class="detail-section">
-                <div class="detail-section-header">
+        <div class="fc-tab-content @(_activeTab == "overview" ? "fc-tab-content-active" : "")" role="tabpanel">
+            <div class="fc-section">
+                <div class="fc-section-header">
                     <h3>
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
                         Submission Details
                     </h3>
                 </div>
-                <div class="detail-section-body">
-                    <div class="detail-info-grid">
-                        <div class="detail-info-item">
-                            <span class="detail-info-label">Submission ID</span>
-                            <span class="detail-info-value">#@_submission.Id</span>
+                <div class="fc-section-body">
+                    <div class="fc-detail-info-grid">
+                        <div class="fc-detail-info-item">
+                            <span class="fc-detail-info-label">Submission ID</span>
+                            <span class="fc-detail-info-value">#@_submission.Id</span>
                         </div>
-                        <div class="detail-info-item">
-                            <span class="detail-info-label">Return Code</span>
-                            <span class="detail-info-value">
+                        <div class="fc-detail-info-item">
+                            <span class="fc-detail-info-label">Return Code</span>
+                            <span class="fc-detail-info-value">
                                 <a href="/templates/@_submission.ReturnCode"><code>@_submission.ReturnCode</code></a>
                             </span>
                         </div>
-                        <div class="detail-info-item">
-                            <span class="detail-info-label">Status</span>
-                            <span class="detail-info-value">
-                                <span class="detail-status detail-status-@_submission.Status.ToString().ToLowerInvariant()">
-                                    <span class="detail-status-dot" aria-hidden="true"></span>
+                        <div class="fc-detail-info-item">
+                            <span class="fc-detail-info-label">Status</span>
+                            <span class="fc-detail-info-value">
+                                <span class="fc-detail-status fc-detail-status-@_submission.Status.ToString().ToLowerInvariant()">
+                                    <span class="fc-detail-status-dot" aria-hidden="true"></span>
                                     @FormatStatus(_submission.Status)
                                 </span>
                             </span>
                         </div>
-                        <div class="detail-info-item">
-                            <span class="detail-info-label">Institution ID</span>
-                            <span class="detail-info-value">@_submission.InstitutionId</span>
+                        <div class="fc-detail-info-item">
+                            <span class="fc-detail-info-label">Institution ID</span>
+                            <span class="fc-detail-info-value">@_submission.InstitutionId</span>
                         </div>
-                        <div class="detail-info-item">
-                            <span class="detail-info-label">Return Period ID</span>
-                            <span class="detail-info-value">@_submission.ReturnPeriodId</span>
+                        <div class="fc-detail-info-item">
+                            <span class="fc-detail-info-label">Return Period ID</span>
+                            <span class="fc-detail-info-value">@_submission.ReturnPeriodId</span>
                         </div>
                         @if (_submission.TemplateVersionId.HasValue)
                         {
-                            <div class="detail-info-item">
-                                <span class="detail-info-label">Template Version ID</span>
-                                <span class="detail-info-value">@_submission.TemplateVersionId</span>
+                            <div class="fc-detail-info-item">
+                                <span class="fc-detail-info-label">Template Version ID</span>
+                                <span class="fc-detail-info-value">@_submission.TemplateVersionId</span>
                             </div>
                         }
-                        <div class="detail-info-item">
-                            <span class="detail-info-label">Submitted At</span>
-                            <span class="detail-info-value">@_submission.SubmittedAt.ToString("d MMM yyyy, HH:mm:ss") UTC</span>
+                        <div class="fc-detail-info-item">
+                            <span class="fc-detail-info-label">Submitted At</span>
+                            <span class="fc-detail-info-value">@_submission.SubmittedAt.ToString("d MMM yyyy, HH:mm:ss") UTC</span>
                         </div>
-                        <div class="detail-info-item">
-                            <span class="detail-info-label">Processing Duration</span>
-                            <span class="detail-info-value">@(_submission.ProcessingDurationMs)ms</span>
+                        <div class="fc-detail-info-item">
+                            <span class="fc-detail-info-label">Processing Duration</span>
+                            <span class="fc-detail-info-value">@(_submission.ProcessingDurationMs)ms</span>
                         </div>
-                        <div class="detail-info-item">
-                            <span class="detail-info-label">Created At</span>
-                            <span class="detail-info-value">@_submission.CreatedAt.ToString("d MMM yyyy, HH:mm:ss") UTC</span>
+                        <div class="fc-detail-info-item">
+                            <span class="fc-detail-info-label">Created At</span>
+                            <span class="fc-detail-info-value">@_submission.CreatedAt.ToString("d MMM yyyy, HH:mm:ss") UTC</span>
                         </div>
                     </div>
                 </div>
@@ -188,35 +188,35 @@
 
             @if (_submission.ValidationReport != null)
             {
-                <div class="detail-section">
-                    <div class="detail-section-header">
+                <div class="fc-section">
+                    <div class="fc-section-header">
                         <h3>
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
                             Validation Summary
                         </h3>
-                        <span class="detail-status @(_submission.ValidationReport.IsValid ? "detail-status-accepted" : "detail-status-rejected")">
-                            <span class="detail-status-dot" aria-hidden="true"></span>
+                        <span class="fc-detail-status @(_submission.ValidationReport.IsValid ? "fc-detail-status-accepted" : "fc-detail-status-rejected")">
+                            <span class="fc-detail-status-dot" aria-hidden="true"></span>
                             @(_submission.ValidationReport.IsValid ? "Valid" : "Invalid")
                         </span>
                     </div>
-                    <div class="detail-section-body">
-                        <div class="detail-validation-summary">
-                            <div class="detail-val-stat detail-val-error">
+                    <div class="fc-section-body">
+                        <div class="fc-detail-validation-summary">
+                            <div class="fc-detail-val-stat fc-detail-val-error">
                                 <div>
-                                    <div class="detail-val-stat-count">@_submission.ValidationReport.ErrorCount</div>
-                                    <div class="detail-val-stat-label">Errors</div>
+                                    <div class="fc-detail-val-stat-count">@_submission.ValidationReport.ErrorCount</div>
+                                    <div class="fc-detail-val-stat-label">Errors</div>
                                 </div>
                             </div>
-                            <div class="detail-val-stat detail-val-warning">
+                            <div class="fc-detail-val-stat fc-detail-val-warning">
                                 <div>
-                                    <div class="detail-val-stat-count">@_submission.ValidationReport.WarningCount</div>
-                                    <div class="detail-val-stat-label">Warnings</div>
+                                    <div class="fc-detail-val-stat-count">@_submission.ValidationReport.WarningCount</div>
+                                    <div class="fc-detail-val-stat-label">Warnings</div>
                                 </div>
                             </div>
-                            <div class="detail-val-stat @(_submission.ValidationReport.IsValid ? "detail-val-success" : "detail-val-error")">
+                            <div class="fc-detail-val-stat @(_submission.ValidationReport.IsValid ? "fc-detail-val-success" : "fc-detail-val-error")">
                                 <div>
-                                    <div class="detail-val-stat-count">@_submission.ValidationReport.Errors.Count</div>
-                                    <div class="detail-val-stat-label">Total Issues</div>
+                                    <div class="fc-detail-val-stat-count">@_submission.ValidationReport.Errors.Count</div>
+                                    <div class="fc-detail-val-stat-label">Total Issues</div>
                                 </div>
                             </div>
                         </div>
@@ -226,35 +226,35 @@
         </div>
 
         <!-- Tab: Validation -->
-        <div class="detail-tab-content @(_activeTab == "validation" ? "detail-tab-content-active" : "")" role="tabpanel">
+        <div class="fc-tab-content @(_activeTab == "validation" ? "fc-tab-content-active" : "")" role="tabpanel">
             @if (_submission.ValidationReport != null)
             {
                 var report = _submission.ValidationReport;
 
                 <!-- Validation Counters -->
-                <div class="detail-section">
-                    <div class="detail-section-header">
+                <div class="fc-section">
+                    <div class="fc-section-header">
                         <h3>
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
                             Validation Report
                         </h3>
-                        <span class="detail-status @(report.IsValid ? "detail-status-accepted" : "detail-status-rejected")">
-                            <span class="detail-status-dot" aria-hidden="true"></span>
+                        <span class="fc-detail-status @(report.IsValid ? "fc-detail-status-accepted" : "fc-detail-status-rejected")">
+                            <span class="fc-detail-status-dot" aria-hidden="true"></span>
                             @(report.IsValid ? "Passed" : "Failed")
                         </span>
                     </div>
-                    <div class="detail-section-body">
-                        <div class="detail-validation-summary">
-                            <div class="detail-val-stat detail-val-error">
+                    <div class="fc-section-body">
+                        <div class="fc-detail-validation-summary">
+                            <div class="fc-detail-val-stat fc-detail-val-error">
                                 <div>
-                                    <div class="detail-val-stat-count">@report.ErrorCount</div>
-                                    <div class="detail-val-stat-label">Errors</div>
+                                    <div class="fc-detail-val-stat-count">@report.ErrorCount</div>
+                                    <div class="fc-detail-val-stat-label">Errors</div>
                                 </div>
                             </div>
-                            <div class="detail-val-stat detail-val-warning">
+                            <div class="fc-detail-val-stat fc-detail-val-warning">
                                 <div>
-                                    <div class="detail-val-stat-count">@report.WarningCount</div>
-                                    <div class="detail-val-stat-label">Warnings</div>
+                                    <div class="fc-detail-val-stat-count">@report.WarningCount</div>
+                                    <div class="fc-detail-val-stat-label">Warnings</div>
                                 </div>
                             </div>
                         </div>
@@ -266,15 +266,15 @@
                 {
                     @if (report.ErrorCount > 0)
                     {
-                        <div class="detail-section">
-                            <div class="detail-section-header">
+                        <div class="fc-section">
+                            <div class="fc-section-header">
                                 <h3>
                                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
                                     Errors (@report.ErrorCount)
                                 </h3>
                             </div>
                             <div style="overflow-x:auto;">
-                                <table class="detail-field-table">
+                                <table class="fc-detail-field-table">
                                     <thead>
                                         <tr>
                                             <th>Rule ID</th>
@@ -305,15 +305,15 @@
 
                     @if (report.WarningCount > 0)
                     {
-                        <div class="detail-section">
-                            <div class="detail-section-header">
+                        <div class="fc-section">
+                            <div class="fc-section-header">
                                 <h3>
                                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
                                     Warnings (@report.WarningCount)
                                 </h3>
                             </div>
                             <div style="overflow-x:auto;">
-                                <table class="detail-field-table">
+                                <table class="fc-detail-field-table">
                                     <thead>
                                         <tr>
                                             <th>Rule ID</th>
@@ -344,12 +344,12 @@
                 }
                 else
                 {
-                    <div class="detail-section">
-                        <div class="detail-section-body">
-                            <div class="detail-empty">
+                    <div class="fc-section">
+                        <div class="fc-section-body">
+                            <div class="fc-detail-empty">
                                 <svg viewBox="0 0 24 24" fill="none" stroke="var(--cbn-success)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-                                <p class="detail-empty-title">All checks passed</p>
-                                <p class="detail-empty-text">No validation errors or warnings were found for this submission.</p>
+                                <p class="fc-detail-empty-title">All checks passed</p>
+                                <p class="fc-detail-empty-text">No validation errors or warnings were found for this submission.</p>
                             </div>
                         </div>
                     </div>
@@ -357,12 +357,12 @@
             }
             else
             {
-                <div class="detail-section">
-                    <div class="detail-section-body">
-                        <div class="detail-empty">
+                <div class="fc-section">
+                    <div class="fc-section-body">
+                        <div class="fc-detail-empty">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
-                            <p class="detail-empty-title">No validation report</p>
-                            <p class="detail-empty-text">Validation has not been completed for this submission.</p>
+                            <p class="fc-detail-empty-title">No validation report</p>
+                            <p class="fc-detail-empty-text">Validation has not been completed for this submission.</p>
                         </div>
                     </div>
                 </div>
@@ -370,29 +370,29 @@
         </div>
 
         <!-- Tab: Submission Data -->
-        <div class="detail-tab-content @(_activeTab == "data" ? "detail-tab-content-active" : "")" role="tabpanel">
-            <div class="detail-section">
-                <div class="detail-section-header">
+        <div class="fc-tab-content @(_activeTab == "data" ? "fc-tab-content-active" : "")" role="tabpanel">
+            <div class="fc-section">
+                <div class="fc-section-header">
                     <h3>
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
                         Raw Submission Data
                     </h3>
                 </div>
-                <div class="detail-section-body">
+                <div class="fc-section-body">
                     @if (!string.IsNullOrEmpty(_submission.RawXml))
                     {
-                        <pre class="detail-code-block">@_submission.RawXml</pre>
+                        <pre class="fc-detail-code-block">@_submission.RawXml</pre>
                     }
                     else if (!string.IsNullOrEmpty(_submission.ParsedDataJson))
                     {
-                        <pre class="detail-code-block">@_submission.ParsedDataJson</pre>
+                        <pre class="fc-detail-code-block">@_submission.ParsedDataJson</pre>
                     }
                     else
                     {
-                        <div class="detail-empty">
+                        <div class="fc-detail-empty">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
-                            <p class="detail-empty-title">No raw data available</p>
-                            <p class="detail-empty-text">The raw submission payload is not stored or has been purged.</p>
+                            <p class="fc-detail-empty-title">No raw data available</p>
+                            <p class="fc-detail-empty-text">The raw submission payload is not stored or has been purged.</p>
                         </div>
                     }
                 </div>

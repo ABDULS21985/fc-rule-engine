@@ -10,42 +10,42 @@
 @inject NavigationManager Nav
 @inject ToastService Toast
 
-<div class="list-page">
-    <div class="list-page-header">
-        <div class="list-page-header-text">
+<div class="fc-list-page">
+    <div class="fc-list-page-header">
+        <div class="fc-list-page-header-text">
             <h1>
                 Return Templates
                 @if (!_loading)
                 {
-                    <span class="list-count-chip">@_templates.Count</span>
+                    <span class="fc-list-count-chip">@_templates.Count</span>
                 }
             </h1>
             <p>Manage all published return templates, their fields, formulas, and physical table mappings</p>
         </div>
     </div>
 
-    <div class="list-card">
-        <div class="list-toolbar">
-            <div class="list-toolbar-filters">
-                <div class="list-search-wrap">
-                    <svg class="list-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
-                    <input class="list-search-input" placeholder="Search by code or name..." @bind="_searchTerm" @bind:event="oninput" />
+    <div class="fc-list-card">
+        <div class="fc-list-toolbar">
+            <div class="fc-list-toolbar-filters">
+                <div class="fc-list-search-wrap">
+                    <svg class="fc-list-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+                    <input class="fc-list-search-input" placeholder="Search by code or name..." @bind="_searchTerm" @bind:event="oninput" />
                 </div>
-                <select class="list-filter-select" @bind="_frequencyFilter">
+                <select class="fc-list-filter-select" @bind="_frequencyFilter">
                     <option value="">All Frequencies</option>
                     <option value="Monthly">Monthly</option>
                     <option value="Quarterly">Quarterly</option>
                     <option value="Semi-Annual">Semi-Annual</option>
                     <option value="Computed">Computed</option>
                 </select>
-                <select class="list-filter-select" @bind="_categoryFilter">
+                <select class="fc-list-filter-select" @bind="_categoryFilter">
                     <option value="">All Categories</option>
                     <option value="FixedRow">FixedRow</option>
                     <option value="MultiRow">MultiRow</option>
                     <option value="ItemCoded">ItemCoded</option>
                 </select>
             </div>
-            <div class="list-toolbar-actions">
+            <div class="fc-list-toolbar-actions">
                 <AuthorizeView Roles="Admin,Approver">
                     <Authorized Context="createAuth">
                         <button class="fc-btn fc-btn--gold" @onclick="ShowCreateForm">
@@ -59,7 +59,7 @@
 
         @if (_showCreateForm)
         {
-            <div class="list-inline-form">
+            <div class="fc-list-inline-form">
                 <h3>Create New Template</h3>
                 <div class="grid-2">
                     <div class="form-group">
@@ -93,7 +93,7 @@
                         <input class="form-control" @bind="_createRequest.Description" placeholder="Optional description" />
                     </div>
                 </div>
-                <div class="list-form-actions">
+                <div class="fc-list-form-actions">
                     <button class="fc-btn fc-btn--primary fc-btn--sm" @onclick="CreateTemplate">Create</button>
                     <button class="fc-btn fc-btn--outline fc-btn--sm" @onclick="CancelCreate">Cancel</button>
                 </div>
@@ -102,32 +102,32 @@
 
         @if (_loading)
         {
-            <div class="list-skeleton">
+            <div class="fc-list-skeleton">
                 @for (var i = 0; i < 6; i++)
                 {
-                    <div class="list-skeleton-row">
-                        <div class="list-skeleton-cell" style="width:80px;"></div>
-                        <div class="list-skeleton-cell" style="flex:1;"></div>
-                        <div class="list-skeleton-cell" style="width:70px;"></div>
-                        <div class="list-skeleton-cell" style="width:40px;"></div>
-                        <div class="list-skeleton-cell" style="width:40px;"></div>
-                        <div class="list-skeleton-cell" style="width:120px;"></div>
+                    <div class="fc-list-skeleton-row">
+                        <div class="fc-list-skeleton-cell" style="width:80px;"></div>
+                        <div class="fc-list-skeleton-cell" style="flex:1;"></div>
+                        <div class="fc-list-skeleton-cell" style="width:70px;"></div>
+                        <div class="fc-list-skeleton-cell" style="width:40px;"></div>
+                        <div class="fc-list-skeleton-cell" style="width:40px;"></div>
+                        <div class="fc-list-skeleton-cell" style="width:120px;"></div>
                     </div>
                 }
             </div>
         }
         else if (!FilteredTemplates.Any())
         {
-            <div class="list-empty">
-                <svg class="list-empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M12 18v-6"/><path d="m9 15 3-3 3 3"/></svg>
-                <h3 class="list-empty-title">No templates found</h3>
-                <p class="list-empty-text">Try adjusting your search criteria or filters to find what you're looking for.</p>
+            <div class="fc-list-empty">
+                <svg class="fc-list-empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M12 18v-6"/><path d="m9 15 3-3 3 3"/></svg>
+                <h3 class="fc-list-empty-title">No templates found</h3>
+                <p class="fc-list-empty-text">Try adjusting your search criteria or filters to find what you're looking for.</p>
             </div>
         }
         else
         {
-            <div class="list-table-wrap">
-                <table class="list-table" role="table">
+            <div class="fc-table-wrap">
+                <table class="fc-table" role="table">
                     <thead>
                         <tr>
                             <th scope="col">Return Code</th>
@@ -143,20 +143,20 @@
                     <tbody>
                         @foreach (var t in PagedTemplates)
                         {
-                            <tr class="list-row-clickable" @onclick="() => ViewTemplate(t.ReturnCode)">
-                                <td class="list-cell-code">@t.ReturnCode</td>
-                                <td class="list-cell-strong">@t.Name</td>
+                            <tr class="fc-list-row-clickable" @onclick="() => ViewTemplate(t.ReturnCode)">
+                                <td class="fc-list-cell-code">@t.ReturnCode</td>
+                                <td class="fc-list-cell-strong">@t.Name</td>
                                 <td>
                                     <span class="fc-badge @CategoryBadge(t.StructuralCategory)">
                                         @t.StructuralCategory
                                     </span>
                                 </td>
-                                <td class="list-cell-muted">@GetFrequency(t.ReturnCode)</td>
+                                <td class="fc-list-cell-muted">@GetFrequency(t.ReturnCode)</td>
                                 <td>@t.CurrentVersion.Fields.Count</td>
                                 <td>@t.CurrentVersion.IntraSheetFormulas.Count</td>
-                                <td class="list-cell-code">@t.PhysicalTableName</td>
+                                <td class="fc-list-cell-code">@t.PhysicalTableName</td>
                                 <td>
-                                    <div class="list-row-actions">
+                                    <div class="fc-list-row-actions">
                                         <button class="fc-btn fc-btn--ghost fc-btn--xs" @onclick="() => ViewTemplate(t.ReturnCode)" @onclick:stopPropagation="true">
                                             View
                                         </button>
@@ -168,8 +168,8 @@
                 </table>
             </div>
 
-            <div class="list-footer">
-                <div class="list-footer-summary">
+            <div class="fc-list-footer">
+                <div class="fc-list-footer-summary">
                     Showing <strong>@PagedTemplates.Count()</strong> of <strong>@FilteredTemplates.Count()</strong> templates
                     @if (TotalPages > 1)
                     {
@@ -178,14 +178,14 @@
                 </div>
                 @if (TotalPages > 1)
                 {
-                    <div class="list-pagination">
-                        <button class="list-page-btn" disabled="@(_currentPage <= 1)" @onclick="() => _currentPage--">&laquo;</button>
+                    <div class="fc-list-pagination">
+                        <button class="fc-list-page-btn" disabled="@(_currentPage <= 1)" @onclick="() => _currentPage--">&laquo;</button>
                         @for (var p = 1; p <= TotalPages; p++)
                         {
                             var page = p;
-                            <button class="list-page-btn @(page == _currentPage ? "list-page-btn-active" : "")" @onclick="() => _currentPage = page">@(page)</button>
+                            <button class="fc-list-page-btn @(page == _currentPage ? "fc-list-page-btn-active" : "")" @onclick="() => _currentPage = page">@(page)</button>
                         }
-                        <button class="list-page-btn" disabled="@(_currentPage >= TotalPages)" @onclick="() => _currentPage++">&raquo;</button>
+                        <button class="fc-list-page-btn" disabled="@(_currentPage >= TotalPages)" @onclick="() => _currentPage++">&raquo;</button>
                     </div>
                 }
             </div>

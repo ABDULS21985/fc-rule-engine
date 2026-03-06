@@ -5,21 +5,21 @@
 @using Microsoft.EntityFrameworkCore
 @inject IServiceProvider ServiceProvider
 
-<div class="admin-page">
+<div class="fc-page">
 
     <!-- Breadcrumb -->
-    <nav class="detail-breadcrumb" aria-label="Breadcrumb">
+    <nav class="fc-breadcrumb" aria-label="Breadcrumb">
         <a href="/">Dashboard</a>
-        <span class="detail-breadcrumb-sep" aria-hidden="true">/</span>
-        <span class="detail-breadcrumb-current">Audit Log</span>
+        <span class="fc-breadcrumb-sep" aria-hidden="true">/</span>
+        <span class="fc-breadcrumb-current">Audit Log</span>
     </nav>
 
     <!-- Page Header -->
-    <div class="admin-header">
-        <div class="admin-header-top">
+    <div class="fc-page-header">
+        <div class="fc-page-header-top">
             <div>
                 <h1>Audit Log</h1>
-                <p class="admin-header-subtitle">Trace all operational activity, metadata changes, and administrative actions across the platform.</p>
+                <p class="fc-page-header-subtitle">Trace all operational activity, metadata changes, and administrative actions across the platform.</p>
             </div>
         </div>
 
@@ -41,12 +41,12 @@
     </div>
 
     <!-- Filter Toolbar -->
-    <div class="admin-toolbar">
-        <div class="admin-toolbar-search">
+    <div class="fc-toolbar">
+        <div class="fc-toolbar-search">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
             <input type="text" placeholder="Search by entity, user, or action..." @bind="_searchQuery" @bind:event="oninput" aria-label="Search audit entries" />
         </div>
-        <div class="admin-toolbar-filter">
+        <div class="fc-toolbar-filter">
             <select @bind="_actionFilter" aria-label="Filter by action type">
                 <option value="">All Actions</option>
                 @foreach (var action in _entries.Select(e => e.Action).Distinct().OrderBy(a => a))
@@ -62,12 +62,12 @@
                 }
             </select>
         </div>
-        <div class="admin-toolbar-date">
+        <div class="fc-toolbar-date">
             <input type="date" @bind="_dateFrom" aria-label="From date" />
-            <span class="admin-toolbar-date-sep">to</span>
+            <span class="fc-toolbar-date-sep">to</span>
             <input type="date" @bind="_dateTo" aria-label="To date" />
         </div>
-        <div class="admin-toolbar-actions">
+        <div class="fc-toolbar-actions">
             <button class="fc-btn fc-btn--outline" @onclick="ClearFilters" type="button">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
                 Clear
@@ -82,15 +82,15 @@
     <!-- Content -->
     @if (_loading)
     {
-        <div class="skel-timeline" role="status" aria-label="Loading audit trail">
+        <div class="fc-skel-timeline" role="status" aria-label="Loading audit trail">
             @for (var i = 0; i < 5; i++)
             {
-                <div class="skel-timeline-item">
+                <div class="fc-skel-timeline-item">
                     <div style="display:flex;align-items:center;gap:var(--space-3);margin-bottom:var(--space-2);">
-                        <div class="skel skel-circle" style="width:32px;height:32px;flex-shrink:0;"></div>
+                        <div class="skel fc-skel-circle" style="width:32px;height:32px;flex-shrink:0;"></div>
                         <div style="flex:1;">
-                            <div class="skel skel-text" style="width:120px;"></div>
-                            <div class="skel skel-text" style="width:180px;"></div>
+                            <div class="skel fc-skel-text" style="width:120px;"></div>
+                            <div class="skel fc-skel-text" style="width:180px;"></div>
                         </div>
                     </div>
                     <div style="display:flex;gap:var(--space-4);margin-top:var(--space-2);">
@@ -103,38 +103,38 @@
     }
     else if (!FilteredEntries.Any())
     {
-        <div class="admin-empty">
-            <div class="admin-empty-icon">
+        <div class="fc-empty">
+            <div class="fc-empty-icon">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
             </div>
             @if (string.IsNullOrEmpty(_searchQuery) && string.IsNullOrEmpty(_actionFilter) && string.IsNullOrEmpty(_entityFilter) && _dateFrom is null && _dateTo is null)
             {
-                <h3 class="admin-empty-title">No audit events recorded</h3>
-                <p class="admin-empty-text">System activity will appear here as operations are performed.</p>
+                <h3 class="fc-empty-title">No audit events recorded</h3>
+                <p class="fc-empty-text">System activity will appear here as operations are performed.</p>
             }
             else
             {
-                <h3 class="admin-empty-title">No matching events</h3>
-                <p class="admin-empty-text">Try adjusting the date range or filters.</p>
+                <h3 class="fc-empty-title">No matching events</h3>
+                <p class="fc-empty-text">Try adjusting the date range or filters.</p>
             }
         </div>
     }
     else
     {
         <!-- Vertical Alternating Timeline -->
-        <div class="audit-timeline" role="feed" aria-label="Audit trail timeline">
+        <div class="fc-audit-timeline" role="feed" aria-label="Audit trail timeline">
             @foreach (var entry in FilteredEntries.Take(200))
             {
-                <div class="audit-timeline-item" role="article">
-                    <span class="audit-timeline-dot @GetDotClass(entry.Action)" aria-hidden="true"></span>
-                    <div class="audit-timeline-card">
-                        <div class="audit-card-header">
-                            <div class="audit-card-icon @GetIconClass(entry.Action)" aria-hidden="true">
+                <div class="fc-audit-timeline-item" role="article">
+                    <span class="fc-audit-timeline-dot @GetDotClass(entry.Action)" aria-hidden="true"></span>
+                    <div class="fc-audit-timeline-card">
+                        <div class="fc-audit-card-header">
+                            <div class="fc-audit-card-icon @GetIconClass(entry.Action)" aria-hidden="true">
                                 @GetActionIcon(entry.Action)
                             </div>
-                            <div class="audit-card-content">
-                                <div class="audit-card-action">@entry.Action</div>
-                                <div class="audit-card-entity">
+                            <div class="fc-audit-card-content">
+                                <div class="fc-audit-card-action">@entry.Action</div>
+                                <div class="fc-audit-card-entity">
                                     @entry.EntityType
                                     @if (!string.IsNullOrEmpty(entry.EntityId))
                                     {
@@ -146,23 +146,23 @@
 
                         @if (!string.IsNullOrEmpty(entry.Changes))
                         {
-                            <div class="audit-card-entity" style="margin-top: var(--space-2); font-size: var(--text-caption); color: var(--cbn-text-muted);">
+                            <div class="fc-audit-card-entity" style="margin-top: var(--space-2); font-size: var(--text-caption); color: var(--cbn-text-muted);">
                                 @entry.Changes
                             </div>
                         }
 
-                        <div class="audit-card-footer">
-                            <span class="audit-card-meta">
+                        <div class="fc-audit-card-footer">
+                            <span class="fc-audit-card-meta">
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4-4v2"/><circle cx="12" cy="7" r="4"/></svg>
                                 @entry.PerformedBy
                             </span>
-                            <span class="audit-card-meta">
+                            <span class="fc-audit-card-meta">
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
                                 @entry.Timestamp.ToString("dd MMM yyyy, HH:mm:ss")
                             </span>
                             @if (!string.IsNullOrEmpty(entry.IpAddress))
                             {
-                                <span class="audit-card-meta">
+                                <span class="fc-audit-card-meta">
                                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
                                     @entry.IpAddress
                                 </span>
@@ -249,28 +249,28 @@
     // --- Visual helpers ---
     private static string GetDotClass(string action) => NormalizeAction(action) switch
     {
-        "created" => "audit-dot-created",
-        "updated" => "audit-dot-updated",
-        "deleted" => "audit-dot-deleted",
-        "archived" => "audit-dot-archived",
-        "published" => "audit-dot-published",
-        "approved" => "audit-dot-approved",
-        "rejected" => "audit-dot-rejected",
-        "loggedin" or "login" => "audit-dot-login",
-        _ => "audit-dot-default"
+        "created" => "fc-audit-dot-created",
+        "updated" => "fc-audit-dot-updated",
+        "deleted" => "fc-audit-dot-deleted",
+        "archived" => "fc-audit-dot-archived",
+        "published" => "fc-audit-dot-published",
+        "approved" => "fc-audit-dot-approved",
+        "rejected" => "fc-audit-dot-rejected",
+        "loggedin" or "login" => "fc-audit-dot-login",
+        _ => "fc-audit-dot-default"
     };
 
     private static string GetIconClass(string action) => NormalizeAction(action) switch
     {
-        "created" => "audit-icon-created",
-        "updated" => "audit-icon-updated",
-        "deleted" => "audit-icon-deleted",
-        "archived" => "audit-icon-archived",
-        "published" => "audit-icon-published",
-        "approved" => "audit-icon-approved",
-        "rejected" => "audit-icon-rejected",
-        "loggedin" or "login" => "audit-icon-login",
-        _ => "audit-icon-default"
+        "created" => "fc-audit-icon-created",
+        "updated" => "fc-audit-icon-updated",
+        "deleted" => "fc-audit-icon-deleted",
+        "archived" => "fc-audit-icon-archived",
+        "published" => "fc-audit-icon-published",
+        "approved" => "fc-audit-icon-approved",
+        "rejected" => "fc-audit-icon-rejected",
+        "loggedin" or "login" => "fc-audit-icon-login",
+        _ => "fc-audit-icon-default"
     };
 
     private static string GetChipDotClass(string action) => NormalizeAction(action) switch

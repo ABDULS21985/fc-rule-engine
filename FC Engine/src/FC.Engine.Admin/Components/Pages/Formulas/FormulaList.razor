@@ -12,35 +12,35 @@
 @inject ToastService Toast
 @inject DialogService Dialog
 
-<div class="list-page">
-    <div class="list-page-header">
-        <div class="list-page-header-text">
+<div class="fc-list-page">
+    <div class="fc-list-page-header">
+        <div class="fc-list-page-header-text">
             <h1>
                 Intra-Sheet Formulas
                 @if (!_loading)
                 {
-                    <span class="list-count-chip">@_allFormulas.Count</span>
+                    <span class="fc-list-count-chip">@_allFormulas.Count</span>
                 }
             </h1>
             <p>View and manage validation formulas across all templates. Formulas define how computed fields are validated.</p>
         </div>
     </div>
 
-    <div class="list-card">
-        <div class="list-toolbar">
-            <div class="list-toolbar-filters">
-                <div class="list-search-wrap">
-                    <svg class="list-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
-                    <input class="list-search-input" placeholder="Search by rule code, field, or description..." @bind="_search" @bind:event="oninput" />
+    <div class="fc-list-card">
+        <div class="fc-list-toolbar">
+            <div class="fc-list-toolbar-filters">
+                <div class="fc-list-search-wrap">
+                    <svg class="fc-list-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+                    <input class="fc-list-search-input" placeholder="Search by rule code, field, or description..." @bind="_search" @bind:event="oninput" />
                 </div>
-                <select class="list-filter-select" @bind="_typeFilter">
+                <select class="fc-list-filter-select" @bind="_typeFilter">
                     <option value="">All Types</option>
                     @foreach (var ft in Enum.GetValues<FormulaType>())
                     {
                         <option value="@ft">@ft</option>
                     }
                 </select>
-                <select class="list-filter-select" @bind="_templateFilter">
+                <select class="fc-list-filter-select" @bind="_templateFilter">
                     <option value="">All Templates</option>
                     @foreach (var rc in _returnCodes)
                     {
@@ -48,7 +48,7 @@
                     }
                 </select>
             </div>
-            <div class="list-toolbar-actions">
+            <div class="fc-list-toolbar-actions">
                 <AuthorizeView Roles="Admin,Approver">
                     <Authorized Context="addAuth">
                         <button class="fc-btn fc-btn--gold" @onclick="ShowAddFormula">
@@ -62,7 +62,7 @@
 
         @if (_showAddForm)
         {
-            <div class="list-inline-form">
+            <div class="fc-list-inline-form">
                 <h3>@(_editFormulaId.HasValue ? "Edit Formula" : "Add Intra-Sheet Formula")</h3>
                 <div class="grid-2">
                     <div class="form-group">
@@ -144,7 +144,7 @@
                         Available fields: @string.Join(", ", _selectedTemplateFields.Take(20))@(_selectedTemplateFields.Count > 20 ? $"... (+{_selectedTemplateFields.Count - 20} more)" : "")
                     </div>
                 }
-                <div class="list-form-actions">
+                <div class="fc-list-form-actions">
                     @if (_editFormulaId.HasValue)
                     {
                         <button class="fc-btn fc-btn--primary fc-btn--sm" @onclick="UpdateFormula">Update</button>
@@ -160,32 +160,32 @@
 
         @if (_loading)
         {
-            <div class="list-skeleton">
+            <div class="fc-list-skeleton">
                 @for (var i = 0; i < 8; i++)
                 {
-                    <div class="list-skeleton-row">
-                        <div class="list-skeleton-cell" style="width:80px;"></div>
-                        <div class="list-skeleton-cell" style="width:120px;"></div>
-                        <div class="list-skeleton-cell" style="flex:1;"></div>
-                        <div class="list-skeleton-cell" style="width:60px;"></div>
-                        <div class="list-skeleton-cell" style="width:80px;"></div>
-                        <div class="list-skeleton-cell" style="width:40px;"></div>
+                    <div class="fc-list-skeleton-row">
+                        <div class="fc-list-skeleton-cell" style="width:80px;"></div>
+                        <div class="fc-list-skeleton-cell" style="width:120px;"></div>
+                        <div class="fc-list-skeleton-cell" style="flex:1;"></div>
+                        <div class="fc-list-skeleton-cell" style="width:60px;"></div>
+                        <div class="fc-list-skeleton-cell" style="width:80px;"></div>
+                        <div class="fc-list-skeleton-cell" style="width:40px;"></div>
                     </div>
                 }
             </div>
         }
         else if (!FilteredFormulas.Any())
         {
-            <div class="list-empty">
-                <svg class="list-empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4.745 3A23.933 23.933 0 0 0 3 12c0 3.183.62 6.22 1.745 9M19.255 3C20.38 5.78 21 8.817 21 12s-.62 6.22-1.745 9M12 3v18"/><circle cx="12" cy="12" r="3"/></svg>
-                <h3 class="list-empty-title">No formulas found</h3>
-                <p class="list-empty-text">Try adjusting your search criteria or filters. You can also add a new formula to get started.</p>
+            <div class="fc-list-empty">
+                <svg class="fc-list-empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4.745 3A23.933 23.933 0 0 0 3 12c0 3.183.62 6.22 1.745 9M19.255 3C20.38 5.78 21 8.817 21 12s-.62 6.22-1.745 9M12 3v18"/><circle cx="12" cy="12" r="3"/></svg>
+                <h3 class="fc-list-empty-title">No formulas found</h3>
+                <p class="fc-list-empty-text">Try adjusting your search criteria or filters. You can also add a new formula to get started.</p>
             </div>
         }
         else
         {
-            <div class="list-table-wrap">
-                <table class="list-table" role="table">
+            <div class="fc-table-wrap">
+                <table class="fc-table" role="table">
                     <thead>
                         <tr>
                             <th scope="col">Template</th>
@@ -203,37 +203,37 @@
                         @foreach (var (rc, f) in PagedFormulas)
                         {
                             <tr>
-                                <td><a class="list-cell-link" href="/templates/@rc">@rc</a></td>
-                                <td class="list-cell-code">@f.RuleCode</td>
-                                <td class="list-cell-truncate" title="@f.RuleName">@f.RuleName</td>
+                                <td><a class="fc-list-cell-link" href="/templates/@rc">@rc</a></td>
+                                <td class="fc-list-cell-code">@f.RuleCode</td>
+                                <td class="fc-list-cell-truncate" title="@f.RuleName">@f.RuleName</td>
                                 <td>
                                     <span class="fc-badge @FormulaBadge(f.FormulaType.ToString())">@f.FormulaType</span>
                                 </td>
                                 <td>
-                                    <span class="list-cell-code">@f.TargetFieldName</span>
+                                    <span class="fc-list-cell-code">@f.TargetFieldName</span>
                                     @if (!string.IsNullOrEmpty(f.TargetLineCode))
                                     {
-                                        <br/><span class="list-cell-muted">@f.TargetLineCode</span>
+                                        <br/><span class="fc-list-cell-muted">@f.TargetLineCode</span>
                                     }
                                 </td>
-                                <td class="list-cell-truncate">
+                                <td class="fc-list-cell-truncate">
                                     @if (f.FormulaType == FormulaType.Custom && !string.IsNullOrEmpty(f.CustomExpression))
                                     {
-                                        <span class="list-cell-code" title="@f.CustomExpression">@TruncateExpression(f.CustomExpression, 50)</span>
+                                        <span class="fc-list-cell-code" title="@f.CustomExpression">@TruncateExpression(f.CustomExpression, 50)</span>
                                     }
                                     else
                                     {
-                                        <span class="list-cell-code" title="@f.OperandFields">@FormatOperands(f.OperandFields, f.FormulaType)</span>
+                                        <span class="fc-list-cell-code" title="@f.OperandFields">@FormatOperands(f.OperandFields, f.FormulaType)</span>
                                     }
                                 </td>
-                                <td class="list-cell-muted">@f.ToleranceAmount</td>
+                                <td class="fc-list-cell-muted">@f.ToleranceAmount</td>
                                 <td>
                                     <span class="fc-badge @StatusBadge(f.Severity.ToString())">@f.Severity</span>
                                 </td>
                                 <td>
                                     <AuthorizeView Roles="Admin,Approver">
                                         <Authorized Context="editAuth">
-                                            <div class="list-row-actions">
+                                            <div class="fc-list-row-actions">
                                                 <button class="fc-btn fc-btn--ghost fc-btn--xs" @onclick="() => EditFormula(rc, f)">Edit</button>
                                                 <button class="fc-btn fc-btn--ghost fc-btn--xs fc-btn--danger" @onclick="() => DeleteFormula(f)">Delete</button>
                                             </div>
@@ -246,8 +246,8 @@
                 </table>
             </div>
 
-            <div class="list-footer">
-                <div class="list-footer-summary">
+            <div class="fc-list-footer">
+                <div class="fc-list-footer-summary">
                     Showing <strong>@PagedFormulas.Count()</strong> of <strong>@FilteredFormulas.Count()</strong> formulas
                     @if (!string.IsNullOrEmpty(_templateFilter))
                     {
@@ -260,14 +260,14 @@
                 </div>
                 @if (TotalPages > 1)
                 {
-                    <div class="list-pagination">
-                        <button class="list-page-btn" disabled="@(_currentPage <= 1)" @onclick="() => _currentPage--">&laquo;</button>
+                    <div class="fc-list-pagination">
+                        <button class="fc-list-page-btn" disabled="@(_currentPage <= 1)" @onclick="() => _currentPage--">&laquo;</button>
                         @for (var p = Math.Max(1, _currentPage - 2); p <= Math.Min(TotalPages, _currentPage + 2); p++)
                         {
                             var page = p;
-                            <button class="list-page-btn @(page == _currentPage ? "list-page-btn-active" : "")" @onclick="() => _currentPage = page">@(page)</button>
+                            <button class="fc-list-page-btn @(page == _currentPage ? "fc-list-page-btn-active" : "")" @onclick="() => _currentPage = page">@(page)</button>
                         }
-                        <button class="list-page-btn" disabled="@(_currentPage >= TotalPages)" @onclick="() => _currentPage++">&raquo;</button>
+                        <button class="fc-list-page-btn" disabled="@(_currentPage >= TotalPages)" @onclick="() => _currentPage++">&raquo;</button>
                     </div>
                 }
             </div>
