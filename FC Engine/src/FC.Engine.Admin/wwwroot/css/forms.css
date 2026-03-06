@@ -1,0 +1,1013 @@
+/* ============================================================
+   FC Engine — Advanced Form System
+   BEM naming: .fc-ff-* (form field), .fc-fs-* (form section),
+   .fc-fa-* (form actions), .fc-currency-*, .fc-datepicker-*,
+   .fc-multiselect-*, .fc-file-upload-*, .fc-rte-*,
+   .fc-autosave-*, .fc-cond-*
+   ============================================================ */
+
+/* ================================================================
+   1. FORM FIELD — Wrapper with label, hint, validation
+   ================================================================ */
+
+.fc-ff {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+}
+
+.fc-ff__label {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+    font-size: var(--text-label, 0.75rem);
+    font-weight: var(--font-weight-medium, 500);
+    color: var(--cbn-text-secondary);
+    letter-spacing: var(--tracking-wide, 0.025em);
+}
+
+.fc-ff__label--required::after {
+    content: "*";
+    color: var(--cbn-danger);
+    font-weight: 600;
+}
+
+.fc-ff__check {
+    display: inline-flex;
+    width: 14px;
+    height: 14px;
+    color: var(--cbn-success);
+    opacity: 0;
+    transform: scale(0.5);
+    transition: opacity var(--transition-fast) var(--ease-standard),
+                transform var(--transition-fast) var(--ease-spring);
+}
+
+.fc-ff--valid .fc-ff__check {
+    opacity: 1;
+    transform: scale(1);
+}
+
+.fc-ff__body {
+    position: relative;
+}
+
+.fc-ff__body .fc-form-input {
+    width: 100%;
+}
+
+/* Validation states on inputs */
+.fc-ff--valid .fc-form-input {
+    border-color: var(--cbn-success);
+}
+
+.fc-ff--valid .fc-form-input:focus {
+    box-shadow: 0 0 0 3px rgba(5, 150, 105, 0.15);
+}
+
+.fc-ff--invalid .fc-form-input {
+    border-color: var(--cbn-danger);
+}
+
+.fc-ff--invalid .fc-form-input:focus {
+    box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.15);
+}
+
+.fc-ff__hint {
+    font-size: var(--text-caption, 0.75rem);
+    color: var(--cbn-text-muted);
+    line-height: 1.4;
+    transition: color var(--transition-fast) var(--ease-standard);
+}
+
+.fc-ff--invalid .fc-ff__hint {
+    display: none;
+}
+
+.fc-ff__error {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-1);
+    font-size: var(--text-caption, 0.75rem);
+    color: var(--cbn-danger);
+    line-height: 1.4;
+    overflow: hidden;
+}
+
+.fc-ff__error-icon {
+    flex-shrink: 0;
+    width: 14px;
+    height: 14px;
+    margin-top: 1px;
+}
+
+/* ================================================================
+   2. FORM SECTION — Collapsible accordion for long forms
+   ================================================================ */
+
+.fc-fs {
+    border: 1px solid var(--cbn-border, #e5e7eb);
+    border-radius: var(--radius-lg, 12px);
+    background: var(--cbn-surface-elevated, #fff);
+    overflow: hidden;
+    transition: box-shadow var(--transition-base) var(--ease-standard);
+}
+
+.fc-fs + .fc-fs {
+    margin-top: var(--space-3);
+}
+
+.fc-fs:has(.fc-fs__header:hover) {
+    box-shadow: var(--shadow-level-1);
+}
+
+.fc-fs__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--space-4) var(--space-5);
+    cursor: pointer;
+    user-select: none;
+    background: transparent;
+    transition: background var(--transition-fast) var(--ease-standard);
+}
+
+.fc-fs__header:hover {
+    background: var(--cbn-surface, #f9fafb);
+}
+
+.fc-fs__header-text {
+    flex: 1;
+    min-width: 0;
+}
+
+.fc-fs__title {
+    font-size: var(--text-body-lg, 1rem);
+    font-weight: var(--font-weight-semibold, 600);
+    color: var(--cbn-text);
+    margin: 0;
+}
+
+.fc-fs__desc {
+    font-size: var(--text-body-sm, 0.8125rem);
+    color: var(--cbn-text-muted);
+    margin: var(--space-1) 0 0;
+}
+
+.fc-fs__header-right {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+}
+
+.fc-fs__badge {
+    font-size: var(--text-caption, 0.75rem);
+    font-weight: var(--font-weight-medium, 500);
+    padding: 2px 10px;
+    border-radius: var(--radius-pill);
+    background: var(--cbn-gold-pale, #FBF5E0);
+    color: var(--cbn-gold-dark, #A68A10);
+}
+
+.fc-fs__chevron {
+    width: 20px;
+    height: 20px;
+    color: var(--cbn-text-muted);
+    transition: transform var(--transition-base) var(--ease-emphasized);
+    flex-shrink: 0;
+}
+
+.fc-fs--open .fc-fs__chevron {
+    transform: rotate(180deg);
+}
+
+.fc-fs__body {
+    overflow: hidden;
+    transition: max-height var(--transition-slow, 300ms) var(--ease-emphasized, cubic-bezier(0.2,0,0,1));
+}
+
+.fc-fs--closed .fc-fs__body {
+    max-height: 0 !important;
+}
+
+.fc-fs__content {
+    padding: 0 var(--space-5) var(--space-5);
+    border-top: 1px solid var(--cbn-border-subtle, #f3f4f6);
+}
+
+/* ================================================================
+   3. FORM ACTIONS — Footer with buttons + auto-save
+   ================================================================ */
+
+.fc-fa {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-4);
+    padding: var(--space-5) 0;
+    border-top: 1px solid var(--cbn-border, #e5e7eb);
+    margin-top: var(--space-6);
+}
+
+.fc-fa__left {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+}
+
+.fc-fa__right {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+}
+
+@media (max-width: 640px) {
+    .fc-fa {
+        flex-direction: column-reverse;
+        align-items: stretch;
+    }
+    .fc-fa__left,
+    .fc-fa__right {
+        justify-content: stretch;
+    }
+    .fc-fa__left .fc-btn,
+    .fc-fa__right .fc-btn {
+        flex: 1;
+    }
+}
+
+/* ================================================================
+   4. CURRENCY INPUT
+   ================================================================ */
+
+.fc-currency {
+    position: relative;
+    display: flex;
+    align-items: stretch;
+}
+
+.fc-currency__symbol {
+    display: flex;
+    align-items: center;
+    padding: 0 var(--space-3);
+    background: var(--cbn-surface, #f9fafb);
+    border: 1px solid var(--cbn-border, #e5e7eb);
+    border-right: none;
+    border-radius: var(--radius-md) 0 0 var(--radius-md);
+    font-size: var(--text-body, 0.875rem);
+    font-weight: var(--font-weight-medium, 500);
+    color: var(--cbn-text-secondary);
+    user-select: none;
+}
+
+.fc-currency__input {
+    flex: 1;
+    min-width: 0;
+    padding: var(--space-2-5, 0.625rem) var(--space-3);
+    border: 1px solid var(--cbn-border, #e5e7eb);
+    border-radius: 0 var(--radius-md) var(--radius-md) 0;
+    font-size: var(--text-body, 0.875rem);
+    font-family: var(--font-mono, monospace);
+    color: var(--cbn-text);
+    background: var(--cbn-surface-elevated, #fff);
+    text-align: right;
+    transition: border-color var(--transition-fast) var(--ease-standard),
+                box-shadow var(--transition-fast) var(--ease-standard);
+}
+
+.fc-currency__input:focus {
+    outline: none;
+    border-color: var(--cbn-primary);
+    box-shadow: 0 0 0 3px var(--cbn-focus-ring, rgba(0,107,63,0.15));
+}
+
+.fc-currency__input::placeholder {
+    color: var(--cbn-text-muted);
+    font-family: var(--font-sans);
+}
+
+.fc-currency__input:disabled {
+    background: var(--cbn-surface, #f9fafb);
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+
+/* ================================================================
+   5. DATE RANGE PICKER
+   ================================================================ */
+
+.fc-datepicker {
+    position: relative;
+    display: inline-flex;
+    flex-direction: column;
+}
+
+.fc-datepicker__trigger {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-2-5, 0.625rem) var(--space-3);
+    border: 1px solid var(--cbn-border, #e5e7eb);
+    border-radius: var(--radius-md);
+    background: var(--cbn-surface-elevated, #fff);
+    cursor: pointer;
+    font-size: var(--text-body, 0.875rem);
+    color: var(--cbn-text);
+    transition: border-color var(--transition-fast) var(--ease-standard),
+                box-shadow var(--transition-fast) var(--ease-standard);
+    min-width: 220px;
+}
+
+.fc-datepicker__trigger:hover {
+    border-color: var(--cbn-primary);
+}
+
+.fc-datepicker__trigger:focus-within {
+    border-color: var(--cbn-primary);
+    box-shadow: 0 0 0 3px var(--cbn-focus-ring, rgba(0,107,63,0.15));
+}
+
+.fc-datepicker__trigger-icon {
+    width: 16px;
+    height: 16px;
+    color: var(--cbn-text-muted);
+    flex-shrink: 0;
+}
+
+.fc-datepicker__trigger-text {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.fc-datepicker__trigger-text--placeholder {
+    color: var(--cbn-text-muted);
+}
+
+.fc-datepicker__trigger-clear {
+    width: 16px;
+    height: 16px;
+    color: var(--cbn-text-muted);
+    cursor: pointer;
+    flex-shrink: 0;
+    border: none;
+    background: none;
+    padding: 0;
+    display: flex;
+    align-items: center;
+}
+
+.fc-datepicker__trigger-clear:hover {
+    color: var(--cbn-danger);
+}
+
+.fc-datepicker__dropdown {
+    position: absolute;
+    z-index: 100;
+    top: 100%;
+    left: 0;
+    margin-top: 4px;
+    background: var(--cbn-surface-elevated, #fff);
+    border: 1px solid var(--cbn-border, #e5e7eb);
+    border-radius: var(--radius-lg, 12px);
+    box-shadow: var(--shadow-level-3);
+    padding: var(--space-4);
+    min-width: 300px;
+    animation: fc-dp-enter 200ms var(--ease-emphasized);
+}
+
+@keyframes fc-dp-enter {
+    from { opacity: 0; transform: translateY(-8px) scale(0.97); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.fc-datepicker__presets {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-1);
+    margin-bottom: var(--space-3);
+    padding-bottom: var(--space-3);
+    border-bottom: 1px solid var(--cbn-border-subtle, #f3f4f6);
+}
+
+.fc-datepicker__preset {
+    padding: 3px 10px;
+    border: 1px solid var(--cbn-border, #e5e7eb);
+    border-radius: var(--radius-pill);
+    background: transparent;
+    font-size: var(--text-caption, 0.75rem);
+    color: var(--cbn-text-secondary);
+    cursor: pointer;
+    transition: all var(--transition-fast) var(--ease-standard);
+}
+
+.fc-datepicker__preset:hover {
+    background: var(--cbn-primary);
+    color: #fff;
+    border-color: var(--cbn-primary);
+}
+
+.fc-datepicker__nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: var(--space-3);
+}
+
+.fc-datepicker__nav-btn {
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    background: transparent;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    color: var(--cbn-text-secondary);
+    transition: background var(--transition-fast) var(--ease-standard);
+}
+
+.fc-datepicker__nav-btn:hover {
+    background: var(--cbn-surface, #f9fafb);
+}
+
+.fc-datepicker__nav-title {
+    font-weight: var(--font-weight-semibold, 600);
+    font-size: var(--text-body, 0.875rem);
+    color: var(--cbn-text);
+}
+
+.fc-datepicker__grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 2px;
+    text-align: center;
+}
+
+.fc-datepicker__dow {
+    font-size: var(--text-caption, 0.75rem);
+    font-weight: var(--font-weight-medium, 500);
+    color: var(--cbn-text-muted);
+    padding: var(--space-1) 0;
+}
+
+.fc-datepicker__day {
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    background: transparent;
+    border-radius: var(--radius-sm);
+    font-size: var(--text-body-sm, 0.8125rem);
+    color: var(--cbn-text);
+    cursor: pointer;
+    transition: all var(--transition-fast) var(--ease-standard);
+    margin: 0 auto;
+}
+
+.fc-datepicker__day:hover {
+    background: var(--cbn-surface, #f9fafb);
+}
+
+.fc-datepicker__day--today {
+    font-weight: var(--font-weight-semibold, 600);
+    border: 1px solid var(--cbn-primary);
+}
+
+.fc-datepicker__day--selected {
+    background: var(--cbn-primary) !important;
+    color: #fff !important;
+    font-weight: var(--font-weight-semibold, 600);
+}
+
+.fc-datepicker__day--in-range {
+    background: rgba(0, 107, 63, 0.08);
+    border-radius: 0;
+}
+
+.fc-datepicker__day--range-start {
+    border-radius: var(--radius-sm) 0 0 var(--radius-sm);
+}
+
+.fc-datepicker__day--range-end {
+    border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+}
+
+.fc-datepicker__day--other-month {
+    color: var(--cbn-text-muted);
+    opacity: 0.4;
+}
+
+.fc-datepicker__day--disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+}
+
+/* ================================================================
+   6. MULTI-SELECT
+   ================================================================ */
+
+.fc-multiselect {
+    position: relative;
+}
+
+.fc-multiselect__control {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-1);
+    min-height: 40px;
+    padding: var(--space-1) var(--space-2);
+    border: 1px solid var(--cbn-border, #e5e7eb);
+    border-radius: var(--radius-md);
+    background: var(--cbn-surface-elevated, #fff);
+    cursor: text;
+    transition: border-color var(--transition-fast) var(--ease-standard),
+                box-shadow var(--transition-fast) var(--ease-standard);
+}
+
+.fc-multiselect__control:focus-within {
+    border-color: var(--cbn-primary);
+    box-shadow: 0 0 0 3px var(--cbn-focus-ring, rgba(0,107,63,0.15));
+}
+
+.fc-multiselect__pill {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    padding: 2px 6px 2px 10px;
+    background: var(--cbn-gold-pale, #FBF5E0);
+    border: 1px solid var(--cbn-gold-light, #F5E6A3);
+    border-radius: var(--radius-pill);
+    font-size: var(--text-caption, 0.75rem);
+    font-weight: var(--font-weight-medium, 500);
+    color: var(--cbn-gold-dark, #A68A10);
+    animation: fc-pill-in 200ms var(--ease-spring);
+    max-width: 200px;
+}
+
+@keyframes fc-pill-in {
+    from { opacity: 0; transform: scale(0.8); }
+    to   { opacity: 1; transform: scale(1); }
+}
+
+.fc-multiselect__pill-text {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.fc-multiselect__pill-remove {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    border: none;
+    background: transparent;
+    border-radius: 50%;
+    cursor: pointer;
+    color: var(--cbn-gold-dark, #A68A10);
+    padding: 0;
+    flex-shrink: 0;
+    transition: background var(--transition-fast) var(--ease-standard);
+}
+
+.fc-multiselect__pill-remove:hover {
+    background: rgba(0,0,0,0.08);
+    color: var(--cbn-danger);
+}
+
+.fc-multiselect__input {
+    flex: 1;
+    min-width: 80px;
+    border: none;
+    outline: none;
+    background: transparent;
+    font-size: var(--text-body, 0.875rem);
+    font-family: var(--font-sans);
+    color: var(--cbn-text);
+    padding: var(--space-1);
+}
+
+.fc-multiselect__input::placeholder {
+    color: var(--cbn-text-muted);
+}
+
+.fc-multiselect__dropdown {
+    position: absolute;
+    z-index: 100;
+    top: 100%;
+    left: 0;
+    right: 0;
+    margin-top: 4px;
+    background: var(--cbn-surface-elevated, #fff);
+    border: 1px solid var(--cbn-border, #e5e7eb);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-level-3);
+    max-height: 240px;
+    overflow-y: auto;
+    animation: fc-dp-enter 150ms var(--ease-emphasized);
+}
+
+.fc-multiselect__option {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-3);
+    cursor: pointer;
+    font-size: var(--text-body, 0.875rem);
+    color: var(--cbn-text);
+    transition: background var(--transition-fast) var(--ease-standard);
+}
+
+.fc-multiselect__option:hover,
+.fc-multiselect__option--focused {
+    background: var(--cbn-surface, #f9fafb);
+}
+
+.fc-multiselect__option--selected {
+    color: var(--cbn-primary);
+    font-weight: var(--font-weight-medium, 500);
+}
+
+.fc-multiselect__option-check {
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+    opacity: 0;
+}
+
+.fc-multiselect__option--selected .fc-multiselect__option-check {
+    opacity: 1;
+    color: var(--cbn-success);
+}
+
+.fc-multiselect__empty {
+    padding: var(--space-4);
+    text-align: center;
+    font-size: var(--text-body-sm, 0.8125rem);
+    color: var(--cbn-text-muted);
+}
+
+/* ================================================================
+   7. FILE UPLOAD
+   ================================================================ */
+
+.fc-file-upload {
+    position: relative;
+    border: 2px dashed var(--cbn-border, #e5e7eb);
+    border-radius: var(--radius-lg, 12px);
+    padding: var(--space-8) var(--space-6);
+    text-align: center;
+    cursor: pointer;
+    transition: border-color var(--transition-fast) var(--ease-standard),
+                background var(--transition-fast) var(--ease-standard);
+}
+
+.fc-file-upload:hover {
+    border-color: var(--cbn-primary);
+    background: rgba(0, 107, 63, 0.02);
+}
+
+.fc-file-upload--dragover {
+    border-color: var(--cbn-primary);
+    background: rgba(0, 107, 63, 0.06);
+    border-style: solid;
+}
+
+.fc-file-upload__icon {
+    width: 40px;
+    height: 40px;
+    margin: 0 auto var(--space-3);
+    color: var(--cbn-text-muted);
+}
+
+.fc-file-upload--dragover .fc-file-upload__icon {
+    color: var(--cbn-primary);
+    transform: scale(1.1);
+    transition: transform var(--transition-fast) var(--ease-spring);
+}
+
+.fc-file-upload__text {
+    font-size: var(--text-body, 0.875rem);
+    color: var(--cbn-text-secondary);
+    margin: 0;
+}
+
+.fc-file-upload__text strong {
+    color: var(--cbn-primary);
+}
+
+.fc-file-upload__hint {
+    font-size: var(--text-caption, 0.75rem);
+    color: var(--cbn-text-muted);
+    margin: var(--space-1) 0 0;
+}
+
+.fc-file-upload__input {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    cursor: pointer;
+}
+
+.fc-file-upload__files {
+    margin-top: var(--space-4);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+}
+
+.fc-file-upload__file {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-3);
+    border: 1px solid var(--cbn-border, #e5e7eb);
+    border-radius: var(--radius-md);
+    background: var(--cbn-surface-elevated, #fff);
+}
+
+.fc-file-upload__preview {
+    width: 48px;
+    height: 48px;
+    border-radius: var(--radius-sm);
+    object-fit: cover;
+    flex-shrink: 0;
+}
+
+.fc-file-upload__file-icon {
+    width: 32px;
+    height: 32px;
+    color: var(--cbn-text-muted);
+    flex-shrink: 0;
+}
+
+.fc-file-upload__file-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.fc-file-upload__file-name {
+    font-size: var(--text-body-sm, 0.8125rem);
+    font-weight: var(--font-weight-medium, 500);
+    color: var(--cbn-text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.fc-file-upload__file-size {
+    font-size: var(--text-caption, 0.75rem);
+    color: var(--cbn-text-muted);
+}
+
+.fc-file-upload__progress {
+    width: 100%;
+    height: 4px;
+    background: var(--cbn-border, #e5e7eb);
+    border-radius: var(--radius-pill);
+    margin-top: var(--space-1);
+    overflow: hidden;
+}
+
+.fc-file-upload__progress-bar {
+    height: 100%;
+    background: var(--cbn-primary);
+    border-radius: var(--radius-pill);
+    transition: width var(--transition-base) var(--ease-standard);
+}
+
+.fc-file-upload__file-remove {
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    background: transparent;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    color: var(--cbn-text-muted);
+    flex-shrink: 0;
+    transition: color var(--transition-fast), background var(--transition-fast);
+}
+
+.fc-file-upload__file-remove:hover {
+    color: var(--cbn-danger);
+    background: rgba(220, 38, 38, 0.06);
+}
+
+.fc-file-upload__error {
+    font-size: var(--text-caption, 0.75rem);
+    color: var(--cbn-danger);
+    margin-top: var(--space-1);
+}
+
+/* ================================================================
+   8. RICH TEXT EDITOR
+   ================================================================ */
+
+.fc-rte {
+    border: 1px solid var(--cbn-border, #e5e7eb);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    transition: border-color var(--transition-fast) var(--ease-standard),
+                box-shadow var(--transition-fast) var(--ease-standard);
+}
+
+.fc-rte:focus-within {
+    border-color: var(--cbn-primary);
+    box-shadow: 0 0 0 3px var(--cbn-focus-ring, rgba(0,107,63,0.15));
+}
+
+.fc-rte__toolbar {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 2px;
+    padding: var(--space-1) var(--space-2);
+    background: var(--cbn-surface, #f9fafb);
+    border-bottom: 1px solid var(--cbn-border, #e5e7eb);
+}
+
+.fc-rte__toolbar-sep {
+    width: 1px;
+    height: 20px;
+    background: var(--cbn-border, #e5e7eb);
+    margin: 0 var(--space-1);
+}
+
+.fc-rte__toolbar-btn {
+    width: 30px;
+    height: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    background: transparent;
+    border-radius: var(--radius-xs, 4px);
+    cursor: pointer;
+    color: var(--cbn-text-secondary);
+    transition: all var(--transition-fast) var(--ease-standard);
+}
+
+.fc-rte__toolbar-btn:hover {
+    background: var(--cbn-border-subtle, #f3f4f6);
+    color: var(--cbn-text);
+}
+
+.fc-rte__toolbar-btn--active {
+    background: var(--cbn-primary);
+    color: #fff;
+}
+
+.fc-rte__toolbar-btn svg {
+    width: 16px;
+    height: 16px;
+}
+
+.fc-rte__editor {
+    min-height: 120px;
+    max-height: 400px;
+    overflow-y: auto;
+    padding: var(--space-3);
+    font-size: var(--text-body, 0.875rem);
+    font-family: var(--font-sans);
+    color: var(--cbn-text);
+    line-height: 1.6;
+    outline: none;
+}
+
+.fc-rte__editor:empty::before {
+    content: attr(data-placeholder);
+    color: var(--cbn-text-muted);
+    pointer-events: none;
+}
+
+.fc-rte__editor ul,
+.fc-rte__editor ol {
+    padding-left: 1.5em;
+    margin: 0.5em 0;
+}
+
+.fc-rte__editor a {
+    color: var(--cbn-primary);
+    text-decoration: underline;
+}
+
+.fc-rte__footer {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    padding: var(--space-1) var(--space-3);
+    background: var(--cbn-surface, #f9fafb);
+    border-top: 1px solid var(--cbn-border-subtle, #f3f4f6);
+}
+
+.fc-rte__char-count {
+    font-size: var(--text-caption, 0.75rem);
+    color: var(--cbn-text-muted);
+}
+
+.fc-rte__char-count--over {
+    color: var(--cbn-danger);
+    font-weight: var(--font-weight-medium, 500);
+}
+
+/* ================================================================
+   9. AUTO-SAVE INDICATOR
+   ================================================================ */
+
+.fc-autosave {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    font-size: var(--text-caption, 0.75rem);
+    font-weight: var(--font-weight-medium, 500);
+    padding: 3px 10px;
+    border-radius: var(--radius-pill);
+    transition: all var(--transition-base) var(--ease-standard);
+}
+
+.fc-autosave--unsaved {
+    background: rgba(217, 119, 6, 0.1);
+    color: var(--cbn-warning);
+}
+
+.fc-autosave--saving {
+    background: rgba(0, 107, 63, 0.08);
+    color: var(--cbn-primary);
+}
+
+.fc-autosave--saved {
+    background: rgba(5, 150, 105, 0.08);
+    color: var(--cbn-success);
+}
+
+.fc-autosave--error {
+    background: rgba(220, 38, 38, 0.08);
+    color: var(--cbn-danger);
+}
+
+.fc-autosave__dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.fc-autosave--unsaved .fc-autosave__dot {
+    background: var(--cbn-warning);
+}
+
+.fc-autosave--saving .fc-autosave__dot {
+    background: var(--cbn-primary);
+    animation: fc-autosave-pulse 1s ease-in-out infinite;
+}
+
+.fc-autosave--saved .fc-autosave__dot {
+    background: var(--cbn-success);
+}
+
+.fc-autosave--error .fc-autosave__dot {
+    background: var(--cbn-danger);
+}
+
+@keyframes fc-autosave-pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50%      { opacity: 0.4; transform: scale(0.7); }
+}
+
+.fc-autosave__icon {
+    width: 14px;
+    height: 14px;
+    flex-shrink: 0;
+}
+
+.fc-autosave--saving .fc-autosave__icon {
+    animation: fc-autosave-spin 0.8s linear infinite;
+}
+
+@keyframes fc-autosave-spin {
+    from { transform: rotate(0deg); }
+    to   { transform: rotate(360deg); }
+}
+
+/* ================================================================
+   10. CONDITIONAL FIELD — Animated show/hide
+   ================================================================ */
+
+.fc-cond {
+    overflow: hidden;
+}
+
+.fc-cond--hidden {
+    display: none;
+}

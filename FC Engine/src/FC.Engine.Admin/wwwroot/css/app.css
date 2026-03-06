@@ -9422,3 +9422,559 @@ code.cmd-palette-preview-val {
         display: none;
     }
 }
+
+
+/* ==================================================================
+   INTELLIGENT SIDEBAR — Enhanced Navigation
+   ================================================================== */
+
+
+/* ── Sidebar width transition ──────────────────────────────────────── */
+
+.fc-shell__sidebar {
+    transition: width var(--transition-slow) var(--ease-emphasized);
+}
+
+.fc-shell__main {
+    transition: margin-left var(--transition-slow) var(--ease-emphasized);
+}
+
+
+/* ── Collapsed mode (icon-only 56px) ──────────────────────────────── */
+
+.fc-sidebar-collapsed .fc-shell__sidebar {
+    width: 56px;
+}
+
+.fc-sidebar-collapsed .fc-shell__main {
+    margin-left: 56px;
+}
+
+/* Hide text in collapsed mode */
+.fc-sidebar-collapsed .fc-sidebar__brand-text,
+.fc-sidebar-collapsed .fc-nav__group-label-text,
+.fc-sidebar-collapsed .fc-nav__item-label,
+.fc-sidebar-collapsed .fc-nav__badge,
+.fc-sidebar-collapsed .fc-nav__lock-icon,
+.fc-sidebar-collapsed .fc-nav__empty-search,
+.fc-sidebar-collapsed .fc-nav__search,
+.fc-sidebar-collapsed .fc-sidebar__user-name,
+.fc-sidebar-collapsed .fc-sidebar__user-role,
+.fc-sidebar-collapsed .fc-sidebar__signout span {
+    display: none;
+}
+
+/* Centre icons when collapsed */
+.fc-sidebar-collapsed .fc-nav__item {
+    justify-content: center;
+    padding-left: 0;
+    padding-right: 0;
+}
+
+.fc-sidebar-collapsed .fc-nav__item:hover {
+    padding-left: 0;
+    padding-right: 0;
+}
+
+.fc-sidebar-collapsed .fc-nav__item.active {
+    padding-left: 0;
+    padding-right: 0;
+}
+
+.fc-sidebar-collapsed .fc-nav__item-icon {
+    opacity: 1;
+}
+
+.fc-sidebar-collapsed .fc-sidebar__brand {
+    justify-content: center;
+    padding: var(--space-4) var(--space-2);
+}
+
+.fc-sidebar-collapsed .fc-sidebar__logo {
+    width: 32px;
+}
+
+.fc-sidebar-collapsed .fc-sidebar__user {
+    padding: var(--space-3) var(--space-2);
+    align-items: center;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+}
+
+.fc-sidebar-collapsed .fc-sidebar-user-info {
+    margin-bottom: 0;
+}
+
+.fc-sidebar-collapsed .fc-sidebar__avatar {
+    margin: 0 auto;
+}
+
+.fc-sidebar-collapsed .fc-sidebar__signout {
+    padding: var(--space-2);
+    justify-content: center;
+}
+
+/* Group headers in collapsed: icon-only, no label/chevron */
+.fc-sidebar-collapsed .fc-nav__group-header {
+    justify-content: center;
+    padding: var(--space-2) 0;
+}
+
+.fc-sidebar-collapsed .fc-nav__group-chevron {
+    display: none;
+}
+
+/* Dot badge in collapsed mode */
+.fc-nav__badge--dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--cbn-gold);
+    padding: 0;
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    min-width: 0;
+}
+
+/* Tooltip for collapsed items */
+.fc-nav__tooltip {
+    position: fixed;
+    z-index: 9999;
+    background: var(--cbn-green-deepest);
+    color: white;
+    padding: 5px 10px;
+    border-radius: var(--radius-sm);
+    font-size: var(--text-caption);
+    font-weight: var(--font-weight-medium);
+    pointer-events: none;
+    white-space: nowrap;
+    box-shadow: var(--shadow-level-2);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* CSS tooltip via data-attr for collapsed mode */
+.fc-sidebar-collapsed .fc-nav__item[aria-label] {
+    position: relative;
+}
+
+.fc-sidebar-collapsed .fc-nav__item[aria-label]:hover::after {
+    content: attr(aria-label);
+    position: fixed;
+    left: 64px;
+    top: auto;
+    background: var(--cbn-green-deepest);
+    color: white;
+    padding: 5px 10px;
+    border-radius: var(--radius-sm);
+    font-size: var(--text-caption);
+    font-weight: var(--font-weight-medium);
+    white-space: nowrap;
+    z-index: 9999;
+    box-shadow: var(--shadow-level-2);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    pointer-events: none;
+    animation: navTooltipIn 120ms var(--ease-standard) both;
+}
+
+@keyframes navTooltipIn {
+    from { opacity: 0; transform: translateX(-4px); }
+    to   { opacity: 1; transform: translateX(0); }
+}
+
+
+/* ── Collapse toggle button ──────────────────────────────────────── */
+
+.fc-sidebar__collapse-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: rgba(255, 255, 255, 0.06);
+    color: rgba(255, 255, 255, 0.5);
+    border-radius: var(--radius-xs);
+    cursor: pointer;
+    flex-shrink: 0;
+    margin-left: auto;
+    transition: all var(--transition-fast) var(--ease-standard);
+}
+
+.fc-sidebar__collapse-btn:hover {
+    background: rgba(255, 255, 255, 0.12);
+    color: rgba(255, 255, 255, 0.85);
+    border-color: rgba(255, 255, 255, 0.2);
+}
+
+.fc-sidebar__collapse-btn:focus-visible {
+    outline: 2px solid var(--cbn-gold);
+    outline-offset: 2px;
+}
+
+/* Hide in collapsed mode (no room) */
+.fc-sidebar-collapsed .fc-sidebar__collapse-btn {
+    display: none;
+}
+
+
+/* ── Group header (collapsible accordion) ────────────────────────── */
+
+.fc-nav__group-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    padding: var(--space-3) var(--space-5) var(--space-1-5);
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    color: rgba(200, 164, 21, 0.55);
+    font-family: var(--font-sans);
+    transition: color var(--transition-fast) var(--ease-standard);
+}
+
+.fc-nav__group-header:hover {
+    color: rgba(200, 164, 21, 0.85);
+}
+
+.fc-nav__group-header:focus-visible {
+    outline: 2px solid var(--cbn-gold);
+    outline-offset: -2px;
+    border-radius: var(--radius-xs);
+}
+
+.fc-nav__group-header-inner {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1-5);
+}
+
+.fc-nav__group-header-icon {
+    color: rgba(200, 164, 21, 0.7);
+    flex-shrink: 0;
+}
+
+.fc-nav__group-label-text {
+    font-size: 0.65rem;
+    font-weight: var(--font-weight-semibold);
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+}
+
+.fc-nav__group-chevron {
+    transition: transform var(--transition-normal) var(--ease-standard);
+    flex-shrink: 0;
+    color: rgba(200, 164, 21, 0.4);
+}
+
+.fc-nav__group.is-collapsed .fc-nav__group-chevron {
+    transform: rotate(-90deg);
+}
+
+
+/* ── Group accordion content (grid trick — no max-height jank) ───── */
+
+.fc-nav__group-items {
+    display: grid;
+    grid-template-rows: 1fr;
+    transition: grid-template-rows var(--transition-normal) var(--ease-standard);
+}
+
+.fc-nav__group.is-collapsed .fc-nav__group-items {
+    grid-template-rows: 0fr;
+}
+
+.fc-nav__group-items-inner {
+    overflow: hidden;
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+
+/* ── Hover slide-in from left ────────────────────────────────────── */
+
+/* Override the existing hover that just sets background immediately */
+.fc-nav__item {
+    overflow: hidden;
+    border-left: 3px solid transparent;
+}
+
+.fc-nav__item::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+        90deg,
+        rgba(255, 255, 255, 0.09) 0%,
+        rgba(255, 255, 255, 0.04) 50%,
+        transparent 100%
+    );
+    transform: translateX(-100%);
+    transition: transform var(--transition-base) var(--ease-decelerate);
+    pointer-events: none;
+    z-index: 0;
+}
+
+.fc-nav__item:hover::before {
+    transform: translateX(0);
+}
+
+/* Ensure content sits above the pseudo-element */
+.fc-nav__item > * {
+    position: relative;
+    z-index: 1;
+}
+
+.fc-nav__item-icon,
+.fc-nav__item-label,
+.fc-nav__badge {
+    position: relative;
+    z-index: 1;
+}
+
+/* Suppress old hover background (now handled by ::before) */
+.fc-nav__item:hover {
+    background: transparent;
+    color: var(--cbn-white);
+    border-left-color: rgba(200, 164, 21, 0.3);
+}
+
+
+/* ── Badge counters ──────────────────────────────────────────────── */
+
+.fc-nav__badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 5px;
+    background: var(--cbn-gold);
+    color: var(--cbn-green-deepest);
+    font-size: 0.6rem;
+    font-weight: var(--font-weight-bold);
+    border-radius: var(--radius-pill);
+    margin-left: auto;
+    flex-shrink: 0;
+    line-height: 1;
+    position: relative;
+    z-index: 1;
+}
+
+
+/* ── Locked / inactive module items ──────────────────────────────── */
+
+.fc-nav__item--locked {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-3) var(--space-5);
+    color: rgba(255, 255, 255, 0.25);
+    font-size: var(--text-body-sm);
+    font-weight: var(--font-weight-medium);
+    border-left: 3px solid transparent;
+    cursor: not-allowed;
+    user-select: none;
+    letter-spacing: 0.01em;
+}
+
+.fc-nav__lock-icon {
+    width: 12px;
+    height: 12px;
+    margin-left: auto;
+    opacity: 0.4;
+    flex-shrink: 0;
+    position: relative;
+    z-index: 1;
+}
+
+
+/* ── Search bar ──────────────────────────────────────────────────── */
+
+.fc-nav__search-wrap {
+    padding: var(--space-2) var(--space-4) var(--space-1);
+    flex-shrink: 0;
+}
+
+.fc-nav__search-wrap--collapsed {
+    padding: var(--space-2) var(--space-1);
+    display: flex;
+    justify-content: center;
+}
+
+.fc-nav__search {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.fc-nav__search-icon {
+    position: absolute;
+    left: 9px;
+    color: rgba(255, 255, 255, 0.3);
+    pointer-events: none;
+    z-index: 1;
+}
+
+.fc-nav__search-input {
+    width: 100%;
+    padding: 6px 28px 6px 28px;
+    background: rgba(255, 255, 255, 0.07);
+    border: 1px solid rgba(255, 255, 255, 0.09);
+    border-radius: var(--radius-md);
+    color: rgba(255, 255, 255, 0.9);
+    font-size: var(--text-caption);
+    font-family: var(--font-sans);
+    outline: none;
+    transition: all var(--transition-fast) var(--ease-standard);
+}
+
+.fc-nav__search-input::placeholder {
+    color: rgba(255, 255, 255, 0.25);
+}
+
+.fc-nav__search-input:focus {
+    background: rgba(255, 255, 255, 0.11);
+    border-color: rgba(200, 164, 21, 0.4);
+    box-shadow: 0 0 0 2px rgba(200, 164, 21, 0.1);
+}
+
+/* Remove default search (x) button in webkit */
+.fc-nav__search-input::-webkit-search-cancel-button { display: none; }
+
+.fc-nav__search-clear {
+    position: absolute;
+    right: 7px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    background: rgba(255, 255, 255, 0.12);
+    border: none;
+    border-radius: 50%;
+    color: rgba(255, 255, 255, 0.5);
+    cursor: pointer;
+    padding: 0;
+    transition: all var(--transition-fast) var(--ease-standard);
+}
+
+.fc-nav__search-clear:hover {
+    background: rgba(255, 255, 255, 0.2);
+    color: white;
+}
+
+.fc-nav__search-icon-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: var(--radius-sm);
+    color: rgba(255, 255, 255, 0.4);
+    cursor: pointer;
+    transition: all var(--transition-fast) var(--ease-standard);
+    padding: 0;
+}
+
+.fc-nav__search-icon-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: rgba(255, 255, 255, 0.7);
+}
+
+.fc-nav__empty-search {
+    padding: var(--space-4) var(--space-5);
+    color: rgba(255, 255, 255, 0.3);
+    font-size: var(--text-caption);
+    text-align: center;
+}
+
+
+/* ── Context menu ────────────────────────────────────────────────── */
+
+.fc-nav-context-menu {
+    position: fixed;
+    z-index: 9999;
+    background: var(--cbn-surface-elevated);
+    border: 1px solid var(--cbn-border);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-level-3);
+    min-width: 192px;
+    padding: var(--space-1) 0;
+    overflow: hidden;
+}
+
+.fc-nav-ctx__item {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2-5, 10px);
+    width: 100%;
+    padding: var(--space-2) var(--space-4);
+    background: transparent;
+    border: none;
+    color: var(--cbn-text);
+    font-size: var(--text-body-sm);
+    font-family: var(--font-sans);
+    text-align: left;
+    text-decoration: none;
+    cursor: pointer;
+    transition: background var(--transition-fast) var(--ease-standard);
+    white-space: nowrap;
+}
+
+.fc-nav-ctx__item:hover,
+.fc-nav-ctx__item:focus {
+    background: var(--cbn-surface-subtle);
+    outline: none;
+}
+
+.fc-nav-ctx__item svg {
+    color: var(--cbn-text-muted);
+    flex-shrink: 0;
+}
+
+.fc-nav-ctx__divider {
+    height: 1px;
+    background: var(--cbn-border-subtle);
+    margin: var(--space-1) 0;
+}
+
+
+/* ── Responsive: no collapse toggle on mobile ────────────────────── */
+
+@media (max-width: 1024px) {
+    .fc-sidebar__collapse-btn {
+        display: none;
+    }
+
+    /* Always full-width on mobile */
+    .fc-sidebar-collapsed .fc-shell__sidebar {
+        width: 260px;
+    }
+
+    .fc-sidebar-collapsed .fc-shell__main {
+        margin-left: 0;
+    }
+
+    .fc-sidebar-collapsed .fc-sidebar__brand-text,
+    .fc-sidebar-collapsed .fc-nav__group-label-text,
+    .fc-sidebar-collapsed .fc-nav__item-label,
+    .fc-sidebar-collapsed .fc-nav__badge,
+    .fc-sidebar-collapsed .fc-nav__lock-icon,
+    .fc-sidebar-collapsed .fc-nav__search,
+    .fc-sidebar-collapsed .fc-sidebar__user-name,
+    .fc-sidebar-collapsed .fc-sidebar__user-role,
+    .fc-sidebar-collapsed .fc-sidebar__signout span {
+        display: unset;
+    }
+
+    .fc-sidebar-collapsed .fc-nav__item {
+        justify-content: flex-start;
+        padding: var(--space-3) var(--space-5);
+    }
+}

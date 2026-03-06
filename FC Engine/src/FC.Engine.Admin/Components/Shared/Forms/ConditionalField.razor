@@ -1,0 +1,41 @@
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+
+<div id="@_id" class="fc-cond @(_visible ? "" : "fc-cond--hidden")">
+    @ChildContent
+</div>
+
+@code {
+    private string _id = $"fc-cond-{Guid.NewGuid():N}";
+    private bool _visible;
+    private bool _initialized;
+
+    [Parameter] public bool Visible { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (!_initialized)
+        {
+            _visible = Visible;
+            _initialized = true;
+            return;
+        }
+
+        if (_visible != Visible)
+        {
+            _visible = Visible;
+            try
+            {
+                await JS.InvokeVoidAsync("FCForms.animateHeight", _id, _visible);
+            }
+            catch (JSDisconnectedException) { }
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        // No cleanup needed
+        await ValueTask.CompletedTask;
+    }
+}

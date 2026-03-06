@@ -37,10 +37,11 @@ builder.Services.AddScoped<IngestionOrchestrator>();
 builder.Services.AddScoped<ValidationOrchestrator>();
 builder.Services.AddScoped<AuthService>();
 
-// UI notification, dialog & command palette services
+// UI notification, dialog, command palette & sidebar services
 builder.Services.AddScoped<FC.Engine.Admin.Services.ToastService>();
 builder.Services.AddScoped<FC.Engine.Admin.Services.DialogService>();
 builder.Services.AddScoped<FC.Engine.Admin.Services.CommandPaletteService>();
+builder.Services.AddScoped<FC.Engine.Admin.Services.SidebarStateService>();
 
 // Platform Admin services
 builder.Services.AddScoped<FC.Engine.Admin.Services.TenantManagementService>();

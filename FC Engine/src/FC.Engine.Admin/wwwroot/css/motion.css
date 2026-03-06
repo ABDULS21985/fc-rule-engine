@@ -921,4 +921,92 @@
     .fc-counter-pop {
         animation: none;
     }
+
+    /* Sidebar: no slide-in hover, no accordion animation */
+    .fc-nav__item::before {
+        transition: none;
+    }
+
+    .fc-nav__group-items {
+        transition: none;
+    }
+
+    .fc-nav__group-chevron {
+        transition: none;
+    }
+
+    .fc-shell__sidebar,
+    .fc-shell__main {
+        transition: none;
+    }
+}
+
+
+/* ==================================================================
+   SIDEBAR MOTION
+   ================================================================== */
+
+
+/* ── Badge pulse (when a new item arrives) ───────────────────────── */
+
+@keyframes navBadgePulse {
+    0%   { transform: scale(1); }
+    40%  { transform: scale(1.25); }
+    70%  { transform: scale(0.9); }
+    100% { transform: scale(1); }
+}
+
+.fc-nav__badge--new {
+    animation: navBadgePulse var(--motion-slow) var(--ease-spring);
+}
+
+
+/* ── Context menu entrance ───────────────────────────────────────── */
+
+@keyframes navContextMenuIn {
+    from {
+        opacity: 0;
+        transform: scale(0.94) translateY(-6px);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1) translateY(0);
+    }
+}
+
+.fc-nav-context-menu {
+    animation: navContextMenuIn var(--motion-fast) var(--ease-spring) both;
+}
+
+
+/* ── Search input expand (on focus) ──────────────────────────────── */
+
+@keyframes navSearchFocus {
+    from { box-shadow: 0 0 0 0 rgba(200, 164, 21, 0); }
+    to   { box-shadow: 0 0 0 2px rgba(200, 164, 21, 0.1); }
+}
+
+.fc-nav__search-input:focus {
+    animation: navSearchFocus var(--motion-fast) var(--ease-out) both;
+}
+
+
+/* ── Favorites/Recent section stagger entrance ───────────────────── */
+
+.fc-nav__group-items-inner > li {
+    animation: motionStaggerIn var(--motion-normal) var(--ease-out) both;
+}
+
+.fc-nav__group-items-inner > li:nth-child(1) { animation-delay: 0ms; }
+.fc-nav__group-items-inner > li:nth-child(2) { animation-delay: 20ms; }
+.fc-nav__group-items-inner > li:nth-child(3) { animation-delay: 40ms; }
+.fc-nav__group-items-inner > li:nth-child(4) { animation-delay: 60ms; }
+.fc-nav__group-items-inner > li:nth-child(5) { animation-delay: 80ms; }
+
+
+/* ── Sidebar collapse button pulse hint (first-time) ─────────────── */
+
+@keyframes navCollapseBtnPulse {
+    0%, 100% { opacity: 0.5; }
+    50%       { opacity: 1; }
 }
