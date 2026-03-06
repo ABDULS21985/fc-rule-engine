@@ -202,6 +202,11 @@ public static class DependencyInjection
         services.AddScoped<IBenchmarkingService, BenchmarkingService>();
         services.AddScoped<ChartJsInterop>();
 
+        // ── Report Builder (RG-18) ──
+        services.AddScoped<ISavedReportRepository, SavedReportRepository>();
+        services.AddScoped<IReportQueryEngine, ReportQueryEngine>();
+        services.AddScoped<IBoardPackGenerator, BoardPackGenerator>();
+
         // Billing & subscription background jobs
         services.AddHostedService<UsageTrackingJob>();
         services.AddHostedService<OverdueInvoiceJob>();
@@ -212,6 +217,7 @@ public static class DependencyInjection
         services.AddHostedService<AuditIntegrityVerificationJob>();
         services.AddHostedService<DataBreachEscalationJob>();
         services.AddHostedService<RetentionEnforcementJob>();
+        services.AddHostedService<ScheduledReportJob>();
 
         return services;
     }

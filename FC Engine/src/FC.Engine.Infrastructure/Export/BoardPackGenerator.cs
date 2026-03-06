@@ -150,9 +150,11 @@ public class BoardPackGenerator : IBoardPackGenerator
                                 foreach (var colName in section.ColumnNames)
                                 {
                                     row.TryGetValue(colName, out var value);
-                                    var cell = table.Cell();
-                                    if (isAlt) cell = cell.Background(Colors.Grey.Lighten4);
-                                    cell.Padding(3).Text(FormatCellValue(value)).FontSize(8);
+                                    var cellContainer = table.Cell();
+                                    IContainer cell = isAlt
+                                        ? cellContainer.Background(Colors.Grey.Lighten4).Padding(3)
+                                        : cellContainer.Padding(3);
+                                    cell.Text(FormatCellValue(value)).FontSize(8);
                                 }
                                 rowIndex++;
                             }

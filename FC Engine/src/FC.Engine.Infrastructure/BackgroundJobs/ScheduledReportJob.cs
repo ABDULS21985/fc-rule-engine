@@ -1,11 +1,16 @@
 using System.Text.Json;
 using ClosedXML.Excel;
 using FC.Engine.Domain.Abstractions;
+using FC.Engine.Domain.Enums;
 using FC.Engine.Domain.Notifications;
 using FC.Engine.Domain.ValueObjects;
+using FC.Engine.Infrastructure.Export;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using QuestPDF.Fluent;
+using QuestPDF.Helpers;
+using QuestPDF.Infrastructure;
 
 namespace FC.Engine.Infrastructure.BackgroundJobs;
 
@@ -74,20 +79,14 @@ public class ScheduledReportJob : BackgroundService
                 var result = await queryEngine.Execute(definition, report.TenantId, entitledModules, ct);
 
                 byte[] fileBytes;
-                string fileName;
-                string contentType;
 
                 if (string.Equals(report.ScheduleFormat, "PDF", StringComparison.OrdinalIgnoreCase))
                 {
                     fileBytes = GeneratePdfFromResult(result, report.Name);
-                    fileName = $"report-{report.Id}-{DateTime.UtcNow:yyyyMMddHHmm}.pdf";
-                    contentType = "application/pdf";
                 }
                 else
                 {
                     fileBytes = GenerateExcelFromResult(result, report.Name);
-                    fileName = $"report-{report.Id}-{DateTime.UtcNow:yyyyMMddHHmm}.xlsx";
-                    contentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
                 }
 
                 // Notify recipients
@@ -159,7 +158,8 @@ public class ScheduledReportJob : BackgroundService
     private static byte[] GenerateExcelFromResult(ReportQueryResult result, string reportName)
     {
         using var wb = new XLWorkbook();
-        var ws = wb.AddWorksheet(ExportUtility.SafeSheetName(reportName));
+        var usedNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var ws = wb.AddWorksheet(ExportUtility.SanitizeWorksheetName(reportName, usedNames));
 
         // Headers
         for (var col = 0; col < result.Columns.Count; col++)
@@ -178,7 +178,12 @@ public class ScheduledReportJob : BackgroundService
                 var colName = result.Columns[col];
                 result.Rows[row].TryGetValue(colName, out var value);
                 var cell = ws.Cell(row + 2, col + 1);
-                ExportUtility.SetCellValue(cell, value);
+                if (value is decimal d) cell.Value = (double)d;
+                else if (value is int i) cell.Value = i;
+                else if (value is long l) cell.Value = l;
+                else if (value is double dbl) cell.Value = dbl;
+                else if (value is DateTime dt) cell.Value = dt;
+                else cell.Value = value?.ToString() ?? "";
             }
         }
 
@@ -198,7 +203,7 @@ public class ScheduledReportJob : BackgroundService
         {
             document.Page(page =>
             {
-                page.Size(QuestPDF.Helpers.PageSizes.A4.Landscape());
+                page.Size(QuestPDF.Helpers.PageSizes.A4);
                 page.Margin(1, QuestPDF.Infrastructure.Unit.Centimetre);
                 page.DefaultTextStyle(x => x.FontSize(8));
 
@@ -237,7 +242,11 @@ public class ScheduledReportJob : BackgroundService
                         {
                             row.TryGetValue(colName, out var value);
                             var cell = table.Cell();
-                            if (isAlt) cell = cell.Background(QuestPDF.Helpers.Colors.Grey.Lighten4);
+                            if (isAlt)
+                            {
+                                cell.Background(QuestPDF.Helpers.Colors.Grey.Lighten4);
+                            }
+
                             cell.Padding(2).Text(value?.ToString() ?? "").FontSize(7);
                         }
                         rowIdx++;
