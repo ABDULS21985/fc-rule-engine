@@ -8,7 +8,7 @@ namespace FC.Engine.Infrastructure.Notifications;
 
 public class SendGridEmailSender : IEmailSender
 {
-    private readonly ISendGridClient _client;
+    private readonly ISendGridClient? _client;
     private readonly SendGridSettings _settings;
     private readonly IEmailTemplateRepository _templateRepository;
 
@@ -16,14 +16,16 @@ public class SendGridEmailSender : IEmailSender
         IOptions<NotificationSettings> notificationOptions,
         IEmailTemplateRepository templateRepository)
         : this(
-            new SendGridClient(notificationOptions.Value.Email.SendGrid.ApiKey),
+            string.IsNullOrWhiteSpace(notificationOptions.Value.Email.SendGrid.ApiKey)
+                ? null
+                : new SendGridClient(notificationOptions.Value.Email.SendGrid.ApiKey),
             notificationOptions,
             templateRepository)
     {
     }
 
     internal SendGridEmailSender(
-        ISendGridClient client,
+        ISendGridClient? client,
         IOptions<NotificationSettings> notificationOptions,
         IEmailTemplateRepository templateRepository)
     {
@@ -34,7 +36,7 @@ public class SendGridEmailSender : IEmailSender
 
     public async Task<EmailSendResult> SendAsync(EmailMessage message, CancellationToken ct = default)
     {
-        if (string.IsNullOrWhiteSpace(_settings.ApiKey))
+        if (_client is null)
         {
             return new EmailSendResult
             {

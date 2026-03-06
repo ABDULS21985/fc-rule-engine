@@ -288,10 +288,10 @@ var v1 = app.MapGroup("/api/v1")
     .RequireRateLimiting("PerTenantPolicy");
 
 v1.MapAuthEndpoints();
-v1.MapSubmissionEndpoints();
+v1.MapSubmissionEndpoints("v1");
 v1.MapDataFeedEndpoints();
 v1.MapTemplateEndpoints();
-v1.MapSchemaEndpoints();
+v1.MapSchemaEndpoints("v1");
 v1.MapFilingCalendarEndpoints();
 v1.MapPrivacyEndpoints();
 v1.MapHistoricalMigrationEndpoints();
@@ -300,8 +300,8 @@ v1.MapHistoricalMigrationEndpoints();
 var v2 = app.MapGroup("/api/v2")
     .RequireRateLimiting("PerTenantPolicy");
 
-v2.MapSchemaEndpoints();
-v2.MapSubmissionEndpoints();
+v2.MapSchemaEndpoints("v2");
+v2.MapSubmissionEndpoints("v2");
 
 app.Run();
 

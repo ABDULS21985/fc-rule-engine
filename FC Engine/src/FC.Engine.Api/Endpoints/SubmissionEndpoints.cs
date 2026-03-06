@@ -6,8 +6,9 @@ namespace FC.Engine.Api.Endpoints;
 
 public static class SubmissionEndpoints
 {
-    public static void MapSubmissionEndpoints(this IEndpointRouteBuilder routes)
+    public static void MapSubmissionEndpoints(this IEndpointRouteBuilder routes, string versionSuffix = "")
     {
+        var suffix = string.IsNullOrEmpty(versionSuffix) ? "" : $"_{versionSuffix}";
         var group = routes.MapGroup("/submissions").WithTags("Submissions");
 
         group.MapPost("/{returnCode}", async (
@@ -48,7 +49,7 @@ public static class SubmissionEndpoints
         .Produces<SubmissionResultDto>()
         .Produces<SubmissionResultDto>(422)
         .RequireAuthorization("CanCreateSubmission")
-        .WithName("SubmitReturn")
+        .WithName($"SubmitReturn{suffix}")
         .WithSummary("Submit an XML return for processing and validation");
 
         group.MapGet("/{id:int}", async (
@@ -85,7 +86,7 @@ public static class SubmissionEndpoints
             });
         })
         .Produces<SubmissionResultDto>()
-        .WithName("GetSubmission")
+        .WithName($"GetSubmission{suffix}")
         .WithSummary("Get submission details with validation report");
 
         group.MapGet("/institution/{institutionId:int}", async (
@@ -102,7 +103,7 @@ public static class SubmissionEndpoints
                 ProcessingDurationMs = s.ProcessingDurationMs
             }));
         })
-        .WithName("GetInstitutionSubmissions")
+        .WithName($"GetInstitutionSubmissions{suffix}")
         .WithSummary("Get all submissions for an institution");
     }
 }
