@@ -30,21 +30,21 @@ public class DashboardService
     /// <summary>
     /// Gets the full dashboard data for an institution, with 5-minute caching.
     /// </summary>
-    public async Task<DashboardData> GetDashboardDataAsync(int institutionId, string institutionName, string institutionCode)
+    public async Task<DashboardData> GetDashboardDataAsync(int institutionId, string institutionName, string institutionCode, int dateRangeDays = 30)
     {
-        var cacheKey = $"dashboard:{institutionId}";
+        var cacheKey = $"dashboard:{institutionId}:{dateRangeDays}";
 
         if (_cache.TryGetValue(cacheKey, out DashboardData? cached) && cached is not null)
             return cached;
 
-        var data = await BuildDashboardDataAsync(institutionId, institutionName, institutionCode);
+        var data = await BuildDashboardDataAsync(institutionId, institutionName, institutionCode, dateRangeDays);
 
         _cache.Set(cacheKey, data, CacheDuration);
 
         return data;
     }
 
-    private async Task<DashboardData> BuildDashboardDataAsync(int institutionId, string institutionName, string institutionCode)
+    private async Task<DashboardData> BuildDashboardDataAsync(int institutionId, string institutionName, string institutionCode, int dateRangeDays = 30)
     {
         var dashboard = new DashboardData
         {

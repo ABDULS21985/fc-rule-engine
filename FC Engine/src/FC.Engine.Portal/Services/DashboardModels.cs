@@ -34,6 +34,15 @@ public class DashboardData
 
     // Compliance trend (last 6 months)
     public List<ComplianceTrendItem> ComplianceTrend { get; set; } = new();
+
+    // ── Enhanced Dashboard Collections ──────────────────────────
+    public List<HeroMetric> HeroMetrics { get; set; } = new();
+    public List<SubmissionVolumeItem> SubmissionVolume { get; set; } = new();
+    public List<TemplateHealthItem> TemplateHealth { get; set; } = new();
+    public List<ModuleRankItem> TopModules { get; set; } = new();
+    public List<HeatmapDay> HeatmapData { get; set; } = new();
+    public List<ActivityFeedItem> ActivityFeed { get; set; } = new();
+    public int DateRangeDays { get; set; } = 30;
 }
 
 /// <summary>
@@ -84,4 +93,79 @@ public class ComplianceTrendItem
     public decimal CompliancePercent { get; set; }
     public int Submitted { get; set; }
     public int Total { get; set; }
+}
+
+/// <summary>
+/// Hero metric card with animated counter and 7-day sparkline.
+/// </summary>
+public class HeroMetric
+{
+    public string Id { get; set; } = "";
+    public string Label { get; set; } = "";
+    public decimal Value { get; set; }
+    public decimal PreviousValue { get; set; }
+    public decimal ChangePercent { get; set; }
+    public bool IsPositiveTrend { get; set; }
+    public string Suffix { get; set; } = "";
+    public List<decimal> SparklineData { get; set; } = new();
+    public string Color { get; set; } = "#0f766e";
+    public string IconPath { get; set; } = "";
+}
+
+/// <summary>
+/// Submission volume data point (for stacked area chart).
+/// </summary>
+public class SubmissionVolumeItem
+{
+    public string Label { get; set; } = "";
+    public int Accepted { get; set; }
+    public int Rejected { get; set; }
+    public int Pending { get; set; }
+}
+
+/// <summary>
+/// Template health entry (for donut drill-down chart).
+/// </summary>
+public class TemplateHealthItem
+{
+    public string ReturnCode { get; set; } = "";
+    public string ReturnName { get; set; } = "";
+    public decimal PassRate { get; set; }
+    public int TotalSubmissions { get; set; }
+    public int ErrorCount { get; set; }
+    public int WarningCount { get; set; }
+}
+
+/// <summary>
+/// Module ranking entry (for horizontal bar chart).
+/// </summary>
+public class ModuleRankItem
+{
+    public string ReturnCode { get; set; } = "";
+    public string ReturnName { get; set; } = "";
+    public int SubmissionCount { get; set; }
+    public decimal ComplianceRate { get; set; }
+}
+
+/// <summary>
+/// A single day's submission intensity for the heatmap.
+/// </summary>
+public class HeatmapDay
+{
+    public DateTime Date { get; set; }
+    public int Count { get; set; }
+    public int Intensity { get; set; }  // 0–4
+}
+
+/// <summary>
+/// Activity feed entry.
+/// </summary>
+public class ActivityFeedItem
+{
+    public string Icon { get; set; } = "submit";   // submit|approve|reject|validate|draft
+    public string Message { get; set; } = "";
+    public string Actor { get; set; } = "";
+    public DateTime Timestamp { get; set; }
+    public string? LinkUrl { get; set; }
+    public string BadgeClass { get; set; } = "portal-badge-neutral";
 }

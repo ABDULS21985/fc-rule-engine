@@ -1,0 +1,110 @@
+@*
+    Right-click context menu for sidebar nav items.
+    Renders as a fixed-position overlay; positioned by JS at cursor coordinates.
+*@
+@inject IJSRuntime JS
+
+<div id="@_menuId"
+     class="fc-nav-context-menu"
+     role="menu"
+     aria-label="Navigation item actions"
+     style="display:none;">
+
+    @if (_item != null)
+    {
+        @* ── Pin / Unpin ─────────────────────────────────────────── *@
+        <button class="fc-nav-ctx__item" role="menuitem" @onclick="ToggleFavorite">
+            @if (IsFavorite)
+            {
+                <svg viewBox="0 0 24 24" fill="currentColor" stroke="none" width="14" height="14" aria-hidden="true">
+                    <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+                </svg>
+                <span>Unpin from Favorites</span>
+            }
+            else
+            {
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14" aria-hidden="true">
+                    <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+                </svg>
+                <span>Pin to Favorites</span>
+            }
+        </button>
+
+        @* ── Open in new tab ──────────────────────────────────────── *@
+        <a class="fc-nav-ctx__item" role="menuitem" href="@_item.Href" target="_blank" rel="noopener" @onclick="CloseMenu">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14" aria-hidden="true">
+                <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/>
+                <polyline points="15 3 21 3 21 9"/>
+                <line x1="10" y1="14" x2="21" y2="3"/>
+            </svg>
+            <span>Open in New Tab</span>
+        </a>
+
+        @* ── Item-specific quick actions ───────────────────────────── *@
+        @if (_item.QuickActions.Count > 0)
+        {
+            <div class="fc-nav-ctx__divider" role="separator"></div>
+            @foreach (var action in _item.QuickActions)
+            {
+                <button class="fc-nav-ctx__item" role="menuitem" @onclick="() => ExecuteAction(action)">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14" aria-hidden="true">
+                        @((MarkupString)action.IconPath)
+                    </svg>
+                    <span>@action.Label</span>
+                </button>
+            }
+        }
+    }
+</div>
+
+@code {
+    [Parameter] public EventCallback<string> OnFavoriteToggled { get; set; }
+
+    private string _menuId = $"nav-ctx-{Guid.NewGuid():N}"[..12];
+    private NavContextItem? _item;
+
+    public bool IsFavorite { get; private set; }
+
+    public async Task ShowAsync(double x, double y, NavContextItem item, bool isFavorite)
+    {
+        _item = item;
+        IsFavorite = isFavorite;
+        StateHasChanged();
+        await JS.InvokeVoidAsync("FCSidebar.showContextMenu", x, y, _menuId);
+    }
+
+    private async Task ToggleFavorite()
+    {
+        if (_item == null) return;
+        await CloseMenu();
+        await OnFavoriteToggled.InvokeAsync(_item.Href);
+    }
+
+    private async Task CloseMenu()
+    {
+        await JS.InvokeVoidAsync("FCSidebar.hideContextMenu", _menuId);
+    }
+
+    private async Task ExecuteAction(NavQuickAction action)
+    {
+        await CloseMenu();
+        if (!string.IsNullOrEmpty(action.NavigateTo))
+        {
+            // Actions that navigate are handled by the parent via callback
+            await OnFavoriteToggled.InvokeAsync($"__action__{action.NavigateTo}");
+        }
+    }
+}
+
+/// <summary>Nav item descriptor passed to the context menu.</summary>
+public sealed record NavContextItem(
+    string Label,
+    string Href,
+    string IconPath,
+    List<NavQuickAction> QuickActions);
+
+/// <summary>A quick-action entry in the context menu (e.g. "Create New").</summary>
+public sealed record NavQuickAction(
+    string Label,
+    string IconPath,
+    string? NavigateTo = null);
