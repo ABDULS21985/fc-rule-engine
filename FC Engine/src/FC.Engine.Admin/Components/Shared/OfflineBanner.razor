@@ -1,0 +1,124 @@
+@* Network offline detection banner — fixed top bar that slides in when browser loses connectivity.
+   Add <OfflineBanner /> once inside MainLayout's global overlays section. *@
+@inject IJSRuntime JS
+@implements IAsyncDisposable
+
+@if (_showBanner)
+{
+    <div class="fc-offline-banner @(_isOnline ? "fc-offline-banner--online" : "fc-offline-banner--visible")"
+         role="status" aria-live="assertive" aria-atomic="true">
+        @if (_isOnline)
+        {
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14" aria-hidden="true">
+                <polyline points="1,8 6,13 15,3"/>
+            </svg>
+            <span>Back online</span>
+        }
+        else
+        {
+            <span class="fc-offline-pulse" aria-hidden="true"></span>
+            <span>You're offline &mdash; changes won't save until you reconnect.</span>
+            <button class="fc-offline-banner__btn" @onclick="TryReconnect">
+                Try reconnecting
+            </button>
+            @if (_countdown > 0)
+            {
+                <span class="fc-offline-banner__countdown">Auto-retry in @_countdown&thinsp;s</span>
+            }
+        }
+    </div>
+}
+
+@code {
+    private bool _isOnline    = true;
+    private bool _showBanner  = false;
+    private int  _countdown   = 0;
+    private DotNetObjectReference<OfflineBanner>? _dotnetRef;
+    private PeriodicTimer? _timer;
+    private CancellationTokenSource? _cts;
+
+    // ── Lifecycle ──────────────────────────────────────────
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        _dotnetRef = DotNetObjectReference.Create(this);
+        try
+        {
+            await JS.InvokeVoidAsync("FCSidebar.initOfflineDetection", _dotnetRef);
+        }
+        catch { /* prerender / no-JS — silently ignore */ }
+    }
+
+    // ── JS callback ───────────────────────────────────────
+    [JSInvokable]
+    public async Task OnNetworkChange(bool isOnline)
+    {
+        _cts?.Cancel();
+        _isOnline = isOnline;
+
+        if (!isOnline)
+        {
+            _showBanner = true;
+            StartReconnectCountdown();
+        }
+        else
+        {
+            // Show "Back online" flash then hide
+            _showBanner = true;
+            await InvokeAsync(StateHasChanged);
+            await Task.Delay(3000);
+            _showBanner = false;
+        }
+
+        await InvokeAsync(StateHasChanged);
+    }
+
+    // ── Reconnect countdown ────────────────────────────────
+    private void StartReconnectCountdown()
+    {
+        _cts?.Dispose();
+        _cts = new CancellationTokenSource();
+        _countdown = 30;
+        _ = RunCountdownAsync(_cts.Token);
+    }
+
+    private async Task RunCountdownAsync(CancellationToken ct)
+    {
+        _timer?.Dispose();
+        _timer = new PeriodicTimer(TimeSpan.FromSeconds(1));
+        try
+        {
+            while (await _timer.WaitForNextTickAsync(ct))
+            {
+                _countdown--;
+                await InvokeAsync(StateHasChanged);
+                if (_countdown <= 0)
+                {
+                    await TryReconnect();
+                    break;
+                }
+            }
+        }
+        catch (OperationCanceledException) { }
+        finally { _timer?.Dispose(); _timer = null; }
+    }
+
+    private async Task TryReconnect()
+    {
+        _cts?.Cancel();
+        _countdown = 0;
+        try { await JS.InvokeVoidAsync("eval", "window.location.reload()"); }
+        catch { /* no-op */ }
+    }
+
+    // ── Disposal ──────────────────────────────────────────
+    public async ValueTask DisposeAsync()
+    {
+        _cts?.Cancel();
+        _cts?.Dispose();
+        _timer?.Dispose();
+        try { await JS.InvokeVoidAsync("FCSidebar.disposeOfflineDetection"); }
+        catch { /* no-op */ }
+        _dotnetRef?.Dispose();
+    }
+}
