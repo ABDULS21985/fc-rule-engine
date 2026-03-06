@@ -27,6 +27,9 @@ public class ChartJsInterop
     public Task RenderHorizontalBarChart(string canvasId, string[] labels, int[] values, decimal[] compliance)
         => _js.InvokeVoidAsync("renderHorizontalBarChart", canvasId, labels, values, compliance).AsTask();
 
+    public Task RenderDonutWithColors(string canvasId, string[] labels, decimal[] values, string[] colors)
+        => _js.InvokeVoidAsync("renderDonutWithColors", canvasId, labels, values, colors).AsTask();
+
     public Task RenderHeatmap(string canvasId, object days)
         => _js.InvokeVoidAsync("renderHeatmap", canvasId, days).AsTask();
 

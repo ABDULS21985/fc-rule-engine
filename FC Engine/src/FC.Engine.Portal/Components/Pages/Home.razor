@@ -3,7 +3,6 @@
 @inject DashboardService DashboardService
 @inject ChartJsInterop Charts
 @using FC.Engine.Domain.Enums
-@using System.Text.Json
 
 <PageTitle>Dashboard — FC Engine Portal</PageTitle>
 
@@ -508,23 +507,13 @@ else
             await Charts.RenderAreaChart("chart-volume", labels, accepted, rejected, pending);
         }
 
-        // Donut chart (template health)
+        // Donut chart (template health) — color-coded by pass rate
         if (data.TemplateHealth.Any())
         {
-            var trendData = new FC.Engine.Domain.Models.TrendData
-            {
-                Labels = data.TemplateHealth.Select(t => t.ReturnCode).ToList(),
-                Datasets = new List<FC.Engine.Domain.Models.TrendDataset>
-                {
-                    new()
-                    {
-                        Label = "Pass Rate",
-                        Data = data.TemplateHealth.Select(t => (double)t.PassRate).ToList(),
-                        BackgroundColor = data.TemplateHealth.Select(t => GetHealthColorHex(t.PassRate)).ToList()
-                    }
-                }
-            };
-            await Charts.RenderDoughnutChart("chart-health", trendData);
+            var labels  = data.TemplateHealth.Select(t => t.ReturnCode).ToArray();
+            var values  = data.TemplateHealth.Select(t => t.PassRate).ToArray();
+            var colors  = data.TemplateHealth.Select(t => GetHealthColorHex(t.PassRate)).ToArray();
+            await Charts.RenderDonutWithColors("chart-health", labels, values, colors);
         }
 
         // Horizontal bar chart (top modules)

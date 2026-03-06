@@ -1,0 +1,53 @@
+@* Column visibility toggle dropdown. *@
+
+<div class="fc-dt-col-toggle" @onfocusout="OnFocusOut">
+    <button class="fc-btn fc-btn--outline fc-btn--sm fc-dt-col-toggle-btn"
+            type="button"
+            @onclick="Toggle"
+            aria-haspopup="listbox"
+            aria-expanded="@_open"
+            aria-label="Toggle column visibility"
+            title="Show / hide columns">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round" width="14" height="14" aria-hidden="true">
+            <path d="M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2V9M9 21H5a2 2 0 0 1-2-2V9m0 0h18"/>
+        </svg>
+        Columns
+    </button>
+
+    @if (_open)
+    {
+        <div class="fc-dt-col-toggle-dropdown" role="listbox" aria-label="Columns">
+            @foreach (var col in Columns.Where(c => c.Hideable))
+            {
+                var colId = col.Id;
+                var isVisible = !HiddenColumns.Contains(col.Id);
+                <label class="fc-dt-col-toggle-item" role="option" aria-selected="@isVisible">
+                    <input type="checkbox"
+                           checked="@isVisible"
+                           @onchange="() => OnToggle.InvokeAsync(colId)" />
+                    @col.Title
+                </label>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public IReadOnlyList<DataColumnInfo> Columns { get; set; } = Array.Empty<DataColumnInfo>();
+    [Parameter] public IReadOnlySet<string> HiddenColumns { get; set; } = new HashSet<string>();
+    [Parameter] public EventCallback<string> OnToggle { get; set; }
+
+    private bool _open;
+
+    private void Toggle() => _open = !_open;
+
+    private async Task OnFocusOut(FocusEventArgs e)
+    {
+        // Delay allows the click on dropdown items to register before closing
+        await Task.Delay(150);
+        _open = false;
+    }
+
+    public record DataColumnInfo(string Id, string Title, bool Hideable);
+}

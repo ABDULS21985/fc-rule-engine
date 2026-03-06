@@ -1,0 +1,257 @@
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+
+<div id="@_containerId" class="fc-datepicker">
+    <!-- Trigger -->
+    <div class="fc-datepicker__trigger" @onclick="ToggleDropdown" tabindex="0" role="combobox"
+         aria-expanded="@_isOpen" aria-haspopup="dialog" @onkeydown="HandleTriggerKey">
+        <svg class="fc-datepicker__trigger-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <rect x="3" y="4" width="18" height="18" rx="2" ry="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" />
+        </svg>
+        <span class="fc-datepicker__trigger-text @(HasValue ? "" : "fc-datepicker__trigger-text--placeholder")">
+            @DisplayText
+        </span>
+        @if (HasValue)
+        {
+            <button class="fc-datepicker__trigger-clear" @onclick="Clear" @onclick:stopPropagation="true" aria-label="Clear date" type="button">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+            </button>
+        }
+    </div>
+
+    <!-- Dropdown -->
+    @if (_isOpen)
+    {
+        <div id="@_dropdownId" class="fc-datepicker__dropdown" role="dialog" aria-label="Date picker">
+            @if (ShowPresets)
+            {
+                <div class="fc-datepicker__presets">
+                    <button class="fc-datepicker__preset" type="button" @onclick='() => ApplyPreset("today")'>Today</button>
+                    <button class="fc-datepicker__preset" type="button" @onclick='() => ApplyPreset("week")'>This Week</button>
+                    <button class="fc-datepicker__preset" type="button" @onclick='() => ApplyPreset("month")'>This Month</button>
+                    <button class="fc-datepicker__preset" type="button" @onclick='() => ApplyPreset("quarter")'>This Quarter</button>
+                    <button class="fc-datepicker__preset" type="button" @onclick='() => ApplyPreset("year")'>This Year</button>
+                </div>
+            }
+
+            <!-- Month nav -->
+            <div class="fc-datepicker__nav">
+                <button class="fc-datepicker__nav-btn" type="button" @onclick="PrevMonth" aria-label="Previous month">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><polyline points="15 18 9 12 15 6" /></svg>
+                </button>
+                <span class="fc-datepicker__nav-title">@_viewDate.ToString("MMMM yyyy")</span>
+                <button class="fc-datepicker__nav-btn" type="button" @onclick="NextMonth" aria-label="Next month">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><polyline points="9 18 15 12 9 6" /></svg>
+                </button>
+            </div>
+
+            <!-- Calendar grid -->
+            <div class="fc-datepicker__grid" role="grid">
+                @foreach (var dow in _daysOfWeek)
+                {
+                    <span class="fc-datepicker__dow">@dow</span>
+                }
+                @foreach (var day in GetCalendarDays())
+                {
+                    var d = day;
+                    var classes = GetDayClasses(d);
+                    <button class="fc-datepicker__day @classes" type="button"
+                            @onclick="() => SelectDay(d)"
+                            disabled="@(d.Month != _viewDate.Month && !ShowOtherMonthDays)"
+                            aria-label="@d.ToString("d MMMM yyyy")">
+                        @d.Day
+                    </button>
+                }
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private string _containerId = $"fc-dp-{Guid.NewGuid():N}";
+    private string _dropdownId = $"fc-dp-dd-{Guid.NewGuid():N}";
+    private bool _isOpen;
+    private DateTime _viewDate = DateTime.Today;
+    private DotNetObjectReference<DateRangePicker>? _dotnetRef;
+
+    private static readonly string[] _daysOfWeek = { "Su", "Mo", "Tu", "We", "Th", "Fr", "Sa" };
+
+    [Parameter] public DateTime? StartDate { get; set; }
+    [Parameter] public EventCallback<DateTime?> StartDateChanged { get; set; }
+    [Parameter] public DateTime? EndDate { get; set; }
+    [Parameter] public EventCallback<DateTime?> EndDateChanged { get; set; }
+    [Parameter] public DatePickerMode Mode { get; set; } = DatePickerMode.Single;
+    [Parameter] public bool ShowPresets { get; set; } = true;
+    [Parameter] public bool ShowOtherMonthDays { get; set; }
+    [Parameter] public string Placeholder { get; set; } = "Select date...";
+
+    private bool HasValue => StartDate.HasValue;
+
+    private string DisplayText
+    {
+        get
+        {
+            if (!StartDate.HasValue) return Placeholder;
+            if (Mode == DatePickerMode.Single) return StartDate.Value.ToString("dd MMM yyyy");
+            if (!EndDate.HasValue) return StartDate.Value.ToString("dd MMM yyyy") + " - ...";
+            return $"{StartDate.Value:dd MMM yyyy} - {EndDate.Value:dd MMM yyyy}";
+        }
+    }
+
+    private async Task ToggleDropdown()
+    {
+        _isOpen = !_isOpen;
+        if (_isOpen)
+        {
+            _viewDate = StartDate ?? DateTime.Today;
+            _dotnetRef = DotNetObjectReference.Create(this);
+            // Position & outside-click handled after render
+            await Task.Yield();
+            try
+            {
+                await JS.InvokeVoidAsync("FCForms.onOutsideClick", _containerId, _dotnetRef, "CloseDropdown");
+            }
+            catch (JSDisconnectedException) { }
+        }
+        else
+        {
+            CleanupOutsideClick();
+        }
+    }
+
+    [JSInvokable]
+    public void CloseDropdown()
+    {
+        _isOpen = false;
+        CleanupOutsideClick();
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void CleanupOutsideClick()
+    {
+        try { JS.InvokeVoidAsync("FCForms.dispose_outsideClick", _containerId); } catch { }
+        _dotnetRef?.Dispose();
+        _dotnetRef = null;
+    }
+
+    private void HandleTriggerKey(KeyboardEventArgs e)
+    {
+        if (e.Key is "Enter" or " " or "ArrowDown") _ = ToggleDropdown();
+        if (e.Key == "Escape" && _isOpen) CloseDropdown();
+    }
+
+    private void PrevMonth() => _viewDate = _viewDate.AddMonths(-1);
+    private void NextMonth() => _viewDate = _viewDate.AddMonths(1);
+
+    private async Task SelectDay(DateTime day)
+    {
+        if (Mode == DatePickerMode.Single)
+        {
+            await StartDateChanged.InvokeAsync(day);
+            await EndDateChanged.InvokeAsync(day);
+            CloseDropdown();
+        }
+        else
+        {
+            // Range mode
+            if (!StartDate.HasValue || (StartDate.HasValue && EndDate.HasValue) || day < StartDate.Value)
+            {
+                await StartDateChanged.InvokeAsync(day);
+                await EndDateChanged.InvokeAsync(null);
+            }
+            else
+            {
+                await EndDateChanged.InvokeAsync(day);
+                CloseDropdown();
+            }
+        }
+    }
+
+    private async Task ApplyPreset(string preset)
+    {
+        var today = DateTime.Today;
+        DateTime start, end;
+
+        switch (preset)
+        {
+            case "today":
+                start = end = today;
+                break;
+            case "week":
+                start = today.AddDays(-(int)today.DayOfWeek);
+                end = start.AddDays(6);
+                break;
+            case "month":
+                start = new DateTime(today.Year, today.Month, 1);
+                end = start.AddMonths(1).AddDays(-1);
+                break;
+            case "quarter":
+                var qMonth = ((today.Month - 1) / 3) * 3 + 1;
+                start = new DateTime(today.Year, qMonth, 1);
+                end = start.AddMonths(3).AddDays(-1);
+                break;
+            case "year":
+                start = new DateTime(today.Year, 1, 1);
+                end = new DateTime(today.Year, 12, 31);
+                break;
+            default:
+                return;
+        }
+
+        await StartDateChanged.InvokeAsync(start);
+        await EndDateChanged.InvokeAsync(end);
+        CloseDropdown();
+    }
+
+    private async Task Clear()
+    {
+        await StartDateChanged.InvokeAsync(null);
+        await EndDateChanged.InvokeAsync(null);
+    }
+
+    private List<DateTime> GetCalendarDays()
+    {
+        var first = new DateTime(_viewDate.Year, _viewDate.Month, 1);
+        var startOffset = (int)first.DayOfWeek;
+        var start = first.AddDays(-startOffset);
+
+        var days = new List<DateTime>();
+        for (var i = 0; i < 42; i++)
+            days.Add(start.AddDays(i));
+        return days;
+    }
+
+    private string GetDayClasses(DateTime day)
+    {
+        var classes = new List<string>();
+        if (day.Date == DateTime.Today) classes.Add("fc-datepicker__day--today");
+        if (day.Month != _viewDate.Month) classes.Add("fc-datepicker__day--other-month");
+
+        if (StartDate.HasValue && day.Date == StartDate.Value.Date)
+        {
+            classes.Add("fc-datepicker__day--selected");
+            if (EndDate.HasValue && EndDate.Value.Date != StartDate.Value.Date)
+                classes.Add("fc-datepicker__day--range-start");
+        }
+
+        if (EndDate.HasValue && day.Date == EndDate.Value.Date)
+        {
+            classes.Add("fc-datepicker__day--selected");
+            if (StartDate.HasValue && EndDate.Value.Date != StartDate.Value.Date)
+                classes.Add("fc-datepicker__day--range-end");
+        }
+
+        if (StartDate.HasValue && EndDate.HasValue && day.Date > StartDate.Value.Date && day.Date < EndDate.Value.Date)
+            classes.Add("fc-datepicker__day--in-range");
+
+        return string.Join(" ", classes);
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        CleanupOutsideClick();
+        await ValueTask.CompletedTask;
+    }
+
+    public enum DatePickerMode { Single, Range }
+}

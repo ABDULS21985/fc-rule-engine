@@ -1,0 +1,197 @@
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+@typeparam TItem
+
+<div id="@_containerId" class="fc-multiselect">
+    <div class="fc-multiselect__control" @onclick="FocusInput">
+        @foreach (var val in SelectedValues)
+        {
+            var item = Items.FirstOrDefault(i => GetValue(i)?.Equals(val) == true);
+            var display = item != null ? GetDisplay(item) : val?.ToString() ?? "";
+            <span class="fc-multiselect__pill">
+                <span class="fc-multiselect__pill-text">@display</span>
+                <button class="fc-multiselect__pill-remove" type="button" @onclick="() => RemoveItem(val)" @onclick:stopPropagation="true" aria-label="Remove @display">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" width="12" height="12"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+                </button>
+            </span>
+        }
+        <input id="@_inputId" class="fc-multiselect__input"
+               type="text"
+               placeholder="@(SelectedValues.Any() ? "" : Placeholder)"
+               @bind="_searchText"
+               @bind:event="oninput"
+               @onfocus="OpenDropdown"
+               @onkeydown="HandleKeyDown"
+               autocomplete="off"
+               aria-label="@Placeholder" />
+    </div>
+
+    @if (_isOpen)
+    {
+        <div class="fc-multiselect__dropdown" role="listbox">
+            @if (!FilteredItems.Any())
+            {
+                <div class="fc-multiselect__empty">No items match your search</div>
+            }
+            else
+            {
+                var index = 0;
+                @foreach (var item in FilteredItems)
+                {
+                    var i = index;
+                    var val = GetValue(item);
+                    var isSelected = SelectedValues.Any(v => v?.Equals(val) == true);
+                    var isFocused = i == _focusedIndex;
+                    <div id="@($"{_containerId}-opt-{i}")"
+                         class="fc-multiselect__option @(isSelected ? "fc-multiselect__option--selected" : "") @(isFocused ? "fc-multiselect__option--focused" : "")"
+                         @onclick="() => ToggleItem(val)"
+                         role="option"
+                         aria-selected="@isSelected">
+                        <svg class="fc-multiselect__option-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <polyline points="20 6 9 17 4 12" />
+                        </svg>
+                        <span>@GetDisplay(item)</span>
+                    </div>
+                    index++;
+                }
+            }
+        </div>
+    }
+</div>
+
+@code {
+    private string _containerId = $"fc-ms-{Guid.NewGuid():N}";
+    private string _inputId = $"fc-ms-in-{Guid.NewGuid():N}";
+    private bool _isOpen;
+    private string _searchText = "";
+    private int _focusedIndex = -1;
+    private DotNetObjectReference<MultiSelect<TItem>>? _dotnetRef;
+
+    [Parameter] public List<TItem> Items { get; set; } = new();
+    [Parameter] public List<object> SelectedValues { get; set; } = new();
+    [Parameter] public EventCallback<List<object>> SelectedValuesChanged { get; set; }
+    [Parameter] public string Placeholder { get; set; } = "Select items...";
+    [Parameter] public int MaxSelections { get; set; } = int.MaxValue;
+    [Parameter] public Func<TItem, string>? DisplayMember { get; set; }
+    [Parameter] public Func<TItem, object>? ValueMember { get; set; }
+
+    private string GetDisplay(TItem item) => DisplayMember?.Invoke(item) ?? item?.ToString() ?? "";
+    private object? GetValue(TItem item) => ValueMember?.Invoke(item) ?? item;
+
+    private IEnumerable<TItem> FilteredItems => Items
+        .Where(i => string.IsNullOrEmpty(_searchText)
+            || GetDisplay(i).Contains(_searchText, StringComparison.OrdinalIgnoreCase));
+
+    private async Task FocusInput()
+    {
+        try { await JS.InvokeVoidAsync("FCForms.focusElement", _inputId); }
+        catch (JSDisconnectedException) { }
+    }
+
+    private async Task OpenDropdown()
+    {
+        if (_isOpen) return;
+        _isOpen = true;
+        _focusedIndex = -1;
+        _dotnetRef = DotNetObjectReference.Create(this);
+        await Task.Yield();
+        try { await JS.InvokeVoidAsync("FCForms.onOutsideClick", _containerId, _dotnetRef, "CloseDropdown"); }
+        catch (JSDisconnectedException) { }
+    }
+
+    [JSInvokable]
+    public void CloseDropdown()
+    {
+        _isOpen = false;
+        _searchText = "";
+        _focusedIndex = -1;
+        CleanupOutsideClick();
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void CleanupOutsideClick()
+    {
+        try { JS.InvokeVoidAsync("FCForms.dispose_outsideClick", _containerId); } catch { }
+        _dotnetRef?.Dispose();
+        _dotnetRef = null;
+    }
+
+    private async Task HandleKeyDown(KeyboardEventArgs e)
+    {
+        var items = FilteredItems.ToList();
+
+        switch (e.Key)
+        {
+            case "ArrowDown":
+                if (!_isOpen) { await OpenDropdown(); return; }
+                _focusedIndex = Math.Min(_focusedIndex + 1, items.Count - 1);
+                await ScrollToFocused();
+                break;
+
+            case "ArrowUp":
+                _focusedIndex = Math.Max(_focusedIndex - 1, 0);
+                await ScrollToFocused();
+                break;
+
+            case "Enter":
+                if (_focusedIndex >= 0 && _focusedIndex < items.Count)
+                {
+                    var val = GetValue(items[_focusedIndex]);
+                    await ToggleItem(val);
+                }
+                break;
+
+            case "Backspace":
+                if (string.IsNullOrEmpty(_searchText) && SelectedValues.Any())
+                {
+                    await RemoveItem(SelectedValues.Last());
+                }
+                break;
+
+            case "Escape":
+                CloseDropdown();
+                break;
+        }
+    }
+
+    private async Task ScrollToFocused()
+    {
+        if (_focusedIndex >= 0)
+        {
+            try { await JS.InvokeVoidAsync("FCForms.scrollIntoView", $"{_containerId}-opt-{_focusedIndex}"); }
+            catch (JSDisconnectedException) { }
+        }
+    }
+
+    private async Task ToggleItem(object? val)
+    {
+        if (val is null) return;
+
+        var newList = new List<object>(SelectedValues);
+        if (newList.Any(v => v.Equals(val)))
+        {
+            newList.RemoveAll(v => v.Equals(val));
+        }
+        else if (newList.Count < MaxSelections)
+        {
+            newList.Add(val);
+        }
+
+        _searchText = "";
+        await SelectedValuesChanged.InvokeAsync(newList);
+    }
+
+    private async Task RemoveItem(object? val)
+    {
+        if (val is null) return;
+        var newList = new List<object>(SelectedValues);
+        newList.RemoveAll(v => v.Equals(val));
+        await SelectedValuesChanged.InvokeAsync(newList);
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        CleanupOutsideClick();
+        await ValueTask.CompletedTask;
+    }
+}

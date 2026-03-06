@@ -1,0 +1,70 @@
+@typeparam TItem
+@implements IDisposable
+
+@* DataColumn is a definition-only component. It renders no HTML.
+   It registers itself with the parent DataTable via CascadingParameter. *@
+
+@code {
+    [CascadingParameter] private DataTable<TItem> Parent { get; set; } = default!;
+
+    /// <summary>Column header text.</summary>
+    [Parameter] public string Title { get; set; } = string.Empty;
+
+    /// <summary>Unique identifier. Defaults to Title.</summary>
+    [Parameter] public string? ColumnId { get; set; }
+
+    /// <summary>Provide a selector to enable header-click sorting on this column.</summary>
+    [Parameter] public Func<TItem, object?>? SortKey { get; set; }
+
+    /// <summary>CSS width, e.g. "120px" or "20%". Applied to both th and td.</summary>
+    [Parameter] public string? Width { get; set; }
+
+    /// <summary>CSS min-width.</summary>
+    [Parameter] public string? MinWidth { get; set; }
+
+    /// <summary>Show a drag handle on the right edge of the header to resize this column.</summary>
+    [Parameter] public bool Resizable { get; set; }
+
+    /// <summary>Text alignment: "left" (default), "center", "right".</summary>
+    [Parameter] public string Align { get; set; } = "left";
+
+    /// <summary>Additional CSS classes applied to each &lt;td&gt; in this column.</summary>
+    [Parameter] public string? CellClass { get; set; }
+
+    /// <summary>Additional CSS classes applied to the &lt;th&gt; header.</summary>
+    [Parameter] public string? HeaderClass { get; set; }
+
+    /// <summary>Whether this column is visible. Can be toggled at runtime.</summary>
+    [Parameter] public bool Visible { get; set; } = true;
+
+    /// <summary>Whether this column appears in the column visibility toggle.</summary>
+    [Parameter] public bool Hideable { get; set; } = true;
+
+    /// <summary>Custom cell content. Use @context to access the row item.</summary>
+    [Parameter] public RenderFragment<TItem>? CellTemplate { get; set; }
+
+    /// <summary>Custom header content.</summary>
+    [Parameter] public RenderFragment? HeaderTemplate { get; set; }
+
+    /// <summary>Value extractor for export (CSV/Excel/PDF). Falls back to empty string.</summary>
+    [Parameter] public Func<TItem, string>? ExportValue { get; set; }
+
+    /// <summary>Label shown in mobile card layout. Defaults to Title.</summary>
+    [Parameter] public string? MobileLabel { get; set; }
+
+    /// <summary>Mobile display priority. 0 = always show, 1 = show if space, 2+ = hide on mobile.</summary>
+    [Parameter] public int MobilePriority { get; set; }
+
+    /// <summary>Resolved unique identifier (ColumnId ?? Title).</summary>
+    public string Id => ColumnId ?? Title;
+
+    protected override void OnInitialized()
+    {
+        Parent.RegisterColumn(this);
+    }
+
+    public void Dispose()
+    {
+        Parent.UnregisterColumn(this);
+    }
+}

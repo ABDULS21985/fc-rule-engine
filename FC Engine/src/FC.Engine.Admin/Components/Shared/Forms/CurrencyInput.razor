@@ -1,0 +1,67 @@
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+
+<div class="fc-currency">
+    <span class="fc-currency__symbol" aria-hidden="true">@CurrencySymbol</span>
+    <input id="@_id"
+           class="fc-currency__input"
+           type="text"
+           inputmode="decimal"
+           placeholder="@Placeholder"
+           disabled="@Disabled"
+           aria-label="@(string.IsNullOrEmpty(AriaLabel) ? $"Amount in {CurrencySymbol}" : AriaLabel)" />
+</div>
+
+@code {
+    private string _id = $"fc-cur-{Guid.NewGuid():N}";
+    private DotNetObjectReference<CurrencyInput>? _dotnetRef;
+    private decimal _currentValue;
+
+    [Parameter] public decimal Value { get; set; }
+    [Parameter] public EventCallback<decimal> ValueChanged { get; set; }
+    [Parameter] public string CurrencySymbol { get; set; } = "₦";
+    [Parameter] public string? Placeholder { get; set; } = "0.00";
+    [Parameter] public bool Disabled { get; set; }
+    [Parameter] public int Decimals { get; set; } = 2;
+    [Parameter] public string? AriaLabel { get; set; }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _dotnetRef = DotNetObjectReference.Create(this);
+            await JS.InvokeVoidAsync("FCForms.initCurrencyInput", _id, _dotnetRef, CurrencySymbol, Decimals);
+            if (Value != 0)
+            {
+                await JS.InvokeVoidAsync("FCForms.setCurrencyValue", _id, Value, Decimals);
+            }
+            _currentValue = Value;
+        }
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_currentValue != Value && _dotnetRef != null)
+        {
+            _currentValue = Value;
+            try
+            {
+                await JS.InvokeVoidAsync("FCForms.setCurrencyValue", _id, Value, Decimals);
+            }
+            catch (JSDisconnectedException) { }
+        }
+    }
+
+    [JSInvokable]
+    public async Task OnJsValueChanged(decimal value)
+    {
+        _currentValue = value;
+        await ValueChanged.InvokeAsync(value);
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        _dotnetRef?.Dispose();
+        await ValueTask.CompletedTask;
+    }
+}

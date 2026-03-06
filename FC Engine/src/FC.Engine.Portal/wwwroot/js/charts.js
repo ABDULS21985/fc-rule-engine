@@ -210,6 +210,32 @@
         chartRegistry[canvasId] = { destroy: function () { canvas.onmousemove = null; canvas.title = ""; } };
     };
 
+    // ── Donut Chart with per-segment colors ──────────────────────────
+    window.renderDonutWithColors = function (canvasId, labels, values, colors) {
+        const canvas = document.getElementById(canvasId);
+        if (!canvas || typeof Chart === "undefined") return;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return;
+        if (chartRegistry[canvasId]) chartRegistry[canvasId].destroy();
+
+        chartRegistry[canvasId] = new Chart(ctx, {
+            type: "doughnut",
+            data: {
+                labels: labels,
+                datasets: [{ data: values, backgroundColor: colors, borderColor: "#fff", borderWidth: 2 }]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                animation: { duration: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 700 },
+                plugins: {
+                    legend: { position: "bottom", labels: { usePointStyle: true, padding: 12, font: { size: 11 } } },
+                    tooltip: { callbacks: { label: function (ctx) { return " " + ctx.label + ": " + ctx.formattedValue + "%"; } } }
+                },
+                cutout: "62%"
+            }
+        });
+    };
+
     // ── Animated Counter ──────────────────────────────────────────────
     window.animateCounter = function (elementId, targetValue, durationMs, suffix) {
         const el = document.getElementById(elementId);
