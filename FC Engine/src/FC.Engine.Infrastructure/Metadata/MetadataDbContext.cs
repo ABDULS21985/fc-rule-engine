@@ -91,6 +91,9 @@ public class MetadataDbContext : DbContext
     // Filing SLA (RG-12)
     public DbSet<FilingSlaRecord> FilingSlaRecords => Set<FilingSlaRecord>();
 
+    // Reports (RG-18)
+    public DbSet<SavedReport> SavedReports => Set<SavedReport>();
+
     // Audit
     public DbSet<AuditLogEntry> AuditLog => Set<AuditLogEntry>();
     public DbSet<FieldChangeHistory> FieldChangeHistory => Set<FieldChangeHistory>();

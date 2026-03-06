@@ -1,0 +1,295 @@
+#nullable enable
+using FC.Engine.Infrastructure.Metadata;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
+
+namespace FC.Engine.Infrastructure.Metadata.Migrations;
+
+[DbContext(typeof(MetadataDbContext))]
+[Migration("20260306140000_AddPrivacyComplianceRg20")]
+public partial class AddPrivacyComplianceRg20 : Migration
+{
+    protected override void Up(MigrationBuilder migrationBuilder)
+    {
+        migrationBuilder.Sql(@"
+            IF OBJECT_ID(N'dbo.consent_records', N'U') IS NULL
+            BEGIN
+                CREATE TABLE dbo.consent_records (
+                    Id              INT                 IDENTITY(1,1) PRIMARY KEY,
+                    TenantId        UNIQUEIDENTIFIER    NOT NULL REFERENCES dbo.tenants(TenantId),
+                    UserId          INT                 NOT NULL,
+                    UserType        NVARCHAR(20)        NOT NULL,
+                    ConsentType     NVARCHAR(50)        NOT NULL,
+                    PolicyVersion   NVARCHAR(20)        NOT NULL,
+                    ConsentGiven    BIT                 NOT NULL,
+                    ConsentMethod   NVARCHAR(30)        NOT NULL,
+                    IpAddress       NVARCHAR(45)        NULL,
+                    UserAgent       NVARCHAR(500)       NULL,
+                    ConsentedAt     DATETIME2           NOT NULL DEFAULT SYSUTCDATETIME(),
+                    WithdrawnAt     DATETIME2           NULL
+                );
+            END;
+
+            IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_consent_records_TenantId' AND object_id = OBJECT_ID('dbo.consent_records'))
+                CREATE INDEX IX_consent_records_TenantId ON dbo.consent_records(TenantId);
+
+            IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_consent_records_User' AND object_id = OBJECT_ID('dbo.consent_records'))
+                CREATE INDEX IX_consent_records_User ON dbo.consent_records(UserId, UserType, ConsentType);
+
+            IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_consent_records_Tenant_User_ConsentedAt' AND object_id = OBJECT_ID('dbo.consent_records'))
+                CREATE INDEX IX_consent_records_Tenant_User_ConsentedAt
+                    ON dbo.consent_records(TenantId, UserId, UserType, ConsentType, ConsentedAt DESC);
+
+            IF OBJECT_ID(N'dbo.data_subject_requests', N'U') IS NULL
+            BEGIN
+                CREATE TABLE dbo.data_subject_requests (
+                    Id                  INT                 IDENTITY(1,1) PRIMARY KEY,
+                    TenantId            UNIQUEIDENTIFIER    NOT NULL REFERENCES dbo.tenants(TenantId),
+                    RequestType         NVARCHAR(30)        NOT NULL,
+                    RequestedBy         INT                 NOT NULL,
+                    RequestedByUserType NVARCHAR(20)        NOT NULL DEFAULT 'InstitutionUser',
+                    Status              NVARCHAR(20)        NOT NULL DEFAULT 'Received',
+                    Description         NVARCHAR(1000)      NULL,
+                    ResponseNotes       NVARCHAR(MAX)       NULL,
+                    ProcessedBy         INT                 NULL,
+                    DataPackagePath     NVARCHAR(500)       NULL,
+                    CompletedAt         DATETIME2           NULL,
+                    DueDate             DATETIME2           NOT NULL,
+                    CreatedAt           DATETIME2           NOT NULL DEFAULT SYSUTCDATETIME()
+                );
+            END;
+
+            IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_data_subject_requests_TenantId' AND object_id = OBJECT_ID('dbo.data_subject_requests'))
+                CREATE INDEX IX_data_subject_requests_TenantId ON dbo.data_subject_requests(TenantId);
+
+            IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_data_subject_requests_Tenant_Status_DueDate' AND object_id = OBJECT_ID('dbo.data_subject_requests'))
+                CREATE INDEX IX_data_subject_requests_Tenant_Status_DueDate
+                    ON dbo.data_subject_requests(TenantId, Status, DueDate);
+
+            IF OBJECT_ID(N'dbo.data_processing_activities', N'U') IS NULL
+            BEGIN
+                CREATE TABLE dbo.data_processing_activities (
+                    Id                  INT             IDENTITY(1,1) PRIMARY KEY,
+                    ModuleCode          NVARCHAR(30)    NOT NULL,
+                    ActivityName        NVARCHAR(200)   NOT NULL,
+                    Purpose             NVARCHAR(500)   NOT NULL,
+                    LegalBasis          NVARCHAR(100)   NOT NULL,
+                    DataCategories      NVARCHAR(MAX)   NOT NULL,
+                    DataSubjects        NVARCHAR(MAX)   NOT NULL,
+                    RetentionPeriod     NVARCHAR(100)   NOT NULL,
+                    ThirdPartySharing   NVARCHAR(MAX)   NULL,
+                    SecurityMeasures    NVARCHAR(MAX)   NOT NULL,
+                    IsAutoGenerated     BIT             NOT NULL DEFAULT 1,
+                    LastUpdated         DATETIME2       NOT NULL DEFAULT SYSUTCDATETIME(),
+                    CONSTRAINT UQ_data_processing_activities UNIQUE (ModuleCode, ActivityName)
+                );
+            END;
+
+            IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_data_processing_activities_ModuleCode' AND object_id = OBJECT_ID('dbo.data_processing_activities'))
+                CREATE INDEX IX_data_processing_activities_ModuleCode ON dbo.data_processing_activities(ModuleCode);
+
+            IF OBJECT_ID(N'dbo.data_breach_incidents', N'U') IS NULL
+            BEGIN
+                CREATE TABLE dbo.data_breach_incidents (
+                    Id                          INT                 IDENTITY(1,1) PRIMARY KEY,
+                    TenantId                    UNIQUEIDENTIFIER    NULL REFERENCES dbo.tenants(TenantId),
+                    Severity                    NVARCHAR(10)        NOT NULL,
+                    Status                      NVARCHAR(20)        NOT NULL DEFAULT 'Detected',
+                    Title                       NVARCHAR(200)       NOT NULL,
+                    Description                 NVARCHAR(MAX)       NOT NULL,
+                    DataSubjectsAffected        INT                 NULL,
+                    DataCategoriesAffected      NVARCHAR(MAX)       NULL,
+                    DetectedAt                  DATETIME2           NOT NULL,
+                    ContainedAt                 DATETIME2           NULL,
+                    NitdaNotifiedAt             DATETIME2           NULL,
+                    NitdaNotificationDeadline   DATETIME2           NULL,
+                    RemediatedAt                DATETIME2           NULL,
+                    Escalation24hSentAt         DATETIME2           NULL,
+                    Escalation48hSentAt         DATETIME2           NULL,
+                    Escalation68hSentAt         DATETIME2           NULL,
+                    DpoNotes                    NVARCHAR(MAX)       NULL,
+                    CreatedAt                   DATETIME2           NOT NULL DEFAULT SYSUTCDATETIME()
+                );
+            END;
+
+            IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_data_breach_incidents_TenantId' AND object_id = OBJECT_ID('dbo.data_breach_incidents'))
+                CREATE INDEX IX_data_breach_incidents_TenantId ON dbo.data_breach_incidents(TenantId);
+
+            IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_data_breach_incidents_Status_Deadline' AND object_id = OBJECT_ID('dbo.data_breach_incidents'))
+                CREATE INDEX IX_data_breach_incidents_Status_Deadline ON dbo.data_breach_incidents(Status, NitdaNotificationDeadline);
+
+            IF COL_LENGTH('meta.template_fields', 'DataClassification') IS NULL
+            BEGIN
+                ALTER TABLE meta.template_fields
+                    ADD DataClassification NVARCHAR(30) NOT NULL CONSTRAINT DF_template_fields_DataClassification DEFAULT 'Internal';
+            END;
+
+            IF COL_LENGTH('dbo.return_submissions', 'IsRetentionAnonymised') IS NULL
+            BEGIN
+                ALTER TABLE dbo.return_submissions
+                    ADD IsRetentionAnonymised BIT NOT NULL CONSTRAINT DF_return_submissions_IsRetentionAnonymised DEFAULT 0;
+            END;
+
+            IF COL_LENGTH('meta.portal_users', 'DeletedAt') IS NULL
+                ALTER TABLE meta.portal_users ADD DeletedAt DATETIME2 NULL;
+
+            IF COL_LENGTH('meta.portal_users', 'DeletionReason') IS NULL
+                ALTER TABLE meta.portal_users ADD DeletionReason NVARCHAR(300) NULL;
+
+            IF COL_LENGTH('meta.institution_users', 'DeletedAt') IS NULL
+                ALTER TABLE meta.institution_users ADD DeletedAt DATETIME2 NULL;
+
+            IF COL_LENGTH('meta.institution_users', 'DeletionReason') IS NULL
+                ALTER TABLE meta.institution_users ADD DeletionReason NVARCHAR(300) NULL;
+
+            IF COL_LENGTH('meta.login_attempts', 'UserId') IS NULL
+                ALTER TABLE meta.login_attempts ADD UserId INT NULL;
+
+            IF COL_LENGTH('meta.login_attempts', 'UserType') IS NULL
+                ALTER TABLE meta.login_attempts ADD UserType NVARCHAR(20) NULL;
+
+            IF COL_LENGTH('meta.login_attempts', 'UserAgent') IS NULL
+                ALTER TABLE meta.login_attempts ADD UserAgent NVARCHAR(500) NULL;
+
+            IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_login_attempts_UserId' AND object_id = OBJECT_ID('meta.login_attempts'))
+                CREATE INDEX IX_login_attempts_UserId ON meta.login_attempts(UserId);
+        ");
+
+        RebuildTenantSecurityPolicy(migrationBuilder);
+    }
+
+    protected override void Down(MigrationBuilder migrationBuilder)
+    {
+        migrationBuilder.Sql(@"
+            IF OBJECT_ID(N'dbo.data_breach_incidents', N'U') IS NOT NULL
+                DROP TABLE dbo.data_breach_incidents;
+
+            IF OBJECT_ID(N'dbo.data_processing_activities', N'U') IS NOT NULL
+                DROP TABLE dbo.data_processing_activities;
+
+            IF OBJECT_ID(N'dbo.data_subject_requests', N'U') IS NOT NULL
+                DROP TABLE dbo.data_subject_requests;
+
+            IF OBJECT_ID(N'dbo.consent_records', N'U') IS NOT NULL
+                DROP TABLE dbo.consent_records;
+
+            IF COL_LENGTH('meta.template_fields', 'DataClassification') IS NOT NULL
+            BEGIN
+                DECLARE @dfTemplateFields SYSNAME;
+                SELECT @dfTemplateFields = dc.name
+                FROM sys.default_constraints dc
+                INNER JOIN sys.columns c ON c.object_id = dc.parent_object_id AND c.column_id = dc.parent_column_id
+                WHERE dc.parent_object_id = OBJECT_ID('meta.template_fields')
+                  AND c.name = 'DataClassification';
+                IF @dfTemplateFields IS NOT NULL EXEC('ALTER TABLE meta.template_fields DROP CONSTRAINT ' + QUOTENAME(@dfTemplateFields));
+                ALTER TABLE meta.template_fields DROP COLUMN DataClassification;
+            END;
+
+            IF COL_LENGTH('dbo.return_submissions', 'IsRetentionAnonymised') IS NOT NULL
+            BEGIN
+                DECLARE @dfReturnSubmissions SYSNAME;
+                SELECT @dfReturnSubmissions = dc.name
+                FROM sys.default_constraints dc
+                INNER JOIN sys.columns c ON c.object_id = dc.parent_object_id AND c.column_id = dc.parent_column_id
+                WHERE dc.parent_object_id = OBJECT_ID('dbo.return_submissions')
+                  AND c.name = 'IsRetentionAnonymised';
+                IF @dfReturnSubmissions IS NOT NULL EXEC('ALTER TABLE dbo.return_submissions DROP CONSTRAINT ' + QUOTENAME(@dfReturnSubmissions));
+                ALTER TABLE dbo.return_submissions DROP COLUMN IsRetentionAnonymised;
+            END;
+
+            IF COL_LENGTH('meta.portal_users', 'DeletedAt') IS NOT NULL
+                ALTER TABLE meta.portal_users DROP COLUMN DeletedAt;
+
+            IF COL_LENGTH('meta.portal_users', 'DeletionReason') IS NOT NULL
+                ALTER TABLE meta.portal_users DROP COLUMN DeletionReason;
+
+            IF COL_LENGTH('meta.institution_users', 'DeletedAt') IS NOT NULL
+                ALTER TABLE meta.institution_users DROP COLUMN DeletedAt;
+
+            IF COL_LENGTH('meta.institution_users', 'DeletionReason') IS NOT NULL
+                ALTER TABLE meta.institution_users DROP COLUMN DeletionReason;
+
+            IF EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_login_attempts_UserId' AND object_id = OBJECT_ID('meta.login_attempts'))
+                DROP INDEX IX_login_attempts_UserId ON meta.login_attempts;
+
+            IF COL_LENGTH('meta.login_attempts', 'UserId') IS NOT NULL
+                ALTER TABLE meta.login_attempts DROP COLUMN UserId;
+
+            IF COL_LENGTH('meta.login_attempts', 'UserType') IS NOT NULL
+                ALTER TABLE meta.login_attempts DROP COLUMN UserType;
+
+            IF COL_LENGTH('meta.login_attempts', 'UserAgent') IS NOT NULL
+                ALTER TABLE meta.login_attempts DROP COLUMN UserAgent;
+        ");
+
+        RebuildTenantSecurityPolicy(migrationBuilder);
+    }
+
+    private static void RebuildTenantSecurityPolicy(MigrationBuilder migrationBuilder)
+    {
+        migrationBuilder.Sql(@"
+            IF OBJECT_ID(N'dbo.fn_TenantFilter', N'IF') IS NULL
+            BEGIN
+                EXEC('
+                    CREATE FUNCTION dbo.fn_TenantFilter(@TenantId UNIQUEIDENTIFIER)
+                    RETURNS TABLE
+                    WITH SCHEMABINDING
+                    AS
+                    RETURN
+                    SELECT 1 AS fn_accessResult
+                    WHERE @TenantId = CAST(SESSION_CONTEXT(N''TenantId'') AS UNIQUEIDENTIFIER)
+                       OR @TenantId IS NULL
+                       OR SESSION_CONTEXT(N''TenantId'') IS NULL;');
+            END;
+
+            IF OBJECT_ID(N'dbo.TenantSecurityPolicy', N'SP') IS NOT NULL
+                DROP SECURITY POLICY dbo.TenantSecurityPolicy;
+
+            DECLARE @sql NVARCHAR(MAX) = N'CREATE SECURITY POLICY dbo.TenantSecurityPolicy' + CHAR(13);
+            DECLARE @first BIT = 1;
+
+            DECLARE tenant_cursor CURSOR FAST_FORWARD FOR
+            SELECT s.name AS SchemaName, t.name AS TableName
+            FROM sys.tables t
+            INNER JOIN sys.schemas s ON t.schema_id = s.schema_id
+            INNER JOIN sys.columns c ON c.object_id = t.object_id
+            WHERE c.name = 'TenantId'
+              AND t.is_ms_shipped = 0;
+
+            DECLARE @schemaName SYSNAME, @tableName SYSNAME;
+            OPEN tenant_cursor;
+            FETCH NEXT FROM tenant_cursor INTO @schemaName, @tableName;
+            WHILE @@FETCH_STATUS = 0
+            BEGIN
+                IF @first = 0 SET @sql += N',' + CHAR(13);
+                SET @sql += N'    ADD FILTER PREDICATE dbo.fn_TenantFilter(TenantId) ON [' + @schemaName + N'].[' + @tableName + N']';
+                SET @first = 0;
+                FETCH NEXT FROM tenant_cursor INTO @schemaName, @tableName;
+            END;
+            CLOSE tenant_cursor;
+            DEALLOCATE tenant_cursor;
+
+            DECLARE tenant_cursor_block CURSOR FAST_FORWARD FOR
+            SELECT s.name AS SchemaName, t.name AS TableName
+            FROM sys.tables t
+            INNER JOIN sys.schemas s ON t.schema_id = s.schema_id
+            INNER JOIN sys.columns c ON c.object_id = t.object_id
+            WHERE c.name = 'TenantId'
+              AND t.is_ms_shipped = 0;
+
+            OPEN tenant_cursor_block;
+            FETCH NEXT FROM tenant_cursor_block INTO @schemaName, @tableName;
+            WHILE @@FETCH_STATUS = 0
+            BEGIN
+                SET @sql += N',' + CHAR(13)
+                         + N'    ADD BLOCK PREDICATE dbo.fn_TenantFilter(TenantId) ON [' + @schemaName + N'].[' + @tableName + N']';
+                FETCH NEXT FROM tenant_cursor_block INTO @schemaName, @tableName;
+            END;
+            CLOSE tenant_cursor_block;
+            DEALLOCATE tenant_cursor_block;
+
+            SET @sql += CHAR(13) + N'WITH (STATE = ON);';
+            EXEC sp_executesql @sql;
+        ");
+    }
+}

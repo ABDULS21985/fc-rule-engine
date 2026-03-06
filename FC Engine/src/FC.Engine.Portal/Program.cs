@@ -297,7 +297,7 @@ app.MapPost("/account/reconsent", async (HttpContext context, IConsentService co
     var allowMarketing = string.Equals(form["allowMarketing"], "on", StringComparison.OrdinalIgnoreCase);
     var allowAnalytics = string.Equals(form["allowAnalytics"], "on", StringComparison.OrdinalIgnoreCase);
     var ipAddress = context.Connection.RemoteIpAddress?.ToString();
-    var userAgent = context.Request.Headers.UserAgent.ToString();
+    var userAgent = context.Request.Headers["User-Agent"].ToString();
 
     if (!allowCore)
     {

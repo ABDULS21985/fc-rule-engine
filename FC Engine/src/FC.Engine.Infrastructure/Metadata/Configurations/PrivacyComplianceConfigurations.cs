@@ -35,7 +35,7 @@ public class DataSubjectRequestConfiguration : IEntityTypeConfiguration<DataSubj
         builder.Property(x => x.TenantId).IsRequired();
         builder.Property(x => x.RequestType).HasMaxLength(30).HasConversion<string>().IsRequired();
         builder.Property(x => x.RequestedByUserType).HasMaxLength(20).IsRequired();
-        builder.Property(x => x.Status).HasMaxLength(20).HasConversion<string>().HasDefaultValue("Received").IsRequired();
+        builder.Property(x => x.Status).HasMaxLength(20).HasConversion<string>().HasDefaultValue(DataSubjectRequestStatus.Received).IsRequired();
         builder.Property(x => x.Description).HasMaxLength(1000);
         builder.Property(x => x.DataPackagePath).HasMaxLength(500);
         builder.Property(x => x.CreatedAt).HasDefaultValueSql("SYSUTCDATETIME()");

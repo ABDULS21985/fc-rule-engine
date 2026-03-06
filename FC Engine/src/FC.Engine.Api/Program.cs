@@ -293,6 +293,7 @@ v1.MapDataFeedEndpoints();
 v1.MapTemplateEndpoints();
 v1.MapSchemaEndpoints();
 v1.MapFilingCalendarEndpoints();
+v1.MapPrivacyEndpoints();
 v1.MapHistoricalMigrationEndpoints();
 
 // v2 endpoints (future — same implementations for now, diverge later)

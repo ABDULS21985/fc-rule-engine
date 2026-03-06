@@ -36,6 +36,9 @@ public static class NotificationEvents
     public const string BreachDetected = "breach.detected";
     public const string BreachEscalation = "breach.escalation";
 
+    // Reports (RG-18)
+    public const string ScheduledReportReady = "report.scheduled_ready";
+
     public static readonly IReadOnlyList<string> All = new[]
     {
         ReturnCreated,
@@ -61,7 +64,8 @@ public static class NotificationEvents
         ExportReady,
         DataFlowCompleted,
         BreachDetected,
-        BreachEscalation
+        BreachEscalation,
+        ScheduledReportReady
     };
 }
 

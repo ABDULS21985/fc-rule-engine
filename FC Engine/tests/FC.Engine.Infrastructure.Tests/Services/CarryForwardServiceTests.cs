@@ -126,6 +126,88 @@ public class CarryForwardServiceTests
             Times.Never);
     }
 
+    [Fact]
+    public async Task CarryForward_Uses_Historical_Submission_When_Most_Recent()
+    {
+        var tenantId = Guid.NewGuid();
+        await using var db = CreateDb(nameof(CarryForward_Uses_Historical_Submission_When_Most_Recent));
+
+        var previousPeriod = new ReturnPeriod
+        {
+            TenantId = tenantId,
+            Year = 2025,
+            Month = 12,
+            Frequency = "Monthly",
+            ReportingDate = new DateTime(2025, 12, 31),
+            DeadlineDate = new DateTime(2026, 1, 30),
+            IsOpen = false,
+            CreatedAt = DateTime.UtcNow
+        };
+
+        var currentPeriod = new ReturnPeriod
+        {
+            TenantId = tenantId,
+            Year = 2026,
+            Month = 1,
+            Frequency = "Monthly",
+            ReportingDate = new DateTime(2026, 1, 31),
+            DeadlineDate = new DateTime(2026, 3, 2),
+            IsOpen = true,
+            CreatedAt = DateTime.UtcNow
+        };
+
+        db.ReturnPeriods.AddRange(previousPeriod, currentPeriod);
+        await db.SaveChangesAsync();
+
+        var historicalSubmission = new Submission
+        {
+            TenantId = tenantId,
+            InstitutionId = 1,
+            ReturnPeriodId = previousPeriod.Id,
+            ReturnCode = "BDC_CAP",
+            Status = SubmissionStatus.Historical,
+            SubmittedAt = DateTime.UtcNow.AddDays(-10),
+            CreatedAt = DateTime.UtcNow.AddDays(-10)
+        };
+        db.Submissions.Add(historicalSubmission);
+        await db.SaveChangesAsync();
+
+        var templateCache = new Mock<ITemplateMetadataCache>();
+        templateCache
+            .Setup(x => x.GetPublishedTemplate(tenantId, "BDC_CAP", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new CachedTemplate
+            {
+                ReturnCode = "BDC_CAP",
+                StructuralCategory = "FixedRow",
+                CurrentVersion = new CachedTemplateVersion
+                {
+                    Id = 12,
+                    Fields = new List<TemplateField>
+                    {
+                        new()
+                        {
+                            FieldName = "closing_balance",
+                            DisplayName = "Closing Balance",
+                            DataType = FieldDataType.Decimal,
+                            IsYtdField = true,
+                            FieldOrder = 1
+                        }
+                    }
+                }
+            });
+
+        var dataRepo = new Mock<IGenericDataRepository>();
+        dataRepo
+            .Setup(x => x.ReadFieldValue("BDC_CAP", historicalSubmission.Id, "closing_balance", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(8080m);
+
+        var sut = new CarryForwardService(templateCache.Object, dataRepo.Object, db);
+        var result = await sut.GetCarryForwardValues(tenantId, "BDC_CAP", currentPeriod.Id);
+
+        result.SourceSubmissionId.Should().Be(historicalSubmission.Id);
+        result.Values["closing_balance"].Should().Be(8080m);
+    }
+
     private static MetadataDbContext CreateDb(string name)
     {
         var options = new DbContextOptionsBuilder<MetadataDbContext>()

@@ -90,7 +90,12 @@ public static class HistoricalMigrationEndpoints
                 return Results.Forbid();
             }
 
-            await using var fileStream = file.OpenReadStream(50 * 1024 * 1024);
+            if (file.Length > 50 * 1024 * 1024)
+            {
+                return Results.BadRequest(new { error = "File size exceeds 50 MB limit." });
+            }
+
+            await using var fileStream = file.OpenReadStream();
             var job = await migrationService.UploadAndParse(
                 tenantContext.CurrentTenantId.Value,
                 institutionId,
