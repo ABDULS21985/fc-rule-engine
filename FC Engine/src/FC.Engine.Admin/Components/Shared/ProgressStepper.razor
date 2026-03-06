@@ -1,0 +1,104 @@
+@* Reusable wizard / progress stepper.
+   Renders numbered steps with complete/active/pending states and connecting lines.
+
+   Usage:
+       <ProgressStepper Steps="_steps" @bind-CurrentStep="_step" />
+
+   StepItem record is defined in this file and can be used from any page
+   that imports FC.Engine.Admin.Components.Shared. *@
+
+<div class="fc-stepper @OrientationClass" role="list" aria-label="Progress">
+    @for (int i = 0; i < Steps.Count; i++)
+    {
+        var idx      = i;          // capture for closure
+        var stepNum  = i + 1;
+        var step     = Steps[i];
+        var isActive   = stepNum == CurrentStep;
+        var isComplete = stepNum < CurrentStep;
+        var stateClass = isComplete ? "fc-stepper__step--complete"
+                       : isActive   ? "fc-stepper__step--active"
+                                    : "";
+        var isClickable = Clickable && isComplete;
+
+        <div class="fc-stepper__step @stateClass"
+             role="listitem"
+             aria-current="@(isActive ? "step" : null)">
+
+            @* ── Step node (circle) ─────────────────── *@
+            @if (isClickable)
+            {
+                <button class="fc-stepper__node fc-stepper__node--btn"
+                        @onclick="() => GoToStep(stepNum)"
+                        aria-label="Go to step @stepNum: @step.Label">
+                    @StepNodeContent(isComplete, stepNum)
+                </button>
+            }
+            else
+            {
+                <div class="fc-stepper__node"
+                     aria-label="Step @stepNum @(isComplete ? "(complete)" : isActive ? "(current)" : "(pending)"): @step.Label">
+                    @StepNodeContent(isComplete, stepNum)
+                </div>
+            }
+
+            @* ── Label + description ────────────────── *@
+            <div class="fc-stepper__text">
+                <span class="fc-stepper__label">@step.Label</span>
+                @if (!string.IsNullOrEmpty(step.Description))
+                {
+                    <span class="fc-stepper__sublabel">@step.Description</span>
+                }
+            </div>
+
+        </div>
+
+        @* ── Connector line between steps ───────────── *@
+        @if (i < Steps.Count - 1)
+        {
+            <div class="fc-stepper__connector @(isComplete ? "fc-stepper__connector--done" : "")"
+                 aria-hidden="true"></div>
+        }
+    }
+</div>
+
+@code {
+    public sealed record StepItem(string Label, string? Description = null);
+
+    // ── Parameters ──────────────────────────────────────────
+    [Parameter] public List<StepItem> Steps { get; set; } = [];
+
+    /// <summary>1-based index of the active step.</summary>
+    [Parameter] public int CurrentStep { get; set; } = 1;
+    [Parameter] public EventCallback<int> CurrentStepChanged { get; set; }
+
+    /// <summary>Allow clicking completed steps to navigate back.</summary>
+    [Parameter] public bool Clickable { get; set; } = false;
+
+    /// <summary>horizontal | vertical</summary>
+    [Parameter] public string Orientation { get; set; } = "horizontal";
+
+    // ── Helpers ─────────────────────────────────────────────
+    private string OrientationClass => Orientation == "vertical" ? "fc-stepper--vertical" : "";
+
+    private RenderFragment StepNodeContent(bool isComplete, int stepNum) => __builder =>
+    {
+        if (isComplete)
+        {
+            // Checkmark
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.5"
+                 stroke-linecap="round" stroke-linejoin="round" width="14" height="14" aria-hidden="true">
+                <polyline points="2,8 6,13 14,3"/>
+            </svg>
+        }
+        else
+        {
+            <span>@stepNum</span>
+        }
+    };
+
+    private async Task GoToStep(int step)
+    {
+        if (step < CurrentStep)
+            await CurrentStepChanged.InvokeAsync(step);
+    }
+}

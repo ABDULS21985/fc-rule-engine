@@ -1,0 +1,247 @@
+@* Keyboard shortcuts reference overlay.
+   Shown by pressing ? when not in an input field.
+   Keyboard shortcut manager also handles g+d, g+t, etc. navigation chords. *@
+
+@inject IJSRuntime JS
+@inject NavigationManager Navigation
+@implements IAsyncDisposable
+
+@if (_visible)
+{
+    <div class="fc-ks-backdrop @(_animating ? "fc-ks-backdrop--active" : "")"
+         @onclick="Close"
+         role="presentation"
+         aria-hidden="true">
+    </div>
+
+    <div class="fc-ks-overlay @(_animating ? "fc-ks-overlay--active" : "")"
+         id="fc-ks-dialog"
+         role="dialog"
+         aria-modal="true"
+         aria-labelledby="fc-ks-title"
+         @onclick:stopPropagation="true">
+
+        <div class="fc-ks-header">
+            <div class="fc-ks-header-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                     stroke-linecap="round" stroke-linejoin="round" width="20" height="20">
+                    <rect x="2" y="4" width="20" height="16" rx="3" ry="3"/>
+                    <path d="M8 8h.01M12 8h.01M16 8h.01M8 12h.01M12 12h.01M16 12h.01M8 16h4"/>
+                    <path d="M14 16h2"/>
+                </svg>
+            </div>
+            <h2 id="fc-ks-title" class="fc-ks-title">Keyboard Shortcuts</h2>
+            <button class="fc-ks-close" @onclick="Close" aria-label="Close keyboard shortcuts" type="button">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                     stroke-linecap="round" stroke-linejoin="round" width="16" height="16" aria-hidden="true">
+                    <line x1="18" y1="6" x2="6" y2="18"/>
+                    <line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+            </button>
+        </div>
+
+        <div class="fc-ks-body">
+            <div class="fc-ks-grid">
+
+                <!-- Navigation -->
+                <section class="fc-ks-section" aria-labelledby="fc-ks-nav-heading">
+                    <h3 id="fc-ks-nav-heading" class="fc-ks-section-title">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                             stroke-linecap="round" stroke-linejoin="round" width="14" height="14" aria-hidden="true">
+                            <circle cx="12" cy="12" r="10"/>
+                            <polyline points="12 8 16 12 12 16"/>
+                            <line x1="8" y1="12" x2="16" y2="12"/>
+                        </svg>
+                        Navigation
+                    </h3>
+                    <ul class="fc-ks-list" role="list">
+                        <li class="fc-ks-row">
+                            <span class="fc-ks-keys"><kbd>g</kbd> then <kbd>d</kbd></span>
+                            <span class="fc-ks-action">Dashboard</span>
+                        </li>
+                        <li class="fc-ks-row">
+                            <span class="fc-ks-keys"><kbd>g</kbd> then <kbd>t</kbd></span>
+                            <span class="fc-ks-action">Templates</span>
+                        </li>
+                        <li class="fc-ks-row">
+                            <span class="fc-ks-keys"><kbd>g</kbd> then <kbd>s</kbd></span>
+                            <span class="fc-ks-action">Submissions</span>
+                        </li>
+                        <li class="fc-ks-row">
+                            <span class="fc-ks-keys"><kbd>g</kbd> then <kbd>f</kbd></span>
+                            <span class="fc-ks-action">Formulas</span>
+                        </li>
+                        <li class="fc-ks-row">
+                            <span class="fc-ks-keys"><kbd>g</kbd> then <kbd>a</kbd></span>
+                            <span class="fc-ks-action">Audit Log</span>
+                        </li>
+                        <li class="fc-ks-row">
+                            <span class="fc-ks-keys"><kbd>g</kbd> then <kbd>u</kbd></span>
+                            <span class="fc-ks-action">User Management</span>
+                        </li>
+                        <li class="fc-ks-row">
+                            <span class="fc-ks-keys"><kbd>g</kbd> then <kbd>p</kbd></span>
+                            <span class="fc-ks-action">Platform Dashboard</span>
+                        </li>
+                        <li class="fc-ks-row">
+                            <span class="fc-ks-keys"><kbd>g</kbd> then <kbd>r</kbd></span>
+                            <span class="fc-ks-action">Business Rules</span>
+                        </li>
+                    </ul>
+                </section>
+
+                <!-- General -->
+                <section class="fc-ks-section" aria-labelledby="fc-ks-general-heading">
+                    <h3 id="fc-ks-general-heading" class="fc-ks-section-title">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                             stroke-linecap="round" stroke-linejoin="round" width="14" height="14" aria-hidden="true">
+                            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+                        </svg>
+                        General
+                    </h3>
+                    <ul class="fc-ks-list" role="list">
+                        <li class="fc-ks-row">
+                            <span class="fc-ks-keys"><kbd>⌘</kbd><kbd>K</kbd></span>
+                            <span class="fc-ks-action">Open command palette</span>
+                        </li>
+                        <li class="fc-ks-row">
+                            <span class="fc-ks-keys"><kbd>?</kbd></span>
+                            <span class="fc-ks-action">Show this overlay</span>
+                        </li>
+                        <li class="fc-ks-row">
+                            <span class="fc-ks-keys"><kbd>Esc</kbd></span>
+                            <span class="fc-ks-action">Close dialog / overlay</span>
+                        </li>
+                    </ul>
+                </section>
+
+                <!-- Data Tables -->
+                <section class="fc-ks-section" aria-labelledby="fc-ks-table-heading">
+                    <h3 id="fc-ks-table-heading" class="fc-ks-section-title">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                             stroke-linecap="round" stroke-linejoin="round" width="14" height="14" aria-hidden="true">
+                            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                            <line x1="3" y1="9" x2="21" y2="9"/>
+                            <line x1="3" y1="15" x2="21" y2="15"/>
+                            <line x1="9" y1="3" x2="9" y2="21"/>
+                        </svg>
+                        Data Tables
+                    </h3>
+                    <ul class="fc-ks-list" role="list">
+                        <li class="fc-ks-row">
+                            <span class="fc-ks-keys"><kbd>↑</kbd><kbd>↓</kbd></span>
+                            <span class="fc-ks-action">Navigate rows</span>
+                        </li>
+                        <li class="fc-ks-row">
+                            <span class="fc-ks-keys"><kbd>Space</kbd></span>
+                            <span class="fc-ks-action">Select / deselect row</span>
+                        </li>
+                        <li class="fc-ks-row">
+                            <span class="fc-ks-keys"><kbd>Enter</kbd></span>
+                            <span class="fc-ks-action">Open row detail</span>
+                        </li>
+                    </ul>
+                </section>
+
+                <!-- Drag & Drop -->
+                <section class="fc-ks-section" aria-labelledby="fc-ks-drag-heading">
+                    <h3 id="fc-ks-drag-heading" class="fc-ks-section-title">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                             stroke-linecap="round" stroke-linejoin="round" width="14" height="14" aria-hidden="true">
+                            <polyline points="5 9 2 12 5 15"/>
+                            <polyline points="9 5 12 2 15 5"/>
+                            <polyline points="15 19 12 22 9 19"/>
+                            <polyline points="19 9 22 12 19 15"/>
+                            <line x1="2" y1="12" x2="22" y2="12"/>
+                            <line x1="12" y1="2" x2="12" y2="22"/>
+                        </svg>
+                        Drag & Drop Lists
+                    </h3>
+                    <ul class="fc-ks-list" role="list">
+                        <li class="fc-ks-row">
+                            <span class="fc-ks-keys"><kbd>Space</kbd></span>
+                            <span class="fc-ks-action">Pick up / drop item</span>
+                        </li>
+                        <li class="fc-ks-row">
+                            <span class="fc-ks-keys"><kbd>↑</kbd><kbd>↓</kbd></span>
+                            <span class="fc-ks-action">Move item up / down</span>
+                        </li>
+                        <li class="fc-ks-row">
+                            <span class="fc-ks-keys"><kbd>Esc</kbd></span>
+                            <span class="fc-ks-action">Cancel drag</span>
+                        </li>
+                    </ul>
+                </section>
+
+            </div>
+        </div>
+
+        <div class="fc-ks-footer">
+            <span>Press</span>
+            <kbd class="fc-ks-footer-kbd">Esc</kbd>
+            <span>or click outside to close</span>
+        </div>
+
+    </div>
+}
+
+@code {
+    private bool _visible;
+    private bool _animating;
+    private DotNetObjectReference<KeyboardShortcutsOverlay>? _ref;
+    private bool _jsInit;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && !_jsInit)
+        {
+            _ref = DotNetObjectReference.Create(this);
+            await JS.InvokeVoidAsync("FCAccessibility.initShortcuts", _ref);
+            _jsInit = true;
+        }
+    }
+
+    [JSInvokable]
+    public async Task ToggleOverlay()
+    {
+        if (_visible) await Close();
+        else await Open();
+    }
+
+    [JSInvokable]
+    public async Task CloseOverlay()
+    {
+        if (_visible) await Close();
+    }
+
+    [JSInvokable]
+    public void NavigateTo(string url) => Navigation.NavigateTo(url);
+
+    private async Task Open()
+    {
+        _visible = true;
+        StateHasChanged();
+        await Task.Yield();
+        _animating = true;
+        StateHasChanged();
+    }
+
+    private async Task Close()
+    {
+        _animating = false;
+        StateHasChanged();
+        await Task.Delay(180);
+        _visible = false;
+        StateHasChanged();
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_jsInit)
+        {
+            try { await JS.InvokeVoidAsync("FCAccessibility.disposeShortcuts"); }
+            catch (JSDisconnectedException) { }
+        }
+        _ref?.Dispose();
+    }
+}

@@ -1,0 +1,51 @@
+@*
+    FloatingActionButton (FAB) — Primary mobile action button. Visible only on mobile
+    (≤640 px) by default. Positioned above the bottom navigation bar.
+
+    Usage:
+        <FloatingActionButton Label="New Submission"
+                              OnClick="CreateSubmission" />
+
+        <FloatingActionButton Label="New" IconOnly="true"
+                              IconPath=@("""<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>""")
+                              OnClick="HandleCreate" />
+*@
+
+<button class="fc-fab @(IconOnly ? "fc-fab--icon-only" : "") @CssClass"
+        type="button"
+        @onclick="HandleClick"
+        aria-label="@Label"
+        title="@Label">
+
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+         stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"
+         width="22" height="22" aria-hidden="true">
+        @((MarkupString)IconPath)
+    </svg>
+
+    @if (!IconOnly)
+    {
+        <span class="fc-fab-label">@Label</span>
+    }
+
+</button>
+
+@code {
+    /// <summary>Accessible label and tooltip text.</summary>
+    [Parameter, EditorRequired] public string Label { get; set; } = "New";
+
+    /// <summary>SVG path data for the icon (inner SVG content only).</summary>
+    [Parameter] public string IconPath { get; set; } =
+        """<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>""";
+
+    /// <summary>Render as a round icon-only button (hides label text).</summary>
+    [Parameter] public bool IconOnly { get; set; }
+
+    /// <summary>Additional CSS classes on the button element.</summary>
+    [Parameter] public string? CssClass { get; set; }
+
+    /// <summary>Click handler.</summary>
+    [Parameter] public EventCallback OnClick { get; set; }
+
+    private Task HandleClick() => OnClick.InvokeAsync();
+}

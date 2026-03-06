@@ -9,11 +9,17 @@
     };
 }
 
+<CascadingValue Value="@this" IsFixed="false">
 <div class="fc-ff @stateClass">
     @if (!string.IsNullOrEmpty(Label))
     {
-        <label class="fc-ff__label @(IsRequired ? "fc-ff__label--required" : "")">
+        <label class="fc-ff__label @(IsRequired ? "fc-ff__label--required" : "")"
+               for="@InputId">
             @Label
+            @if (IsRequired)
+            {
+                <span class="fc-sr-only">(required)</span>
+            }
             @if (ValidationState == FieldValidation.Valid)
             {
                 <svg class="fc-ff__check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -29,7 +35,7 @@
 
     @if (ValidationState == FieldValidation.Invalid && !string.IsNullOrEmpty(ErrorMessage))
     {
-        <div id="@_errorId" class="fc-ff__error" role="alert">
+        <div id="@ErrorId" class="fc-ff__error" role="alert" aria-live="assertive">
             <svg class="fc-ff__error-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
             </svg>
@@ -38,14 +44,22 @@
     }
     else if (!string.IsNullOrEmpty(HintText))
     {
-        <div class="fc-ff__hint">@HintText</div>
+        <div id="@HintId" class="fc-ff__hint">@HintText</div>
     }
 </div>
+</CascadingValue>
 
 @code {
-    private string _errorId = $"fc-ff-err-{Guid.NewGuid():N}";
+    /// <summary>Stable error element id. Wire inputs: aria-describedby="@Field?.ErrorId"</summary>
+    public string ErrorId { get; } = $"fc-ff-err-{Guid.NewGuid():N}";
+
+    /// <summary>Stable hint element id. Wire inputs: aria-describedby="@Field?.HintId"</summary>
+    public string HintId { get; } = $"fc-ff-hint-{Guid.NewGuid():N}";
+
     private FieldValidation _prevState;
 
+    /// <summary>Optional: id to use on the &lt;label for="..."&gt; attribute.</summary>
+    [Parameter] public string? InputId { get; set; }
     [Parameter] public string? Label { get; set; }
     [Parameter] public string? HintText { get; set; }
     [Parameter] public string? ErrorMessage { get; set; }
@@ -53,11 +67,20 @@
     [Parameter] public FieldValidation ValidationState { get; set; } = FieldValidation.None;
     [Parameter] public RenderFragment? ChildContent { get; set; }
 
+    /// <summary>
+    /// Convenience: returns the correct aria-describedby value for the inner input —
+    /// ErrorId when invalid, HintId when hint is present, null otherwise.
+    /// </summary>
+    public string? AriaDescribedBy =>
+        ValidationState == FieldValidation.Invalid && !string.IsNullOrEmpty(ErrorMessage)
+            ? ErrorId
+            : !string.IsNullOrEmpty(HintText) ? HintId : null;
+
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (_prevState != FieldValidation.Invalid && ValidationState == FieldValidation.Invalid)
         {
-            try { await JS.InvokeVoidAsync("FCForms.slideInError", _errorId); }
+            try { await JS.InvokeVoidAsync("FCForms.slideInError", ErrorId); }
             catch (JSDisconnectedException) { }
         }
         _prevState = ValidationState;

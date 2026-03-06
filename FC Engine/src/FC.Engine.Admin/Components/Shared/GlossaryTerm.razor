@@ -1,0 +1,84 @@
+@* ================================================================
+   GlossaryTerm — Wraps a regulatory/financial term and shows its
+   definition in a popover on hover.
+
+   Usage (term auto-resolved from built-in dictionary):
+     <GlossaryTerm Term="IFRS" />
+     <GlossaryTerm Term="CAR" />
+
+   Usage (custom definition):
+     <GlossaryTerm Term="Basel III" Definition="International regulatory framework…" />
+   ================================================================ *@
+
+<span class="fc-gt"
+      @onmouseenter="Show"
+      @onmouseleave="Hide"
+      @onfocus="Show"
+      @onblur="Hide"
+      tabindex="0"
+      aria-describedby="@(_visible ? _id : null)">
+    <span class="fc-gt__term">@Term</span>
+
+    @if (_visible && _definition != null)
+    {
+        <span class="fc-gt__popover" id="@_id" role="tooltip">
+            <strong class="fc-gt__popover-term">@Term</strong>
+            <span class="fc-gt__popover-def">@_definition</span>
+        </span>
+    }
+</span>
+
+@code {
+    /// <summary>The term to display and look up.</summary>
+    [Parameter, EditorRequired] public string Term { get; set; } = "";
+
+    /// <summary>Override the auto-resolved definition.</summary>
+    [Parameter] public string? Definition { get; set; }
+
+    private bool _visible;
+    private string? _definition;
+    private readonly string _id = $"fc-gt-{Guid.NewGuid():N}";
+
+    protected override void OnParametersSet()
+    {
+        _definition = Definition
+            ?? (_glossary.TryGetValue(Term, out var def) ? def : null);
+    }
+
+    private void Show() { if (_definition != null) _visible = true; }
+    private void Hide() => _visible = false;
+
+    // ── Built-in glossary ────────────────────────────────────────────────────
+    private static readonly Dictionary<string, string> _glossary = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["IFRS"]      = "International Financial Reporting Standards — globally adopted accounting standards issued by the IASB.",
+        ["GAAP"]      = "Generally Accepted Accounting Principles — US accounting standards framework.",
+        ["BOG"]       = "Bank of Ghana — Ghana's central bank and primary financial regulator.",
+        ["FSA"]       = "Financial Services Authority — regulatory body overseeing financial institutions.",
+        ["BIS"]       = "Bank for International Settlements — international organisation serving central banks.",
+        ["NPL"]       = "Non-Performing Loan — a loan where scheduled payments are at least 90 days overdue.",
+        ["CAR"]       = "Capital Adequacy Ratio — a bank's available capital as a percentage of risk-weighted assets.",
+        ["ROA"]       = "Return on Assets — profitability relative to total assets.",
+        ["ROE"]       = "Return on Equity — net income divided by shareholders' equity.",
+        ["NIM"]       = "Net Interest Margin — difference between interest income and interest paid out.",
+        ["LCR"]       = "Liquidity Coverage Ratio — requirement to hold liquid assets sufficient for 30 days of stress.",
+        ["NSFR"]      = "Net Stable Funding Ratio — measures long-term resilience of a bank's funding structure.",
+        ["KYC"]       = "Know Your Customer — process of verifying client identity to prevent fraud and money laundering.",
+        ["AML"]       = "Anti-Money Laundering — regulations to prevent criminal funds entering the financial system.",
+        ["FATF"]      = "Financial Action Task Force — intergovernmental body setting AML/CFT standards.",
+        ["IASB"]      = "International Accounting Standards Board — independent body that issues IFRS standards.",
+        ["XBRL"]      = "eXtensible Business Reporting Language — XML-based standard for business data exchange.",
+        ["Basel III"] = "International regulatory framework for bank capital adequacy, stress testing, and market liquidity risk.",
+        ["Tier 1"]    = "Core capital of a bank, including common equity and disclosed reserves.",
+        ["Tier 2"]    = "Supplementary capital, including undisclosed reserves and subordinated instruments.",
+        ["CRR"]       = "Capital Requirements Regulation — EU regulation implementing Basel III capital rules.",
+        ["CRD"]       = "Capital Requirements Directive — EU directive complementing the CRR.",
+        ["ICAAP"]     = "Internal Capital Adequacy Assessment Process — bank's own assessment of its capital needs.",
+        ["SREP"]      = "Supervisory Review and Evaluation Process — regulator's assessment of a bank's ICAAP.",
+        ["PD"]        = "Probability of Default — likelihood that a borrower will fail to meet credit obligations.",
+        ["LGD"]       = "Loss Given Default — percentage of a loan lost if the borrower defaults.",
+        ["EAD"]       = "Exposure at Default — total value exposed to loss at the time of default.",
+        ["RWA"]       = "Risk-Weighted Assets — assets weighted by credit risk, used in CAR calculation.",
+        ["DSCR"]      = "Debt Service Coverage Ratio — net operating income divided by total debt service.",
+    };
+}

@@ -1,0 +1,105 @@
+@inject HelpService Help
+@inject IJSRuntime JS
+@implements IAsyncDisposable
+
+@* ── What's New Modal ──────────────────────────────────────────────────────── *@
+@* Checks localStorage on first render. Shows automatically if the user        *@
+@* hasn't seen the current version yet.                                        *@
+
+@if (Help.IsWhatsNewOpen)
+{
+    <div class="fc-whats-new-backdrop"
+         @onclick="Dismiss"
+         role="presentation"
+         aria-hidden="true"></div>
+
+    <div class="fc-whats-new"
+         role="dialog"
+         aria-modal="true"
+         aria-label="What's new in FC Engine"
+         @onkeydown="HandleKey">
+
+        <div class="fc-whats-new__header">
+            <div class="fc-whats-new__header-left">
+                <span class="fc-whats-new__badge">What's New</span>
+                <h2 class="fc-whats-new__title">FC Engine v@Help.CurrentVersion</h2>
+            </div>
+            <button class="fc-whats-new__close"
+                    @onclick="Dismiss"
+                    aria-label="Close what's new">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                     stroke-linecap="round" stroke-linejoin="round" width="16" height="16" aria-hidden="true">
+                    <line x1="18" y1="6" x2="6" y2="18"/>
+                    <line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+            </button>
+        </div>
+
+        <div class="fc-whats-new__body">
+            @foreach (var entry in Help.GetChangelog())
+            {
+                var isCurrent = entry.Version == Help.CurrentVersion;
+                <div class="fc-whats-new__version @(isCurrent ? "fc-whats-new__version--current" : "")">
+                    <div class="fc-whats-new__version-meta">
+                        <span class="fc-whats-new__version-tag @(isCurrent ? "fc-whats-new__version-tag--current" : "")">
+                            v@entry.Version
+                        </span>
+                        <span class="fc-whats-new__version-date">@entry.Date</span>
+                        @if (isCurrent)
+                        {
+                            <span class="fc-whats-new__new-badge">New</span>
+                        }
+                    </div>
+                    <h3 class="fc-whats-new__version-title">@entry.Title</h3>
+                    <ul class="fc-whats-new__items">
+                        @foreach (var item in entry.Items)
+                        {
+                            <li class="fc-whats-new__item fc-whats-new__item--@item.Type">
+                                <span class="fc-whats-new__item-badge fc-whats-new__item-badge--@item.Type">
+                                    @item.Type
+                                </span>
+                                @item.Text
+                            </li>
+                        }
+                    </ul>
+                </div>
+            }
+        </div>
+
+        <div class="fc-whats-new__footer">
+            <button class="fc-btn fc-btn--ghost fc-btn--sm" @onclick="Dismiss">Dismiss</button>
+            <button class="fc-btn fc-btn--gold" @onclick="Dismiss">Got it!</button>
+        </div>
+    </div>
+}
+
+@code {
+    protected override void OnInitialized() => Help.OnChanged += OnHelpChanged;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        var shouldShow = await JS.InvokeAsync<bool>("fcHelp.checkWhatsNew", Help.CurrentVersion);
+        if (shouldShow)
+            Help.ShowWhatsNew();
+    }
+
+    private async Task Dismiss()
+    {
+        await JS.InvokeVoidAsync("fcHelp.markWhatsNewSeen", Help.CurrentVersion);
+        Help.DismissWhatsNew();
+    }
+
+    private void HandleKey(KeyboardEventArgs e)
+    {
+        if (e.Key == "Escape") Help.DismissWhatsNew();
+    }
+
+    private void OnHelpChanged() => InvokeAsync(StateHasChanged);
+
+    public ValueTask DisposeAsync()
+    {
+        Help.OnChanged -= OnHelpChanged;
+        return ValueTask.CompletedTask;
+    }
+}

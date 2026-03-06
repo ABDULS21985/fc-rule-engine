@@ -204,6 +204,41 @@ window.FCSidebar = (() => {
 
 
     /* ================================================================
+       7. OFFLINE DETECTION — Browser network status monitoring
+          Called by OfflineBanner.razor via JS interop.
+       ================================================================ */
+
+    let _offlineRef  = null;
+    let _onlineFn    = null;
+    let _offlineFn   = null;
+
+    function initOfflineDetection(dotnetRef) {
+        _offlineRef = dotnetRef;
+
+        _onlineFn  = () => {
+            if (_offlineRef) _offlineRef.invokeMethodAsync('OnNetworkChange', true);
+        };
+        _offlineFn = () => {
+            if (_offlineRef) _offlineRef.invokeMethodAsync('OnNetworkChange', false);
+        };
+
+        window.addEventListener('online',  _onlineFn);
+        window.addEventListener('offline', _offlineFn);
+
+        // Notify immediately if already offline when component mounts
+        if (!navigator.onLine) {
+            _offlineRef.invokeMethodAsync('OnNetworkChange', false);
+        }
+    }
+
+    function disposeOfflineDetection() {
+        if (_onlineFn)  window.removeEventListener('online',  _onlineFn);
+        if (_offlineFn) window.removeEventListener('offline', _offlineFn);
+        _offlineRef = _onlineFn = _offlineFn = null;
+    }
+
+
+    /* ================================================================
        PUBLIC API
        ================================================================ */
 
@@ -217,6 +252,8 @@ window.FCSidebar = (() => {
         initSidebarHoverExpand,
         disposeSidebarHoverExpand,
         focusNavSearch,
-        scrollActiveIntoView
+        scrollActiveIntoView,
+        initOfflineDetection,
+        disposeOfflineDetection
     };
 })();

@@ -1,0 +1,104 @@
+@* Session expiry overlay — detects when auth state transitions from authenticated → anonymous
+   and shows a non-dismissible modal prompting re-login.
+   Add <SessionExpiredModal /> once inside MainLayout's global overlays section. *@
+@inject AuthenticationStateProvider AuthProvider
+@inject NavigationManager Navigation
+@implements IDisposable
+
+@if (_visible)
+{
+    <div class="fc-modal-backdrop fc-modal-backdrop-active" role="presentation">
+        <div class="fc-modal fc-modal-sm fc-modal-active fc-session-expired"
+             role="alertdialog"
+             aria-modal="true"
+             aria-labelledby="session-expired-title"
+             aria-describedby="session-expired-desc">
+
+            <!-- Gold accent -->
+            <div class="fc-modal-accent" aria-hidden="true"></div>
+
+            <div class="fc-modal-body" style="display:flex; flex-direction:column; align-items:center; text-align:center; gap: var(--space-5); padding: var(--space-10) var(--space-8);">
+
+                <!-- Lock illustration -->
+                <div class="fc-session-expired__illu" aria-hidden="true">
+                    <svg viewBox="0 0 80 80" fill="none" stroke="currentColor" stroke-width="2.5"
+                         stroke-linecap="round" stroke-linejoin="round" width="80" height="80">
+                        <!-- Lock body -->
+                        <rect x="16" y="36" width="48" height="36" rx="6"/>
+                        <!-- Shackle -->
+                        <path d="M26 36 V26 Q26 12 40 12 Q54 12 54 26 V36"/>
+                        <!-- Keyhole -->
+                        <circle cx="40" cy="52" r="5"/>
+                        <line x1="40" y1="57" x2="40" y2="64"/>
+                    </svg>
+                </div>
+
+                <!-- Heading -->
+                <div>
+                    <h2 id="session-expired-title" class="fc-modal-title">Your session has expired</h2>
+                    <p id="session-expired-desc" class="fc-modal-subtitle" style="margin-top: var(--space-2);">
+                        For your security, you've been signed out after a period of inactivity.
+                        Please sign in again to continue.
+                    </p>
+                </div>
+
+                <!-- Sign in button -->
+                <a href="@_loginUrl" class="fc-btn fc-btn--gold" style="min-width:180px;">
+                    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"
+                         stroke-linecap="round" stroke-linejoin="round" width="14" height="14" aria-hidden="true">
+                        <path d="M10 3H13a1 1 0 011 1v8a1 1 0 01-1 1H10"/>
+                        <polyline points="7,11 10,8 7,5"/>
+                        <line x1="1" y1="8" x2="10" y2="8"/>
+                    </svg>
+                    Sign in again
+                </a>
+
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private bool    _visible         = false;
+    private bool    _wasAuthenticated = false;
+    private string  _loginUrl        = "/login";
+
+    protected override async Task OnInitializedAsync()
+    {
+        var state = await AuthProvider.GetAuthenticationStateAsync();
+        _wasAuthenticated = state.User.Identity?.IsAuthenticated == true;
+
+        AuthProvider.AuthenticationStateChanged += OnAuthStateChanged;
+        BuildLoginUrl();
+    }
+
+    private async void OnAuthStateChanged(Task<AuthenticationState> stateTask)
+    {
+        try
+        {
+            var state       = await stateTask;
+            var isAuthed    = state.User.Identity?.IsAuthenticated == true;
+
+            if (_wasAuthenticated && !isAuthed)
+            {
+                BuildLoginUrl();
+                _visible = true;
+                await InvokeAsync(StateHasChanged);
+            }
+
+            _wasAuthenticated = isAuthed;
+        }
+        catch { /* ignore disposal races */ }
+    }
+
+    private void BuildLoginUrl()
+    {
+        var returnUrl = Uri.EscapeDataString(Navigation.Uri);
+        _loginUrl = $"/login?returnUrl={returnUrl}";
+    }
+
+    public void Dispose()
+    {
+        AuthProvider.AuthenticationStateChanged -= OnAuthStateChanged;
+    }
+}

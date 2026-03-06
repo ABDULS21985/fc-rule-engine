@@ -1,0 +1,82 @@
+@page "/access-denied"
+@layout FC.Engine.Admin.Components.Layout.MainLayout
+@inject NavigationManager Navigation
+
+<PageTitle>Access Denied | RegOS</PageTitle>
+
+<div class="fc-error-page">
+
+    @* ── Shield illustration ─────────────────────────── *@
+    <div class="fc-error-page__illu fc-error-page__illu--warn" aria-hidden="true">
+        <svg viewBox="0 0 140 140" fill="none" stroke="currentColor" stroke-width="3"
+             stroke-linecap="round" stroke-linejoin="round" width="140" height="140">
+            <!-- Shield body -->
+            <path d="M70 14 L116 30 V68 Q116 104 70 124 Q24 104 24 68 V30 Z"/>
+            <!-- Inner shield highlight -->
+            <path d="M70 26 L104 38 V66 Q104 94 70 110 Q36 94 36 66 V38 Z"
+                  stroke="currentColor" stroke-width="1.5" opacity="0.25"/>
+            <!-- X mark -->
+            <line x1="52" y1="56" x2="88" y2="92" stroke-width="4"/>
+            <line x1="88" y1="56" x2="52" y2="92" stroke-width="4"/>
+        </svg>
+    </div>
+
+    @* ── Heading ─────────────────────────────────────── *@
+    <h1 class="fc-error-page__heading">Access denied</h1>
+    <p class="fc-error-page__desc">
+        You don't have permission to view this page.
+    </p>
+
+    @* ── Permission info box ──────────────────────────── *@
+    @if (!string.IsNullOrEmpty(RequiredRole))
+    {
+        <div class="fc-error-page__info-box">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"
+                 stroke-linecap="round" stroke-linejoin="round" width="14" height="14" aria-hidden="true">
+                <circle cx="8" cy="8" r="7"/>
+                <line x1="8" y1="6" x2="8" y2="8"/>
+                <line x1="8" y1="11" x2="8" y2="11"/>
+            </svg>
+            <span>
+                Required permission: <strong>@RequiredRole</strong>.
+                Contact your administrator to request access.
+            </span>
+        </div>
+    }
+    else
+    {
+        <div class="fc-error-page__info-box">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"
+                 stroke-linecap="round" stroke-linejoin="round" width="14" height="14" aria-hidden="true">
+                <circle cx="8" cy="8" r="7"/>
+                <line x1="8" y1="6" x2="8" y2="8"/>
+                <line x1="8" y1="11" x2="8" y2="11"/>
+            </svg>
+            <span>
+                Your current role doesn't include this permission.
+                Contact your administrator to request access.
+            </span>
+        </div>
+    }
+
+    @* ── Actions ─────────────────────────────────────── *@
+    <div class="fc-error-page__actions">
+        <a href="/" class="fc-btn fc-btn--gold">Go to dashboard</a>
+        <button class="fc-btn fc-btn--ghost" @onclick="GoBack">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"
+                 stroke-linecap="round" stroke-linejoin="round" width="14" height="14" aria-hidden="true">
+                <polyline points="10,3 5,8 10,13"/>
+            </svg>
+            Go back
+        </button>
+    </div>
+
+</div>
+
+@code {
+    /// <summary>Optionally passed via query string e.g. /access-denied?role=Admin</summary>
+    [SupplyParameterFromQuery(Name = "role")]
+    public string? RequiredRole { get; set; }
+
+    private void GoBack() => Navigation.NavigateTo("/");
+}

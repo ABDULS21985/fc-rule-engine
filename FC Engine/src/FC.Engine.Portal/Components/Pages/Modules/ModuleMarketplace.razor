@@ -1,19 +1,38 @@
 @page "/modules"
 @attribute [Authorize(Policy = "InstitutionUser")]
 @using FC.Engine.Domain.Abstractions
+@using FC.Engine.Infrastructure.DragDrop
 @using FC.Engine.Infrastructure.Metadata
 @using Microsoft.EntityFrameworkCore
 @inject IEntitlementService EntitlementSvc
 @inject ITenantContext TenantContext
 @inject MetadataDbContext Db
+@inject DragDropInterop DragDrop
 
 <PageTitle>Modules — FC Engine Portal</PageTitle>
 
 <div class="portal-page">
-    <div class="portal-page-header">
+    <div class="portal-page-header portal-page-header-split">
         <div class="portal-page-header-main">
             <h1 class="portal-page-title">Regulatory Modules</h1>
             <p class="portal-page-subtitle">View all available regulatory modules and your entitlement status based on your licence types</p>
+        </div>
+        <div class="portal-page-header-actions">
+            @if (!_loading && !_allModules.Any() == false)
+            {
+                <button class="portal-btn portal-btn-ghost portal-btn-sm @(_customizeOrder ? "portal-btn-active" : "")"
+                        @onclick="ToggleCustomizeOrder"
+                        title="@(_customizeOrder ? "Exit customize mode" : "Drag cards to customize module order")">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="9" cy="5" r="1.5"/><circle cx="15" cy="5" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="19" r="1.5"/><circle cx="15" cy="19" r="1.5"/></svg>
+                    @(_customizeOrder ? "Done" : "Customize Order")
+                </button>
+                @if (_customizeOrder)
+                {
+                    <button class="portal-btn portal-btn-ghost portal-btn-sm portal-btn-danger-ghost" @onclick="ResetModuleOrder">
+                        Reset
+                    </button>
+                }
+            }
         </div>
     </div>
 
@@ -53,12 +72,18 @@
         </div>
 
         <!-- MODULE GRID -->
-        <div class="portal-card-grid">
+        <div class="portal-card-grid" id="module-card-grid">
             @foreach (var module in _allModules)
             {
                 var status = GetModuleStatus(module);
-                <div class="portal-card @GetCardClass(status)">
+                <div class="portal-card @GetCardClass(status)" data-item-id="@module.ModuleCode">
                     <div class="portal-card-header">
+                        @if (_customizeOrder)
+                        {
+                            <button class="portal-drag-handle portal-drag-handle-card" title="Drag to reorder" aria-label="Drag to reorder" tabindex="0">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="9" cy="5" r="1.5"/><circle cx="15" cy="5" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="19" r="1.5"/><circle cx="15" cy="19" r="1.5"/></svg>
+                            </button>
+                        }
                         <div class="portal-card-title-row">
                             <h3 class="portal-card-title">@module.ModuleName</h3>
                             <span class="portal-badge @GetBadgeClass(status)">@status</span>
@@ -101,6 +126,7 @@
 @code {
     private bool _loading = true;
     private string? _error;
+    private bool _customizeOrder = false;
     private List<ModuleViewModel> _allModules = new();
     private HashSet<string> _eligibleModules = new(StringComparer.OrdinalIgnoreCase);
     private HashSet<string> _activeModules = new(StringComparer.OrdinalIgnoreCase);
@@ -205,6 +231,38 @@
         "Eligible - Not Activated" => "portal-badge-info",
         _ => "portal-badge-muted"
     };
+
+    private async Task ToggleCustomizeOrder()
+    {
+        _customizeOrder = !_customizeOrder;
+        StateHasChanged();
+
+        if (_customizeOrder)
+        {
+            await Task.Yield(); // allow Blazor to render handles first
+            await DragDrop.InitSortable("#module-card-grid", ".portal-card", new
+            {
+                storageKey = "fc-module-order",
+                handle = ".portal-drag-handle"
+            });
+        }
+        else
+        {
+            await DragDrop.Destroy("module-card-grid");
+        }
+    }
+
+    private async Task ResetModuleOrder()
+    {
+        try
+        {
+            await DragDrop.Destroy("module-card-grid");
+        }
+        catch { /* ignore */ }
+
+        _customizeOrder = false;
+        StateHasChanged();
+    }
 
     private class ModuleViewModel
     {

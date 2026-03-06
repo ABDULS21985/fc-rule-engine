@@ -2,8 +2,11 @@
 @attribute [Authorize]
 @using FC.Engine.Domain.Enums
 @using FC.Engine.Infrastructure.Charts
+@using FC.Engine.Infrastructure.DragDrop
 @inject DashboardService DashboardService
 @inject ChartJsInterop Charts
+@inject DragDropInterop DragDrop
+@implements IDisposable
 
 <PageTitle>Dashboard — FC Engine Portal</PageTitle>
 
@@ -122,10 +125,13 @@ else if (data is not null)
         <!-- ═══════════════════════════════════════════════════════════
              SECTION 3: Chart Grid Row 1 — Area + Donut
              ═══════════════════════════════════════════════════════════ -->
-        <div class="portal-chart-grid">
+        <div class="portal-chart-grid" id="portal-widget-grid">
             <!-- Area Chart: Submission Volume -->
-            <div class="portal-widget portal-chart-widget" id="widget-volume">
+            <div class="portal-widget portal-chart-widget" id="widget-volume" data-widget-id="volume">
                 <div class="portal-dash-section-header">
+                    <button class="portal-drag-handle" title="Drag to reorder" aria-label="Drag widget to reorder" tabindex="0">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="9" cy="5" r="1.5"/><circle cx="15" cy="5" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="19" r="1.5"/><circle cx="15" cy="19" r="1.5"/></svg>
+                    </button>
                     <h2 class="portal-dash-section-title">Submission Volume</h2>
                     <span class="portal-dash-section-meta">Last 6 months</span>
                 </div>
@@ -135,8 +141,11 @@ else if (data is not null)
             </div>
 
             <!-- Donut Chart: Template Health -->
-            <div class="portal-widget portal-chart-widget" id="widget-health">
+            <div class="portal-widget portal-chart-widget" id="widget-health" data-widget-id="health">
                 <div class="portal-dash-section-header">
+                    <button class="portal-drag-handle" title="Drag to reorder" aria-label="Drag widget to reorder" tabindex="0">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="9" cy="5" r="1.5"/><circle cx="15" cy="5" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="19" r="1.5"/><circle cx="15" cy="19" r="1.5"/></svg>
+                    </button>
                     <h2 class="portal-dash-section-title">Template Health</h2>
                     <span class="portal-dash-section-meta">Pass rate by return</span>
                 </div>
@@ -176,10 +185,13 @@ else if (data is not null)
         <!-- ═══════════════════════════════════════════════════════════
              SECTION 4: Chart Grid Row 2 — Horizontal Bar + Heatmap
              ═══════════════════════════════════════════════════════════ -->
-        <div class="portal-chart-grid">
+        <div class="portal-chart-grid" id="portal-widget-grid-2">
             <!-- Horizontal Bar: Top Modules -->
-            <div class="portal-widget portal-chart-widget" id="widget-modules">
+            <div class="portal-widget portal-chart-widget" id="widget-modules" data-widget-id="modules">
                 <div class="portal-dash-section-header">
+                    <button class="portal-drag-handle" title="Drag to reorder" aria-label="Drag widget to reorder" tabindex="0">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="9" cy="5" r="1.5"/><circle cx="15" cy="5" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="19" r="1.5"/><circle cx="15" cy="19" r="1.5"/></svg>
+                    </button>
                     <h2 class="portal-dash-section-title">Top Returns</h2>
                     <span class="portal-dash-section-meta">By submission volume</span>
                 </div>
@@ -196,8 +208,11 @@ else if (data is not null)
             </div>
 
             <!-- Heatmap: Submission Intensity -->
-            <div class="portal-widget portal-chart-widget" id="widget-heatmap">
+            <div class="portal-widget portal-chart-widget" id="widget-heatmap" data-widget-id="heatmap">
                 <div class="portal-dash-section-header">
+                    <button class="portal-drag-handle" title="Drag to reorder" aria-label="Drag widget to reorder" tabindex="0">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="9" cy="5" r="1.5"/><circle cx="15" cy="5" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="19" r="1.5"/><circle cx="15" cy="19" r="1.5"/></svg>
+                    </button>
                     <h2 class="portal-dash-section-title">Submission Activity</h2>
                     <span class="portal-dash-section-meta">Last 90 days</span>
                 </div>
@@ -218,10 +233,13 @@ else if (data is not null)
         <!-- ═══════════════════════════════════════════════════════════
              SECTION 5: Deadlines + Activity Feed
              ═══════════════════════════════════════════════════════════ -->
-        <div class="portal-chart-grid portal-chart-grid-uneven">
+        <div class="portal-chart-grid portal-chart-grid-uneven" id="portal-widget-grid-3">
             <!-- Upcoming Deadlines -->
-            <div class="portal-widget" id="widget-deadlines">
+            <div class="portal-widget" id="widget-deadlines" data-widget-id="deadlines">
                 <div class="portal-dash-section-header">
+                    <button class="portal-drag-handle" title="Drag to reorder" aria-label="Drag widget to reorder" tabindex="0">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="9" cy="5" r="1.5"/><circle cx="15" cy="5" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="19" r="1.5"/><circle cx="15" cy="19" r="1.5"/></svg>
+                    </button>
                     <h2 class="portal-dash-section-title">Upcoming Deadlines</h2>
                     <a href="/calendar" class="portal-dash-section-link">View Calendar</a>
                 </div>
@@ -271,8 +289,11 @@ else if (data is not null)
             </div>
 
             <!-- Activity Feed -->
-            <div class="portal-widget" id="widget-activity">
+            <div class="portal-widget" id="widget-activity" data-widget-id="activity">
                 <div class="portal-dash-section-header">
+                    <button class="portal-drag-handle" title="Drag to reorder" aria-label="Drag widget to reorder" tabindex="0">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="9" cy="5" r="1.5"/><circle cx="15" cy="5" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="19" r="1.5"/><circle cx="15" cy="19" r="1.5"/></svg>
+                    </button>
                     <h2 class="portal-dash-section-title">Activity Feed</h2>
                     <a href="/submissions" class="portal-dash-section-link">View All</a>
                 </div>
@@ -318,8 +339,11 @@ else if (data is not null)
         <!-- ═══════════════════════════════════════════════════════════
              SECTION 6: Recent Submissions Table
              ═══════════════════════════════════════════════════════════ -->
-        <div class="portal-widget" id="widget-submissions">
+        <div class="portal-widget" id="widget-submissions" data-widget-id="submissions">
             <div class="portal-dash-section-header">
+                <button class="portal-drag-handle" title="Drag to reorder" aria-label="Drag widget to reorder" tabindex="0">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="9" cy="5" r="1.5"/><circle cx="15" cy="5" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="19" r="1.5"/><circle cx="15" cy="19" r="1.5"/></svg>
+                </button>
                 <h2 class="portal-dash-section-title">Recent Submissions</h2>
                 <a href="/submissions" class="portal-dash-section-link">View All</a>
             </div>
@@ -404,10 +428,13 @@ else
     private DashboardData? data;
     private bool isLoading = true;
     private bool chartsRendered = false;
+    private bool dragInitialized = false;
     private string displayName = "";
     private string greeting = "";
     private int selectedDays = 30;
     private TemplateHealthItem? selectedTemplate;
+
+    private DotNetObjectReference<Home>? _dotNetRef;
 
     private static readonly (string Label, int Days)[] dateRanges =
     [
@@ -450,6 +477,22 @@ else
 
         chartsRendered = true;
         await RenderAllCharts();
+
+        if (!dragInitialized)
+        {
+            dragInitialized = true;
+            _dotNetRef = DotNetObjectReference.Create(this);
+            var grids = new[] { "#portal-widget-grid", "#portal-widget-grid-2", "#portal-widget-grid-3" };
+            foreach (var grid in grids)
+            {
+                await DragDrop.InitSortable(grid, ".portal-widget", new
+                {
+                    storageKey = "fc-dashboard-widget-order",
+                    handle = ".portal-drag-handle",
+                    dotNetRef = _dotNetRef
+                });
+            }
+        }
     }
 
     // ── Data Loading ─────────────────────────────────────────────
@@ -640,4 +683,18 @@ else
         "draft"   => new MarkupString("""<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>"""),
         _         => new MarkupString("""<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>""")
     };
+
+    [JSInvokable]
+    public void OnWidgetReordered(int fromIdx, int toIdx)
+    {
+        // Widget DOM order is handled by the JS module; Blazor re-render not required.
+        // If server-side persistence is needed, save here.
+        _ = fromIdx;
+        _ = toIdx;
+    }
+
+    public void Dispose()
+    {
+        _dotNetRef?.Dispose();
+    }
 }

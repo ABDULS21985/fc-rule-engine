@@ -1,235 +1,851 @@
 @page "/audit"
 @using Microsoft.AspNetCore.Authorization
-@attribute [Authorize(Policy = "ApproverOrAdmin")]
-@using FC.Engine.Infrastructure.Metadata
 @using Microsoft.EntityFrameworkCore
+@using FC.Engine.Infrastructure.Metadata
+@using FC.Engine.Admin.Services
+@using System.Text.Json
+@using System.Text.Json.Nodes
+@using QuestPDF.Fluent
+@using QuestPDF.Helpers
+@using QuestPDF.Infrastructure
+@attribute [Authorize(Policy = "ApproverOrAdmin")]
 @inject IServiceProvider ServiceProvider
+@inject IJSRuntime JS
+@inject ToastService Toast
+@implements IDisposable
 
-<PageHeader Title="Audit Log"
-            Subtitle="Trace all operational activity, metadata changes, and administrative actions across the platform." />
+<PageTitle>Activity Feed</PageTitle>
+
+<PageHeader Title="Activity Feed"
+            Subtitle="Real-time audit trail of all platform operations and data changes."
+            CountBadge="@(!_loading ? FilteredCount : null)">
+    <SecondaryActions>
+        <button class="fc-btn fc-btn--outline" @onclick="ToggleViewMode" type="button">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14" aria-hidden="true">
+                @if (_viewMode == "grouped")
+                {
+                    <line x1="8" y1="6" x2="21" y2="6" /><line x1="8" y1="12" x2="21" y2="12" /><line x1="8" y1="18" x2="21" y2="18" /><line x1="3" y1="6" x2="3.01" y2="6" /><line x1="3" y1="12" x2="3.01" y2="12" /><line x1="3" y1="18" x2="3.01" y2="18" />
+                }
+                else
+                {
+                    <rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" /><rect x="14" y="14" width="7" height="7" /><rect x="3" y="14" width="7" height="7" />
+                }
+            </svg>
+            @(_viewMode == "timeline" ? "Grouped View" : "Timeline View")
+        </button>
+        <button class="fc-btn fc-btn--outline" @onclick="ExportTimelinePdf" type="button">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14" aria-hidden="true"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
+            Export PDF
+        </button>
+        <button class="fc-btn fc-btn--gold" @onclick="() => LoadAuditLog(reset: true)" type="button">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14" aria-hidden="true"><polyline points="23 4 23 10 17 10" /><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10" /></svg>
+            Refresh
+        </button>
+    </SecondaryActions>
+</PageHeader>
 
 <div class="fc-page">
 
-    <!-- Filter Toolbar -->
-    <div class="fc-toolbar">
+    <!-- ── Filters ── -->
+    <div class="fc-audit-filters fc-card">
         <div class="fc-toolbar-search">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-            <input type="text" placeholder="Search by entity, user, or action..." @bind="_searchQuery" @bind:event="oninput" aria-label="Search audit entries" />
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16" aria-hidden="true"><circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" /></svg>
+            <input type="text" placeholder="Search events, users, entities..." @bind="_searchQuery" @bind:event="oninput" aria-label="Search audit events" />
         </div>
-        <div class="fc-toolbar-filter">
-            <select @bind="_actionFilter" aria-label="Filter by action type">
-                <option value="">All Actions</option>
-                @foreach (var action in _entries.Select(e => e.Action).Distinct().OrderBy(a => a))
-                {
-                    <option value="@action">@action</option>
-                }
-            </select>
-            <select @bind="_entityFilter" aria-label="Filter by entity type">
-                <option value="">All Entities</option>
-                @foreach (var entity in _entries.Select(e => e.EntityType).Distinct().OrderBy(e => e))
-                {
-                    <option value="@entity">@entity</option>
-                }
-            </select>
-        </div>
-        <div class="fc-toolbar-date">
+        <select @bind="_userFilter" aria-label="Filter by user">
+            <option value="">All Users</option>
+            @foreach (var user in _userOptions)
+            {
+                <option value="@user">@user</option>
+            }
+        </select>
+        <select @bind="_actionFilter" aria-label="Filter by action">
+            <option value="">All Actions</option>
+            @foreach (var action in _actionOptions)
+            {
+                <option value="@action">@action</option>
+            }
+        </select>
+        <select @bind="_entityFilter" aria-label="Filter by entity type">
+            <option value="">All Entities</option>
+            @foreach (var entity in _entityOptions)
+            {
+                <option value="@entity">@entity</option>
+            }
+        </select>
+        <div class="fc-audit-date-range">
             <input type="date" @bind="_dateFrom" aria-label="From date" />
-            <span class="fc-toolbar-date-sep">to</span>
+            <span>–</span>
             <input type="date" @bind="_dateTo" aria-label="To date" />
         </div>
-        <div class="fc-toolbar-actions">
-            <button class="fc-btn fc-btn--outline" @onclick="ClearFilters" type="button">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-                Clear
+        <button class="fc-btn fc-btn--outline" @onclick="ClearFilters" type="button">Clear</button>
+    </div>
+
+    <!-- ── Stream bar ── -->
+    <div class="fc-audit-stream-bar">
+        <div class="fc-audit-stream-bar__left">
+            <button class="fc-audit-live-indicator @(_liveEnabled ? "fc-audit-live-indicator--on" : "")"
+                    @onclick="ToggleLive" type="button"
+                    title="@(_liveEnabled ? "Live updates on — click to pause" : "Live updates paused — click to resume")">
+                <span class="fc-audit-live-dot"></span>
+                @(_liveEnabled ? "LIVE" : "PAUSED")
             </button>
-            <button class="fc-btn fc-btn--gold" @onclick="LoadAuditLog" type="button">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
-                Refresh
-            </button>
+            @if (_pendingNew.Count > 0)
+            {
+                <button class="fc-audit-new-pill" @onclick="FlushNewEntries" type="button">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="12" height="12" aria-hidden="true"><polyline points="17 11 12 6 7 11" /><polyline points="17 18 12 13 7 18" /></svg>
+                    @_pendingNew.Count new event@(_pendingNew.Count == 1 ? "" : "s") — click to show
+                </button>
+            }
+        </div>
+        <div class="fc-audit-stream-bar__right">
+            <span class="fc-audit-stream-stat">@FilteredCount event@(FilteredCount == 1 ? "" : "s")</span>
+            @if (_flaggedIds.Count > 0)
+            {
+                <span class="fc-badge fc-badge--warning" style="font-size:0.72rem;">&#128681; @_flaggedIds.Count flagged</span>
+            }
         </div>
     </div>
 
-    <!-- Content -->
+    <!-- ── Skeleton ── -->
     @if (_loading)
     {
-        <div class="fc-skel-timeline" role="status" aria-label="Loading audit trail">
-            @for (var i = 0; i < 5; i++)
+        <div class="fc-audit-feed" role="status" aria-label="Loading audit trail">
+            @for (var i = 0; i < 6; i++)
             {
-                <div class="fc-skel-timeline-item">
-                    <div style="display:flex;align-items:center;gap:var(--space-3);margin-bottom:var(--space-2);">
-                        <div class="fc-skel fc-skel-circle" style="width:32px;height:32px;flex-shrink:0;"></div>
-                        <div style="flex:1;">
-                            <div class="fc-skel fc-skel-text" style="width:120px;"></div>
-                            <div class="fc-skel fc-skel-text" style="width:180px;"></div>
+                <div class="fc-audit-event fc-audit-event--skeleton">
+                    <div class="fc-skel fc-skel-circle" style="width:36px;height:36px;flex-shrink:0;border-radius:var(--radius-full);"></div>
+                    <div class="fc-audit-event-card" style="flex:1;pointer-events:none;">
+                        <div style="display:flex;align-items:center;gap:var(--space-3);margin-bottom:var(--space-2);">
+                            <div class="fc-skel" style="width:72px;height:13px;border-radius:var(--radius-sm);"></div>
+                            <div class="fc-skel" style="width:110px;height:11px;border-radius:var(--radius-sm);"></div>
+                            <div class="fc-skel" style="width:55px;height:10px;border-radius:var(--radius-sm);margin-left:auto;"></div>
                         </div>
-                    </div>
-                    <div style="display:flex;gap:var(--space-4);margin-top:var(--space-2);">
-                        <div class="fc-skel" style="width:100px;height:10px;"></div>
-                        <div class="fc-skel" style="width:130px;height:10px;"></div>
+                        <div style="display:flex;gap:var(--space-3);">
+                            <div class="fc-skel" style="width:90px;height:10px;border-radius:var(--radius-sm);"></div>
+                            <div class="fc-skel" style="width:70px;height:10px;border-radius:var(--radius-sm);"></div>
+                        </div>
                     </div>
                 </div>
             }
         </div>
     }
-    else if (!FilteredEntries.Any())
+
+    <!-- ── Empty state ── -->
+    else if (FilteredCount == 0)
     {
         <div class="fc-empty">
             <div class="fc-empty-icon">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" /><polyline points="14 2 14 8 20 8" /><line x1="16" y1="13" x2="8" y2="13" /><line x1="16" y1="17" x2="8" y2="17" /></svg>
             </div>
-            @if (string.IsNullOrEmpty(_searchQuery) && string.IsNullOrEmpty(_actionFilter) && string.IsNullOrEmpty(_entityFilter) && _dateFrom is null && _dateTo is null)
+            @if (HasActiveFilters)
             {
-                <h3 class="fc-empty-title">No audit events recorded</h3>
-                <p class="fc-empty-text">System activity will appear here as operations are performed.</p>
+                <h3 class="fc-empty-title">No matching events</h3>
+                <p class="fc-empty-text">Try adjusting the date range, filters, or search query.</p>
+                <button class="fc-btn fc-btn--outline" @onclick="ClearFilters" type="button" style="margin-top:var(--space-3);">Clear Filters</button>
             }
             else
             {
-                <h3 class="fc-empty-title">No matching events</h3>
-                <p class="fc-empty-text">Try adjusting the date range or filters.</p>
+                <h3 class="fc-empty-title">No audit events recorded</h3>
+                <p class="fc-empty-text">System activity will appear here as operations are performed across the platform.</p>
             }
         </div>
     }
+
+    <!-- ── Content ── -->
     else
     {
-        <!-- Vertical Alternating Timeline -->
-        <div class="fc-audit-timeline" role="feed" aria-label="Audit trail timeline">
-            @foreach (var entry in FilteredEntries.Take(200))
-            {
-                <div class="fc-audit-timeline-item" role="article">
-                    <span class="fc-audit-timeline-dot @GetDotClass(entry.Action)" aria-hidden="true"></span>
-                    <div class="fc-audit-timeline-card">
-                        <div class="fc-audit-card-header">
-                            <div class="fc-audit-card-icon @GetIconClass(entry.Action)" aria-hidden="true">
-                                @GetActionIcon(entry.Action)
-                            </div>
-                            <div class="fc-audit-card-content">
-                                <div class="fc-audit-card-action">@entry.Action</div>
-                                <div class="fc-audit-card-entity">
-                                    @entry.EntityType
-                                    @if (!string.IsNullOrEmpty(entry.EntityId))
+        <!-- Grouped view -->
+        @if (_viewMode == "grouped")
+        {
+            <div class="fc-audit-feed" role="feed" aria-label="Grouped audit trail">
+                @foreach (var group in GroupedEntries)
+                {
+                    var gKey = $"{group.PerformedBy}|{group.WindowStart:O}";
+                    var isOpen = _expandedGroups.Contains(gKey);
+                    <div class="fc-audit-group @(isOpen ? "fc-audit-group--open" : "")">
+                        <button class="fc-audit-group-hdr" @onclick="() => ToggleGroup(gKey)" type="button" aria-expanded="@isOpen.ToString().ToLower()">
+                            <div class="fc-audit-avatar" style="background:@GetAvatarColor(group.PerformedBy);" aria-hidden="true">@GetInitials(group.PerformedBy)</div>
+                            <div class="fc-audit-group-summary">
+                                <span class="fc-audit-group-user">@group.PerformedBy</span>
+                                <span class="fc-audit-group-desc">made <strong>@group.Entries.Count</strong> change@(group.Entries.Count == 1 ? "" : "s")</span>
+                                <div class="fc-audit-group-tags">
+                                    @foreach (var act in group.Entries.Select(e => e.Action).Distinct().Take(4))
                                     {
-                                        <code>#@entry.EntityId</code>
+                                        <span class="fc-badge fc-badge--neutral" style="font-size:0.68rem;padding:1px 6px;">@act</span>
+                                    }
+                                    @if (group.Entries.Select(e => e.Action).Distinct().Count() > 4)
+                                    {
+                                        <span class="fc-badge fc-badge--muted" style="font-size:0.68rem;padding:1px 6px;">+more</span>
                                     }
                                 </div>
                             </div>
-                        </div>
-
-                        @if (!string.IsNullOrEmpty(entry.Changes))
+                            <span class="fc-audit-group-time" title="@group.WindowStart.ToString("dd MMM yyyy, HH:mm:ss")">@RelativeTime(group.WindowStart)</span>
+                            <svg class="fc-audit-group-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" width="14" height="14" aria-hidden="true"><polyline points="6 9 12 15 18 9" /></svg>
+                        </button>
+                        @if (isOpen)
                         {
-                            <div class="fc-audit-card-entity" style="margin-top: var(--space-2); font-size: var(--text-caption); color: var(--cbn-text-muted);">
-                                @entry.Changes
+                            <div class="fc-audit-group-body">
+                                @foreach (var entry in group.Entries)
+                                {
+                                    <div class="fc-audit-event fc-audit-event--compact @(entry.IsFlagged ? "fc-audit-event--flagged" : "")">
+                                        <div class="fc-audit-event-icon @GetIconClass(entry.Action)" style="flex-shrink:0;" aria-hidden="true">
+                                            @GetActionIcon(entry.Action)
+                                        </div>
+                                        <div class="fc-audit-event-card">
+                                            <div class="fc-audit-event-header">
+                                                <div class="fc-audit-event-info">
+                                                    <span class="fc-audit-event-action">@entry.Action</span>
+                                                    <span class="fc-audit-event-entity">
+                                                        @entry.EntityType
+                                                        @if (!string.IsNullOrEmpty(entry.EntityId))
+                                                        {
+                                                            <code>#@entry.EntityId</code>
+                                                        }
+                                                    </span>
+                                                </div>
+                                                <span class="fc-audit-event-time" title="@entry.Timestamp.ToString("dd MMM yyyy, HH:mm:ss UTC")">@RelativeTime(entry.Timestamp)</span>
+                                                <div class="fc-audit-quick-actions">
+                                                    <button class="fc-audit-quick-btn @(entry.IsFlagged ? "fc-audit-quick-btn--active" : "")" @onclick="() => ToggleFlag(entry.Id)" @onclick:stopPropagation="true" title="@(entry.IsFlagged ? "Remove flag" : "Flag entry")" type="button">
+                                                        <svg viewBox="0 0 24 24" fill="@(entry.IsFlagged ? "currentColor" : "none")" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="13" height="13" aria-hidden="true"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" /><line x1="4" y1="22" x2="4" y2="15" /></svg>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                            @if (entry.DiffFields is { Count: > 0 })
+                                            {
+                                                <button class="fc-audit-diff-toggle" @onclick="() => entry.ShowDiff = !entry.ShowDiff" type="button">
+                                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="11" height="11" aria-hidden="true"><polyline points="@(entry.ShowDiff ? "18 15 12 9 6 15" : "6 9 12 15 18 9")" /></svg>
+                                                    @(entry.ShowDiff ? "Hide" : "Show") @entry.DiffFields.Count field change@(entry.DiffFields.Count == 1 ? "" : "s")
+                                                </button>
+                                                @if (entry.ShowDiff)
+                                                {
+                                                    <div class="fc-audit-diff">
+                                                        @foreach (var field in entry.DiffFields)
+                                                        {
+                                                            <div class="fc-audit-diff-row fc-audit-diff-row--@field.Type.ToString().ToLower()">
+                                                                <span class="fc-audit-diff-field">@field.Field</span>
+                                                                @if (field.OldValue != null)
+                                                                {
+                                                                    <del class="fc-audit-diff-old">@field.OldValue</del>
+                                                                }
+                                                                @if (field.NewValue != null)
+                                                                {
+                                                                    <ins class="fc-audit-diff-new">@field.NewValue</ins>
+                                                                }
+                                                            </div>
+                                                        }
+                                                    </div>
+                                                }
+                                            }
+                                        </div>
+                                    </div>
+                                }
                             </div>
                         }
+                    </div>
+                }
+            </div>
+        }
 
-                        <div class="fc-audit-card-footer">
-                            <span class="fc-audit-card-meta">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4-4v2"/><circle cx="12" cy="7" r="4"/></svg>
-                                @entry.PerformedBy
-                            </span>
-                            <span class="fc-audit-card-meta">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-                                @entry.Timestamp.ToString("dd MMM yyyy, HH:mm:ss")
-                            </span>
-                            @if (!string.IsNullOrEmpty(entry.IpAddress))
+        <!-- Timeline view -->
+        else
+        {
+            <div class="fc-audit-feed" role="feed" aria-label="Audit trail timeline">
+                @foreach (var entry in PagedEntries)
+                {
+                    <div class="fc-audit-event @(entry.IsNew ? "fc-audit-event--new" : "") @(entry.IsFlagged ? "fc-audit-event--flagged" : "")">
+                        <div class="fc-audit-avatar" style="background:@GetAvatarColor(entry.PerformedBy);" aria-hidden="true" title="@entry.PerformedBy">@GetInitials(entry.PerformedBy)</div>
+                        <div class="fc-audit-event-spine" aria-hidden="true"></div>
+                        <div class="fc-audit-event-card">
+                            <div class="fc-audit-event-header">
+                                <div class="fc-audit-event-icon @GetIconClass(entry.Action)" aria-hidden="true">
+                                    @GetActionIcon(entry.Action)
+                                </div>
+                                <div class="fc-audit-event-info">
+                                    <span class="fc-audit-event-action">@entry.Action</span>
+                                    <span class="fc-audit-event-entity">
+                                        @entry.EntityType
+                                        @if (!string.IsNullOrEmpty(entry.EntityId))
+                                        {
+                                            <code>#@entry.EntityId</code>
+                                        }
+                                    </span>
+                                </div>
+                                <span class="fc-audit-event-time" title="@entry.Timestamp.ToString("dd MMM yyyy, HH:mm:ss UTC")">@RelativeTime(entry.Timestamp)</span>
+                                <!-- Hover quick actions -->
+                                <div class="fc-audit-quick-actions">
+                                    <button class="fc-audit-quick-btn @(entry.IsFlagged ? "fc-audit-quick-btn--active" : "")" @onclick="() => ToggleFlag(entry.Id)" title="@(entry.IsFlagged ? "Remove flag" : "Flag entry")" type="button">
+                                        <svg viewBox="0 0 24 24" fill="@(entry.IsFlagged ? "currentColor" : "none")" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="13" height="13" aria-hidden="true"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" /><line x1="4" y1="22" x2="4" y2="15" /></svg>
+                                    </button>
+                                    <button class="fc-audit-quick-btn @(_editingNoteId == entry.Id ? "fc-audit-quick-btn--active" : "")" @onclick="() => ToggleNote(entry.Id)" title="@(_notes.ContainsKey(entry.Id) ? "Edit note" : "Add note")" type="button">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="13" height="13" aria-hidden="true"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" /></svg>
+                                    </button>
+                                    <button class="fc-audit-quick-btn" @onclick="() => CopyEntry(entry)" title="Copy entry details" type="button">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="13" height="13" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2" ry="2" /><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" /></svg>
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- Diff view -->
+                            @if (entry.DiffFields is { Count: > 0 })
                             {
-                                <span class="fc-audit-card-meta">
-                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
-                                    @entry.IpAddress
-                                </span>
+                                <button class="fc-audit-diff-toggle" @onclick="() => entry.ShowDiff = !entry.ShowDiff" type="button">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="11" height="11" aria-hidden="true"><polyline points="@(entry.ShowDiff ? "18 15 12 9 6 15" : "6 9 12 15 18 9")" /></svg>
+                                    @(entry.ShowDiff ? "Hide" : "Show") @entry.DiffFields.Count field change@(entry.DiffFields.Count == 1 ? "" : "s")
+                                </button>
+                                @if (entry.ShowDiff)
+                                {
+                                    <div class="fc-audit-diff">
+                                        @foreach (var field in entry.DiffFields)
+                                        {
+                                            <div class="fc-audit-diff-row fc-audit-diff-row--@field.Type.ToString().ToLower()">
+                                                <span class="fc-audit-diff-field">@field.Field</span>
+                                                @if (field.OldValue != null)
+                                                {
+                                                    <del class="fc-audit-diff-old">@field.OldValue</del>
+                                                }
+                                                @if (field.NewValue != null)
+                                                {
+                                                    <ins class="fc-audit-diff-new">@field.NewValue</ins>
+                                                }
+                                            </div>
+                                        }
+                                    </div>
+                                }
                             }
+                            else if (!string.IsNullOrWhiteSpace(entry.NewValues) && entry.DiffFields == null)
+                            {
+                                <div class="fc-audit-event-changes">@entry.NewValues</div>
+                            }
+
+                            <!-- Note display / editor -->
+                            @if (_notes.TryGetValue(entry.Id, out var noteText) && !string.IsNullOrWhiteSpace(noteText) && _editingNoteId != entry.Id)
+                            {
+                                <div class="fc-audit-note">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="12" height="12" aria-hidden="true"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" /></svg>
+                                    @noteText
+                                </div>
+                            }
+                            @if (_editingNoteId == entry.Id)
+                            {
+                                <div class="fc-audit-note-input">
+                                    <input class="fc-form-input" @bind="_noteText" placeholder="Add a note about this event..." @bind:event="oninput" />
+                                    <button class="fc-btn fc-btn--primary" style="padding:0.25rem 0.75rem;font-size:0.8rem;" @onclick="() => SaveNote(entry.Id)" type="button">Save</button>
+                                    <button class="fc-btn fc-btn--outline" style="padding:0.25rem 0.75rem;font-size:0.8rem;" @onclick="CancelNote" type="button">Cancel</button>
+                                </div>
+                            }
+
+                            <!-- Footer meta -->
+                            <div class="fc-audit-event-footer">
+                                <span class="fc-audit-card-meta">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="12" height="12" aria-hidden="true"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4-4v2" /><circle cx="12" cy="7" r="4" /></svg>
+                                    @entry.PerformedBy
+                                </span>
+                                @if (!string.IsNullOrEmpty(entry.IpAddress))
+                                {
+                                    <span class="fc-audit-card-meta">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="12" height="12" aria-hidden="true"><rect x="2" y="3" width="20" height="14" rx="2" ry="2" /><line x1="8" y1="21" x2="16" y2="21" /><line x1="12" y1="17" x2="12" y2="21" /></svg>
+                                        @entry.IpAddress
+                                    </span>
+                                }
+                                @if (entry.IsNew)
+                                {
+                                    <span class="fc-badge fc-badge--info" style="font-size:0.65rem;padding:1px 6px;">NEW</span>
+                                }
+                            </div>
                         </div>
                     </div>
-                </div>
-            }
-        </div>
+                }
 
-        @if (FilteredEntries.Count() > 200)
-        {
-            <div style="text-align:center; padding: var(--space-4); color: var(--cbn-text-muted); font-size: var(--text-body-sm);">
-                Showing 200 of @FilteredEntries.Count() matching events. Narrow your filters to see more.
+                @if (FilteredCount > _currentPage * PageSize)
+                {
+                    <div class="fc-audit-load-more">
+                        <button class="fc-btn fc-btn--outline" @onclick="LoadMore" type="button">
+                            Load @(Math.Min(PageSize, FilteredCount - _currentPage * PageSize)) more
+                            <span style="color:var(--cbn-text-muted);font-weight:400;margin-left:4px;">· @(FilteredCount - _currentPage * PageSize) remaining</span>
+                        </button>
+                    </div>
+                }
             </div>
         }
     }
+
 </div>
 
 @code {
+    // ── State ──────────────────────────────────────────────────────────────
     private bool _loading = true;
-    private List<AuditEntry> _entries = new();
+    private bool _liveEnabled = true;
+    private string _viewMode = "timeline";
+    private int _currentPage = 1;
+    private const int PageSize = 50;
 
-    // Filters
-    private string _searchQuery = "";
-    private string _actionFilter = "";
-    private string _entityFilter = "";
+    private List<AuditDisplayEntry> _entries = new();
+    private List<AuditDisplayEntry> _pendingNew = new();
+    private HashSet<long> _flaggedIds = new();
+    private HashSet<string> _expandedGroups = new();
+    private Dictionary<long, string> _notes = new();
+    private long? _editingNoteId;
+    private string _noteText = string.Empty;
+
+    private System.Threading.Timer? _pollTimer;
+    private System.Threading.Timer? _clockTimer;
+
+    // ── Filters ─────────────────────────────────────────────────────────────
+    private string _searchQuery = string.Empty;
+    private string _userFilter = string.Empty;
+    private string _actionFilter = string.Empty;
+    private string _entityFilter = string.Empty;
     private DateTime? _dateFrom;
     private DateTime? _dateTo;
 
-    private IEnumerable<AuditEntry> FilteredEntries => _entries
-        .Where(e => string.IsNullOrEmpty(_searchQuery) ||
-                    e.EntityType.Contains(_searchQuery, StringComparison.OrdinalIgnoreCase) ||
-                    e.PerformedBy.Contains(_searchQuery, StringComparison.OrdinalIgnoreCase) ||
-                    e.Action.Contains(_searchQuery, StringComparison.OrdinalIgnoreCase))
+    private List<string> _userOptions = new();
+    private List<string> _actionOptions = new();
+    private List<string> _entityOptions = new();
+
+    // ── Computed ─────────────────────────────────────────────────────────────
+    private IEnumerable<AuditDisplayEntry> FilteredEntries => _entries
+        .Where(e => string.IsNullOrEmpty(_searchQuery)
+            || e.Action.Contains(_searchQuery, StringComparison.OrdinalIgnoreCase)
+            || e.EntityType.Contains(_searchQuery, StringComparison.OrdinalIgnoreCase)
+            || e.PerformedBy.Contains(_searchQuery, StringComparison.OrdinalIgnoreCase)
+            || (!string.IsNullOrEmpty(e.EntityId) && e.EntityId.Contains(_searchQuery, StringComparison.OrdinalIgnoreCase))
+            || (!string.IsNullOrEmpty(e.NewValues) && e.NewValues.Contains(_searchQuery, StringComparison.OrdinalIgnoreCase)))
+        .Where(e => string.IsNullOrEmpty(_userFilter) || e.PerformedBy == _userFilter)
         .Where(e => string.IsNullOrEmpty(_actionFilter) || e.Action == _actionFilter)
         .Where(e => string.IsNullOrEmpty(_entityFilter) || e.EntityType == _entityFilter)
         .Where(e => _dateFrom is null || e.Timestamp.Date >= _dateFrom.Value.Date)
         .Where(e => _dateTo is null || e.Timestamp.Date <= _dateTo.Value.Date);
 
-    protected override async Task OnInitializedAsync()
+    private IEnumerable<AuditDisplayEntry> PagedEntries =>
+        FilteredEntries.Take(_currentPage * PageSize);
+
+    private int FilteredCount => FilteredEntries.Count();
+
+    private bool HasActiveFilters =>
+        !string.IsNullOrEmpty(_searchQuery) ||
+        !string.IsNullOrEmpty(_userFilter) ||
+        !string.IsNullOrEmpty(_actionFilter) ||
+        !string.IsNullOrEmpty(_entityFilter) ||
+        _dateFrom.HasValue || _dateTo.HasValue;
+
+    private IEnumerable<AuditEventGroup> GroupedEntries
     {
-        await LoadAuditLog();
+        get
+        {
+            var groups = new List<AuditEventGroup>();
+            AuditEventGroup? current = null;
+
+            foreach (var entry in FilteredEntries)
+            {
+                if (current is null
+                    || current.PerformedBy != entry.PerformedBy
+                    || Math.Abs((current.WindowStart - entry.Timestamp).TotalMinutes) > 5)
+                {
+                    current = new AuditEventGroup(entry.PerformedBy, entry.Timestamp);
+                    groups.Add(current);
+                }
+                current.Entries.Add(entry);
+            }
+            return groups;
+        }
     }
 
-    private async Task LoadAuditLog()
+    // ── Lifecycle ─────────────────────────────────────────────────────────────
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAuditLog(reset: true);
+    }
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (!firstRender) return;
+
+        // Poll for new events every 30 seconds
+        _pollTimer = new System.Threading.Timer(async _ =>
+        {
+            if (_liveEnabled && _entries.Count > 0)
+            {
+                await CheckNewEntries();
+                await InvokeAsync(StateHasChanged);
+            }
+        }, null, TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(30));
+
+        // Refresh relative timestamps every 60 seconds
+        _clockTimer = new System.Threading.Timer(async _ =>
+            await InvokeAsync(StateHasChanged),
+            null, TimeSpan.FromSeconds(60), TimeSpan.FromSeconds(60));
+    }
+
+    public void Dispose()
+    {
+        _pollTimer?.Dispose();
+        _clockTimer?.Dispose();
+    }
+
+    // ── Data loading ──────────────────────────────────────────────────────────
+    private async Task LoadAuditLog(bool reset = false)
     {
         _loading = true;
+
         try
         {
             using var scope = ServiceProvider.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<MetadataDbContext>();
-            _entries = await db.Set<AuditLogEntry>()
+
+            var raw = await db.AuditLog
                 .OrderByDescending(a => a.PerformedAt)
                 .Take(500)
-                .Select(a => new AuditEntry
-                {
-                    Timestamp = a.PerformedAt,
-                    Action = a.Action,
-                    EntityType = a.EntityType,
-                    EntityId = a.EntityId.ToString(),
-                    PerformedBy = a.PerformedBy,
-                    Changes = a.NewValues != null && a.NewValues.Length > 120 ? a.NewValues.Substring(0, 120) + "..." : a.NewValues,
-                    IpAddress = a.IpAddress
-                })
                 .ToListAsync();
+
+            _entries = raw.Select(a => MapToDisplay(a)).ToList();
+
+            // Populate filter options from loaded data
+            _userOptions = _entries.Select(e => e.PerformedBy).Distinct().OrderBy(u => u).ToList();
+            _actionOptions = _entries.Select(e => e.Action).Distinct().OrderBy(a => a).ToList();
+            _entityOptions = _entries.Select(e => e.EntityType).Distinct().OrderBy(e => e).ToList();
+
+            if (reset)
+            {
+                _currentPage = 1;
+                _pendingNew.Clear();
+            }
         }
         catch
         {
             _entries = new();
         }
-        _loading = false;
+        finally
+        {
+            _loading = false;
+        }
     }
 
+    private async Task CheckNewEntries()
+    {
+        if (_entries.Count == 0) return;
+
+        try
+        {
+            var latestKnown = _entries.Max(e => e.Timestamp);
+
+            using var scope = ServiceProvider.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<MetadataDbContext>();
+
+            var incoming = await db.AuditLog
+                .Where(a => a.PerformedAt > latestKnown)
+                .OrderByDescending(a => a.PerformedAt)
+                .Take(50)
+                .ToListAsync();
+
+            if (incoming.Count > 0)
+            {
+                var mapped = incoming.Select(a =>
+                {
+                    var d = MapToDisplay(a);
+                    d.IsNew = true;
+                    return d;
+                }).ToList();
+
+                _pendingNew.AddRange(mapped);
+            }
+        }
+        catch { /* swallow — non-critical background check */ }
+    }
+
+    private void FlushNewEntries()
+    {
+        _entries.InsertRange(0, _pendingNew);
+        _pendingNew.Clear();
+        _currentPage = 1;
+    }
+
+    private static AuditDisplayEntry MapToDisplay(AuditLogEntry a) => new()
+    {
+        Id = a.Id,
+        Timestamp = a.PerformedAt,
+        Action = a.Action,
+        EntityType = a.EntityType,
+        EntityId = a.EntityId.ToString(),
+        PerformedBy = a.PerformedBy,
+        OldValues = a.OldValues,
+        NewValues = a.NewValues is { Length: > 200 } nv ? nv[..200] + "…" : a.NewValues,
+        IpAddress = a.IpAddress,
+        DiffFields = ParseDiff(a.OldValues, a.NewValues)
+    };
+
+    // ── Filter actions ────────────────────────────────────────────────────────
     private void ClearFilters()
     {
-        _searchQuery = "";
-        _actionFilter = "";
-        _entityFilter = "";
+        _searchQuery = string.Empty;
+        _userFilter = string.Empty;
+        _actionFilter = string.Empty;
+        _entityFilter = string.Empty;
         _dateFrom = null;
         _dateTo = null;
     }
 
-    // --- Visual helpers ---
-    private static string GetDotClass(string action) => NormalizeAction(action) switch
+    private void LoadMore() => _currentPage++;
+
+    private void ToggleViewMode() =>
+        _viewMode = _viewMode == "timeline" ? "grouped" : "timeline";
+
+    private void ToggleLive() => _liveEnabled = !_liveEnabled;
+
+    // ── Quick actions ─────────────────────────────────────────────────────────
+    private void ToggleFlag(long id)
     {
-        "created" => "fc-audit-dot-created",
-        "updated" => "fc-audit-dot-updated",
-        "deleted" => "fc-audit-dot-deleted",
-        "archived" => "fc-audit-dot-archived",
-        "published" => "fc-audit-dot-published",
-        "approved" => "fc-audit-dot-approved",
-        "rejected" => "fc-audit-dot-rejected",
-        "loggedin" or "login" => "fc-audit-dot-login",
-        _ => "fc-audit-dot-default"
+        if (!_flaggedIds.Add(id))
+            _flaggedIds.Remove(id);
+
+        var entry = _entries.FirstOrDefault(e => e.Id == id);
+        if (entry is not null) entry.IsFlagged = _flaggedIds.Contains(id);
+    }
+
+    private void ToggleNote(long id)
+    {
+        if (_editingNoteId == id)
+        {
+            CancelNote();
+            return;
+        }
+        _editingNoteId = id;
+        _noteText = _notes.TryGetValue(id, out var existing) ? existing : string.Empty;
+    }
+
+    private void SaveNote(long id)
+    {
+        if (!string.IsNullOrWhiteSpace(_noteText))
+            _notes[id] = _noteText.Trim();
+        else
+            _notes.Remove(id);
+
+        _editingNoteId = null;
+        _noteText = string.Empty;
+    }
+
+    private void CancelNote()
+    {
+        _editingNoteId = null;
+        _noteText = string.Empty;
+    }
+
+    private async Task CopyEntry(AuditDisplayEntry entry)
+    {
+        var text = $"[{entry.Timestamp:dd MMM yyyy HH:mm:ss}] {entry.Action} — {entry.EntityType} #{entry.EntityId} by {entry.PerformedBy}" +
+                   (entry.IpAddress is not null ? $" from {entry.IpAddress}" : "");
+        try
+        {
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", text);
+            Toast.Success("Copied to clipboard.");
+        }
+        catch
+        {
+            Toast.Info(text);
+        }
+    }
+
+    private void ToggleGroup(string key)
+    {
+        if (!_expandedGroups.Add(key))
+            _expandedGroups.Remove(key);
+    }
+
+    // ── PDF Export ────────────────────────────────────────────────────────────
+    private async Task ExportTimelinePdf()
+    {
+        try
+        {
+            var entries = FilteredEntries.ToList();
+            if (entries.Count == 0)
+            {
+                Toast.Warning("No events to export. Adjust your filters first.");
+                return;
+            }
+
+            QuestPDF.Settings.License = LicenseType.Community;
+
+            var bytes = Document.Create(container =>
+            {
+                container.Page(page =>
+                {
+                    page.Size(PageSizes.A4);
+                    page.MarginHorizontal(2, Unit.Centimetre);
+                    page.MarginVertical(1.5f, Unit.Centimetre);
+                    page.DefaultTextStyle(x => x.FontSize(9.5f).FontFamily("Arial"));
+
+                    page.Header().Column(col =>
+                    {
+                        col.Item().Row(row =>
+                        {
+                            row.RelativeItem().Column(c =>
+                            {
+                                c.Item().Text("FC Engine Platform").Bold().FontSize(15).FontColor("#006B3F");
+                                c.Item().Text("Audit Trail Report").FontSize(11).FontColor("#475569");
+                            });
+                            row.ConstantItem(160).AlignRight().Column(c =>
+                            {
+                                c.Item().Text($"Generated: {DateTime.UtcNow:dd MMM yyyy HH:mm} UTC").FontSize(7.5f).FontColor("#94A3B8");
+                                c.Item().Text($"Total events: {entries.Count}").FontSize(7.5f).FontColor("#94A3B8");
+                                if (HasActiveFilters)
+                                    c.Item().Text("(filtered view)").FontSize(7.5f).FontColor("#94A3B8").Italic();
+                            });
+                        });
+                        col.Item().PaddingTop(6).LineHorizontal(1).LineColor("#E2E8F0");
+                    });
+
+                    page.Content().PaddingVertical(8).Column(col =>
+                    {
+                        foreach (var entry in entries)
+                        {
+                            col.Item().PaddingBottom(5).Row(row =>
+                            {
+                                row.ConstantItem(8).Column(c =>
+                                    c.Item().Width(6).Height(6).Background(GetPdfDotColor(entry.Action)));
+
+                                row.RelativeItem().PaddingLeft(10).Column(c =>
+                                {
+                                    c.Item().Row(r =>
+                                    {
+                                        r.RelativeItem().Text($"{entry.Action}  ·  {entry.EntityType} #{entry.EntityId}").Bold().FontSize(9.5f);
+                                        r.ConstantItem(130).AlignRight().Text(entry.Timestamp.ToString("dd MMM yyyy  HH:mm:ss")).FontSize(8).FontColor("#64748B");
+                                    });
+                                    c.Item().Text($"By: {entry.PerformedBy}{(entry.IpAddress is not null ? $"  ·  {entry.IpAddress}" : "")}").FontSize(8).FontColor("#64748B");
+                                    if (entry.DiffFields is { Count: > 0 })
+                                    {
+                                        foreach (var f in entry.DiffFields.Take(5))
+                                        {
+                                            c.Item().PaddingTop(1).Text(t =>
+                                            {
+                                                t.Span($"  {f.Field}: ").FontSize(7.5f).FontColor("#64748B");
+                                                if (f.OldValue != null) t.Span(f.OldValue).FontSize(7.5f).FontColor("#DC2626").Strikethrough();
+                                                if (f.OldValue != null && f.NewValue != null) t.Span(" → ").FontSize(7.5f).FontColor("#94A3B8");
+                                                if (f.NewValue != null) t.Span(f.NewValue).FontSize(7.5f).FontColor("#059669");
+                                            });
+                                        }
+                                        if (entry.DiffFields.Count > 5)
+                                            c.Item().Text($"  … +{entry.DiffFields.Count - 5} more changes").FontSize(7.5f).FontColor("#94A3B8").Italic();
+                                    }
+                                });
+                            });
+                            col.Item().LineHorizontal(0.4f).LineColor("#F1F5F9");
+                        }
+                    });
+
+                    page.Footer().Row(row =>
+                    {
+                        row.RelativeItem().Text("FC Engine Admin  ·  Confidential").FontSize(7.5f).FontColor("#94A3B8");
+                        row.ConstantItem(80).AlignRight().Text(x =>
+                        {
+                            x.Span("Page ").FontSize(7.5f);
+                            x.CurrentPageNumber().FontSize(7.5f);
+                            x.Span(" / ").FontSize(7.5f);
+                            x.TotalPages().FontSize(7.5f);
+                        });
+                    });
+                });
+            }).GeneratePdf();
+
+            var b64 = Convert.ToBase64String(bytes);
+            var filename = $"audit-trail-{DateTime.UtcNow:yyyy-MM-dd-HHmm}.pdf";
+            await JS.InvokeVoidAsync("fcDataTable.downloadFile", filename, "application/pdf", b64);
+            Toast.Success($"Exported {entries.Count} audit events.");
+        }
+        catch (Exception ex)
+        {
+            Toast.Error($"Export failed: {ex.Message}");
+        }
+    }
+
+    private static string GetPdfDotColor(string action) => NormalizeAction(action) switch
+    {
+        "created" => "#059669",
+        "updated" => "#C8A415",
+        "deleted" or "rejected" => "#DC2626",
+        "archived" => "#B91C1C",
+        "published" or "approved" => "#006B3F",
+        "login" or "loggedin" => "#2563EB",
+        _ => "#94A3B8"
     };
 
+    // ── Diff parsing ──────────────────────────────────────────────────────────
+    private static List<DiffField>? ParseDiff(string? oldJson, string? newJson)
+    {
+        if (string.IsNullOrWhiteSpace(oldJson) && string.IsNullOrWhiteSpace(newJson))
+            return null;
+
+        // Only attempt parse if at least one looks like JSON
+        var looksLikeJson = (oldJson?.TrimStart().StartsWith("{", StringComparison.Ordinal) == true)
+                         || (newJson?.TrimStart().StartsWith("{", StringComparison.Ordinal) == true);
+        if (!looksLikeJson) return null;
+
+        try
+        {
+            var oldObj = string.IsNullOrWhiteSpace(oldJson)
+                ? new JsonObject()
+                : JsonNode.Parse(oldJson)?.AsObject() ?? new JsonObject();
+
+            var newObj = string.IsNullOrWhiteSpace(newJson)
+                ? new JsonObject()
+                : JsonNode.Parse(newJson)?.AsObject() ?? new JsonObject();
+
+            var fields = new List<DiffField>();
+            var allKeys = oldObj.Select(k => k.Key).Union(newObj.Select(k => k.Key)).Distinct();
+
+            foreach (var key in allKeys)
+            {
+                var oldVal = oldObj[key]?.ToString();
+                var newVal = newObj[key]?.ToString();
+
+                if (oldVal is null && newVal is not null)
+                    fields.Add(new DiffField(key, null, newVal, DiffKind.Added));
+                else if (oldVal is not null && newVal is null)
+                    fields.Add(new DiffField(key, oldVal, null, DiffKind.Removed));
+                else if (oldVal != newVal)
+                    fields.Add(new DiffField(key, oldVal, newVal, DiffKind.Changed));
+            }
+
+            return fields.Count > 0 ? fields : null;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    // ── Avatar helpers ────────────────────────────────────────────────────────
+    private static readonly string[] AvatarPalette =
+    [
+        "#006B3F", "#C8A415", "#2563EB", "#7C3AED",
+        "#DC2626", "#EA580C", "#0891B2", "#059669", "#DB2777"
+    ];
+
+    private static string GetAvatarColor(string user)
+    {
+        var hash = user.Aggregate(0, (acc, c) => acc + c);
+        return AvatarPalette[Math.Abs(hash) % AvatarPalette.Length];
+    }
+
+    private static string GetInitials(string user)
+    {
+        var parts = user.Trim().Split(new[] { ' ', '@', '.' }, StringSplitOptions.RemoveEmptyEntries);
+        return parts.Length >= 2
+            ? $"{char.ToUpper(parts[0][0])}{char.ToUpper(parts[1][0])}"
+            : user.Length >= 2 ? user[..2].ToUpper() : user.ToUpper();
+    }
+
+    // ── Relative time ─────────────────────────────────────────────────────────
+    private static string RelativeTime(DateTime dt)
+    {
+        var ago = DateTime.UtcNow - dt.ToUniversalTime();
+        if (ago.TotalSeconds < 60) return "just now";
+        if (ago.TotalMinutes < 60) return $"{(int)ago.TotalMinutes}m ago";
+        if (ago.TotalHours < 24) return $"{(int)ago.TotalHours}h ago";
+        if (ago.TotalDays < 7) return $"{(int)ago.TotalDays}d ago";
+        return dt.ToString("dd MMM yyyy");
+    }
+
+    // ── Visual helpers (preserved from original) ──────────────────────────────
     private static string GetIconClass(string action) => NormalizeAction(action) switch
     {
         "created" => "fc-audit-icon-created",
@@ -243,39 +859,48 @@
         _ => "fc-audit-icon-default"
     };
 
-    private static string GetChipDotClass(string action) => NormalizeAction(action) switch
-    {
-        "created" => "fc-chip__dot--active",
-        "updated" => "fc-chip__dot--approver",
-        "deleted" or "archived" => "fc-chip__dot--inactive",
-        "published" or "approved" => "fc-chip__dot--approver",
-        _ => "fc-chip__dot--viewer"
-    };
-
     private static string NormalizeAction(string action) =>
         action.Trim().ToLowerInvariant().Replace(" ", "");
 
     private static RenderFragment GetActionIcon(string action) => NormalizeAction(action) switch
     {
-        "created" => @<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>,
-        "updated" => @<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>,
-        "deleted" => @<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>,
-        "archived" => @<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/></svg>,
-        "published" => @<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0018 9h-1.26A8 8 0 103 16.3"/></svg>,
-        "approved" => @<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>,
-        "rejected" => @<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>,
-        "loggedin" or "login" => @<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h4a2 2 0 012 2v14a2 2 0 01-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>,
-        _ => @<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+        "created" => @<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>,
+        "updated" => @<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" /><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" /></svg>,
+        "deleted" => @<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" /></svg>,
+        "archived" => @<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="21 8 21 21 3 21 3 8" /><rect x="1" y="3" width="22" height="5" /><line x1="10" y1="12" x2="14" y2="12" /></svg>,
+        "published" => @<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 16 12 12 8 16" /><line x1="12" y1="12" x2="12" y2="21" /><path d="M20.39 18.39A5 5 0 0018 9h-1.26A8 8 0 103 16.3" /></svg>,
+        "approved" => @<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 11-5.93-9.14" /><polyline points="22 4 12 14.01 9 11.01" /></svg>,
+        "rejected" => @<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" /><line x1="15" y1="9" x2="9" y2="15" /><line x1="9" y1="9" x2="15" y2="15" /></svg>,
+        "loggedin" or "login" => @<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h4a2 2 0 012 2v14a2 2 0 01-2 2h-4" /><polyline points="10 17 15 12 10 7" /><line x1="15" y1="12" x2="3" y2="12" /></svg>,
+        _ => @<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" /><line x1="12" y1="16" x2="12" y2="12" /><line x1="12" y1="8" x2="12.01" y2="8" /></svg>
     };
 
-    private record AuditEntry
+    // ── Data models ───────────────────────────────────────────────────────────
+    private sealed class AuditDisplayEntry
     {
+        public long Id { get; init; }
         public DateTime Timestamp { get; init; }
-        public string Action { get; init; } = "";
-        public string EntityType { get; init; } = "";
-        public string EntityId { get; init; } = "";
-        public string PerformedBy { get; init; } = "";
-        public string? Changes { get; init; }
+        public string Action { get; init; } = string.Empty;
+        public string EntityType { get; init; } = string.Empty;
+        public string EntityId { get; init; } = string.Empty;
+        public string PerformedBy { get; init; } = string.Empty;
+        public string? OldValues { get; init; }
+        public string? NewValues { get; init; }
         public string? IpAddress { get; init; }
+        public bool IsNew { get; set; }
+        public bool IsFlagged { get; set; }
+        public bool ShowDiff { get; set; }
+        public List<DiffField>? DiffFields { get; init; }
     }
+
+    private sealed class AuditEventGroup(string performedBy, DateTime windowStart)
+    {
+        public string PerformedBy { get; } = performedBy;
+        public DateTime WindowStart { get; } = windowStart;
+        public List<AuditDisplayEntry> Entries { get; } = new();
+    }
+
+    private sealed record DiffField(string Field, string? OldValue, string? NewValue, DiffKind Type);
+
+    private enum DiffKind { Added, Removed, Changed }
 }

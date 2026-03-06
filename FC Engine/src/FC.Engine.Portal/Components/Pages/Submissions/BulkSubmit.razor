@@ -1,11 +1,13 @@
 @page "/submit/bulk"
 @attribute [Authorize(Policy = "InstitutionMaker")]
+@using FC.Engine.Infrastructure.DragDrop
 @inject SubmissionService SubmissionService
 @inject ITemplateDownloadService TemplateDownloadService
 @inject IBulkUploadService BulkUploadService
 @inject ToastService Toast
 @inject NavigationManager Navigation
 @inject IJSRuntime JS
+@inject DragDropInterop DragDrop
 
 <PageTitle>Bulk Upload — FC Engine Portal</PageTitle>
 
@@ -94,7 +96,8 @@
         </h2>
         <p class="portal-bulk-section-desc">Drag .xml, .xlsx, or .csv files here or click to browse.</p>
 
-        <div class="portal-bulk-dropzone @(_isDragOver ? "portal-bulk-dropzone-active" : "") @(_isProcessing ? "portal-bulk-dropzone-disabled" : "")"
+        <div id="bulk-dropzone"
+             class="portal-bulk-dropzone @(_isDragOver ? "portal-bulk-dropzone-active" : "") @(_isProcessing ? "portal-bulk-dropzone-disabled" : "")"
              @ondragover="HandleDragOver"
              @ondragover:preventDefault
              @ondragleave="HandleDragLeave"
@@ -109,6 +112,7 @@
                 <strong>Drag files here</strong> or click to browse
             </p>
             <p class="portal-bulk-dropzone-hint">Accepted: .xml, .xlsx, .csv (max 10 MB each)</p>
+            <span class="portal-dropzone-count" hidden aria-hidden="true"></span>
 
             <InputFile OnChange="HandleFilesSelected"
                        accept=".xml,.xlsx,.csv"
@@ -430,7 +434,22 @@
     private string _selectedTemplateCode = string.Empty;
     private HashSet<string> _knownReturnCodes = new(StringComparer.OrdinalIgnoreCase);
 
+    private bool _dropZoneEnhanced = false;
+
     // ── Lifecycle ──────────────────────────────────────────────────
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && !_dropZoneEnhanced)
+        {
+            _dropZoneEnhanced = true;
+            await DragDrop.InitDropZone("#bulk-dropzone", new
+            {
+                accept = new[] { "application/xml", "text/xml", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "text/csv" }
+            });
+        }
+    }
+
     protected override async Task OnInitializedAsync()
     {
         var state = await AuthState!;

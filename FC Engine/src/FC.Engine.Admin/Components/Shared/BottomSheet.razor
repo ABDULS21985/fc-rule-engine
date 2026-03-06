@@ -1,0 +1,103 @@
+@*
+    BottomSheet — A slide-up sheet modal. On mobile it fills from the bottom;
+    on desktop it stays hidden unless ForceDesktop="true".
+
+    Usage:
+        <BottomSheet @ref="_sheet" Title="Filter" Size="half">
+            ... body content ...
+        </BottomSheet>
+        <button @onclick="() => _sheet!.OpenAsync()">Open</button>
+*@
+@inject IJSRuntime JS
+@implements IAsyncDisposable
+
+<div id="@_id"
+     class="fc-sheet-overlay @(ForceDesktop ? "fc-sheet-overlay--desktop" : "")"
+     @onclick="HandleOverlayClick"
+     role="dialog"
+     aria-modal="true"
+     aria-labelledby="@(_id + "-title")"
+     hidden>
+
+    <div class="fc-sheet fc-sheet--@SizeClass" @onclick:stopPropagation="true">
+
+        <div class="fc-sheet-handle" aria-hidden="true"></div>
+
+        @if (!string.IsNullOrEmpty(Title) || ShowClose)
+        {
+            <div class="fc-sheet-header">
+                <h2 class="fc-sheet-title" id="@(_id + "-title")">@Title</h2>
+                @if (ShowClose)
+                {
+                    <button class="fc-sheet-close" type="button" @onclick="CloseAsync" aria-label="Close">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                             stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"
+                             width="15" height="15" aria-hidden="true">
+                            <line x1="18" y1="6" x2="6" y2="18"/>
+                            <line x1="6" y1="6" x2="18" y2="18"/>
+                        </svg>
+                    </button>
+                }
+            </div>
+        }
+
+        <div class="fc-sheet-body">
+            @ChildContent
+        </div>
+
+    </div>
+</div>
+
+@code {
+    // ── Parameters ───────────────────────────────────────────────────
+
+    /// <summary>Sheet title shown in the header.</summary>
+    [Parameter] public string Title { get; set; } = "";
+
+    /// <summary>Size: "half" (50 vh), "three-quarter" (72 vh), or "full" (92 vh).</summary>
+    [Parameter] public string Size { get; set; } = "half";
+
+    /// <summary>Show the × close button in the header.</summary>
+    [Parameter] public bool ShowClose { get; set; } = true;
+
+    /// <summary>Force the sheet to render on desktop too (useful for modals).</summary>
+    [Parameter] public bool ForceDesktop { get; set; }
+
+    /// <summary>Content rendered inside the sheet body.</summary>
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    /// <summary>Raised when the sheet is closed.</summary>
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    // ── Internal ─────────────────────────────────────────────────────
+
+    private readonly string _id = "fc-sheet-" + Guid.NewGuid().ToString("N")[..10];
+
+    private string SizeClass => Size switch
+    {
+        "full"          => "full",
+        "three-quarter" => "three-quarter",
+        _               => "half"
+    };
+
+    // ── Public API ────────────────────────────────────────────────────
+
+    public async Task OpenAsync()
+    {
+        try { await JS.InvokeVoidAsync("fcMobile.openSheet", _id); }
+        catch { /* prerender / JS unavailable */ }
+    }
+
+    public async Task CloseAsync()
+    {
+        try { await JS.InvokeVoidAsync("fcMobile.closeSheet", _id); }
+        catch { }
+        await OnClose.InvokeAsync();
+    }
+
+    // ── Event Handlers ────────────────────────────────────────────────
+
+    private async Task HandleOverlayClick() => await CloseAsync();
+
+    public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+}

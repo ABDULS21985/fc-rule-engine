@@ -1,0 +1,53 @@
+@* ================================================================
+   LearnMore — Expandable "Learn more" inline section for complex forms.
+
+   Usage:
+     <LearnMore>
+       <p>Formula references use <code>Sheet.FieldCode</code> notation…</p>
+     </LearnMore>
+
+     <LearnMore Summary="About reporting periods" StartExpanded="true">
+       <p>The reporting period aligns with the regulatory calendar…</p>
+     </LearnMore>
+   ================================================================ *@
+
+<details class="fc-learn-more @(_open ? "fc-learn-more--open" : "") @CssClass"
+         @ontoggle="OnToggle"
+         open="@StartExpanded">
+    <summary class="fc-learn-more__toggle">
+        <svg class="fc-learn-more__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14" aria-hidden="true">
+            <circle cx="12" cy="12" r="10"/>
+            <line x1="12" y1="8" x2="12" y2="12"/>
+            <line x1="12" y1="16" x2="12.01" y2="16"/>
+        </svg>
+        <span>@(Summary ?? "Learn more")</span>
+        <svg class="fc-learn-more__chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="12" height="12" aria-hidden="true">
+            <polyline points="6 9 12 15 18 9"/>
+        </svg>
+    </summary>
+    <div class="fc-learn-more__body">
+        @ChildContent
+    </div>
+</details>
+
+@code {
+    /// <summary>Summary line shown next to the expand icon. Defaults to "Learn more".</summary>
+    [Parameter] public string? Summary { get; set; }
+
+    /// <summary>Content shown when expanded.</summary>
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    /// <summary>Start the section in expanded state.</summary>
+    [Parameter] public bool StartExpanded { get; set; }
+
+    /// <summary>Extra CSS class for the outer element.</summary>
+    [Parameter] public string? CssClass { get; set; }
+
+    private bool _open;
+
+    protected override void OnParametersSet() => _open = StartExpanded;
+
+    private void OnToggle(EventArgs e) => _open = !_open;
+}

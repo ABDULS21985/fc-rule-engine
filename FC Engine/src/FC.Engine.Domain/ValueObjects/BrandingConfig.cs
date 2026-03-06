@@ -21,6 +21,14 @@ public class BrandingConfig
     public string? CopyrightText { get; set; }
     public string? WatermarkText { get; set; }
     public string? LoginBackgroundUrl { get; set; }
+    public string? LoginTagline { get; set; }
+    public string? TrustBadge1 { get; set; }
+    public string? TrustBadge2 { get; set; }
+    public string? TrustBadge3 { get; set; }
+    public string? CustomCss { get; set; }
+    public string? EmailHeaderColor { get; set; }
+    public string? EmailBodyBackground { get; set; }
+    public string? ThemePresetName { get; set; }
 
     public static BrandingConfig WithDefaults(BrandingConfig? custom = null)
     {
@@ -44,7 +52,15 @@ public class BrandingConfig
             SupportPhone = custom?.SupportPhone,
             CopyrightText = custom?.CopyrightText ?? $"(c) {DateTime.UtcNow.Year} RegOS. All rights reserved.",
             WatermarkText = custom?.WatermarkText ?? "CONFIDENTIAL",
-            LoginBackgroundUrl = custom?.LoginBackgroundUrl
+            LoginBackgroundUrl = custom?.LoginBackgroundUrl,
+            LoginTagline = custom?.LoginTagline ?? "Financial Returns Collection & Analysis System",
+            TrustBadge1 = custom?.TrustBadge1 ?? "Role-Based Access",
+            TrustBadge2 = custom?.TrustBadge2 ?? "Audit Logging",
+            TrustBadge3 = custom?.TrustBadge3 ?? "Encrypted Sessions",
+            CustomCss = custom?.CustomCss,
+            EmailHeaderColor = custom?.EmailHeaderColor ?? "#006B3F",
+            EmailBodyBackground = custom?.EmailBodyBackground ?? "#F8F9FA",
+            ThemePresetName = custom?.ThemePresetName ?? "Financial Green",
         };
     }
 }

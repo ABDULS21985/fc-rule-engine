@@ -1,0 +1,197 @@
+@inject HelpService Help
+@inject IJSRuntime JS
+@implements IAsyncDisposable
+
+@* ── Feature Tour ─────────────────────────────────────────────────────────── *@
+@* Spotlight-based guided tour. Reads target element positions via JS interop  *@
+@* and renders a highlight ring + positioned tooltip for each step.            *@
+
+@if (Help.IsTourActive)
+{
+    var steps = Help.GetTourSteps(Help.ActiveTourId);
+    var step  = steps.ElementAtOrDefault(Help.TourStepIndex);
+
+    if (step != null)
+    {
+        @* Full-screen backdrop (the spotlight box-shadow cuts a hole) *@
+        <div class="fc-tour-backdrop" aria-hidden="true"></div>
+
+        @* Spotlight ring around the target element *@
+        @if (_rect != null)
+        {
+            <div class="fc-tour-spotlight"
+                 style="top:@(_rect.Top - 6)px;left:@(_rect.Left - 6)px;width:@(_rect.Width + 12)px;height:@(_rect.Height + 12)px;"
+                 aria-hidden="true"></div>
+        }
+
+        @* Tooltip *@
+        <div class="fc-tour-tooltip fc-tour-tooltip--@step.Placement"
+             style="@GetTooltipStyle()"
+             role="dialog"
+             aria-modal="true"
+             aria-label="@step.Title"
+             @onkeydown="HandleKey">
+
+            <div class="fc-tour-tooltip__header">
+                <span class="fc-tour-step-counter">Step @(Help.TourStepIndex + 1) of @steps.Count</span>
+                <button class="fc-tour-close"
+                        @onclick="EndTour"
+                        aria-label="End tour">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                         stroke-linecap="round" stroke-linejoin="round" width="14" height="14" aria-hidden="true">
+                        <line x1="18" y1="6" x2="6" y2="18"/>
+                        <line x1="6" y1="6" x2="18" y2="18"/>
+                    </svg>
+                </button>
+            </div>
+
+            <div class="fc-tour-tooltip__progress">
+                @for (var i = 0; i < steps.Count; i++)
+                {
+                    <div class="fc-tour-dot @(i == Help.TourStepIndex ? "fc-tour-dot--active" : i < Help.TourStepIndex ? "fc-tour-dot--done" : "")"></div>
+                }
+            </div>
+
+            <h3 class="fc-tour-tooltip__title">@step.Title</h3>
+            <p class="fc-tour-tooltip__content">@step.Content</p>
+
+            <div class="fc-tour-tooltip__actions">
+                @if (Help.TourStepIndex > 0)
+                {
+                    <button class="fc-btn fc-btn--outline fc-btn--sm" @onclick="PreviousStep">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                             stroke-linecap="round" stroke-linejoin="round" width="14" height="14" aria-hidden="true">
+                            <line x1="19" y1="12" x2="5" y2="12"/>
+                            <polyline points="12 19 5 12 12 5"/>
+                        </svg>
+                        Back
+                    </button>
+                }
+                else
+                {
+                    <button class="fc-btn fc-btn--ghost fc-btn--sm" @onclick="EndTour">Skip tour</button>
+                }
+                <button class="fc-btn fc-btn--gold fc-btn--sm" @onclick="NextStep">
+                    @if (Help.TourStepIndex < steps.Count - 1)
+                    {
+                        <span>Next</span>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                             stroke-linecap="round" stroke-linejoin="round" width="14" height="14" aria-hidden="true">
+                            <line x1="5" y1="12" x2="19" y2="12"/>
+                            <polyline points="12 5 19 12 12 19"/>
+                        </svg>
+                    }
+                    else
+                    {
+                        <span>Done</span>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                             stroke-linecap="round" stroke-linejoin="round" width="14" height="14" aria-hidden="true">
+                            <polyline points="20 6 9 17 4 12"/>
+                        </svg>
+                    }
+                </button>
+            </div>
+        </div>
+    }
+}
+
+@code {
+    private record BoundingRect(double Top, double Left, double Width, double Height);
+    private BoundingRect? _rect;
+
+    protected override void OnInitialized() => Help.OnChanged += OnHelpChanged;
+
+    private async void OnHelpChanged()
+    {
+        await InvokeAsync(async () =>
+        {
+            if (Help.IsTourActive)
+                await UpdateRect();
+            StateHasChanged();
+        });
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && Help.IsTourActive)
+            await UpdateRect();
+    }
+
+    private async Task UpdateRect()
+    {
+        var steps = Help.GetTourSteps(Help.ActiveTourId);
+        var step  = steps.ElementAtOrDefault(Help.TourStepIndex);
+        if (step == null) return;
+
+        await JS.InvokeVoidAsync("fcHelp.scrollToElement", step.TargetSelector);
+        await Task.Delay(200); // let scroll settle
+        _rect = await JS.InvokeAsync<BoundingRect?>("fcHelp.getElementRect", step.TargetSelector);
+        StateHasChanged();
+    }
+
+    private async Task NextStep()
+    {
+        Help.NextTourStep();
+        if (Help.IsTourActive) await UpdateRect();
+    }
+
+    private async Task PreviousStep()
+    {
+        Help.PreviousTourStep();
+        await UpdateRect();
+    }
+
+    private void EndTour() => Help.EndTour();
+
+    private void HandleKey(KeyboardEventArgs e)
+    {
+        if (e.Key == "Escape") Help.EndTour();
+    }
+
+    private string GetTooltipStyle()
+    {
+        if (_rect == null)
+            return "top:50%;left:50%;transform:translate(-50%,-50%);";
+
+        var steps    = Help.GetTourSteps(Help.ActiveTourId);
+        var step     = steps.ElementAtOrDefault(Help.TourStepIndex);
+        var placement = step?.Placement ?? "bottom";
+        double top, left;
+
+        const double tooltipW = 340;
+        const double tooltipH = 200;
+        const double gap      = 16;
+
+        switch (placement)
+        {
+            case "top":
+                top  = _rect.Top - tooltipH - gap;
+                left = _rect.Left + (_rect.Width / 2) - (tooltipW / 2);
+                break;
+            case "left":
+                top  = _rect.Top + (_rect.Height / 2) - (tooltipH / 2);
+                left = _rect.Left - tooltipW - gap;
+                break;
+            case "right":
+                top  = _rect.Top + (_rect.Height / 2) - (tooltipH / 2);
+                left = _rect.Left + _rect.Width + gap;
+                break;
+            default: // bottom
+                top  = _rect.Top + _rect.Height + gap;
+                left = _rect.Left + (_rect.Width / 2) - (tooltipW / 2);
+                break;
+        }
+
+        // Clamp to viewport with 16px margin
+        top  = Math.Max(16, Math.Min(top,  (double)(System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Create("browser")) ? 800 : 800) - tooltipH - 16));
+        left = Math.Max(16, Math.Min(left, 1200 - tooltipW - 16));
+
+        return $"position:fixed;top:{top:F0}px;left:{left:F0}px;width:{tooltipW}px;";
+    }
+
+    public ValueTask DisposeAsync()
+    {
+        Help.OnChanged -= OnHelpChanged;
+        return ValueTask.CompletedTask;
+    }
+}

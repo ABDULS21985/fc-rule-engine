@@ -18,6 +18,19 @@
 
 <div class="fc-page">
 
+    @if (!string.IsNullOrWhiteSpace(_loadError))
+    {
+        <AppAlert Variant="AppAlert.AlertVariant.Error"
+                  Message="@_loadError"
+                  Dismissible="true"
+                  OnDismiss="() => _loadError = null" />
+        <div style="margin-bottom:var(--space-4);">
+            <button class="fc-btn fc-btn--outline" @onclick="ReloadPageData" type="button">
+                Retry Loading Data
+            </button>
+        </div>
+    }
+
     <!-- Generate Invoice -->
     @if (!_loading)
     {
@@ -160,6 +173,7 @@
 
 @code {
     private bool _loading = true;
+    private string? _loadError;
     private string _searchTerm = string.Empty;
     private string _statusFilter = "ALL";
     private string? _selectedTenantId;
@@ -173,9 +187,9 @@
 
     private IReadOnlyList<InvoiceRow> FilteredInvoices => _invoices
         .Where(i => string.IsNullOrWhiteSpace(_searchTerm)
-            || i.InvoiceNumber.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase)
-            || i.TenantName.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase)
-            || i.TenantSlug.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase))
+            || (i.InvoiceNumber ?? string.Empty).Contains(_searchTerm, StringComparison.OrdinalIgnoreCase)
+            || (i.TenantName ?? string.Empty).Contains(_searchTerm, StringComparison.OrdinalIgnoreCase)
+            || (i.TenantSlug ?? string.Empty).Contains(_searchTerm, StringComparison.OrdinalIgnoreCase))
         .Where(i => _statusFilter == "ALL" || i.Status.ToString() == _statusFilter)
         .OrderByDescending(i => i.CreatedAt)
         .ThenByDescending(i => i.InvoiceNumber)
@@ -183,8 +197,28 @@
 
     protected override async Task OnInitializedAsync()
     {
-        await LoadData();
-        _loading = false;
+        await ReloadPageData();
+    }
+
+    private async Task ReloadPageData()
+    {
+        _loading = true;
+        _loadError = null;
+        try
+        {
+            await LoadData();
+        }
+        catch (Exception ex)
+        {
+            _invoices = new();
+            _tenantOptions = new();
+            _loadError = $"Failed to load invoice data. {ex.Message}";
+            Toast.Error(_loadError);
+        }
+        finally
+        {
+            _loading = false;
+        }
     }
 
     private async Task LoadData()
@@ -198,9 +232,9 @@
                 {
                     Id = i.Id,
                     TenantId = i.TenantId,
-                    InvoiceNumber = i.InvoiceNumber,
-                    TenantName = t.TenantName,
-                    TenantSlug = t.TenantSlug,
+                    InvoiceNumber = i.InvoiceNumber ?? string.Empty,
+                    TenantName = t.TenantName ?? "Unknown",
+                    TenantSlug = t.TenantSlug ?? string.Empty,
                     Status = i.Status,
                     PeriodStart = i.PeriodStart,
                     PeriodEnd = i.PeriodEnd,
@@ -221,7 +255,7 @@
             .Where(i => i.Status is InvoiceStatus.Issued or InvoiceStatus.Overdue)
             .Sum(i => i.TotalAmount);
 
-        _tenantOptions = await Db.Subscriptions
+        var tenantRows = await Db.Subscriptions
             .AsNoTracking()
             .Include(s => s.Tenant)
             .Include(s => s.Plan)
@@ -229,13 +263,17 @@
             .Select(s => new TenantOption
             {
                 TenantId = s.TenantId,
-                TenantName = s.Tenant != null ? s.Tenant.TenantName : "Unknown",
-                PlanCode = s.Plan != null ? s.Plan.PlanCode : "N/A"
+                TenantName = s.Tenant != null ? (s.Tenant.TenantName ?? "Unknown") : "Unknown",
+                PlanCode = s.Plan != null ? (s.Plan.PlanCode ?? "N/A") : "N/A",
+                UpdatedAt = s.UpdatedAt
             })
-            .GroupBy(t => t.TenantId)
-            .Select(g => g.First())
-            .OrderBy(t => t.TenantName)
             .ToListAsync();
+
+        _tenantOptions = tenantRows
+            .GroupBy(t => t.TenantId)
+            .Select(g => g.OrderByDescending(x => x.UpdatedAt).First())
+            .OrderBy(t => t.TenantName)
+            .ToList();
     }
 
     private void ClearFilters()
@@ -395,5 +433,6 @@
         public Guid TenantId { get; set; }
         public string TenantName { get; set; } = string.Empty;
         public string PlanCode { get; set; } = string.Empty;
+        public DateTime UpdatedAt { get; set; }
     }
 }

@@ -14,7 +14,8 @@
          aria-hidden="true">
     </div>
 
-    <div class="cmd-palette @(_animateIn ? "cmd-palette-active" : "")"
+    <div id="cmd-palette-dialog"
+         class="cmd-palette @(_animateIn ? "cmd-palette-active" : "")"
          role="dialog"
          aria-modal="true"
          aria-label="Command palette"
@@ -143,6 +144,14 @@
             }
         </div>
 
+        <!-- Screen reader result count (polite live region) -->
+        <div class="fc-sr-only" aria-live="polite" aria-atomic="true">
+            @if (!string.IsNullOrWhiteSpace(_query))
+            {
+                @($"{_totalCount} result{(_totalCount != 1 ? "s" : "")} for {_query}")
+            }
+        </div>
+
         <!-- Footer -->
         <div class="cmd-palette-footer">
             <div class="cmd-palette-footer-hints">
@@ -220,6 +229,7 @@
         _animateIn = true;
         StateHasChanged();
 
+        await JS.InvokeVoidAsync("FCAccessibility.trapFocus", "cmd-palette-dialog");
         await JS.InvokeVoidAsync("commandPalette.focusInput", "cmd-palette-input");
     }
 
@@ -227,6 +237,9 @@
     {
         _animateIn = false;
         StateHasChanged();
+
+        try { await JS.InvokeVoidAsync("FCAccessibility.releaseFocus", "cmd-palette-dialog"); }
+        catch (JSDisconnectedException) { }
 
         await Task.Delay(200);
         _visible = false;

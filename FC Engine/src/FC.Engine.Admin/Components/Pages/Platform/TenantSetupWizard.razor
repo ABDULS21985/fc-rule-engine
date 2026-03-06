@@ -1,0 +1,342 @@
+@page "/platform/tenant-setup"
+@layout FC.Engine.Admin.Components.Layout.MainLayout
+@using FC.Engine.Admin.Components.Shared
+@inject NavigationManager Navigation
+@inject ToastService Toast
+
+<PageTitle>New Tenant Setup | RegOS Platform</PageTitle>
+
+<PageHeader Title="New Tenant Setup"
+            Subtitle="Complete the steps below to onboard a new tenant."
+            BackUrl="/platform/tenants">
+    <SecondaryActions>
+        <button class="fc-btn fc-btn--ghost" @onclick="Cancel">Cancel</button>
+    </SecondaryActions>
+</PageHeader>
+
+<div class="fc-wizard">
+
+    @* ── Stepper ─────────────────────────────────────── *@
+    <div class="fc-wizard__stepper-wrap">
+        <ProgressStepper Steps="_steps" @bind-CurrentStep="_currentStep" Clickable="true" />
+    </div>
+
+    @* ── Step content ─────────────────────────────────── *@
+    <div class="fc-wizard__content">
+
+        @* Step 1 — Organisation *@
+        @if (_currentStep == 1)
+        {
+            <h2 class="fc-wizard__step-heading">Organisation details</h2>
+            <p class="fc-wizard__step-desc">Tell us about the organisation you're onboarding.</p>
+
+            <div class="fc-form-grid fc-form-grid--2col" style="margin-top: var(--space-6);">
+                <div class="fc-field">
+                    <label class="fc-label" for="wz-name">Organisation name <span class="fc-label-required">*</span></label>
+                    <input id="wz-name" class="fc-input" type="text" placeholder="e.g. Acme Bank Ltd"
+                           @bind="_form.TenantName" />
+                </div>
+                <div class="fc-field">
+                    <label class="fc-label" for="wz-slug">URL slug <span class="fc-label-required">*</span></label>
+                    <input id="wz-slug" class="fc-input" type="text" placeholder="e.g. acme-bank"
+                           @bind="_form.Slug" />
+                    <span class="fc-field-hint">Lowercase letters, numbers and hyphens only.</span>
+                </div>
+                <div class="fc-field">
+                    <label class="fc-label" for="wz-industry">Industry</label>
+                    <select id="wz-industry" class="fc-input" @bind="_form.Industry">
+                        <option value="">Select industry…</option>
+                        <option value="banking">Banking</option>
+                        <option value="insurance">Insurance</option>
+                        <option value="asset_management">Asset Management</option>
+                        <option value="fintech">FinTech</option>
+                        <option value="other">Other</option>
+                    </select>
+                </div>
+                <div class="fc-field">
+                    <label class="fc-label" for="wz-contact">Primary contact email <span class="fc-label-required">*</span></label>
+                    <input id="wz-contact" class="fc-input" type="email" placeholder="admin@example.com"
+                           @bind="_form.ContactEmail" />
+                </div>
+            </div>
+        }
+
+        @* Step 2 — Modules *@
+        @if (_currentStep == 2)
+        {
+            <h2 class="fc-wizard__step-heading">Module selection</h2>
+            <p class="fc-wizard__step-desc">Choose which modules this tenant will have access to.</p>
+
+            <div class="fc-wizard__module-grid" style="margin-top: var(--space-6);">
+                @foreach (var m in _availableModules)
+                {
+                    <label class="fc-wizard__module-card @(_form.SelectedModules.Contains(m.Key) ? "fc-wizard__module-card--selected" : "")">
+                        <input type="checkbox" class="sr-only"
+                               checked="@_form.SelectedModules.Contains(m.Key)"
+                               @onchange="() => ToggleModule(m.Key)" />
+                        <div class="fc-wizard__module-icon" aria-hidden="true">@m.Icon</div>
+                        <div>
+                            <div class="fc-wizard__module-name">@m.Name</div>
+                            <div class="fc-wizard__module-desc">@m.Description</div>
+                        </div>
+                        @if (_form.SelectedModules.Contains(m.Key))
+                        {
+                            <svg class="fc-wizard__module-check" viewBox="0 0 16 16" fill="none"
+                                 stroke="currentColor" stroke-width="2.5" stroke-linecap="round"
+                                 stroke-linejoin="round" width="16" height="16" aria-hidden="true">
+                                <polyline points="2,8 6,13 14,3"/>
+                            </svg>
+                        }
+                    </label>
+                }
+            </div>
+        }
+
+        @* Step 3 — Users *@
+        @if (_currentStep == 3)
+        {
+            <h2 class="fc-wizard__step-heading">Initial admin user</h2>
+            <p class="fc-wizard__step-desc">Create the first administrator for this tenant. They can invite others later.</p>
+
+            <div class="fc-form-grid fc-form-grid--2col" style="margin-top: var(--space-6);">
+                <div class="fc-field">
+                    <label class="fc-label" for="wz-fname">First name <span class="fc-label-required">*</span></label>
+                    <input id="wz-fname" class="fc-input" type="text" @bind="_form.AdminFirstName" />
+                </div>
+                <div class="fc-field">
+                    <label class="fc-label" for="wz-lname">Last name <span class="fc-label-required">*</span></label>
+                    <input id="wz-lname" class="fc-input" type="text" @bind="_form.AdminLastName" />
+                </div>
+                <div class="fc-field">
+                    <label class="fc-label" for="wz-email">Email address <span class="fc-label-required">*</span></label>
+                    <input id="wz-email" class="fc-input" type="email" @bind="_form.AdminEmail" />
+                </div>
+                <div class="fc-field">
+                    <label class="fc-label" for="wz-pwd">Temporary password <span class="fc-label-required">*</span></label>
+                    <input id="wz-pwd" class="fc-input" type="password" @bind="_form.TempPassword"
+                           placeholder="Min 12 characters" />
+                    <span class="fc-field-hint">User will be prompted to change on first login.</span>
+                </div>
+            </div>
+        }
+
+        @* Step 4 — Branding *@
+        @if (_currentStep == 4)
+        {
+            <h2 class="fc-wizard__step-heading">Branding</h2>
+            <p class="fc-wizard__step-desc">Customise how this tenant's portal looks.</p>
+
+            <div class="fc-form-grid fc-form-grid--2col" style="margin-top: var(--space-6);">
+                <div class="fc-field">
+                    <label class="fc-label" for="wz-company">Display name</label>
+                    <input id="wz-company" class="fc-input" type="text"
+                           placeholder="Shown in the portal header"
+                           @bind="_form.BrandName" />
+                </div>
+                <div class="fc-field">
+                    <label class="fc-label" for="wz-logo">Logo URL</label>
+                    <input id="wz-logo" class="fc-input" type="url"
+                           placeholder="https://…"
+                           @bind="_form.LogoUrl" />
+                </div>
+                <div class="fc-field">
+                    <label class="fc-label" for="wz-color">Accent colour</label>
+                    <div style="display:flex; gap: var(--space-2); align-items:center;">
+                        <input id="wz-color" type="color" style="width:40px; height:40px; border:none; cursor:pointer; border-radius: var(--radius-sm);"
+                               @bind="_form.AccentColor" />
+                        <input class="fc-input" type="text" placeholder="#006B3F"
+                               @bind="_form.AccentColor" style="flex:1;" />
+                    </div>
+                </div>
+            </div>
+        }
+
+        @* Step 5 — Review *@
+        @if (_currentStep == 5)
+        {
+            <h2 class="fc-wizard__step-heading">Review &amp; launch</h2>
+            <p class="fc-wizard__step-desc">Confirm the details before creating the tenant.</p>
+
+            <div class="fc-wizard__review" style="margin-top: var(--space-6);">
+                <div class="fc-wizard__review-section">
+                    <div class="fc-wizard__review-label">Organisation</div>
+                    <div class="fc-wizard__review-value">@_form.TenantName <span class="fc-badge">@_form.Slug</span></div>
+                </div>
+                <div class="fc-wizard__review-section">
+                    <div class="fc-wizard__review-label">Industry</div>
+                    <div class="fc-wizard__review-value">@(_form.Industry is { Length: > 0 } i ? i : "—")</div>
+                </div>
+                <div class="fc-wizard__review-section">
+                    <div class="fc-wizard__review-label">Modules</div>
+                    <div class="fc-wizard__review-value" style="display:flex; flex-wrap:wrap; gap: var(--space-2);">
+                        @if (_form.SelectedModules.Any())
+                        {
+                            @foreach (var key in _form.SelectedModules)
+                            {
+                                <span class="fc-badge fc-badge--success">@(_availableModules.FirstOrDefault(m => m.Key == key)?.Name ?? key)</span>
+                            }
+                        }
+                        else
+                        {
+                            <span class="fc-text-muted">No modules selected</span>
+                        }
+                    </div>
+                </div>
+                <div class="fc-wizard__review-section">
+                    <div class="fc-wizard__review-label">Admin user</div>
+                    <div class="fc-wizard__review-value">@_form.AdminFirstName @_form.AdminLastName — @_form.AdminEmail</div>
+                </div>
+                @if (!string.IsNullOrEmpty(_form.BrandName))
+                {
+                    <div class="fc-wizard__review-section">
+                        <div class="fc-wizard__review-label">Brand name</div>
+                        <div class="fc-wizard__review-value">@_form.BrandName</div>
+                    </div>
+                }
+            </div>
+        }
+
+    </div>
+
+    @* ── Navigation buttons ───────────────────────────── *@
+    <div class="fc-wizard__nav">
+        <button class="fc-btn fc-btn--ghost" @onclick="PreviousStep" disabled="@(_currentStep == 1)">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"
+                 stroke-linecap="round" stroke-linejoin="round" width="14" height="14" aria-hidden="true">
+                <polyline points="10,3 5,8 10,13"/>
+            </svg>
+            Back
+        </button>
+
+        <span class="fc-wizard__step-counter">Step @_currentStep of @_steps.Count</span>
+
+        @if (_currentStep < _steps.Count)
+        {
+            <button class="fc-btn fc-btn--gold" @onclick="NextStep" disabled="@(!CanAdvance())">
+                Next
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"
+                     stroke-linecap="round" stroke-linejoin="round" width="14" height="14" aria-hidden="true">
+                    <polyline points="6,3 11,8 6,13"/>
+                </svg>
+            </button>
+        }
+        else
+        {
+            <button class="fc-btn fc-btn--gold" @onclick="CreateTenant" disabled="@_saving">
+                @if (_saving)
+                {
+                    <span class="fc-btn__spinner" aria-hidden="true"></span>
+                    <span>Creating…</span>
+                }
+                else
+                {
+                    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"
+                         stroke-linecap="round" stroke-linejoin="round" width="14" height="14" aria-hidden="true">
+                        <polyline points="1,8 6,13 15,3"/>
+                    </svg>
+                    <span>Create Tenant</span>
+                }
+            </button>
+        }
+    </div>
+
+</div>
+
+@code {
+    // ── Step model ────────────────────────────────────────
+    private List<ProgressStepper.StepItem> _steps =
+    [
+        new("Organisation",  "Name & contact"),
+        new("Modules",       "Feature access"),
+        new("Users",         "Admin account"),
+        new("Branding",      "Logo & colours"),
+        new("Review",        "Confirm & create"),
+    ];
+
+    private int  _currentStep = 1;
+    private bool _saving      = false;
+
+    // ── Form model ────────────────────────────────────────
+    private sealed class WizardForm
+    {
+        public string TenantName    { get; set; } = "";
+        public string Slug          { get; set; } = "";
+        public string Industry      { get; set; } = "";
+        public string ContactEmail  { get; set; } = "";
+        public HashSet<string> SelectedModules { get; set; } = [];
+        public string AdminFirstName { get; set; } = "";
+        public string AdminLastName  { get; set; } = "";
+        public string AdminEmail     { get; set; } = "";
+        public string TempPassword   { get; set; } = "";
+        public string BrandName  { get; set; } = "";
+        public string LogoUrl    { get; set; } = "";
+        public string AccentColor { get; set; } = "#006B3F";
+    }
+
+    private readonly WizardForm _form = new();
+
+    // ── Module catalogue ──────────────────────────────────
+    private sealed record ModuleOption(string Key, string Name, string Description, string Icon);
+
+    private readonly List<ModuleOption> _availableModules =
+    [
+        new("data_pipeline",    "Data Pipeline",    "Automated data collection & validation",  "⚡"),
+        new("analytics",        "Analytics",        "Charts, trends & reporting dashboards",    "📊"),
+        new("submissions",      "Submissions",      "Form submissions & workflow management",   "📥"),
+        new("templates",        "Templates",        "Regulatory form template management",      "📄"),
+        new("audit",            "Audit Log",        "Full action history & compliance trail",   "🔍"),
+        new("billing",          "Billing",          "Invoices, plans & subscription management","💳"),
+    ];
+
+    // ── Navigation ────────────────────────────────────────
+    private void NextStep()
+    {
+        if (_currentStep < _steps.Count && CanAdvance())
+            _currentStep++;
+    }
+
+    private void PreviousStep()
+    {
+        if (_currentStep > 1) _currentStep--;
+    }
+
+    private void Cancel() => Navigation.NavigateTo("/platform/tenants");
+
+    private void ToggleModule(string key)
+    {
+        if (!_form.SelectedModules.Remove(key))
+            _form.SelectedModules.Add(key);
+    }
+
+    private bool CanAdvance() => _currentStep switch
+    {
+        1 => !string.IsNullOrWhiteSpace(_form.TenantName) &&
+             !string.IsNullOrWhiteSpace(_form.Slug) &&
+             !string.IsNullOrWhiteSpace(_form.ContactEmail),
+        3 => !string.IsNullOrWhiteSpace(_form.AdminFirstName) &&
+             !string.IsNullOrWhiteSpace(_form.AdminEmail) &&
+             !string.IsNullOrWhiteSpace(_form.TempPassword),
+        _ => true
+    };
+
+    // ── Submit ────────────────────────────────────────────
+    private async Task CreateTenant()
+    {
+        _saving = true;
+        try
+        {
+            // TODO: wire to ITenantProvisioningService or API endpoint
+            await Task.Delay(1200); // simulate async call
+            Toast.Success($"\u201c{_form.TenantName}\u201d has been created successfully.");
+            Navigation.NavigateTo("/platform/tenants");
+        }
+        catch (Exception ex)
+        {
+            Toast.Error($"Failed to create tenant: {ex.Message}");
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+}

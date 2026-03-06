@@ -1,0 +1,141 @@
+@page "/error"
+@page "/Error"
+@layout FC.Engine.Admin.Components.Layout.MainLayout
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@inject IJSRuntime JS
+@implements IAsyncDisposable
+
+<PageTitle>500 — Something Went Wrong | RegOS</PageTitle>
+
+<HeadContent>
+    @* Noscript auto-reload fallback — page reloads after 30s even without Blazor circuit *@
+    <noscript><meta http-equiv="refresh" content="30"/></noscript>
+</HeadContent>
+
+<div class="fc-error-page">
+
+    @* ── Broken gear illustration ────────────────────── *@
+    <div class="fc-error-page__illu fc-error-page__illu--error" aria-hidden="true">
+        <svg viewBox="0 0 140 140" fill="none" stroke="currentColor" stroke-width="3"
+             stroke-linecap="round" stroke-linejoin="round" width="140" height="140">
+            <!-- Large gear -->
+            <path d="M56 14 L60 6 L68 6 L72 14 Q78 15 84 19 L92 16 L98 22 L95 30
+                     Q99 36 100 42 L108 46 L108 54 L100 58 Q99 64 95 70 L98 78 L92 84
+                     L84 81 Q78 85 72 86 L68 94 L60 94 L56 86 Q50 85 44 81 L36 84
+                     L30 78 L33 70 Q29 64 28 58 L20 54 L20 46 L28 42 Q29 36 33 30
+                     L30 22 L36 16 L44 19 Q50 15 56 14 Z"/>
+            <!-- Gear centre -->
+            <circle cx="64" cy="50" r="16"/>
+            <!-- Small cracked gear (top-right) -->
+            <path d="M98 22 L100 18 L104 18 L106 22 Q109 23 111 25 L115 24 L117 27
+                     L115 31 Q117 34 117 37 L121 39 L121 43 L117 45 Q117 48 115 51
+                     L117 55 L114 57 L110 56 Q107 58 104 58 L102 62 L98 62 L96 58
+                     Q93 58 90 56 L86 57 L84 54 L86 50 Q84 47 84 44 L80 42 L80 38
+                     L84 36 Q84 33 86 30 L84 26 L87 24 L91 25 Q94 23 98 22 Z"
+                  opacity="0.5"/>
+            <circle cx="100" cy="40" r="8" opacity="0.5"/>
+            <!-- Crack lines on gear -->
+            <line x1="56" y1="38" x2="72" y2="54" stroke="var(--cbn-danger,#dc2626)" stroke-width="2.5"/>
+            <line x1="72" y1="38" x2="60" y2="58" stroke="var(--cbn-danger,#dc2626)" stroke-width="2.5" stroke-dasharray="3 2"/>
+            <!-- Wrench -->
+            <path d="M104 76 L124 96 Q127 99 124 102 Q121 105 118 102 L98 82"
+                  stroke="currentColor" stroke-width="3"/>
+            <circle cx="96" cy="80" r="10"/>
+        </svg>
+    </div>
+
+    @* ── Heading ─────────────────────────────────────── *@
+    <h1 class="fc-error-page__heading">Something went wrong</h1>
+    <p class="fc-error-page__desc">
+        An unexpected error occurred. Our team has been notified.
+        The page will reload automatically in @_countdown&thinsp;s.
+    </p>
+
+    @* ── Countdown ring ───────────────────────────────── *@
+    <div class="fc-error-page__timer-ring" aria-label="Reloading in @_countdown seconds" role="timer">
+        @{
+            const double R    = 22;
+            const double Circ = 2 * Math.PI * R;
+            double offset     = Circ * (1 - (double)_countdown / AutoReloadSeconds);
+        }
+        <svg viewBox="0 0 56 56" width="56" height="56" aria-hidden="true">
+            <circle cx="28" cy="28" r="@R" fill="none"
+                    stroke="var(--cbn-border)" stroke-width="4"/>
+            <circle cx="28" cy="28" r="@R" fill="none"
+                    stroke="var(--cbn-primary)" stroke-width="4"
+                    stroke-dasharray="@Circ.ToString("F2")"
+                    stroke-dashoffset="@offset.ToString("F2")"
+                    transform="rotate(-90 28 28)"
+                    style="transition: stroke-dashoffset 1s linear;"/>
+            <text x="28" y="33" text-anchor="middle" font-size="14" font-weight="700"
+                  fill="currentColor" stroke="none" font-family="sans-serif">@_countdown</text>
+        </svg>
+    </div>
+
+    @* ── Actions ─────────────────────────────────────── *@
+    <div class="fc-error-page__actions">
+        <button class="fc-btn fc-btn--gold" @onclick="ReloadPage">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"
+                 stroke-linecap="round" stroke-linejoin="round" width="14" height="14" aria-hidden="true">
+                <polyline points="1,4 1,10 7,10"/>
+                <path d="M3.51 15A9 9 0 1 0 2.05 6.05L1 10"/>
+            </svg>
+            Reload now
+        </button>
+        <a href="/" class="fc-btn fc-btn--ghost">Go to dashboard</a>
+    </div>
+
+    @* ── Support note ─────────────────────────────────── *@
+    <p class="fc-error-page__support">
+        If this keeps happening, please
+        <a href="mailto:support@regoscompliance.com">contact support</a>.
+    </p>
+
+</div>
+
+@code {
+    private const int AutoReloadSeconds = 30;
+    private int _countdown = AutoReloadSeconds;
+    private PeriodicTimer? _timer;
+    private CancellationTokenSource? _cts;
+
+    protected override void OnInitialized()
+    {
+        _cts   = new CancellationTokenSource();
+        _timer = new PeriodicTimer(TimeSpan.FromSeconds(1));
+        _ = RunCountdownAsync(_cts.Token);
+    }
+
+    private async Task RunCountdownAsync(CancellationToken ct)
+    {
+        try
+        {
+            while (await _timer!.WaitForNextTickAsync(ct))
+            {
+                _countdown--;
+                await InvokeAsync(StateHasChanged);
+                if (_countdown <= 0)
+                {
+                    await ReloadPage();
+                    break;
+                }
+            }
+        }
+        catch (OperationCanceledException) { }
+    }
+
+    private async Task ReloadPage()
+    {
+        _cts?.Cancel();
+        try { await JS.InvokeVoidAsync("eval", "window.location.reload()"); }
+        catch { /* no-op during dispose */ }
+    }
+
+    public ValueTask DisposeAsync()
+    {
+        _cts?.Cancel();
+        _cts?.Dispose();
+        _timer?.Dispose();
+        return ValueTask.CompletedTask;
+    }
+}

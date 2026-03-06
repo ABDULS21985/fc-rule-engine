@@ -1,0 +1,128 @@
+@* ================================================================
+   SmartTip — Contextual tip/suggestion banner.
+
+   Variants: info (default) | success | warning | tip
+
+   Usage:
+     <SmartTip Message="You have 3 templates pending review."
+               ActionLabel="Review now" ActionUrl="/templates" />
+
+     <SmartTip Variant="tip" Dismissible="false">
+       <ChildContent>
+         Pro tip: Use <kbd>⌘K</kbd> to jump to any page instantly.
+       </ChildContent>
+     </SmartTip>
+   ================================================================ *@
+
+@if (!_dismissed)
+{
+    <div class="fc-smart-tip fc-smart-tip--@Variant @CssClass" role="note" aria-live="polite">
+        <span class="fc-smart-tip__icon" aria-hidden="true">
+            @if (Variant == "success")
+            {
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16">
+                    <polyline points="20 6 9 17 4 12"/>
+                </svg>
+            }
+            else if (Variant == "warning")
+            {
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16">
+                    <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+                    <line x1="12" y1="9" x2="12" y2="13"/>
+                    <line x1="12" y1="17" x2="12.01" y2="17"/>
+                </svg>
+            }
+            else if (Variant == "tip")
+            {
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16">
+                    <line x1="12" y1="2" x2="12" y2="6"/>
+                    <line x1="12" y1="18" x2="12" y2="22"/>
+                    <line x1="4.93" y1="4.93" x2="7.76" y2="7.76"/>
+                    <line x1="16.24" y1="16.24" x2="19.07" y2="19.07"/>
+                    <line x1="2" y1="12" x2="6" y2="12"/>
+                    <line x1="18" y1="12" x2="22" y2="12"/>
+                    <line x1="4.93" y1="19.07" x2="7.76" y2="16.24"/>
+                    <line x1="16.24" y1="7.76" x2="19.07" y2="4.93"/>
+                </svg>
+            }
+            else
+            {
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16">
+                    <circle cx="12" cy="12" r="10"/>
+                    <line x1="12" y1="8" x2="12" y2="12"/>
+                    <line x1="12" y1="16" x2="12.01" y2="16"/>
+                </svg>
+            }
+        </span>
+
+        <div class="fc-smart-tip__body">
+            @if (ChildContent != null)
+            {
+                @ChildContent
+            }
+            else
+            {
+                <span class="fc-smart-tip__msg">@Message</span>
+            }
+
+            @if (ActionLabel != null && ActionUrl != null)
+            {
+                <a href="@ActionUrl" class="fc-smart-tip__action">@ActionLabel</a>
+            }
+            else if (ActionLabel != null && OnAction.HasDelegate)
+            {
+                <button class="fc-smart-tip__action" @onclick="OnAction">@ActionLabel</button>
+            }
+        </div>
+
+        @if (Dismissible)
+        {
+            <button class="fc-smart-tip__dismiss"
+                    @onclick="Dismiss"
+                    aria-label="Dismiss">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                     stroke-linecap="round" stroke-linejoin="round" width="14" height="14" aria-hidden="true">
+                    <line x1="18" y1="6" x2="6" y2="18"/>
+                    <line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+            </button>
+        }
+    </div>
+}
+
+@code {
+    /// <summary>Visual variant: info | success | warning | tip</summary>
+    [Parameter] public string Variant { get; set; } = "info";
+
+    /// <summary>Plain text message. Use ChildContent for rich HTML.</summary>
+    [Parameter] public string? Message { get; set; }
+
+    /// <summary>Custom rich content. Overrides Message when provided.</summary>
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    /// <summary>Label for the action link/button.</summary>
+    [Parameter] public string? ActionLabel { get; set; }
+
+    /// <summary>URL for the action link (uses &lt;a&gt;). Overrides OnAction.</summary>
+    [Parameter] public string? ActionUrl { get; set; }
+
+    /// <summary>Click handler for the action button (uses &lt;button&gt;).</summary>
+    [Parameter] public EventCallback OnAction { get; set; }
+
+    /// <summary>Show dismiss (×) button.</summary>
+    [Parameter] public bool Dismissible { get; set; } = true;
+
+    /// <summary>Callback fired when the tip is dismissed.</summary>
+    [Parameter] public EventCallback OnDismissed { get; set; }
+
+    /// <summary>Extra CSS class for the outer element.</summary>
+    [Parameter] public string? CssClass { get; set; }
+
+    private bool _dismissed;
+
+    private async Task Dismiss()
+    {
+        _dismissed = true;
+        await OnDismissed.InvokeAsync();
+    }
+}

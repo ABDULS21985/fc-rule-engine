@@ -1,8 +1,11 @@
 @page "/submissions"
 @attribute [Authorize(Policy = "InstitutionUser")]
+@using FC.Engine.Infrastructure.DragDrop
 @inject ISubmissionRepository SubmissionRepo
 @inject ITemplateMetadataCache TemplateCache
 @inject NavigationManager Navigation
+@inject DragDropInterop DragDrop
+@implements IDisposable
 
 <PageTitle>My Submissions — FC Engine Portal</PageTitle>
 
@@ -19,6 +22,22 @@
             <p class="portal-page-subtitle">View and track all your institution's return submissions</p>
         </div>
         <div class="portal-page-header-actions">
+            <!-- View toggle: Table | Kanban -->
+            <div class="portal-view-toggle" role="group" aria-label="View mode">
+                <button class="portal-view-toggle-btn @(viewMode == "table" ? "portal-view-toggle-btn-active" : "")"
+                        @onclick='() => SetView("table")' title="Table view" aria-pressed="@(viewMode == "table")">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                        <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/>
+                        <line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>
+                    </svg>
+                </button>
+                <button class="portal-view-toggle-btn @(viewMode == "kanban" ? "portal-view-toggle-btn-active" : "")"
+                        @onclick='() => SetView("kanban")' title="Kanban view" aria-pressed="@(viewMode == "kanban")">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                        <rect x="3" y="3" width="5" height="18" rx="1"/><rect x="10" y="3" width="5" height="12" rx="1"/><rect x="17" y="3" width="5" height="15" rx="1"/>
+                    </svg>
+                </button>
+            </div>
             <a href="/submit" class="portal-btn portal-btn-primary">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
                     <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
@@ -123,7 +142,7 @@
     </div>
 
     <!-- ═══════════════════════════════════════════════════════
-         SUBMISSIONS TABLE
+         MAIN CONTENT — TABLE OR KANBAN
          ═══════════════════════════════════════════════════════ -->
     @if (isLoading)
     {
@@ -159,24 +178,76 @@
             }
         </div>
     }
+    else if (viewMode == "kanban")
+    {
+        <!-- ── Kanban Board ── -->
+        <div class="portal-kanban-board" id="submissions-kanban" role="region" aria-label="Submissions kanban board">
+            @foreach (var col in kanbanColumns)
+            {
+                var colCards = filteredSubmissions.Where(s => col.Statuses.Contains(s.Status)).ToList();
+                <div class="portal-kanban-column" data-column-id="@col.Id" role="group" aria-label="@col.Title column">
+                    <div class="portal-kanban-column-header">
+                        <span class="portal-kanban-column-title">@col.Title</span>
+                        <span class="portal-badge portal-badge-neutral portal-badge-sm">@colCards.Count</span>
+                    </div>
+                    @if (!colCards.Any())
+                    {
+                        <div class="portal-kanban-empty">No submissions</div>
+                    }
+                    @foreach (var sub in colCards)
+                    {
+                        <div class="portal-kanban-card" data-card-id="@sub.Id"
+                             role="button" tabindex="0"
+                             @onclick="() => ViewDetail(sub.Id)"
+                             @onkeydown="e => OnKanbanCardKey(e, sub.Id)"
+                             aria-label="@sub.ReturnCode — @sub.TemplateName, @GetStatusLabel(sub.Status)">
+                            <div class="portal-kanban-card-header">
+                                <span class="portal-table-primary portal-kanban-card-code">@sub.ReturnCode</span>
+                                <span class="portal-badge @GetStatusBadgeClass(sub.Status) portal-badge-xs">@GetStatusLabel(sub.Status)</span>
+                            </div>
+                            <div class="portal-kanban-card-name">@sub.TemplateName</div>
+                            <div class="portal-kanban-card-meta">
+                                <span>@sub.PeriodLabel</span>
+                                <span>·</span>
+                                <span>@sub.SubmittedAt.ToString("d MMM yyyy")</span>
+                            </div>
+                            @if (sub.ErrorCount > 0 || sub.WarningCount > 0)
+                            {
+                                <div class="portal-kanban-card-counts">
+                                    @if (sub.ErrorCount > 0)
+                                    {
+                                        <span class="portal-text-danger-bold">@sub.ErrorCount err</span>
+                                    }
+                                    @if (sub.WarningCount > 0)
+                                    {
+                                        <span class="portal-text-warning-bold">@sub.WarningCount warn</span>
+                                    }
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    }
     else
     {
-        <!-- Desktop Table -->
+        <!-- ── Desktop Table ── -->
         <div class="portal-card portal-card-flush portal-hide-mobile">
             <div class="portal-table-container">
-                <table class="portal-table" aria-label="Submissions list">
+                <table class="portal-table" id="submissions-table" aria-label="Submissions list">
                     <thead>
                         <tr>
-                            <th>ID</th>
-                            <th>Return Code</th>
-                            <th>Return Name</th>
-                            <th>Period</th>
-                            <th>Submitted</th>
-                            <th>Status</th>
-                            <th class="portal-th-num">Errors</th>
-                            <th class="portal-th-num">Warnings</th>
-                            <th class="portal-th-num">Duration</th>
-                            <th class="portal-th-center">Actions</th>
+                            <th data-col-id="id">ID</th>
+                            <th data-col-id="returncode">Return Code</th>
+                            <th data-col-id="name">Return Name</th>
+                            <th data-col-id="period">Period</th>
+                            <th data-col-id="submitted">Submitted</th>
+                            <th data-col-id="status">Status</th>
+                            <th class="portal-th-num" data-col-id="errors">Errors</th>
+                            <th class="portal-th-num" data-col-id="warnings">Warnings</th>
+                            <th class="portal-th-num" data-col-id="duration">Duration</th>
+                            <th class="portal-th-center" data-col-id="actions">Actions</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -316,6 +387,8 @@
     private string filterStatus = "";
     private string filterReturnCode = "";
     private string sortBy = "date-desc";
+    private string viewMode = "table";
+    private bool colReorderInitialized = false;
 
     private int currentPage = 1;
     private const int pageSize = 20;
@@ -324,12 +397,63 @@
     private List<SubmissionListItem> pagedSubmissions =>
         filteredSubmissions.Skip((currentPage - 1) * pageSize).Take(pageSize).ToList();
 
+    private static readonly KanbanColumnDef[] kanbanColumns =
+    [
+        new("draft",      "Draft",        ["Draft"]),
+        new("processing", "Processing",   ["Parsing", "Validating"]),
+        new("review",     "Pending Review", ["PendingApproval"]),
+        new("accepted",   "Accepted",     ["Accepted", "AcceptedWithWarnings"]),
+        new("rejected",   "Rejected",     ["Rejected", "ApprovalRejected", "Historical"])
+    ];
+
     [CascadingParameter]
     private Task<AuthenticationState>? AuthState { get; set; }
 
     protected override async Task OnInitializedAsync()
     {
         await LoadSubmissions();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!isLoading && viewMode == "table" && !colReorderInitialized && filteredSubmissions.Any())
+        {
+            colReorderInitialized = true;
+            await DragDrop.InitColumnReorder("#submissions-table", new
+            {
+                storageKey = "fc-table-cols-submissions"
+            });
+        }
+    }
+
+    private async Task SetView(string mode)
+    {
+        if (viewMode == mode) return;
+        viewMode = mode;
+        colReorderInitialized = false;
+        StateHasChanged();
+
+        if (mode == "kanban")
+        {
+            await Task.Yield(); // let Blazor render kanban DOM first
+            await DragDrop.InitKanban("#submissions-kanban", ".portal-kanban-column",
+                ".portal-kanban-card", new
+                {
+                    storageKey = "fc-kanban-submissions"
+                });
+        }
+    }
+
+    private void OnKanbanCardKey(KeyboardEventArgs e, int submissionId)
+    {
+        if (e.Key == "Enter" || e.Key == " ")
+            ViewDetail(submissionId);
+    }
+
+    public void Dispose()
+    {
+        _ = DragDrop.Destroy("submissions-kanban");
+        _ = DragDrop.Destroy("submissions-table");
     }
 
     private async Task LoadSubmissions()
@@ -508,4 +632,6 @@
         public int WarningCount { get; set; }
         public int? ProcessingDurationMs { get; set; }
     }
+
+    private record KanbanColumnDef(string Id, string Title, string[] Statuses);
 }

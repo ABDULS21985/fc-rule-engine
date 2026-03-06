@@ -207,13 +207,47 @@
         @* ── Mobile Cards ── *@
         @if (Responsive)
         {
-            <div class="fc-dt-cards" aria-hidden="true">
+            var primaryCols   = visibleCols.Where(c => c.MobilePriority <= 1).ToList();
+            var secondaryCols = visibleCols.Where(c => c.MobilePriority > 1).ToList();
+            var hasSwipe      = OnSwipeRight.HasDelegate || OnSwipeLeft.HasDelegate;
+
+            <div class="fc-dt-cards" id="@(_tableId + "-cards")" aria-hidden="true">
                 @foreach (var item in pagedItems)
                 {
-                    var localItem = item;
+                    var localItem     = item;
                     var isRowSelected = _selectedItems.Contains(item);
+
                     <div class="fc-dt-card @(Clickable || OnRowClick.HasDelegate ? "fc-dt-card--clickable" : "") @(isRowSelected ? "fc-dt-card--selected" : "") @(RowClass?.Invoke(item) ?? "")"
-                         @onclick="async () => await HandleRowClick(localItem)">
+                         @onclick="async () => await HandleRowClick(localItem)"
+                         data-swipeable="@(hasSwipe ? "true" : null)">
+
+                        @* Swipe-right action reveal (e.g. View / Open) *@
+                        @if (OnSwipeRight.HasDelegate)
+                        {
+                            <div class="fc-dt-card-swipe-right" aria-hidden="true">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+                                     stroke-linecap="round" stroke-linejoin="round" width="16" height="16" aria-hidden="true">
+                                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                                    <circle cx="12" cy="12" r="3"/>
+                                </svg>
+                                <span>@SwipeRightLabel</span>
+                            </div>
+                        }
+
+                        @* Swipe-left action reveal (e.g. Delete / Archive) *@
+                        @if (OnSwipeLeft.HasDelegate)
+                        {
+                            <div class="fc-dt-card-swipe-left" aria-hidden="true">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+                                     stroke-linecap="round" stroke-linejoin="round" width="16" height="16" aria-hidden="true">
+                                    <polyline points="3 6 5 6 21 6"/>
+                                    <path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/>
+                                </svg>
+                                <span>@SwipeLeftLabel</span>
+                            </div>
+                        }
+
+                        @* Checkbox *@
                         @if (Selectable)
                         {
                             <div class="fc-dt-card-select">
@@ -222,7 +256,9 @@
                                        @onclick:stopPropagation="true" />
                             </div>
                         }
-                        @foreach (var col in visibleCols.Where(c => c.MobilePriority <= 1))
+
+                        @* Primary fields — always visible *@
+                        @foreach (var col in primaryCols)
                         {
                             <div class="fc-dt-card-row">
                                 <span class="fc-dt-card-label">@(col.MobileLabel ?? col.Title)</span>
@@ -231,6 +267,35 @@
                                 </span>
                             </div>
                         }
+
+                        @* Secondary fields — hidden until expanded *@
+                        @if (secondaryCols.Count > 0)
+                        {
+                            <div class="fc-dt-card-extra">
+                                <div class="fc-dt-card-extra-inner">
+                                    @foreach (var col in secondaryCols)
+                                    {
+                                        <div class="fc-dt-card-row">
+                                            <span class="fc-dt-card-label">@(col.MobileLabel ?? col.Title)</span>
+                                            <span class="fc-dt-card-value @col.CellClass">
+                                                @if (col.CellTemplate is not null) { @col.CellTemplate(item) }
+                                            </span>
+                                        </div>
+                                    }
+                                </div>
+                            </div>
+                            <button class="fc-dt-card-expand-btn" type="button"
+                                    aria-expanded="false"
+                                    onclick="(function(btn){var c=btn.closest('.fc-dt-card');c.classList.toggle('fc-dt-card--expanded');btn.setAttribute('aria-expanded',c.classList.contains('fc-dt-card--expanded'));btn.querySelector('span').textContent=c.classList.contains('fc-dt-card--expanded')?'Show less':'@(secondaryCols.Count) more detail@(secondaryCols.Count == 1 ? "" : "s")'})(this)"
+                                    @onclick:stopPropagation="true">
+                                <span>@secondaryCols.Count more detail@(secondaryCols.Count == 1 ? "" : "s")</span>
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+                                     stroke-linecap="round" stroke-linejoin="round" width="14" height="14" aria-hidden="true">
+                                    <polyline points="6 9 12 15 18 9"/>
+                                </svg>
+                            </button>
+                        }
+
                     </div>
                 }
             </div>
@@ -336,6 +401,18 @@
     /// <summary>Additional CSS class on the outer wrapper div.</summary>
     [Parameter] public string? WrapperClass { get; set; }
 
+    /// <summary>Label shown in the right-swipe action strip on mobile cards.</summary>
+    [Parameter] public string SwipeRightLabel { get; set; } = "View";
+
+    /// <summary>Label shown in the left-swipe action strip on mobile cards.</summary>
+    [Parameter] public string SwipeLeftLabel { get; set; } = "Delete";
+
+    /// <summary>Raised on mobile when the user swipes a card right. Receives the swiped item.</summary>
+    [Parameter] public EventCallback<TItem> OnSwipeRight { get; set; }
+
+    /// <summary>Raised on mobile when the user swipes a card left. Receives the swiped item.</summary>
+    [Parameter] public EventCallback<TItem> OnSwipeLeft { get; set; }
+
     // ── Internal State ──────────────────────────────────────────────────────────
 
     private readonly List<DataColumn<TItem>> _columns = new();
@@ -375,6 +452,12 @@
                 _dotnetRef = DotNetObjectReference.Create(this);
                 await JS.InvokeVoidAsync("dataTable.init", _tableId + "-tbl", _dotnetRef);
                 _jsInitialized = true;
+
+                // Mobile swipe (no-op on desktop — JS guards against it)
+                if (Responsive && (OnSwipeRight.HasDelegate || OnSwipeLeft.HasDelegate))
+                {
+                    await JS.InvokeVoidAsync("fcMobile.initCardSwipe", _tableId, _dotnetRef);
+                }
             }
             catch { /* JS not available (prerender) */ }
         }
@@ -525,6 +608,24 @@
     }
 
     // ── Keyboard Navigation (JS → .NET) ─────────────────────────────────────────
+
+    // ── Mobile Swipe (JS → .NET) ──────────────────────────────────────────
+
+    [JSInvokable]
+    public async Task OnMobileSwipeRight(int index)
+    {
+        var paged = GetPagedItems(GetSortedItems()).ToList();
+        if (index >= 0 && index < paged.Count)
+            await OnSwipeRight.InvokeAsync(paged[index]);
+    }
+
+    [JSInvokable]
+    public async Task OnMobileSwipeLeft(int index)
+    {
+        var paged = GetPagedItems(GetSortedItems()).ToList();
+        if (index >= 0 && index < paged.Count)
+            await OnSwipeLeft.InvokeAsync(paged[index]);
+    }
 
     [JSInvokable]
     public async Task HandleKeyNav(string key)

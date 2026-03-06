@@ -3,6 +3,7 @@
 @using FC.Engine.Domain.ValueObjects
 @inject ITenantBrandingService BrandingService
 @inject ITenantContext TenantContext
+@inject ILogger<LoginLayout> Logger
 
 <TenantThemeProvider />
 
@@ -70,9 +71,20 @@
 
     protected override async Task OnInitializedAsync()
     {
-        if (TenantContext.CurrentTenantId.HasValue)
+        if (!TenantContext.CurrentTenantId.HasValue)
+        {
+            return;
+        }
+
+        try
         {
             _branding = await BrandingService.GetBrandingConfig(TenantContext.CurrentTenantId.Value);
+        }
+        catch (Exception ex)
+        {
+            // Fall back to safe defaults so /login remains available even if branding lookup fails.
+            _branding = BrandingConfig.WithDefaults();
+            Logger.LogWarning(ex, "Failed to load tenant branding for login layout; using defaults.");
         }
     }
 }

@@ -6,7 +6,10 @@
 <div class="fc-toast-container" aria-live="polite" aria-label="Notifications">
     @foreach (var toast in ToastService.Toasts)
     {
-        <div class="fc-toast fc-toast-@GetVariantClass(toast.Variant)" role="status">
+        <div class="fc-toast fc-toast-@GetVariantClass(toast.Variant)"
+             role="@(toast.Variant is ToastVariant.Error or ToastVariant.Warning ? "alert" : "status")"
+             aria-live="@(toast.Variant is ToastVariant.Error or ToastVariant.Warning ? "assertive" : "polite")"
+             aria-atomic="true">
             <div class="fc-toast-icon" aria-hidden="true">
                 @switch (toast.Variant)
                 {

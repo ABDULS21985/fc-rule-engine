@@ -11142,3 +11142,240 @@ html {
         align-items: stretch;
     }
 }
+
+/* ══════════════════════════════════════════════════════════════════
+   DRAG-AND-DROP INTERACTIONS
+   ══════════════════════════════════════════════════════════════════ */
+
+/* ── Drag handles ───────────────────────────────────────────────── */
+.portal-drag-handle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: grab;
+    color: var(--cbn-text-secondary, #6b7280);
+    padding: 0.25rem;
+    border: none;
+    background: transparent;
+    border-radius: var(--radius-sm, 4px);
+    flex-shrink: 0;
+    transition: color 100ms, background 100ms;
+    touch-action: none;
+}
+.portal-drag-handle:hover {
+    color: var(--cbn-text, #111827);
+    background: rgba(0, 0, 0, 0.05);
+}
+.portal-drag-handle:active { cursor: grabbing; }
+.portal-drag-handle-sm { padding: 0.125rem; }
+.portal-drag-handle-card {
+    position: absolute;
+    top: 0.5rem;
+    right: 0.5rem;
+}
+
+/* ── Sortable item states ────────────────────────────────────────── */
+.portal-sortable-dragging {
+    opacity: 0.5;
+    transform: scale(0.98);
+    transition: none;
+}
+.portal-sortable-ghost {
+    opacity: 0.7;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+    transform: rotate(1deg);
+}
+.portal-sortable-placeholder {
+    border: 2px dashed var(--cbn-primary, #006B3F);
+    border-radius: var(--radius-lg, 8px);
+    background: rgba(0, 107, 63, 0.04);
+    min-height: 40px;
+    box-sizing: border-box;
+}
+
+/* ── Keyboard drag focus ─────────────────────────────────────────── */
+.portal-sortable-kbd-active {
+    outline: 2px solid var(--cbn-primary, #006B3F);
+    outline-offset: 2px;
+}
+
+/* ── Kanban board ────────────────────────────────────────────────── */
+.portal-kanban-board {
+    display: flex;
+    gap: 1rem;
+    overflow-x: auto;
+    padding-bottom: 1.25rem;
+    align-items: flex-start;
+}
+.portal-kanban-column {
+    min-width: 220px;
+    flex: 1;
+    background: var(--cbn-gray-50, #f9fafb);
+    border-radius: var(--radius-lg, 8px);
+    padding: 0.75rem;
+    border: 1px solid var(--cbn-border, #e5e7eb);
+}
+.portal-kanban-column-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.25rem 0.25rem 0.625rem;
+    margin-bottom: 0.25rem;
+    border-bottom: 1px solid var(--cbn-border, #e5e7eb);
+}
+.portal-kanban-column-title {
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: var(--cbn-text, #111827);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+.portal-kanban-empty {
+    font-size: 0.75rem;
+    color: var(--cbn-text-secondary, #6b7280);
+    text-align: center;
+    padding: 1rem 0.5rem;
+}
+.portal-kanban-card {
+    background: #fff;
+    border-radius: var(--radius-md, 6px);
+    padding: 0.625rem 0.75rem;
+    margin-bottom: 0.5rem;
+    border: 1px solid var(--cbn-border, #e5e7eb);
+    cursor: pointer;
+    transition: box-shadow 150ms, transform 150ms;
+    position: relative;
+}
+.portal-kanban-card:hover {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+    transform: translateY(-1px);
+}
+.portal-kanban-card:focus-visible {
+    outline: 2px solid var(--cbn-primary, #006B3F);
+    outline-offset: 2px;
+}
+.portal-kanban-card-dragging {
+    opacity: 0.5;
+    transform: scale(0.97);
+}
+.portal-kanban-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.25rem;
+}
+.portal-kanban-card-code {
+    font-weight: 600;
+    font-size: 0.8125rem;
+}
+.portal-kanban-card-name {
+    font-size: 0.75rem;
+    color: var(--cbn-text, #374151);
+    margin-bottom: 0.25rem;
+    line-height: 1.3;
+}
+.portal-kanban-card-meta {
+    font-size: 0.6875rem;
+    color: var(--cbn-text-secondary, #6b7280);
+    display: flex;
+    gap: 0.25rem;
+    flex-wrap: wrap;
+}
+.portal-kanban-card-counts {
+    display: flex;
+    gap: 0.5rem;
+    margin-top: 0.375rem;
+    font-size: 0.6875rem;
+}
+
+/* ── View toggle (table | kanban) ────────────────────────────────── */
+.portal-view-toggle {
+    display: inline-flex;
+    border: 1px solid var(--cbn-border, #e5e7eb);
+    border-radius: var(--radius-md, 6px);
+    overflow: hidden;
+}
+.portal-view-toggle-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.375rem 0.625rem;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    color: var(--cbn-text-secondary, #6b7280);
+    transition: background 100ms, color 100ms;
+}
+.portal-view-toggle-btn:hover {
+    background: var(--cbn-gray-50, #f9fafb);
+    color: var(--cbn-text, #111827);
+}
+.portal-view-toggle-btn-active {
+    background: var(--cbn-primary, #006B3F);
+    color: #fff;
+}
+.portal-view-toggle-btn-active:hover {
+    background: var(--cbn-primary, #006B3F);
+    color: #fff;
+}
+
+/* ── Column reorder ──────────────────────────────────────────────── */
+.portal-th-draggable {
+    cursor: grab;
+    user-select: none;
+}
+.portal-th-draggable:active { cursor: grabbing; }
+.portal-th-dragging { opacity: 0.5; }
+.portal-th-drop-indicator {
+    border-left: 2px solid var(--cbn-primary, #006B3F);
+}
+
+/* ── Enhanced file drop zone ─────────────────────────────────────── */
+.portal-drop-zone-active {
+    border-color: var(--cbn-primary, #006B3F) !important;
+    background: rgba(0, 107, 63, 0.03);
+}
+.portal-drop-zone-invalid {
+    border-color: var(--cbn-danger, #ef4444) !important;
+    background: rgba(239, 68, 68, 0.03);
+}
+.portal-bulk-dropzone-pulse {
+    animation: portalDropPulse 1s ease-in-out infinite;
+}
+@keyframes portalDropPulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(0, 107, 63, 0.2); }
+    50% { box-shadow: 0 0 0 12px rgba(0, 107, 63, 0); }
+}
+.portal-dropzone-count {
+    display: inline-block;
+    margin-top: 0.5rem;
+    padding: 0.25rem 0.625rem;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    background: var(--cbn-primary, #006B3F);
+    color: #fff;
+}
+
+/* ── Template fields toolbar ─────────────────────────────────────── */
+.portal-tmpl-fields-toolbar {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    margin-bottom: 1rem;
+}
+
+/* ── Module card relative (for drag handle positioning) ─────────── */
+.portal-card { position: relative; }
+
+/* ── Reduced motion overrides ────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+    .portal-sortable-dragging,
+    .portal-sortable-ghost,
+    .portal-kanban-card:hover {
+        transform: none;
+        animation: none;
+    }
+    .portal-bulk-dropzone-pulse { animation: none; }
+}

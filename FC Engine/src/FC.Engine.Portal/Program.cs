@@ -5,6 +5,7 @@ using FC.Engine.Domain.Enums;
 using FC.Engine.Domain.Models;
 using FC.Engine.Infrastructure;
 using FC.Engine.Infrastructure.Auth;
+using FC.Engine.Infrastructure.DragDrop;
 using FC.Engine.Infrastructure.Hubs;
 using FC.Engine.Infrastructure.Middleware;
 using FC.Engine.Infrastructure.MultiTenancy;
@@ -30,6 +31,9 @@ builder.Services.AddScoped<IngestionOrchestrator>();
 builder.Services.AddScoped<ValidationOrchestrator>();
 builder.Services.AddScoped<TemplateService>();
 builder.Services.AddScoped<InstitutionAuthService>();
+
+// Infrastructure interop services
+builder.Services.AddScoped<DragDropInterop>();
 
 // UI services
 builder.Services.AddScoped<FC.Engine.Portal.Services.ToastService>();

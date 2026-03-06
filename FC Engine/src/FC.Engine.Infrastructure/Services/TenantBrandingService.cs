@@ -1,9 +1,11 @@
 using FC.Engine.Domain.Abstractions;
+using FC.Engine.Domain.Enums;
 using FC.Engine.Domain.ValueObjects;
 using FC.Engine.Infrastructure.Metadata;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.DependencyInjection;
+using System.Text.Json;
 
 namespace FC.Engine.Infrastructure.Services;
 
@@ -21,22 +23,26 @@ public class TenantBrandingService : ITenantBrandingService
 
     private const long MaxAssetSizeBytes = 2 * 1024 * 1024;
     private static readonly TimeSpan CacheTtl = TimeSpan.FromMinutes(30);
+    private static readonly SubscriptionStatus[] ActiveSubscriptionStatuses =
+    {
+        SubscriptionStatus.Active,
+        SubscriptionStatus.Trial,
+        SubscriptionStatus.PastDue,
+        SubscriptionStatus.Suspended
+    };
 
-    private readonly MetadataDbContext _db;
     private readonly IMemoryCache _cache;
     private readonly IFileStorageService _storage;
-    private readonly IServiceProvider _serviceProvider;
+    private readonly IServiceScopeFactory _scopeFactory;
 
     public TenantBrandingService(
-        MetadataDbContext db,
         IMemoryCache cache,
         IFileStorageService storage,
-        IServiceProvider serviceProvider)
+        IServiceScopeFactory scopeFactory)
     {
-        _db = db;
         _cache = cache;
         _storage = storage;
-        _serviceProvider = serviceProvider;
+        _scopeFactory = scopeFactory;
     }
 
     public async Task<BrandingConfig> GetBrandingConfig(Guid tenantId, CancellationToken ct = default)
@@ -47,7 +53,10 @@ public class TenantBrandingService : ITenantBrandingService
             return cached;
         }
 
-        var tenant = await _db.Tenants
+        await using var scope = _scopeFactory.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<MetadataDbContext>();
+
+        var tenant = await db.Tenants
             .AsNoTracking()
             .FirstOrDefaultAsync(t => t.TenantId == tenantId, ct);
 
@@ -56,12 +65,10 @@ public class TenantBrandingService : ITenantBrandingService
             && tenant.ParentTenantId.HasValue
             && string.IsNullOrWhiteSpace(tenant.BrandingConfig))
         {
-            var subscriptionService = _serviceProvider.GetService<ISubscriptionService>();
-            var hasCustomBranding = subscriptionService is not null
-                && await subscriptionService.HasFeature(tenantId, "custom_branding", ct);
+            var hasCustomBranding = await HasFeature(db, tenantId, "custom_branding", ct);
             if (!hasCustomBranding)
             {
-                var parentTenant = await _db.Tenants
+                var parentTenant = await db.Tenants
                     .AsNoTracking()
                     .FirstOrDefaultAsync(t => t.TenantId == tenant.ParentTenantId.Value, ct);
 
@@ -82,15 +89,16 @@ public class TenantBrandingService : ITenantBrandingService
 
     public async Task UpdateBrandingConfig(Guid tenantId, BrandingConfig config, CancellationToken ct = default)
     {
-        var tenant = await _db.Tenants
+        await using var scope = _scopeFactory.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<MetadataDbContext>();
+
+        var tenant = await db.Tenants
             .FirstOrDefaultAsync(t => t.TenantId == tenantId, ct)
             ?? throw new InvalidOperationException($"Tenant {tenantId} not found");
 
         if (tenant.ParentTenantId.HasValue)
         {
-            var subscriptionService = _serviceProvider.GetService<ISubscriptionService>();
-            var hasCustomBranding = subscriptionService is not null
-                && await subscriptionService.HasFeature(tenantId, "custom_branding", ct);
+            var hasCustomBranding = await HasFeature(db, tenantId, "custom_branding", ct);
             if (!hasCustomBranding)
             {
                 throw new InvalidOperationException("Custom branding is managed by your white-label partner for this plan.");
@@ -100,7 +108,7 @@ public class TenantBrandingService : ITenantBrandingService
         ValidateConfig(config);
 
         tenant.SetBrandingConfig(config);
-        await _db.SaveChangesAsync(ct);
+        await db.SaveChangesAsync(ct);
 
         _cache.Remove(BuildCacheKey(tenantId));
     }
@@ -115,6 +123,21 @@ public class TenantBrandingService : ITenantBrandingService
 
         var config = await GetBrandingConfig(tenantId, ct);
         config.LogoUrl = url;
+
+        await UpdateBrandingConfig(tenantId, config, ct);
+        return url;
+    }
+
+    public async Task<string> UploadCompactLogo(Guid tenantId, Stream fileStream, string fileName, string contentType, CancellationToken ct = default)
+    {
+        await using var uploadStream = await PrepareAssetStream(fileStream, contentType, ct);
+
+        var extension = ResolveExtension(fileName, contentType, ".png");
+        var path = $"tenants/{tenantId}/branding/logo-compact{extension}";
+        var url = await _storage.UploadAsync(path, uploadStream, contentType, ct);
+
+        var config = await GetBrandingConfig(tenantId, ct);
+        config.LogoSmallUrl = url;
 
         await UpdateBrandingConfig(tenantId, config, ct);
         return url;
@@ -142,6 +165,59 @@ public class TenantBrandingService : ITenantBrandingService
     }
 
     private static string BuildCacheKey(Guid tenantId) => $"branding:{tenantId}";
+
+    private static async Task<bool> HasFeature(MetadataDbContext db, Guid tenantId, string featureCode, CancellationToken ct)
+    {
+        if (tenantId == Guid.Empty || string.IsNullOrWhiteSpace(featureCode))
+        {
+            return false;
+        }
+
+        var featureBlob = await db.Subscriptions
+            .AsNoTracking()
+            .Where(s => s.TenantId == tenantId && ActiveSubscriptionStatuses.Contains(s.Status))
+            .Join(
+                db.SubscriptionPlans.AsNoTracking(),
+                s => s.PlanId,
+                p => p.Id,
+                (s, p) => new { s.UpdatedAt, p.Features })
+            .OrderByDescending(x => x.UpdatedAt)
+            .Select(x => x.Features)
+            .FirstOrDefaultAsync(ct);
+
+        return ContainsFeature(featureBlob, featureCode);
+    }
+
+    private static bool ContainsFeature(string? featureBlob, string featureCode)
+    {
+        if (string.IsNullOrWhiteSpace(featureBlob) || string.IsNullOrWhiteSpace(featureCode))
+        {
+            return false;
+        }
+
+        var target = featureCode.Trim();
+        var trimmed = featureBlob.Trim();
+
+        if (trimmed.StartsWith("[", StringComparison.Ordinal))
+        {
+            try
+            {
+                var parsed = JsonSerializer.Deserialize<List<string>>(trimmed);
+                if (parsed is not null && parsed.Any(f => string.Equals(f, target, StringComparison.OrdinalIgnoreCase)))
+                {
+                    return true;
+                }
+            }
+            catch
+            {
+                // Fall through to delimiter parsing for malformed payloads.
+            }
+        }
+
+        return trimmed
+            .Split([',', ';', '|', '\n', '\r'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Any(f => string.Equals(f, target, StringComparison.OrdinalIgnoreCase));
+    }
 
     private static async Task<Stream> PrepareAssetStream(Stream fileStream, string contentType, CancellationToken ct)
     {
@@ -207,6 +283,8 @@ public class TenantBrandingService : ITenantBrandingService
         ValidateHexOrEmpty(config.WarningColor, nameof(config.WarningColor));
         ValidateHexOrEmpty(config.BackgroundColor, nameof(config.BackgroundColor));
         ValidateHexOrEmpty(config.SidebarColor, nameof(config.SidebarColor));
+        ValidateHexOrEmpty(config.EmailHeaderColor, nameof(config.EmailHeaderColor));
+        ValidateHexOrEmpty(config.EmailBodyBackground, nameof(config.EmailBodyBackground));
     }
 
     private static void ValidateHexOrEmpty(string? value, string field)

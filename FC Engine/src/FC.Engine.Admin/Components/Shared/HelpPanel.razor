@@ -1,0 +1,195 @@
+@inject HelpService Help
+@inject NavigationManager Navigation
+@implements IDisposable
+
+@* Right slide-out help panel. Always rendered (CSS visibility toggled). *@
+
+@* ── Backdrop ─────────────────────────────────────────────────────────────── *@
+<div class="fc-help-panel-backdrop @(Help.IsPanelOpen ? "fc-help-panel-backdrop--visible" : "")"
+     @onclick="Help.ClosePanel"
+     aria-hidden="true"></div>
+
+@* ── Panel ────────────────────────────────────────────────────────────────── *@
+<aside class="fc-help-panel @(Help.IsPanelOpen ? "fc-help-panel--open" : "")"
+       id="fc-help-panel"
+       role="complementary"
+       aria-label="Help"
+       aria-hidden="@(!Help.IsPanelOpen ? "true" : "false")">
+
+    @* Header *@
+    <div class="fc-help-panel__header">
+        <div class="fc-help-panel__header-left">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                 stroke-linecap="round" stroke-linejoin="round" width="18" height="18" aria-hidden="true">
+                <circle cx="12" cy="12" r="10"/>
+                <path d="M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3"/>
+                <line x1="12" y1="17" x2="12.01" y2="17"/>
+            </svg>
+            <span class="fc-help-panel__title">Help</span>
+        </div>
+        <button class="fc-help-panel__close"
+                @onclick="Help.ClosePanel"
+                aria-label="Close help panel">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                 stroke-linecap="round" stroke-linejoin="round" width="16" height="16" aria-hidden="true">
+                <line x1="18" y1="6" x2="6" y2="18"/>
+                <line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+        </button>
+    </div>
+
+    @* Search *@
+    <div class="fc-help-panel__search">
+        <svg class="fc-help-panel__search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14" aria-hidden="true">
+            <circle cx="11" cy="11" r="8"/>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+        </svg>
+        <input class="fc-help-panel__search-input"
+               type="search"
+               placeholder="Search help articles…"
+               aria-label="Search help articles"
+               autocomplete="off"
+               @bind="_query"
+               @bind:event="oninput" />
+    </div>
+
+    @* Body *@
+    <div class="fc-help-panel__body">
+        @{
+            var path = new Uri(Navigation.Uri).AbsolutePath;
+            var articles = Help.GetArticlesForPage(path);
+            var tourId   = Help.GetTourIdForPath(path);
+
+            var filtered = string.IsNullOrWhiteSpace(_query)
+                ? articles
+                : articles
+                    .Where(a =>
+                        a.Title.Contains(_query, StringComparison.OrdinalIgnoreCase) ||
+                        System.Text.RegularExpressions.Regex.Replace(a.Body, "<[^>]+>", "")
+                            .Contains(_query, StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+        }
+
+        @* Guided tour button *@
+        @if (tourId != null && string.IsNullOrWhiteSpace(_query))
+        {
+            <button class="fc-help-panel__tour-btn" @onclick="() => StartTour(tourId)">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                     stroke-linecap="round" stroke-linejoin="round" width="16" height="16" aria-hidden="true">
+                    <polygon points="5 3 19 12 5 21 5 3"/>
+                </svg>
+                <span>Take a guided tour of this page</span>
+                <svg class="fc-help-panel__tour-btn-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                     stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14" aria-hidden="true">
+                    <line x1="5" y1="12" x2="19" y2="12"/>
+                    <polyline points="12 5 19 12 12 19"/>
+                </svg>
+            </button>
+        }
+
+        @* Articles section *@
+        <div class="fc-help-panel__section-label">Help Articles</div>
+
+        @if (filtered.Any())
+        {
+            @foreach (var article in filtered)
+            {
+                var isOpen = _openArticleId == article.Id;
+                <div class="fc-help-article @(isOpen ? "fc-help-article--open" : "")">
+                    <button class="fc-help-article__header"
+                            @onclick="() => ToggleArticle(article.Id)"
+                            aria-expanded="@isOpen">
+                        <span class="fc-help-article__title">@article.Title</span>
+                        <svg class="fc-help-article__chevron" viewBox="0 0 24 24" fill="none"
+                             stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                             stroke-linejoin="round" width="12" height="12" aria-hidden="true">
+                            <polyline points="6 9 12 15 18 9"/>
+                        </svg>
+                    </button>
+                    @if (isOpen)
+                    {
+                        <div class="fc-help-article__body">
+                            <p>@((MarkupString)article.Body)</p>
+                            @if (article.VideoUrl != null)
+                            {
+                                <div class="fc-help-article__video">
+                                    <div class="fc-help-article__video-wrap">
+                                        <iframe src="@article.VideoUrl"
+                                                title="@article.Title tutorial video"
+                                                frameborder="0"
+                                                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                                                allowfullscreen
+                                                loading="lazy"></iframe>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+            }
+        }
+        else
+        {
+            <div class="fc-help-panel__empty">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"
+                     width="32" height="32" aria-hidden="true">
+                    <circle cx="11" cy="11" r="8"/>
+                    <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                </svg>
+                <span>No articles found for "@_query"</span>
+            </div>
+        }
+    </div>
+
+    @* Footer *@
+    <div class="fc-help-panel__footer">
+        <button class="fc-help-panel__footer-btn" @onclick="OpenShortcuts">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"
+                 stroke-linecap="round" stroke-linejoin="round" width="15" height="15" aria-hidden="true">
+                <rect x="2" y="4" width="20" height="16" rx="2"/>
+                <path d="M8 10h.01M12 10h.01M16 10h.01M8 14h8"/>
+            </svg>
+            <span>Keyboard shortcuts</span>
+            <kbd class="fc-help-panel__kbd">?</kbd>
+        </button>
+        <button class="fc-help-panel__footer-btn" @onclick="ShowWhatsNew">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"
+                 stroke-linecap="round" stroke-linejoin="round" width="15" height="15" aria-hidden="true">
+                <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+            </svg>
+            <span>What's new in v@Help.CurrentVersion</span>
+        </button>
+    </div>
+</aside>
+
+@code {
+    private string _query = "";
+    private string? _openArticleId;
+
+    protected override void OnInitialized() => Help.OnChanged += OnHelpChanged;
+
+    private void OnHelpChanged() => InvokeAsync(StateHasChanged);
+
+    private void ToggleArticle(string id) => _openArticleId = _openArticleId == id ? null : id;
+
+    private void StartTour(string tourId)
+    {
+        Help.ClosePanel();
+        Help.StartTour(tourId);
+    }
+
+    private void OpenShortcuts()
+    {
+        Help.ClosePanel();
+        Help.OpenShortcutOverlay();
+    }
+
+    private void ShowWhatsNew()
+    {
+        Help.ClosePanel();
+        Help.ShowWhatsNew();
+    }
+
+    public void Dispose() => Help.OnChanged -= OnHelpChanged;
+}

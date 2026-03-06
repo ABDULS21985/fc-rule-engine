@@ -1,0 +1,96 @@
+@*
+    MobileBottomNav — Fixed bottom tab bar, visible only on ≤640 px screens.
+    5 tabs: Dashboard, Templates, Submissions, Modules, More (opens sidebar).
+*@
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.AspNetCore.Components.Routing
+
+<AuthorizeView>
+    <Authorized>
+        <nav class="fc-mobile-nav" role="navigation" aria-label="Mobile navigation">
+
+            @* Dashboard *@
+            <NavLink href="/"
+                     Match="NavLinkMatch.All"
+                     class="fc-mobile-nav__tab"
+                     aria-label="Dashboard">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                     stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                     width="22" height="22" aria-hidden="true">
+                    <rect x="3" y="3" width="7" height="7"/>
+                    <rect x="14" y="3" width="7" height="7"/>
+                    <rect x="14" y="14" width="7" height="7"/>
+                    <rect x="3" y="14" width="7" height="7"/>
+                </svg>
+                <span>Dashboard</span>
+            </NavLink>
+
+            @* Templates *@
+            <NavLink href="/templates"
+                     class="fc-mobile-nav__tab"
+                     aria-label="Templates">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                     stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                     width="22" height="22" aria-hidden="true">
+                    <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
+                    <polyline points="14 2 14 8 20 8"/>
+                    <line x1="16" y1="13" x2="8" y2="13"/>
+                    <line x1="16" y1="17" x2="8" y2="17"/>
+                </svg>
+                <span>Templates</span>
+            </NavLink>
+
+            @* Submissions *@
+            <NavLink href="/submissions"
+                     class="fc-mobile-nav__tab"
+                     aria-label="Submissions">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                     stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                     width="22" height="22" aria-hidden="true">
+                    <polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/>
+                    <path d="M5.45 5.11L2 12v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.45-6.89A2 2 0 0016.76 4H7.24a2 2 0 00-1.79 1.11z"/>
+                </svg>
+                <span>Submissions</span>
+            </NavLink>
+
+            @* Modules *@
+            <NavLink href="/modules"
+                     class="fc-mobile-nav__tab"
+                     aria-label="Module Registry">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                     stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                     width="22" height="22" aria-hidden="true">
+                    <rect x="2" y="2" width="8" height="8" rx="1"/>
+                    <rect x="14" y="2" width="8" height="8" rx="1"/>
+                    <rect x="2" y="14" width="8" height="8" rx="1"/>
+                    <rect x="14" y="14" width="8" height="8" rx="1"/>
+                </svg>
+                <span>Modules</span>
+            </NavLink>
+
+            @* More — opens the sidebar overlay *@
+            <button class="fc-mobile-nav__tab"
+                    type="button"
+                    @onclick="HandleMoreClick"
+                    aria-label="More navigation options"
+                    aria-haspopup="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                     stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                     width="22" height="22" aria-hidden="true">
+                    <line x1="3" y1="6" x2="21" y2="6"/>
+                    <line x1="3" y1="12" x2="21" y2="12"/>
+                    <line x1="3" y1="18" x2="21" y2="18"/>
+                </svg>
+                <span>More</span>
+            </button>
+
+        </nav>
+    </Authorized>
+</AuthorizeView>
+
+@code {
+    /// <summary>Raised when the "More" tab is tapped — parent should open the sidebar.</summary>
+    [Parameter] public EventCallback OnMoreClicked { get; set; }
+
+    private Task HandleMoreClick() => OnMoreClicked.InvokeAsync();
+}

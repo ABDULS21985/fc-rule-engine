@@ -1,0 +1,55 @@
+@* ================================================================
+   HelpTooltip — Inline (?) icon that shows an explanatory popover.
+
+   Usage:
+     <label>Formula Type <HelpTooltip Text="Determines how the formula is evaluated…" /></label>
+     <label>Period <HelpTooltip Text="The reporting quarter for this return." Placement="right" /></label>
+   ================================================================ *@
+
+<span class="fc-ht @CssClass" @onmouseenter="Show" @onmouseleave="Hide" @onfocus="Show" @onblur="Hide" tabindex="-1">
+    <button class="fc-ht__icon"
+            type="button"
+            aria-label="Help: @(StripHtml(Text))"
+            aria-describedby="@_id"
+            @onmouseenter="Show"
+            @onmouseleave="Hide"
+            @onfocus="Show"
+            @onblur="Hide">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round" width="14" height="14" aria-hidden="true">
+            <circle cx="12" cy="12" r="10"/>
+            <path d="M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3"/>
+            <line x1="12" y1="17" x2="12.01" y2="17"/>
+        </svg>
+    </button>
+
+    @if (_visible)
+    {
+        <div class="fc-ht__popover fc-ht__popover--@Placement" id="@_id" role="tooltip">
+            @((MarkupString)Text)
+        </div>
+    }
+</span>
+
+@code {
+    /// <summary>HTML or plain text shown in the popover.</summary>
+    [Parameter, EditorRequired] public string Text { get; set; } = "";
+
+    /// <summary>Popover placement relative to the icon.</summary>
+    [Parameter] public string Placement { get; set; } = "top"; // top | bottom | left | right
+
+    /// <summary>Extra CSS class for the wrapper.</summary>
+    [Parameter] public string? CssClass { get; set; }
+
+    private bool _visible;
+    private readonly string _id = $"fc-ht-{Guid.NewGuid():N}";
+
+    private void Show() => _visible = true;
+    private void Hide() => _visible = false;
+
+    private static string StripHtml(string html)
+    {
+        if (string.IsNullOrEmpty(html)) return "";
+        return System.Text.RegularExpressions.Regex.Replace(html, "<[^>]+>", "");
+    }
+}

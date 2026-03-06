@@ -1,7 +1,9 @@
 @page "/templates/{ReturnCode}"
 @attribute [Authorize(Policy = "InstitutionUser")]
+@using FC.Engine.Infrastructure.DragDrop
 @inject NavigationManager Navigation
 @inject IJSRuntime JS
+@inject DragDropInterop DragDrop
 
 <PageTitle>@(template?.ReturnCode ?? "Template") — FC Engine Portal</PageTitle>
 
@@ -117,8 +119,25 @@
             @if (activeTab == "fields")
             {
                 <div role="tabpanel" aria-label="Template fields">
+                    <div class="portal-tmpl-fields-toolbar">
+                        <button class="portal-btn portal-btn-ghost portal-btn-sm @(customizeFieldView ? "portal-btn-active" : "")"
+                                @onclick="ToggleCustomizeView"
+                                title="@(customizeFieldView ? "Exit customize mode" : "Drag rows to customize field order")">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="9" cy="5" r="1.5"/><circle cx="15" cy="5" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="19" r="1.5"/><circle cx="15" cy="19" r="1.5"/></svg>
+                            @(customizeFieldView ? "Done" : "Customize View")
+                        </button>
+                        @if (customizeFieldView)
+                        {
+                            <button class="portal-btn portal-btn-ghost portal-btn-sm portal-btn-danger-ghost" @onclick="ResetFieldOrder">
+                                Reset Order
+                            </button>
+                        }
+                    </div>
+
+                    @{ int sectionIdx = 0; }
                     @foreach (var sectionGroup in template.Fields.GroupBy(f => f.SectionName))
                     {
+                        var tableId = $"field-table-{sectionIdx++}";
                         <div class="portal-tmpl-section">
                             <h3 class="portal-tmpl-section-title">
                                 @sectionGroup.Key
@@ -126,9 +145,13 @@
                             </h3>
                             <div class="portal-card portal-card-flush">
                                 <div class="portal-table-responsive">
-                                    <table class="portal-table" aria-label="@sectionGroup.Key fields">
+                                    <table class="portal-table" id="@tableId" aria-label="@sectionGroup.Key fields">
                                         <thead>
                                             <tr>
+                                                @if (customizeFieldView)
+                                                {
+                                                    <th style="width: 32px;" aria-hidden="true"></th>
+                                                }
                                                 <th>Field Name</th>
                                                 <th>Display Name</th>
                                                 <th>XML Element</th>
@@ -140,7 +163,15 @@
                                         <tbody>
                                             @foreach (var field in sectionGroup)
                                             {
-                                                <tr>
+                                                <tr data-item-id="@field.FieldName">
+                                                    @if (customizeFieldView)
+                                                    {
+                                                        <td>
+                                                            <button class="portal-drag-handle portal-drag-handle-sm" title="Drag to reorder" aria-label="Drag to reorder" tabindex="0">
+                                                                <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="9" cy="5" r="1.5"/><circle cx="15" cy="5" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="19" r="1.5"/><circle cx="15" cy="19" r="1.5"/></svg>
+                                                            </button>
+                                                        </td>
+                                                    }
                                                     <td class="portal-table-mono">@field.FieldName</td>
                                                     <td>@field.DisplayName</td>
                                                     <td class="portal-table-mono portal-text-muted">@field.XmlElementName</td>
@@ -443,6 +474,7 @@
     private bool isLoading = true;
     private TemplateDetailModel? template;
     private string activeTab = "fields";
+    private bool customizeFieldView = false;
 
     // Schema tab
     private bool isLoadingSchema;
@@ -673,5 +705,53 @@
         if (status == "ApprovalRejected") return "Approval Rejected";
         if (status == "PendingApproval") return "Pending Approval";
         return status;
+    }
+
+    // ── Field View Customization ──────────────────────────────────
+
+    private async Task ToggleCustomizeView()
+    {
+        customizeFieldView = !customizeFieldView;
+        StateHasChanged();
+
+        if (customizeFieldView)
+        {
+            await Task.Yield(); // let Blazor render handles first
+            if (template is null) return;
+            var sectionCount = template.Fields.GroupBy(f => f.SectionName).Count();
+            for (int i = 0; i < sectionCount; i++)
+            {
+                var storageKey = $"fc-tmpl-field-order-{ReturnCode}-s{i}";
+                await DragDrop.InitSortable($"#field-table-{i} tbody", "tr", new
+                {
+                    storageKey,
+                    handle = ".portal-drag-handle"
+                });
+            }
+        }
+        else
+        {
+            if (template is null) return;
+            var sectionCount = template.Fields.GroupBy(f => f.SectionName).Count();
+            for (int i = 0; i < sectionCount; i++)
+                await DragDrop.Destroy($"field-table-{i}");
+        }
+    }
+
+    private async Task ResetFieldOrder()
+    {
+        if (template is null) return;
+        var sectionCount = template.Fields.GroupBy(f => f.SectionName).Count();
+        for (int i = 0; i < sectionCount; i++)
+        {
+            try
+            {
+                await JS.InvokeVoidAsync("localStorage.removeItem",
+                    $"fc-tmpl-field-order-{ReturnCode}-s{i}");
+            }
+            catch { /* ignore */ }
+        }
+        customizeFieldView = false;
+        StateHasChanged();
     }
 }

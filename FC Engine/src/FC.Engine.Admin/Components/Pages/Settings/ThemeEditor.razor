@@ -1,0 +1,916 @@
+@page "/settings/theme"
+@attribute [Authorize]
+@using FC.Engine.Domain.Abstractions
+@using FC.Engine.Domain.ValueObjects
+@using Microsoft.AspNetCore.Components.Forms
+@using System.Text.Json
+@using System.IO
+@inject ITenantBrandingService BrandingService
+@inject ITenantContext TenantContext
+@inject ToastService Toast
+@inject IJSRuntime JS
+
+<PageTitle>Theme &amp; Branding</PageTitle>
+
+<PageHeader Title="Theme &amp; Branding"
+            Subtitle="Customize your portal's visual identity for white-label branding">
+    <PrimaryAction>
+        <button class="fc-btn fc-btn--gold" @onclick="SaveAsync" disabled="@_saving" type="button">
+            @if (_saving)
+            {
+                <svg class="fc-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15" aria-hidden="true">
+                    <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
+                </svg>
+                <span>Saving&hellip;</span>
+            }
+            else
+            {
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15" aria-hidden="true">
+                    <path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/>
+                </svg>
+                <span>Save Changes</span>
+            }
+        </button>
+    </PrimaryAction>
+    <SecondaryActions>
+        <button class="fc-btn fc-btn--outline" @onclick="ExportThemeAsync" type="button">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15" aria-hidden="true">
+                <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+            </svg>
+            Export
+        </button>
+        <label class="fc-btn fc-btn--outline" style="cursor:pointer;display:inline-flex;align-items:center;gap:0.375rem;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15" aria-hidden="true">
+                <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
+            </svg>
+            Import
+            <InputFile OnChange="ImportThemeAsync" accept=".json" style="display:none" />
+        </label>
+    </SecondaryActions>
+</PageHeader>
+
+<div class="fc-page">
+    @if (_loading)
+    {
+        <div style="display:grid;grid-template-columns:1fr 380px;gap:1.5rem;margin-bottom:1rem">
+            <div class="fc-card"><div class="fc-card__body"><div class="fc-skel" style="height:480px;border-radius:8px;"></div></div></div>
+            <div class="fc-card"><div class="fc-card__body"><div class="fc-skel" style="height:480px;border-radius:8px;"></div></div></div>
+        </div>
+    }
+    else if (_draft is not null)
+    {
+        <div class="fc-te">
+
+            @* ── Preset Gallery ─────────────────────────────────────────── *@
+            <div class="fc-card fc-te__presets-card">
+                <div class="fc-card__body fc-te__presets-body">
+                    <span class="fc-te__presets-label">Quick Presets</span>
+                    <div class="fc-te__presets-row">
+                        @foreach (var p in _presets)
+                        {
+                            <button class="fc-te__preset @(_draft.ThemePresetName == p.Name ? "fc-te__preset--active" : "")"
+                                    @onclick="() => ApplyPreset(p)" type="button" title="Apply @p.Name theme">
+                                <div class="fc-te__preset-palette">
+                                    <span style="background:@p.SidebarColor;"></span>
+                                    <span style="background:@p.PrimaryColor;"></span>
+                                    <span style="background:@p.SecondaryColor;"></span>
+                                </div>
+                                <span class="fc-te__preset-name">@p.Name</span>
+                            </button>
+                        }
+                    </div>
+                </div>
+            </div>
+
+            @* ── Editor / Preview workspace ──────────────────────────────── *@
+            <div class="fc-te__workspace">
+
+                @* ── Left: tabbed editor ─────────────────────────────────── *@
+                <div class="fc-te__editor-col">
+                    <div class="fc-card" style="height:100%">
+
+                        <div class="fc-te__tab-bar">
+                            @foreach (var (id, label) in new (string, string)[]
+                            {
+                                ("colors", "Colors"),
+                                ("fonts", "Fonts"),
+                                ("logos", "Logos"),
+                                ("login", "Login Page"),
+                                ("email", "Email"),
+                                ("advanced", "Advanced"),
+                            })
+                            {
+                                <button class="fc-tab @(_tab == id ? "fc-tab-active" : "")"
+                                        @onclick="() => _tab = id" type="button">@label</button>
+                            }
+                        </div>
+
+                        <div class="fc-card__body fc-te__tab-body">
+
+                            @* ═══════════════════════════════════════════════
+                               COLORS TAB
+                            ═══════════════════════════════════════════════ *@
+                            @if (_tab == "colors")
+                            {
+                                <div class="fc-te__section-heading">Brand Colors</div>
+
+                                <div class="fc-te__color-grid">
+                                    @RenderColorRow("Primary Color", "Buttons, active nav, links", _draft.PrimaryColor, v => _draft.PrimaryColor = v, "#FFFFFF", "White on Primary")
+                                    @RenderColorRow("Secondary Color", "Gold accent buttons", _draft.SecondaryColor, v => _draft.SecondaryColor = v, "#FFFFFF", "White on Secondary")
+                                    @RenderColorRow("Accent Color", "Info highlights, focus rings", _draft.AccentColor, v => _draft.AccentColor = v, "#FFFFFF", "White on Accent")
+                                </div>
+
+                                <div class="fc-te__section-heading" style="margin-top:1.5rem">State Colors</div>
+                                <div class="fc-te__color-grid">
+                                    @RenderColorRow("Danger", "Errors, destructive actions", _draft.DangerColor, v => _draft.DangerColor = v, "#FFFFFF", "White on Danger")
+                                    @RenderColorRow("Success", "Confirmations, approvals", _draft.SuccessColor, v => _draft.SuccessColor = v, "#FFFFFF", "White on Success")
+                                    @RenderColorRow("Warning", "Cautions, pending states", _draft.WarningColor, v => _draft.WarningColor = v, "#1F2937", "Dark on Warning")
+                                </div>
+
+                                <div class="fc-te__section-heading" style="margin-top:1.5rem">Layout Colors</div>
+                                <div class="fc-te__color-grid">
+                                    @RenderColorRow("Background", "Page & card surfaces", _draft.BackgroundColor, v => _draft.BackgroundColor = v, "#1F2937", "Dark text on Background")
+                                    @RenderColorRow("Sidebar", "Navigation sidebar", _draft.SidebarColor, v => _draft.SidebarColor = v, "#FFFFFF", "White on Sidebar")
+                                </div>
+
+                                @* Contrast summary grid *@
+                                <div class="fc-te__section-heading" style="margin-top:1.5rem">WCAG Contrast Summary</div>
+                                <div class="fc-te__contrast-grid">
+                                    @foreach (var ck in GetContrastChecks())
+                                    {
+                                        <div class="fc-te__contrast-item fc-te__contrast-item--@ck.CssClass">
+                                            <div class="fc-te__contrast-swatch" style="background:@ck.Bg;color:@ck.Fg;">Aa</div>
+                                            <div class="fc-te__contrast-detail">
+                                                <span class="fc-te__contrast-ratio">@ck.Ratio.ToString("F1"):1</span>
+                                                <span class="fc-te__contrast-lbl">@ck.Label</span>
+                                                <span class="fc-te__contrast-grade">WCAG @ck.Grade</span>
+                                            </div>
+                                        </div>
+                                    }
+                                </div>
+                            }
+
+                            @* ═══════════════════════════════════════════════
+                               FONTS TAB
+                            ═══════════════════════════════════════════════ *@
+                            @if (_tab == "fonts")
+                            {
+                                <div class="fc-te__section-heading">Heading Font</div>
+                                <div class="fc-te__font-row">
+                                    <select class="fc-te__font-select"
+                                            @onchange="e => { _draft.FontHeading = e.Value?.ToString(); _ = LoadFontAsync(_draft.FontHeading); }">
+                                        @foreach (var f in _fontOptions)
+                                        {
+                                            <option value="@f.Value" selected="@(f.Value == _draft.FontHeading)">@f.Label</option>
+                                        }
+                                    </select>
+                                    <div class="fc-te__font-preview-lg" style="font-family:'@_draft.FontHeading',sans-serif;">
+                                        AaBbCc 123
+                                    </div>
+                                </div>
+
+                                <div class="fc-te__section-heading" style="margin-top:1.5rem">Body Font</div>
+                                <div class="fc-te__font-row">
+                                    <select class="fc-te__font-select"
+                                            @onchange="e => { _draft.FontBody = e.Value?.ToString(); _ = LoadFontAsync(_draft.FontBody); }">
+                                        @foreach (var f in _fontOptions)
+                                        {
+                                            <option value="@f.Value" selected="@(f.Value == _draft.FontBody)">@f.Label</option>
+                                        }
+                                    </select>
+                                    <div class="fc-te__font-preview-sm" style="font-family:'@_draft.FontBody',sans-serif;">
+                                        The quick brown fox jumps over the lazy dog.
+                                    </div>
+                                </div>
+
+                                <div class="fc-te__font-sample" style="--fs-h:@_draft.FontHeading;--fs-b:@_draft.FontBody;--fs-primary:@_draft.PrimaryColor">
+                                    <h2 class="fc-te__font-sample-h">@(_draft.CompanyName ?? "Portal Name")</h2>
+                                    <p class="fc-te__font-sample-p">Your trusted platform for regulatory reporting and compliance management. Configure your experience to match your brand identity.</p>
+                                    <div class="fc-te__font-sample-meta">Dashboard &middot; Templates &middot; Submissions &middot; Analytics</div>
+                                </div>
+                            }
+
+                            @* ═══════════════════════════════════════════════
+                               LOGOS TAB
+                            ═══════════════════════════════════════════════ *@
+                            @if (_tab == "logos")
+                            {
+                                <div class="fc-te__section-heading">Primary Logo</div>
+                                <p class="fc-te__section-hint">Shown on the login page and in the main header. PNG or SVG, max 2 MB.</p>
+                                <div class="fc-te__logo-zone">
+                                    @if (!string.IsNullOrEmpty(_draft.LogoUrl))
+                                    {
+                                        <div class="fc-te__logo-preview">
+                                            <img src="@_draft.LogoUrl" alt="Primary logo" />
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        <div class="fc-te__logo-empty">
+                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" width="32" height="32" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+                                            <span>No logo set</span>
+                                        </div>
+                                    }
+                                    <div class="fc-te__logo-actions">
+                                        <InputFile OnChange="e => UploadLogoAsync(e, LogoType.Primary)" accept=".png,.svg,.jpg,.jpeg" style="display:none" id="upload-primary" />
+                                        <label for="upload-primary" class="fc-btn fc-btn--outline" style="cursor:pointer">
+                                            @(_uploadingLogo == LogoType.Primary ? "Uploading…" : "Upload Logo")
+                                        </label>
+                                        <input type="text" class="fc-te__url-input" value="@_draft.LogoUrl"
+                                               @onchange="e => _draft.LogoUrl = e.Value?.ToString()"
+                                               placeholder="Or paste URL…" />
+                                    </div>
+                                </div>
+
+                                <div class="fc-te__section-heading" style="margin-top:1.5rem">Compact Logo</div>
+                                <p class="fc-te__section-hint">Used in the collapsed sidebar. Square format recommended (48 &times; 48 px).</p>
+                                <div class="fc-te__logo-zone">
+                                    @if (!string.IsNullOrEmpty(_draft.LogoSmallUrl))
+                                    {
+                                        <div class="fc-te__logo-preview fc-te__logo-preview--compact">
+                                            <img src="@_draft.LogoSmallUrl" alt="Compact logo" />
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        <div class="fc-te__logo-empty fc-te__logo-empty--compact">
+                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" width="24" height="24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+                                        </div>
+                                    }
+                                    <div class="fc-te__logo-actions">
+                                        <InputFile OnChange="e => UploadLogoAsync(e, LogoType.Compact)" accept=".png,.svg,.jpg,.jpeg" style="display:none" id="upload-compact" />
+                                        <label for="upload-compact" class="fc-btn fc-btn--outline" style="cursor:pointer">
+                                            @(_uploadingLogo == LogoType.Compact ? "Uploading…" : "Upload Compact Logo")
+                                        </label>
+                                        <input type="text" class="fc-te__url-input" value="@_draft.LogoSmallUrl"
+                                               @onchange="e => _draft.LogoSmallUrl = e.Value?.ToString()"
+                                               placeholder="Or paste URL…" />
+                                    </div>
+                                </div>
+
+                                <div class="fc-te__section-heading" style="margin-top:1.5rem">Favicon</div>
+                                <p class="fc-te__section-hint">Browser tab icon. ICO, PNG, or SVG. Square, max 256 &times; 256 px.</p>
+                                <div class="fc-te__logo-zone">
+                                    @if (!string.IsNullOrEmpty(_draft.FaviconUrl))
+                                    {
+                                        <div class="fc-te__logo-preview fc-te__logo-preview--favicon">
+                                            <img src="@_draft.FaviconUrl" alt="Favicon" />
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        <div class="fc-te__logo-empty fc-te__logo-empty--favicon">
+                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" width="18" height="18" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>
+                                        </div>
+                                    }
+                                    <div class="fc-te__logo-actions">
+                                        <InputFile OnChange="e => UploadLogoAsync(e, LogoType.Favicon)" accept=".ico,.png,.svg" style="display:none" id="upload-favicon" />
+                                        <label for="upload-favicon" class="fc-btn fc-btn--outline" style="cursor:pointer">
+                                            @(_uploadingLogo == LogoType.Favicon ? "Uploading…" : "Upload Favicon")
+                                        </label>
+                                        <input type="text" class="fc-te__url-input" value="@_draft.FaviconUrl"
+                                               @onchange="e => _draft.FaviconUrl = e.Value?.ToString()"
+                                               placeholder="Or paste URL…" />
+                                    </div>
+                                </div>
+                            }
+
+                            @* ═══════════════════════════════════════════════
+                               LOGIN PAGE TAB
+                            ═══════════════════════════════════════════════ *@
+                            @if (_tab == "login")
+                            {
+                                <div class="fc-te__field-group">
+                                    <div class="fc-te__section-heading">Company Name</div>
+                                    <input type="text" class="fc-te__text-input" value="@_draft.CompanyName"
+                                           @onchange="e => _draft.CompanyName = e.Value?.ToString()"
+                                           placeholder="Your Company Name" />
+                                </div>
+
+                                <div class="fc-te__field-group">
+                                    <div class="fc-te__section-heading">Login Page Tagline</div>
+                                    <p class="fc-te__section-hint">Displayed below the company name on the login brand panel.</p>
+                                    <input type="text" class="fc-te__text-input" value="@_draft.LoginTagline"
+                                           @onchange="e => _draft.LoginTagline = e.Value?.ToString()"
+                                           placeholder="Financial Returns Collection &amp; Analysis System" />
+                                </div>
+
+                                <div class="fc-te__field-group">
+                                    <div class="fc-te__section-heading">Background Image URL</div>
+                                    <p class="fc-te__section-hint">Custom background for the login brand panel (optional).</p>
+                                    <input type="url" class="fc-te__text-input" value="@_draft.LoginBackgroundUrl"
+                                           @onchange="e => _draft.LoginBackgroundUrl = e.Value?.ToString()"
+                                           placeholder="https://…" />
+                                </div>
+
+                                <div class="fc-te__field-group">
+                                    <div class="fc-te__section-heading">Trust Badges</div>
+                                    <p class="fc-te__section-hint">Three security badges shown on the login page.</p>
+                                    <div class="fc-te__trust-fields">
+                                        <input type="text" class="fc-te__text-input" value="@_draft.TrustBadge1"
+                                               @onchange="e => _draft.TrustBadge1 = e.Value?.ToString()"
+                                               placeholder="e.g. Role-Based Access" />
+                                        <input type="text" class="fc-te__text-input" value="@_draft.TrustBadge2"
+                                               @onchange="e => _draft.TrustBadge2 = e.Value?.ToString()"
+                                               placeholder="e.g. Audit Logging" />
+                                        <input type="text" class="fc-te__text-input" value="@_draft.TrustBadge3"
+                                               @onchange="e => _draft.TrustBadge3 = e.Value?.ToString()"
+                                               placeholder="e.g. Encrypted Sessions" />
+                                    </div>
+                                </div>
+
+                                <div class="fc-te__field-group">
+                                    <div class="fc-te__section-heading">Copyright Text</div>
+                                    <input type="text" class="fc-te__text-input" value="@_draft.CopyrightText"
+                                           @onchange="e => _draft.CopyrightText = e.Value?.ToString()"
+                                           placeholder="© 2026 Company. All rights reserved." />
+                                </div>
+
+                                @* Login page mini-preview *@
+                                <div class="fc-te__section-heading" style="margin-top:1.5rem">Login Panel Preview</div>
+                                <div class="fc-te__login-prev" style="@LoginPanelStyle">
+                                    @if (!string.IsNullOrEmpty(_draft.LoginBackgroundUrl))
+                                    {
+                                        <div class="fc-te__login-prev-bg" style="background-image:linear-gradient(135deg,rgba(0,0,0,0.5),rgba(0,0,0,0.15)),url('@_draft.LoginBackgroundUrl')"></div>
+                                    }
+                                    <div class="fc-te__login-prev-content">
+                                        @if (!string.IsNullOrEmpty(_draft.LogoUrl))
+                                        {
+                                            <img src="@_draft.LogoUrl" alt="" class="fc-te__login-prev-logo" />
+                                        }
+                                        <div class="fc-te__login-prev-name">@_draft.CompanyName</div>
+                                        <div class="fc-te__login-prev-tagline">@_draft.LoginTagline</div>
+                                        <div class="fc-te__login-prev-badges">
+                                            @foreach (var b in new[] { _draft.TrustBadge1, _draft.TrustBadge2, _draft.TrustBadge3 }.Where(s => !string.IsNullOrEmpty(s)))
+                                            {
+                                                <span>&#x2022; @b</span>
+                                            }
+                                        </div>
+                                    </div>
+                                </div>
+                            }
+
+                            @* ═══════════════════════════════════════════════
+                               EMAIL TAB
+                            ═══════════════════════════════════════════════ *@
+                            @if (_tab == "email")
+                            {
+                                <div class="fc-te__section-heading">Email Header Color</div>
+                                <p class="fc-te__section-hint">Header bar background in transactional emails.</p>
+                                @RenderColorRow("Header Background", "Email header bar", _draft.EmailHeaderColor, v => _draft.EmailHeaderColor = v, "#FFFFFF", "White on Email Header")
+
+                                <div class="fc-te__section-heading" style="margin-top:1.5rem">Email Body Background</div>
+                                @RenderColorRow("Body Background", "Email content area", _draft.EmailBodyBackground, v => _draft.EmailBodyBackground = v, "#1F2937", "Body text on Email Background")
+
+                                <div class="fc-te__section-heading" style="margin-top:1.5rem">Email Preview</div>
+                                <div class="fc-te__email-prev">
+                                    <div class="fc-te__email-header" style="background:@_draft.EmailHeaderColor">
+                                        @if (!string.IsNullOrEmpty(_draft.LogoUrl))
+                                        {
+                                            <img src="@_draft.LogoUrl" alt="@_draft.CompanyName" class="fc-te__email-logo" />
+                                        }
+                                        else
+                                        {
+                                            <span style="color:#fff;font-weight:600;font-size:1rem;">@_draft.CompanyName</span>
+                                        }
+                                    </div>
+                                    <div class="fc-te__email-body" style="background:@_draft.EmailBodyBackground">
+                                        <h3 style="font-family:'@_draft.FontHeading',sans-serif;color:@_draft.PrimaryColor;margin:0 0 0.5rem">
+                                            Your filing is due in 3 days
+                                        </h3>
+                                        <p style="font-family:'@_draft.FontBody',sans-serif;color:#374151;font-size:0.875rem;margin:0 0 1rem">
+                                            This is a reminder that your <strong>FRS-102 Annual Report</strong> filing is due on
+                                            <strong>10 March 2026</strong>. Please log in to review and submit.
+                                        </p>
+                                        <a class="fc-te__email-cta" style="background:@_draft.PrimaryColor">View Filing</a>
+                                        @if (!string.IsNullOrEmpty(_draft.SupportEmail))
+                                        {
+                                            <p style="font-family:'@_draft.FontBody',sans-serif;color:#9CA3AF;font-size:0.75rem;margin-top:1rem">
+                                                Questions? Contact <a href="mailto:@_draft.SupportEmail" style="color:@_draft.PrimaryColor">@_draft.SupportEmail</a>
+                                            </p>
+                                        }
+                                    </div>
+                                    <div class="fc-te__email-footer">
+                                        <p>@_draft.CopyrightText</p>
+                                    </div>
+                                </div>
+                            }
+
+                            @* ═══════════════════════════════════════════════
+                               ADVANCED TAB
+                            ═══════════════════════════════════════════════ *@
+                            @if (_tab == "advanced")
+                            {
+                                <div class="fc-te__advanced-warning">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16" aria-hidden="true">
+                                        <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+                                    </svg>
+                                    <span>Custom CSS is injected globally. Malformed styles may break layout. Use CSS variables where possible.</span>
+                                </div>
+
+                                <div class="fc-te__section-heading">Custom CSS Override</div>
+                                <p class="fc-te__section-hint">Applied after all base styles. Reference design tokens with <code>var(--cbn-*)</code>.</p>
+                                <textarea class="fc-te__css-editor" rows="14"
+                                          @oninput="e => _draft.CustomCss = e.Value?.ToString()"
+                                          placeholder=".fc-btn--primary { border-radius: 2px; }&#10;&#10;/* Custom overrides here */">@_draft.CustomCss</textarea>
+
+                                <div class="fc-te__css-vars-section">
+                                    <div class="fc-te__section-heading">Available CSS Variables</div>
+                                    <div class="fc-te__css-var-chips">
+                                        @foreach (var v in new[] { "--cbn-primary", "--cbn-accent", "--cbn-danger", "--cbn-success", "--cbn-warning", "--cbn-surface", "--cbn-sidebar", "--cbn-border", "--cbn-text", "--font-sans", "--font-heading", "--space-4", "--radius-lg" })
+                                        {
+                                            <code class="fc-te__css-var-chip">@v</code>
+                                        }
+                                    </div>
+                                </div>
+
+                                <div class="fc-te__section-heading" style="margin-top:1.5rem">Brand Text</div>
+                                <div class="fc-te__field-grid">
+                                    <div class="fc-te__field-group">
+                                        <label class="fc-te__field-label">Watermark Text</label>
+                                        <input type="text" class="fc-te__text-input" value="@_draft.WatermarkText"
+                                               @onchange="e => _draft.WatermarkText = e.Value?.ToString()"
+                                               placeholder="CONFIDENTIAL" />
+                                    </div>
+                                    <div class="fc-te__field-group">
+                                        <label class="fc-te__field-label">Support Email</label>
+                                        <input type="email" class="fc-te__text-input" value="@_draft.SupportEmail"
+                                               @onchange="e => _draft.SupportEmail = e.Value?.ToString()"
+                                               placeholder="support@company.com" />
+                                    </div>
+                                    <div class="fc-te__field-group">
+                                        <label class="fc-te__field-label">Support Phone</label>
+                                        <input type="tel" class="fc-te__text-input" value="@_draft.SupportPhone"
+                                               @onchange="e => _draft.SupportPhone = e.Value?.ToString()"
+                                               placeholder="+1 (555) 000-0000" />
+                                    </div>
+                                </div>
+                            }
+
+                        </div><!-- /tab-body -->
+                    </div><!-- /card -->
+                </div><!-- /editor-col -->
+
+                @* ── Right: component preview ─────────────────────────────── *@
+                <div class="fc-te__preview-col">
+                    <div class="fc-card" style="height:100%;position:sticky;top:5rem">
+                        <div class="fc-card__header" style="border-bottom:1px solid var(--cbn-border);padding:0.75rem 1rem">
+                            <h3 class="fc-card__title" style="font-size:0.8125rem;font-weight:600;margin:0">Component Preview</h3>
+                        </div>
+                        <div class="fc-card__body fc-te__prev-body" style="@PreviewVars">
+
+                            @* Mini app chrome *@
+                            <div class="fc-te__prev-chrome">
+                                <aside class="fc-te__prev-sidebar">
+                                    <div class="fc-te__prev-sidebar-logo">
+                                        @if (!string.IsNullOrEmpty(_draft.LogoSmallUrl))
+                                        {
+                                            <img src="@_draft.LogoSmallUrl" alt="" />
+                                        }
+                                        else
+                                        {
+                                            <div class="fc-te__prev-logo-placeholder"></div>
+                                        }
+                                    </div>
+                                    <div class="fc-te__prev-nav">
+                                        <div class="fc-te__prev-nav-item">Dashboard</div>
+                                        <div class="fc-te__prev-nav-item fc-te__prev-nav-item--active">Templates</div>
+                                        <div class="fc-te__prev-nav-item">Submissions</div>
+                                        <div class="fc-te__prev-nav-item">Users</div>
+                                    </div>
+                                </aside>
+                                <div class="fc-te__prev-main">
+                                    <div class="fc-te__prev-topbar">
+                                        <span class="fc-te__prev-page-title">Page Title</span>
+                                        <div class="fc-te__prev-btn fc-te__prev-btn--primary">Save</div>
+                                    </div>
+                                    <div class="fc-te__prev-content-area">
+                                        @* Buttons *@
+                                        <div class="fc-te__prev-section">
+                                            <div class="fc-te__prev-section-lbl">Buttons</div>
+                                            <div class="fc-te__prev-btns">
+                                                <div class="fc-te__prev-btn fc-te__prev-btn--primary">Primary</div>
+                                                <div class="fc-te__prev-btn fc-te__prev-btn--secondary">Secondary</div>
+                                                <div class="fc-te__prev-btn fc-te__prev-btn--outline">Outline</div>
+                                                <div class="fc-te__prev-btn fc-te__prev-btn--danger">Danger</div>
+                                            </div>
+                                        </div>
+                                        @* Badges *@
+                                        <div class="fc-te__prev-section">
+                                            <div class="fc-te__prev-section-lbl">Status Badges</div>
+                                            <div class="fc-te__prev-badges">
+                                                <span class="fc-te__prev-badge fc-te__prev-badge--success">Active</span>
+                                                <span class="fc-te__prev-badge fc-te__prev-badge--warning">Pending</span>
+                                                <span class="fc-te__prev-badge fc-te__prev-badge--danger">Overdue</span>
+                                                <span class="fc-te__prev-badge fc-te__prev-badge--neutral">Draft</span>
+                                            </div>
+                                        </div>
+                                        @* Card *@
+                                        <div class="fc-te__prev-card">
+                                            <div class="fc-te__prev-card-header">Q4 2025 &mdash; FRS-102</div>
+                                            <div class="fc-te__prev-card-meta">Due 15 Mar 2026</div>
+                                            <div class="fc-te__prev-progress">
+                                                <div class="fc-te__prev-progress-bar" style="width:65%"></div>
+                                            </div>
+                                            <div class="fc-te__prev-card-foot">65% complete</div>
+                                        </div>
+                                        @* Table row *@
+                                        <div class="fc-te__prev-table">
+                                            <div class="fc-te__prev-table-head">
+                                                <span>Template</span><span>Status</span><span>Period</span>
+                                            </div>
+                                            <div class="fc-te__prev-table-row">
+                                                <span>FRS-102</span>
+                                                <span class="fc-te__prev-badge fc-te__prev-badge--success">Active</span>
+                                                <span>Q4 2025</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            @* Typography sample *@
+                            <div class="fc-te__prev-type">
+                                <div class="fc-te__prev-type-heading" style="font-family:'@_draft.FontHeading',sans-serif">
+                                    @(_draft.CompanyName ?? "Portal Name")
+                                </div>
+                                <div class="fc-te__prev-type-body" style="font-family:'@_draft.FontBody',sans-serif">
+                                    @_draft.FontHeading &middot; @_draft.FontBody
+                                </div>
+                            </div>
+
+                            @* Compact contrast checks *@
+                            <div class="fc-te__prev-contrasts">
+                                @foreach (var ck in GetContrastChecks().Take(3))
+                                {
+                                    <div class="fc-te__prev-contrast-row">
+                                        <div class="fc-te__prev-contrast-swatch" style="background:@ck.Bg;color:@ck.Fg">Aa</div>
+                                        <div class="fc-te__prev-contrast-info">
+                                            <span>@ck.Ratio.ToString("F1"):1</span>
+                                            <span class="fc-te__prev-grade-chip fc-te__prev-grade-chip--@ck.CssClass">@ck.Grade</span>
+                                        </div>
+                                    </div>
+                                }
+                            </div>
+
+                        </div><!-- /prev-body -->
+                    </div><!-- /card -->
+                </div><!-- /preview-col -->
+
+            </div><!-- /workspace -->
+        </div><!-- /fc-te -->
+    }
+</div>
+
+@code {
+    // ── State ─────────────────────────────────────────────────────────
+    private BrandingConfig? _draft;
+    private bool _loading = true;
+    private bool _saving;
+    private string _tab = "colors";
+    private LogoType? _uploadingLogo;
+
+    private enum LogoType { Primary, Compact, Favicon }
+
+    // ── Computed CSS vars string for preview panel ─────────────────────
+    private string PreviewVars => _draft is null ? "" :
+        $"--prev-primary:{_draft.PrimaryColor ?? "#006B3F"};" +
+        $"--prev-primary-hover:{DarkenColor(_draft.PrimaryColor ?? "#006B3F", 0.15)};" +
+        $"--prev-secondary:{_draft.SecondaryColor ?? "#C8A415"};" +
+        $"--prev-accent:{_draft.AccentColor ?? "#1A73E8"};" +
+        $"--prev-danger:{_draft.DangerColor ?? "#DC3545"};" +
+        $"--prev-success:{_draft.SuccessColor ?? "#28A745"};" +
+        $"--prev-warning:{_draft.WarningColor ?? "#FFC107"};" +
+        $"--prev-bg:{_draft.BackgroundColor ?? "#F8F9FA"};" +
+        $"--prev-sidebar:{_draft.SidebarColor ?? "#1A1F2B"};";
+
+    private string LoginPanelStyle =>
+        $"background:{_draft?.PrimaryColor ?? "#006B3F"};";
+
+    // ── Presets ───────────────────────────────────────────────────────
+    private readonly List<ThemePreset> _presets = new()
+    {
+        new("Financial Green",  "#006B3F", "#C8A415", "#1A73E8", "#1A1F2B", "#F8F9FA", "Plus Jakarta Sans", "Inter"),
+        new("Corporate Blue",   "#1E3A5F", "#0F9D58", "#0EA5E9", "#0D2137", "#F1F5F9", "Montserrat",        "Inter"),
+        new("Modern Dark",      "#7C3AED", "#06B6D4", "#EC4899", "#0F0F1A", "#111827", "Poppins",           "Inter"),
+        new("Classic Gold",     "#1A1F2B", "#C8A415", "#D4950D", "#0D1117", "#FAFAFA", "Plus Jakarta Sans", "Inter"),
+        new("Minimal Gray",     "#374151", "#6B7280", "#3B82F6", "#111827", "#F9FAFB", "Inter",             "Inter"),
+        new("High Contrast",    "#000000", "#FF6B00", "#0000EE", "#000000", "#FFFFFF", "Arial",             "Arial"),
+    };
+
+    // ── Font options ──────────────────────────────────────────────────
+    private readonly List<FontOption> _fontOptions = new()
+    {
+        new("System Default",    "system-ui",          false),
+        new("Arial",             "Arial",              false),
+        new("Georgia",           "Georgia",            false),
+        new("Trebuchet MS",      "Trebuchet MS",       false),
+        new("Inter",             "Inter",              true),
+        new("Plus Jakarta Sans", "Plus Jakarta Sans",  true),
+        new("Roboto",            "Roboto",             true),
+        new("Open Sans",         "Open Sans",          true),
+        new("Lato",              "Lato",               true),
+        new("Poppins",           "Poppins",            true),
+        new("Montserrat",        "Montserrat",         true),
+        new("Nunito",            "Nunito",             true),
+        new("Raleway",           "Raleway",            true),
+    };
+
+    // ── Lifecycle ─────────────────────────────────────────────────────
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _draft = TenantContext.CurrentTenantId.HasValue
+                ? await BrandingService.GetBrandingConfig(TenantContext.CurrentTenantId.Value)
+                : BrandingConfig.WithDefaults();
+        }
+        finally { _loading = false; }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && _draft is not null)
+        {
+            await LoadFontAsync(_draft.FontHeading);
+            await LoadFontAsync(_draft.FontBody);
+        }
+    }
+
+    // ── Preset ───────────────────────────────────────────────────────
+    private void ApplyPreset(ThemePreset p)
+    {
+        if (_draft is null) return;
+        _draft.PrimaryColor    = p.PrimaryColor;
+        _draft.SecondaryColor  = p.SecondaryColor;
+        _draft.AccentColor     = p.AccentColor;
+        _draft.SidebarColor    = p.SidebarColor;
+        _draft.BackgroundColor = p.BackgroundColor;
+        _draft.FontHeading     = p.FontHeading;
+        _draft.FontBody        = p.FontBody;
+        _draft.ThemePresetName = p.Name;
+        _ = LoadFontAsync(p.FontHeading);
+        _ = LoadFontAsync(p.FontBody);
+    }
+
+    // ── Save ─────────────────────────────────────────────────────────
+    private async Task SaveAsync()
+    {
+        if (_draft is null || !TenantContext.CurrentTenantId.HasValue) return;
+        _saving = true;
+        try
+        {
+            await BrandingService.UpdateBrandingConfig(TenantContext.CurrentTenantId.Value, _draft);
+            await BrandingService.InvalidateCache(TenantContext.CurrentTenantId.Value);
+            Toast.Success("Theme saved. Refresh to see the new styles applied portal-wide.");
+        }
+        catch (Exception ex) { Toast.Error($"Save failed: {ex.Message}"); }
+        finally { _saving = false; }
+    }
+
+    // ── Export ────────────────────────────────────────────────────────
+    private async Task ExportThemeAsync()
+    {
+        if (_draft is null) return;
+        var json = JsonSerializer.Serialize(new
+        {
+            version    = "1.0",
+            exportedAt = DateTime.UtcNow.ToString("O"),
+            theme      = _draft,
+        }, new JsonSerializerOptions { WriteIndented = true });
+
+        var slug = (_draft.ThemePresetName ?? "custom").ToLower().Replace(" ", "-");
+        await JS.InvokeVoidAsync("fcThemeEditor.downloadJson", json, $"theme-{slug}-{DateTime.Now:yyyyMMdd}.json");
+    }
+
+    // ── Import ────────────────────────────────────────────────────────
+    private async Task ImportThemeAsync(InputFileChangeEventArgs e)
+    {
+        try
+        {
+            await using var stream = e.File.OpenReadStream(maxAllowedSize: 512 * 1024);
+            using var reader = new StreamReader(stream);
+            var json = await reader.ReadToEndAsync();
+
+            using var doc = JsonDocument.Parse(json);
+            var root = doc.RootElement;
+
+            // Support both { theme: {...} } wrapper and bare BrandingConfig
+            var themeEl = root.TryGetProperty("theme", out var nested) ? nested : root;
+            var imported = JsonSerializer.Deserialize<BrandingConfig>(themeEl.GetRawText(),
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+
+            if (imported is not null)
+            {
+                MergeImported(imported);
+                Toast.Success("Theme imported. Review changes and save when ready.");
+            }
+        }
+        catch (Exception ex) { Toast.Error($"Import failed: {ex.Message}"); }
+    }
+
+    private void MergeImported(BrandingConfig src)
+    {
+        if (_draft is null) return;
+        if (!string.IsNullOrEmpty(src.PrimaryColor))    _draft.PrimaryColor    = src.PrimaryColor;
+        if (!string.IsNullOrEmpty(src.SecondaryColor))  _draft.SecondaryColor  = src.SecondaryColor;
+        if (!string.IsNullOrEmpty(src.AccentColor))     _draft.AccentColor     = src.AccentColor;
+        if (!string.IsNullOrEmpty(src.DangerColor))     _draft.DangerColor     = src.DangerColor;
+        if (!string.IsNullOrEmpty(src.SuccessColor))    _draft.SuccessColor    = src.SuccessColor;
+        if (!string.IsNullOrEmpty(src.WarningColor))    _draft.WarningColor    = src.WarningColor;
+        if (!string.IsNullOrEmpty(src.BackgroundColor)) _draft.BackgroundColor = src.BackgroundColor;
+        if (!string.IsNullOrEmpty(src.SidebarColor))    _draft.SidebarColor    = src.SidebarColor;
+        if (!string.IsNullOrEmpty(src.FontHeading))     _draft.FontHeading     = src.FontHeading;
+        if (!string.IsNullOrEmpty(src.FontBody))        _draft.FontBody        = src.FontBody;
+        if (!string.IsNullOrEmpty(src.EmailHeaderColor))    _draft.EmailHeaderColor    = src.EmailHeaderColor;
+        if (!string.IsNullOrEmpty(src.EmailBodyBackground)) _draft.EmailBodyBackground = src.EmailBodyBackground;
+        if (src.ThemePresetName  is not null) _draft.ThemePresetName  = src.ThemePresetName;
+        if (src.CompanyName      is not null) _draft.CompanyName      = src.CompanyName;
+        if (src.LoginTagline     is not null) _draft.LoginTagline     = src.LoginTagline;
+        if (src.TrustBadge1      is not null) _draft.TrustBadge1      = src.TrustBadge1;
+        if (src.TrustBadge2      is not null) _draft.TrustBadge2      = src.TrustBadge2;
+        if (src.TrustBadge3      is not null) _draft.TrustBadge3      = src.TrustBadge3;
+        if (src.CopyrightText    is not null) _draft.CopyrightText    = src.CopyrightText;
+        if (src.WatermarkText    is not null) _draft.WatermarkText    = src.WatermarkText;
+        if (src.LoginBackgroundUrl is not null) _draft.LoginBackgroundUrl = src.LoginBackgroundUrl;
+        if (src.CustomCss        is not null) _draft.CustomCss        = src.CustomCss;
+        if (src.SupportEmail     is not null) _draft.SupportEmail     = src.SupportEmail;
+        if (src.SupportPhone     is not null) _draft.SupportPhone     = src.SupportPhone;
+        _ = LoadFontAsync(_draft.FontHeading);
+        _ = LoadFontAsync(_draft.FontBody);
+    }
+
+    // ── Logo upload ───────────────────────────────────────────────────
+    private async Task UploadLogoAsync(InputFileChangeEventArgs e, LogoType logoType)
+    {
+        if (!TenantContext.CurrentTenantId.HasValue) return;
+        _uploadingLogo = logoType;
+        StateHasChanged();
+        try
+        {
+            var file = e.File;
+            await using var stream = file.OpenReadStream(maxAllowedSize: 2 * 1024 * 1024);
+            var url = logoType switch
+            {
+                LogoType.Primary => await BrandingService.UploadLogo(TenantContext.CurrentTenantId.Value, stream, file.Name, file.ContentType),
+                LogoType.Compact => await BrandingService.UploadCompactLogo(TenantContext.CurrentTenantId.Value, stream, file.Name, file.ContentType),
+                LogoType.Favicon => await BrandingService.UploadFavicon(TenantContext.CurrentTenantId.Value, stream, file.Name, file.ContentType),
+                _                => throw new InvalidOperationException()
+            };
+            switch (logoType)
+            {
+                case LogoType.Primary: _draft!.LogoUrl      = url; break;
+                case LogoType.Compact: _draft!.LogoSmallUrl = url; break;
+                case LogoType.Favicon: _draft!.FaviconUrl   = url; break;
+            }
+            Toast.Success($"{logoType} logo uploaded.");
+        }
+        catch (Exception ex) { Toast.Error($"Upload failed: {ex.Message}"); }
+        finally { _uploadingLogo = null; }
+    }
+
+    // ── Font loading (Google Fonts) ───────────────────────────────────
+    private async Task LoadFontAsync(string? fontName)
+    {
+        if (string.IsNullOrEmpty(fontName)) return;
+        var isGoogle = _fontOptions.Any(f => f.Value == fontName && f.IsGoogleFont);
+        if (!isGoogle) return;
+        try { await JS.InvokeVoidAsync("fcThemeEditor.loadGoogleFont", fontName); }
+        catch { /* swallow — preview degrades gracefully */ }
+    }
+
+    // ── Color row renderer ────────────────────────────────────────────
+    private RenderFragment RenderColorRow(
+        string label, string usage,
+        string? value, Action<string?> onChange,
+        string contrastWith, string contrastLabel) =>
+        __builder =>
+        {
+            var safe  = value ?? "#000000";
+            var ratio = ContrastRatio(safe, contrastWith);
+            var grade = ContrastGrade(ratio);
+            var css   = GradeCss(grade);
+
+            __builder.OpenElement(0, "div");
+            __builder.AddAttribute(1, "class", "fc-te__color-row");
+
+            // Label + usage
+            __builder.OpenElement(2, "div");
+            __builder.AddAttribute(3, "class", "fc-te__color-row-meta");
+            __builder.OpenElement(4, "span"); __builder.AddAttribute(5, "class", "fc-te__color-row-lbl"); __builder.AddContent(6, label); __builder.CloseElement();
+            __builder.OpenElement(7, "span"); __builder.AddAttribute(8, "class", "fc-te__color-row-usage"); __builder.AddContent(9, usage); __builder.CloseElement();
+            __builder.CloseElement();
+
+            // Controls: color picker + hex text
+            __builder.OpenElement(10, "div");
+            __builder.AddAttribute(11, "class", "fc-te__color-row-controls");
+
+            __builder.OpenElement(12, "input");
+            __builder.AddAttribute(13, "type", "color");
+            __builder.AddAttribute(14, "class", "fc-te__color-picker");
+            __builder.AddAttribute(15, "value", safe);
+            __builder.AddAttribute(16, "oninput",
+                EventCallback.Factory.Create<ChangeEventArgs>(this, e =>
+                {
+                    onChange(e.Value?.ToString());
+                    StateHasChanged();
+                }));
+            __builder.CloseElement();
+
+            __builder.OpenElement(17, "input");
+            __builder.AddAttribute(18, "type", "text");
+            __builder.AddAttribute(19, "class", "fc-te__color-hex");
+            __builder.AddAttribute(20, "value", safe);
+            __builder.AddAttribute(21, "maxlength", "7");
+            __builder.AddAttribute(22, "placeholder", "#000000");
+            __builder.AddAttribute(23, "onchange",
+                EventCallback.Factory.Create<ChangeEventArgs>(this, e =>
+                {
+                    var v = e.Value?.ToString();
+                    if (IsValidHex(v)) onChange(v);
+                }));
+            __builder.CloseElement();
+
+            __builder.CloseElement(); // controls
+
+            // Contrast badge
+            __builder.OpenElement(24, "div");
+            __builder.AddAttribute(25, "class", $"fc-te__contrast-badge fc-te__contrast-badge--{css}");
+            __builder.AddContent(26, $"{contrastLabel}: {ratio:F1}:1 — WCAG {grade}");
+            __builder.CloseElement();
+
+            __builder.CloseElement(); // color-row
+        };
+
+    // ── WCAG contrast helpers ──────────────────────────────────────────
+    private List<ContrastCheck> GetContrastChecks()
+    {
+        if (_draft is null) return [];
+        return
+        [
+            new("White on Primary",         "#FFFFFF", _draft.PrimaryColor    ?? "#000"),
+            new("Primary on White",         _draft.PrimaryColor ?? "#000", "#FFFFFF"),
+            new("White on Secondary",       "#FFFFFF", _draft.SecondaryColor  ?? "#000"),
+            new("White on Sidebar",         "#FFFFFF", _draft.SidebarColor    ?? "#000"),
+            new("Body text on Background",  "#1F2937", _draft.BackgroundColor ?? "#FFF"),
+            new("Primary on Background",    _draft.PrimaryColor ?? "#000", _draft.BackgroundColor ?? "#FFF"),
+        ];
+    }
+
+    private static double ContrastRatio(string hex1, string hex2)
+    {
+        var l1 = Luminance(hex1);
+        var l2 = Luminance(hex2);
+        if (l1 < l2) (l1, l2) = (l2, l1);
+        return (l1 + 0.05) / (l2 + 0.05);
+    }
+
+    private static double Luminance(string hex)
+    {
+        var (r, g, b) = ParseHex(hex);
+        double rs = r / 255.0, gs = g / 255.0, bs = b / 255.0;
+        rs = rs <= 0.03928 ? rs / 12.92 : Math.Pow((rs + 0.055) / 1.055, 2.4);
+        gs = gs <= 0.03928 ? gs / 12.92 : Math.Pow((gs + 0.055) / 1.055, 2.4);
+        bs = bs <= 0.03928 ? bs / 12.92 : Math.Pow((bs + 0.055) / 1.055, 2.4);
+        return 0.2126 * rs + 0.7152 * gs + 0.0722 * bs;
+    }
+
+    private static string ContrastGrade(double r) =>
+        r >= 7.0 ? "AAA" : r >= 4.5 ? "AA" : r >= 3.0 ? "AA Large" : "Fail";
+
+    private static string GradeCss(string grade) =>
+        grade == "Fail" ? "fail" : grade.StartsWith("AAA") ? "aaa" : "aa";
+
+    private static bool IsValidHex(string? v) =>
+        v is { Length: 7 } && v[0] == '#' && v[1..].All(Uri.IsHexDigit);
+
+    private static string DarkenColor(string hex, double factor)
+    {
+        var (r, g, b) = ParseHex(hex);
+        return $"#{Clamp((int)(r * (1 - factor))):X2}{Clamp((int)(g * (1 - factor))):X2}{Clamp((int)(b * (1 - factor))):X2}";
+    }
+
+    private static (int r, int g, int b) ParseHex(string hex)
+    {
+        var v = (hex ?? "").TrimStart('#');
+        if (v.Length != 6) v = "006B3F";
+        try { return (Convert.ToInt32(v[..2], 16), Convert.ToInt32(v.Substring(2, 2), 16), Convert.ToInt32(v.Substring(4, 2), 16)); }
+        catch { return (0, 107, 63); }
+    }
+
+    private static int Clamp(int v) => Math.Max(0, Math.Min(255, v));
+
+    // ── Data models ───────────────────────────────────────────────────
+    private sealed record ThemePreset(
+        string Name, string PrimaryColor, string SecondaryColor, string AccentColor,
+        string SidebarColor, string BackgroundColor, string FontHeading, string FontBody);
+
+    private sealed record FontOption(string Label, string Value, bool IsGoogleFont);
+
+    private sealed record ContrastCheck(string Label, string Fg, string Bg)
+    {
+        public double Ratio => ContrastRatio(Fg, Bg);
+        public string Grade => ContrastGrade(Ratio);
+        public string CssClass => GradeCss(Grade);
+    }
+}

@@ -10,21 +10,35 @@
 @inject MetadataDbContext Db
 @inject CommandPaletteService PaletteService
 @inject SidebarStateService SidebarState
+@inject HelpService HelpSvc
+@inject IJSRuntime JS
 @implements IAsyncDisposable
 
 <TenantThemeProvider />
 
-<!-- Skip to content link for accessibility -->
-<a href="#main-content" class="skip-link">Skip to main content</a>
+<!-- Skip navigation links (reveal on focus for keyboard users) -->
+<nav class="skip-links" aria-label="Skip navigation">
+    <a href="#main-content" class="skip-link">Skip to main content</a>
+    <a href="#fc-sidebar-nav" class="skip-link">Skip to navigation</a>
+    <a href="#fc-topbar-search" class="skip-link">Skip to search</a>
+</nav>
+
+<!-- Route change announcer for screen readers -->
+<div id="fc-route-announcer"
+     role="status"
+     aria-live="polite"
+     aria-atomic="true"
+     class="fc-sr-only">
+</div>
 
 <!-- Global progress bar -->
 <div class="global-progress @(_navigating ? "is-loading" : (_progressComplete ? "is-complete" : ""))" aria-hidden="true">
     <div class="global-progress-bar"></div>
 </div>
 
-<div class="fc-shell @(_sidebarOpen ? "fc-sidebar-open" : "") @(SidebarState.IsCollapsed ? "fc-sidebar-collapsed" : "")">
+<div class="fc-shell fc-has-mobile-nav @(_sidebarOpen ? "fc-sidebar-open" : "") @(SidebarState.IsCollapsed ? "fc-sidebar-collapsed" : "")">
     <!-- Sidebar -->
-    <aside class="fc-shell__sidebar" aria-label="Main navigation" @onkeydown="HandleSidebarKeyDown">
+    <aside id="fc-sidebar-nav" class="fc-shell__sidebar" aria-label="Main navigation" @onkeydown="HandleSidebarKeyDown">
         <div class="fc-sidebar__brand">
             <img src="@_branding.LogoSmallUrl" alt="@_branding.CompanyName" class="fc-sidebar__logo" width="40" height="33" />
             <div class="fc-sidebar__brand-text">
@@ -87,6 +101,12 @@
     <!-- Sidebar overlay for mobile -->
     <div class="fc-sidebar__overlay" @onclick="CloseSidebar" role="presentation" aria-hidden="true"></div>
 
+    <!-- Mobile bottom navigation bar (≤640 px) -->
+    <MobileBottomNav OnMoreClicked="ToggleSidebar" />
+
+    <!-- Offline indicator banner -->
+    <OfflineIndicator />
+
     <!-- Main Area -->
     <div class="fc-shell__main">
         <header class="fc-topbar" role="banner">
@@ -118,7 +138,7 @@
             </div>
 
             <div class="fc-topbar__right">
-                <button class="fc-topbar__search-trigger" @onclick="OpenCommandPalette" aria-label="Open command palette (Cmd+K)">
+                <button id="fc-topbar-search" class="fc-topbar__search-trigger" @onclick="OpenCommandPalette" aria-label="Open command palette (Cmd+K)">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16" aria-hidden="true">
                         <circle cx="11" cy="11" r="8"/>
                         <line x1="21" y1="21" x2="16.65" y2="16.65"/>
@@ -131,6 +151,12 @@
                         <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/>
                         <path d="M13.73 21a2 2 0 01-3.46 0"/>
                     </svg>
+                </button>
+                <button class="fc-topbar__help"
+                        @onclick="() => HelpSvc.TogglePanel(new Uri(Navigation.Uri).AbsolutePath)"
+                        aria-label="Open help panel"
+                        title="Help (Shift+/)">
+                    ?
                 </button>
             </div>
         </header>
@@ -146,7 +172,7 @@
             </div>
         }
 
-        <main id="main-content" class="fc-shell__content" role="main">
+        <main id="main-content" class="fc-shell__content" role="main" @ref="_mainContentRef">
             <!-- Print letterhead (visible only in print) -->
             <div class="print-letterhead" aria-hidden="true">
                 <div class="print-letterhead-title">@_branding.CompanyName</div>
@@ -168,6 +194,13 @@
 <CommandPalette />
 <ToastContainer />
 <ConfirmDialog />
+<HelpPanel />
+<KeyboardShortcutOverlay />
+<FeatureTour />
+<WhatsNew />
+<KeyboardShortcutsOverlay />
+<OfflineBanner />
+<SessionExpiredModal />
 
 @code {
     private bool _sidebarOpen;
@@ -178,11 +211,33 @@
     private bool _showImpersonationBanner;
     private string? _impersonatedTenantName;
 
+    private bool _jsInitialized;
+    private ElementReference _mainContentRef;
+    private DotNetObjectReference<MainLayout>? _mobileRef;
+
     protected override void OnInitialized()
     {
         Navigation.LocationChanged += OnLocationChanged;
         SidebarState.OnStateChanged += OnSidebarStateChanged;
         UpdatePageName(Navigation.Uri);
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && !_jsInitialized)
+        {
+            _jsInitialized = true;
+            try { await JS.InvokeVoidAsync("FCAccessibility.initRouteAnnouncer"); }
+            catch (JSDisconnectedException) { }
+
+            // Pull-to-refresh (mobile only — JS guards against desktop)
+            try
+            {
+                _mobileRef = DotNetObjectReference.Create(this);
+                await JS.InvokeVoidAsync("fcMobile.initPullToRefresh", _mainContentRef, _mobileRef);
+            }
+            catch { }
+        }
     }
 
     protected override async Task OnInitializedAsync()
@@ -208,6 +263,10 @@
         _navigating = false;
         _progressComplete = true;
         StateHasChanged();
+
+        // Announce page change to screen readers
+        try { await JS.InvokeVoidAsync("FCAccessibility.announceRoute", _currentPageName); }
+        catch (JSDisconnectedException) { }
 
         await Task.Delay(500);
         _progressComplete = false;
@@ -266,6 +325,13 @@
         }
     }
 
+    [JSInvokable]
+    public void OnPullToRefresh()
+    {
+        // Re-navigate to current URL to trigger data refresh
+        Navigation.NavigateTo(Navigation.Uri, forceLoad: false);
+    }
+
     private void ToggleSidebar() => _sidebarOpen = !_sidebarOpen;
     private void CloseSidebar() => _sidebarOpen = false;
     private void OpenCommandPalette() => PaletteService.Open();
@@ -292,6 +358,7 @@
     {
         Navigation.LocationChanged  -= OnLocationChanged;
         SidebarState.OnStateChanged -= OnSidebarStateChanged;
+        _mobileRef?.Dispose();
         return ValueTask.CompletedTask;
     }
 }
