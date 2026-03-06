@@ -1,0 +1,67 @@
+@inject IJSRuntime JS
+
+@{
+    var stateClass = ValidationState switch
+    {
+        FieldValidation.Valid   => "fc-ff--valid",
+        FieldValidation.Invalid => "fc-ff--invalid",
+        _                       => ""
+    };
+}
+
+<div class="fc-ff @stateClass">
+    @if (!string.IsNullOrEmpty(Label))
+    {
+        <label class="fc-ff__label @(IsRequired ? "fc-ff__label--required" : "")">
+            @Label
+            @if (ValidationState == FieldValidation.Valid)
+            {
+                <svg class="fc-ff__check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <polyline points="20 6 9 17 4 12" />
+                </svg>
+            }
+        </label>
+    }
+
+    <div class="fc-ff__body">
+        @ChildContent
+    </div>
+
+    @if (ValidationState == FieldValidation.Invalid && !string.IsNullOrEmpty(ErrorMessage))
+    {
+        <div id="@_errorId" class="fc-ff__error" role="alert">
+            <svg class="fc-ff__error-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
+            </svg>
+            <span>@ErrorMessage</span>
+        </div>
+    }
+    else if (!string.IsNullOrEmpty(HintText))
+    {
+        <div class="fc-ff__hint">@HintText</div>
+    }
+</div>
+
+@code {
+    private string _errorId = $"fc-ff-err-{Guid.NewGuid():N}";
+    private FieldValidation _prevState;
+
+    [Parameter] public string? Label { get; set; }
+    [Parameter] public string? HintText { get; set; }
+    [Parameter] public string? ErrorMessage { get; set; }
+    [Parameter] public bool IsRequired { get; set; }
+    [Parameter] public FieldValidation ValidationState { get; set; } = FieldValidation.None;
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_prevState != FieldValidation.Invalid && ValidationState == FieldValidation.Invalid)
+        {
+            try { await JS.InvokeVoidAsync("FCForms.slideInError", _errorId); }
+            catch (JSDisconnectedException) { }
+        }
+        _prevState = ValidationState;
+    }
+
+    public enum FieldValidation { None, Valid, Invalid, Validating }
+}

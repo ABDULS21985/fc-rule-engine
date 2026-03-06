@@ -1,0 +1,59 @@
+@{
+    var openClass = _isOpen ? "fc-fs--open" : "fc-fs--closed";
+}
+
+<div class="fc-fs @openClass">
+    <div class="fc-fs__header" @onclick="Toggle" role="button" tabindex="0" aria-expanded="@_isOpen"
+         @onkeydown="HandleKeyDown">
+        <div class="fc-fs__header-text">
+            <h3 class="fc-fs__title">@Title</h3>
+            @if (!string.IsNullOrEmpty(Description))
+            {
+                <p class="fc-fs__desc">@Description</p>
+            }
+        </div>
+        <div class="fc-fs__header-right">
+            @if (!string.IsNullOrEmpty(BadgeText))
+            {
+                <span class="fc-fs__badge">@BadgeText</span>
+            }
+            <svg class="fc-fs__chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <polyline points="6 9 12 15 18 9" />
+            </svg>
+        </div>
+    </div>
+    <div class="fc-fs__body" style="@(_isOpen ? $"max-height:{_maxHeight}" : "max-height:0")">
+        <div class="fc-fs__content">
+            @ChildContent
+        </div>
+    </div>
+</div>
+
+@code {
+    private bool _isOpen;
+    private string _maxHeight = "2000px";
+
+    [Parameter] public string Title { get; set; } = "Section";
+    [Parameter] public string? Description { get; set; }
+    [Parameter] public string? BadgeText { get; set; }
+    [Parameter] public bool IsOpen { get; set; } = true;
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    protected override void OnInitialized()
+    {
+        _isOpen = IsOpen;
+    }
+
+    private void Toggle()
+    {
+        _isOpen = !_isOpen;
+    }
+
+    private void HandleKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key is "Enter" or " ")
+        {
+            Toggle();
+        }
+    }
+}

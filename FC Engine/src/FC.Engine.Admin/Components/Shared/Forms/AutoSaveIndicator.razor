@@ -1,0 +1,54 @@
+@{
+    var stateClass = State switch
+    {
+        SaveState.Unsaved => "fc-autosave--unsaved",
+        SaveState.Saving  => "fc-autosave--saving",
+        SaveState.Saved   => "fc-autosave--saved",
+        SaveState.Error   => "fc-autosave--error",
+        _ => "fc-autosave--saved"
+    };
+}
+
+<span class="fc-autosave @stateClass" role="status" aria-live="polite">
+    @switch (State)
+    {
+        case SaveState.Unsaved:
+            <span class="fc-autosave__dot" aria-hidden="true"></span>
+            <span>Unsaved changes</span>
+            break;
+
+        case SaveState.Saving:
+            <svg class="fc-autosave__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true">
+                <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
+            </svg>
+            <span>Saving...</span>
+            break;
+
+        case SaveState.Saved:
+            <svg class="fc-autosave__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <polyline points="20 6 9 17 4 12" />
+            </svg>
+            <span>
+                Saved
+                @if (LastSavedAt.HasValue)
+                {
+                    <text> @LastSavedAt.Value.ToString("HH:mm")</text>
+                }
+            </span>
+            break;
+
+        case SaveState.Error:
+            <svg class="fc-autosave__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <circle cx="12" cy="12" r="10" /><line x1="15" y1="9" x2="9" y2="15" /><line x1="9" y1="9" x2="15" y2="15" />
+            </svg>
+            <span>Save failed</span>
+            break;
+    }
+</span>
+
+@code {
+    [Parameter] public SaveState State { get; set; } = SaveState.Saved;
+    [Parameter] public DateTime? LastSavedAt { get; set; }
+
+    public enum SaveState { Unsaved, Saving, Saved, Error }
+}

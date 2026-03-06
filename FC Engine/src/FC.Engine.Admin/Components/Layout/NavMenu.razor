@@ -532,8 +532,10 @@
             await SidebarState.ToggleFavoriteAsync(
                 new SidebarNavItem(item.Label, item.Href, item.IconPath));
             var pinned = SidebarState.IsFavorite(item.Href);
-            Toast.Show(pinned ? $"Pinned "{item.Label}"" : $"Unpinned "{item.Label}"",
-                       pinned ? ToastVariant.Success : ToastVariant.Info);
+            if (pinned)
+                Toast.Success($"\u201c{item.Label}\u201d pinned to Favorites");
+            else
+                Toast.Info($"\u201c{item.Label}\u201d unpinned");
         }
     }
 

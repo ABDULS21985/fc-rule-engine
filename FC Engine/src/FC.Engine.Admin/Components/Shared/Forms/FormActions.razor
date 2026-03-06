@@ -1,0 +1,59 @@
+<div class="fc-fa">
+    <div class="fc-fa__left">
+        @if (LeftContent != null)
+        {
+            @LeftContent
+        }
+        else if (SaveState != AutoSaveIndicator.SaveState.Saved || ShowAutoSave)
+        {
+            <AutoSaveIndicator State="@SaveState" LastSavedAt="@LastSavedAt" />
+        }
+    </div>
+    <div class="fc-fa__right">
+        @if (ChildContent != null)
+        {
+            @ChildContent
+        }
+        else
+        {
+            @if (!string.IsNullOrEmpty(DangerText))
+            {
+                <button class="fc-btn fc-btn--danger" type="button" @onclick="OnDanger" disabled="@IsSaving">
+                    @DangerText
+                </button>
+            }
+            @if (!string.IsNullOrEmpty(SecondaryText))
+            {
+                <button class="fc-btn fc-btn--outline" type="button" @onclick="OnSecondary" disabled="@IsSaving">
+                    @SecondaryText
+                </button>
+            }
+            <button class="fc-btn fc-btn--primary" type="@PrimaryType" @onclick="OnPrimary" disabled="@(IsSaving || PrimaryDisabled)">
+                @if (IsSaving)
+                {
+                    <span class="spinner" style="width:16px;height:16px;" aria-hidden="true"></span>
+                }
+                @PrimaryText
+            </button>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter] public string PrimaryText { get; set; } = "Save";
+    [Parameter] public string? SecondaryText { get; set; } = "Cancel";
+    [Parameter] public string? DangerText { get; set; }
+    [Parameter] public string PrimaryType { get; set; } = "button";
+    [Parameter] public bool IsSaving { get; set; }
+    [Parameter] public bool PrimaryDisabled { get; set; }
+    [Parameter] public EventCallback OnPrimary { get; set; }
+    [Parameter] public EventCallback OnSecondary { get; set; }
+    [Parameter] public EventCallback OnDanger { get; set; }
+
+    [Parameter] public AutoSaveIndicator.SaveState SaveState { get; set; } = AutoSaveIndicator.SaveState.Saved;
+    [Parameter] public DateTime? LastSavedAt { get; set; }
+    [Parameter] public bool ShowAutoSave { get; set; }
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter] public RenderFragment? LeftContent { get; set; }
+}

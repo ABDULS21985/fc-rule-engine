@@ -1,6 +1,9 @@
 @page "/"
 @attribute [Authorize]
 @inject DashboardService DashboardService
+@inject ChartJsInterop Charts
+@using FC.Engine.Domain.Enums
+@using System.Text.Json
 
 <PageTitle>Dashboard — FC Engine Portal</PageTitle>
 
@@ -12,12 +15,13 @@
             <div class="portal-skeleton portal-skeleton-text portal-skeleton-lg"></div>
             <div class="portal-skeleton portal-skeleton-text portal-skeleton-sm"></div>
         </div>
-        <div class="portal-dash-stats">
+        <div class="portal-hero-metrics">
             @for (int i = 0; i < 4; i++)
             {
-                <div class="portal-stat-card portal-skeleton-card">
+                <div class="portal-hero-card portal-skeleton-card">
                     <div class="portal-skeleton portal-skeleton-text"></div>
                     <div class="portal-skeleton portal-skeleton-text portal-skeleton-lg"></div>
+                    <div class="portal-skeleton portal-skeleton-text portal-skeleton-sm"></div>
                 </div>
             }
         </div>
@@ -28,7 +32,7 @@ else if (data is not null)
     <div class="portal-dashboard">
 
         <!-- ═══════════════════════════════════════════════════════════
-             SECTION 1: Welcome Header
+             SECTION 1: Welcome Header + Date Range Picker
              ═══════════════════════════════════════════════════════════ -->
         <section class="portal-dash-welcome" aria-label="Welcome">
             <div class="portal-dash-welcome-text">
@@ -37,6 +41,16 @@ else if (data is not null)
                 <p class="portal-dash-date">@DateTime.Now.ToString("dddd, d MMMM yyyy")</p>
             </div>
             <div class="portal-dash-welcome-actions">
+                <div class="portal-date-range-picker" role="group" aria-label="Date range">
+                    @foreach (var range in dateRanges)
+                    {
+                        <button class="portal-date-range-btn @(selectedDays == range.Days ? "portal-date-range-btn-active" : "")"
+                                @onclick="() => ChangeDateRange(range.Days)"
+                                aria-pressed="@(selectedDays == range.Days)">
+                            @range.Label
+                        </button>
+                    }
+                </div>
                 <a href="/submit" class="portal-btn portal-btn-primary">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                         <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
@@ -45,228 +59,266 @@ else if (data is not null)
                     </svg>
                     Submit Return
                 </a>
-                <a href="/calendar" class="portal-btn portal-btn-outline">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                        <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
-                        <line x1="16" y1="2" x2="16" y2="6"/>
-                        <line x1="8" y1="2" x2="8" y2="6"/>
-                        <line x1="3" y1="10" x2="21" y2="10"/>
-                    </svg>
-                    View Calendar
-                </a>
             </div>
         </section>
 
         <!-- ═══════════════════════════════════════════════════════════
-             SECTION 2: Compliance Score (Hero Metric)
+             SECTION 2: Hero Metrics (animated counters + sparklines)
              ═══════════════════════════════════════════════════════════ -->
-        <section class="portal-dash-compliance" aria-label="Compliance score">
-            <div class="portal-compliance-card">
-                <div class="portal-compliance-ring-container">
-                    <div class="portal-ring-chart"
-                         style="--ring-percent: @data.CompliancePercentage; --ring-color: @GetComplianceColor(data.CompliancePercentage);"
-                         role="img"
-                         aria-label="Compliance score: @data.CompliancePercentage percent">
-                        <svg viewBox="0 0 120 120" class="portal-ring-svg">
-                            <circle cx="60" cy="60" r="52" class="portal-ring-bg" />
-                            <circle cx="60" cy="60" r="52"
-                                    class="portal-ring-fill"
-                                    stroke-dasharray="@(Math.Round(326.7m * data.CompliancePercentage / 100, 1)) 326.7"
-                                    stroke-dashoffset="0" />
-                        </svg>
-                        <div class="portal-ring-label">
-                            <span class="portal-ring-value">@data.CompliancePercentage<span class="portal-ring-unit">%</span></span>
-                        </div>
-                    </div>
-                </div>
-                <div class="portal-compliance-details">
-                    <h2 class="portal-compliance-title">Compliance Score</h2>
-                    <p class="portal-compliance-subtitle">
-                        @data.TotalReturnsSubmitted of @data.TotalReturnsDue returns submitted this period
-                    </p>
-                    <div class="portal-compliance-trend">
-                        @if (data.CompliancePercentage >= data.PreviousPeriodCompliancePercentage)
-                        {
-                            <span class="portal-trend portal-trend-up" aria-label="Trending up">
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
+        <section class="portal-hero-metrics" aria-label="Key performance indicators">
+            @foreach (var metric in data.HeroMetrics)
+            {
+                <div class="portal-hero-card portal-hero-card-@metric.Id" id="widget-hero-@metric.Id"
+                     style="--hero-color: @metric.Color;">
+                    <div class="portal-hero-card-header">
+                        <span class="portal-hero-label">@metric.Label</span>
+                        <span class="portal-hero-trend @(metric.IsPositiveTrend ? "portal-trend-up" : "portal-trend-down")"
+                              aria-label="@(metric.IsPositiveTrend ? "Up" : "Down") @Math.Abs(metric.ChangePercent)@metric.Suffix vs previous period">
+                            @if (metric.IsPositiveTrend)
+                            {
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
                                     <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/>
                                     <polyline points="17 6 23 6 23 12"/>
                                 </svg>
-                                +@(data.CompliancePercentage - data.PreviousPeriodCompliancePercentage)% vs last period
-                            </span>
-                        }
-                        else
-                        {
-                            <span class="portal-trend portal-trend-down" aria-label="Trending down">
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
+                            }
+                            else
+                            {
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
                                     <polyline points="23 18 13.5 8.5 8.5 13.5 1 6"/>
                                     <polyline points="17 18 23 18 23 12"/>
                                 </svg>
-                                -@(data.PreviousPeriodCompliancePercentage - data.CompliancePercentage)% vs last period
-                            </span>
+                            }
+                            @(metric.ChangePercent >= 0 ? "+" : "")@metric.ChangePercent@metric.Suffix
+                        </span>
+                    </div>
+                    <div class="portal-hero-value-row">
+                        <span class="portal-hero-value" id="counter-@metric.Id" aria-live="polite">
+                            @metric.Value@metric.Suffix
+                        </span>
+                        @if (metric.SparklineData.Count >= 2)
+                        {
+                            <svg class="portal-sparkline" viewBox="0 0 80 30" preserveAspectRatio="none"
+                                 role="img" aria-label="@metric.Label 7-day trend sparkline">
+                                @{
+                                    var pts = metric.SparklineData;
+                                    var maxVal = pts.Max() == 0 ? 1 : pts.Max();
+                                    var sparkPts = pts.Select((v, i) => $"{i * 80.0 / (pts.Count - 1):F1},{30 - v / maxVal * 26:F1}").ToList();
+                                    var polylinePoints = string.Join(" ", sparkPts);
+                                    var areaPoints = $"0,30 {polylinePoints} {80},30";
+                                }
+                                <polygon points="@areaPoints"
+                                         fill="@metric.Color" fill-opacity="0.12" />
+                                <polyline points="@polylinePoints"
+                                          fill="none" stroke="@metric.Color" stroke-width="2"
+                                          stroke-linejoin="round" stroke-linecap="round" />
+                            </svg>
+                        }
+                    </div>
+                    <div class="portal-hero-subtitle">vs previous @selectedDays days</div>
+                </div>
+            }
+        </section>
+
+        <!-- ═══════════════════════════════════════════════════════════
+             SECTION 3: Chart Grid Row 1 — Area + Donut
+             ═══════════════════════════════════════════════════════════ -->
+        <div class="portal-chart-grid">
+            <!-- Area Chart: Submission Volume -->
+            <div class="portal-widget portal-chart-widget" id="widget-volume">
+                <div class="portal-dash-section-header">
+                    <h2 class="portal-dash-section-title">Submission Volume</h2>
+                    <span class="portal-dash-section-meta">Last 6 months</span>
+                </div>
+                <div class="portal-chart-container" style="height:220px;">
+                    <canvas id="chart-volume" aria-label="Submission volume area chart"></canvas>
+                </div>
+            </div>
+
+            <!-- Donut Chart: Template Health -->
+            <div class="portal-widget portal-chart-widget" id="widget-health">
+                <div class="portal-dash-section-header">
+                    <h2 class="portal-dash-section-title">Template Health</h2>
+                    <span class="portal-dash-section-meta">Pass rate by return</span>
+                </div>
+                <div class="portal-donut-layout">
+                    <div class="portal-chart-container" style="height:200px; width:200px; flex-shrink:0;">
+                        <canvas id="chart-health" aria-label="Template health donut chart"></canvas>
+                    </div>
+                    <div class="portal-donut-detail" id="donut-detail">
+                        @if (selectedTemplate is not null)
+                        {
+                            <div class="portal-donut-detail-card">
+                                <div class="portal-donut-detail-title">@selectedTemplate.ReturnCode</div>
+                                <div class="portal-donut-detail-name">@selectedTemplate.ReturnName</div>
+                                <div class="portal-donut-detail-stat">
+                                    <span class="portal-donut-detail-label">Pass Rate</span>
+                                    <span class="portal-donut-detail-value" style="color: @GetHealthColor(selectedTemplate.PassRate)">@selectedTemplate.PassRate%</span>
+                                </div>
+                                <div class="portal-donut-detail-stat">
+                                    <span class="portal-donut-detail-label">Submissions</span>
+                                    <span class="portal-donut-detail-value">@selectedTemplate.TotalSubmissions</span>
+                                </div>
+                                <div class="portal-donut-detail-stat">
+                                    <span class="portal-donut-detail-label">Errors</span>
+                                    <span class="portal-donut-detail-value @(selectedTemplate.ErrorCount > 0 ? "portal-count-error" : "")">@selectedTemplate.ErrorCount</span>
+                                </div>
+                            </div>
+                        }
+                        else
+                        {
+                            <p class="portal-donut-hint">Click a segment to see details</p>
                         }
                     </div>
                 </div>
             </div>
-        </section>
+        </div>
 
         <!-- ═══════════════════════════════════════════════════════════
-             SECTION 3: Stat Cards
+             SECTION 4: Chart Grid Row 2 — Horizontal Bar + Heatmap
              ═══════════════════════════════════════════════════════════ -->
-        <section class="portal-dash-stats" aria-label="Key metrics">
-            <!-- Due This Month -->
-            <div class="portal-stat-card portal-stat-due">
-                <div class="portal-stat-header">
-                    <span class="portal-stat-icon portal-stat-icon-blue" aria-hidden="true">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
-                            <line x1="16" y1="2" x2="16" y2="6"/>
-                            <line x1="8" y1="2" x2="8" y2="6"/>
-                            <line x1="3" y1="10" x2="21" y2="10"/>
-                        </svg>
-                    </span>
-                    <span class="portal-stat-label">Due This Month</span>
+        <div class="portal-chart-grid">
+            <!-- Horizontal Bar: Top Modules -->
+            <div class="portal-widget portal-chart-widget" id="widget-modules">
+                <div class="portal-dash-section-header">
+                    <h2 class="portal-dash-section-title">Top Returns</h2>
+                    <span class="portal-dash-section-meta">By submission volume</span>
                 </div>
-                <div class="portal-stat-value">@data.DueThisMonth</div>
-                @if (data.OverdueCount > 0)
+                @if (data.TopModules.Any())
                 {
-                    <div class="portal-stat-detail portal-stat-detail-danger">
-                        @data.OverdueCount overdue
+                    <div class="portal-chart-container" style="height:@(Math.Max(160, data.TopModules.Count * 42))px;">
+                        <canvas id="chart-modules" aria-label="Top returns horizontal bar chart"></canvas>
                     </div>
                 }
                 else
                 {
-                    <div class="portal-stat-detail portal-stat-detail-success">
-                        All on track
-                    </div>
+                    <div class="portal-empty-state"><p>No submissions in this period.</p></div>
                 }
             </div>
 
-            <!-- Submitted -->
-            <div class="portal-stat-card portal-stat-submitted">
-                <div class="portal-stat-header">
-                    <span class="portal-stat-icon portal-stat-icon-green" aria-hidden="true">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <polyline points="20 6 9 17 4 12"/>
-                        </svg>
-                    </span>
-                    <span class="portal-stat-label">Submitted</span>
+            <!-- Heatmap: Submission Intensity -->
+            <div class="portal-widget portal-chart-widget" id="widget-heatmap">
+                <div class="portal-dash-section-header">
+                    <h2 class="portal-dash-section-title">Submission Activity</h2>
+                    <span class="portal-dash-section-meta">Last 90 days</span>
                 </div>
-                <div class="portal-stat-value">@data.SubmittedThisPeriod</div>
-                <div class="portal-stat-detail">
-                    <span class="portal-stat-detail-success">@data.AcceptedCount accepted</span>
-                    @if (data.RejectedCount > 0)
+                <div class="portal-heatmap-container">
+                    <canvas id="chart-heatmap" aria-label="Submission activity heatmap"></canvas>
+                </div>
+                <div class="portal-heatmap-legend">
+                    <span>Less</span>
+                    @foreach (var cls in new[] { "l0","l1","l2","l3","l4" })
                     {
-                        <span class="portal-stat-detail-danger"> · @data.RejectedCount rejected</span>
+                        <span class="portal-heatmap-swatch portal-heatmap-swatch-@cls"></span>
                     }
+                    <span>More</span>
                 </div>
             </div>
-
-            <!-- Pending Review -->
-            <div class="portal-stat-card portal-stat-pending">
-                <div class="portal-stat-header">
-                    <span class="portal-stat-icon portal-stat-icon-amber" aria-hidden="true">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <circle cx="12" cy="12" r="10"/>
-                            <polyline points="12 6 12 12 16 14"/>
-                        </svg>
-                    </span>
-                    <span class="portal-stat-label">Pending Review</span>
-                </div>
-                <div class="portal-stat-value">@data.PendingReviewCount</div>
-                <div class="portal-stat-detail">
-                    Awaiting checker approval
-                </div>
-            </div>
-
-            <!-- Validation Score -->
-            <div class="portal-stat-card portal-stat-validation">
-                <div class="portal-stat-header">
-                    <span class="portal-stat-icon portal-stat-icon-purple" aria-hidden="true">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
-                            <polyline points="22 4 12 14.01 9 11.01"/>
-                        </svg>
-                    </span>
-                    <span class="portal-stat-label">Validation Score</span>
-                </div>
-                <div class="portal-stat-value">@data.AverageValidationScore<span class="portal-stat-unit">%</span></div>
-                <div class="portal-stat-detail">
-                    Average pass rate
-                </div>
-            </div>
-        </section>
+        </div>
 
         <!-- ═══════════════════════════════════════════════════════════
-             SECTION 4: Filing RAG Status
+             SECTION 5: Deadlines + Activity Feed
              ═══════════════════════════════════════════════════════════ -->
-        <section class="portal-dash-section" aria-label="Filing status">
-            <RagStatusWidget />
-        </section>
+        <div class="portal-chart-grid portal-chart-grid-uneven">
+            <!-- Upcoming Deadlines -->
+            <div class="portal-widget" id="widget-deadlines">
+                <div class="portal-dash-section-header">
+                    <h2 class="portal-dash-section-title">Upcoming Deadlines</h2>
+                    <a href="/calendar" class="portal-dash-section-link">View Calendar</a>
+                </div>
 
-        <!-- ═══════════════════════════════════════════════════════════
-             SECTION 5: Upcoming Deadlines
-             ═══════════════════════════════════════════════════════════ -->
-        <section class="portal-dash-section" aria-label="Upcoming deadlines">
-            <div class="portal-dash-section-header">
-                <h2 class="portal-dash-section-title">Upcoming Deadlines</h2>
-                <a href="/calendar" class="portal-dash-section-link">View Calendar</a>
+                @if (data.UpcomingDeadlines.Any())
+                {
+                    <div class="portal-deadline-list">
+                        @foreach (var deadline in data.UpcomingDeadlines)
+                        {
+                            <div class="portal-deadline-item portal-deadline-@deadline.Status.ToString().ToLowerInvariant()">
+                                <div class="portal-deadline-code">
+                                    <span class="portal-deadline-return-code">@deadline.ReturnCode</span>
+                                    <span class="portal-deadline-return-name">@deadline.ReturnName</span>
+                                </div>
+                                <div class="portal-deadline-freq">
+                                    <span class="portal-badge portal-badge-neutral">@deadline.Frequency</span>
+                                </div>
+                                <div class="portal-deadline-due">
+                                    <span class="portal-deadline-date">@deadline.DueDate.ToString("d MMM yyyy")</span>
+                                    <span class="portal-deadline-days @GetDaysClass(deadline.DaysRemaining)">
+                                        @FormatDaysRemaining(deadline.DaysRemaining)
+                                    </span>
+                                </div>
+                                <div class="portal-deadline-status">
+                                    <span class="portal-badge @GetDeadlineBadgeClass(deadline.Status)">
+                                        @GetDeadlineStatusLabel(deadline.Status)
+                                    </span>
+                                </div>
+                                <div class="portal-deadline-action">
+                                    @if (deadline.Status == DeadlineStatus.Submitted)
+                                    {
+                                        <a href="/submissions/@deadline.SubmissionId" class="portal-btn portal-btn-xs portal-btn-ghost-green">View</a>
+                                    }
+                                    else
+                                    {
+                                        <a href="/submit" class="portal-btn portal-btn-xs portal-btn-primary">Submit</a>
+                                    }
+                                </div>
+                            </div>
+                        }
+                    </div>
+                }
+                else
+                {
+                    <div class="portal-empty-state"><p>No upcoming deadlines. You're all caught up!</p></div>
+                }
             </div>
 
-            @if (data.UpcomingDeadlines.Any())
-            {
-                <div class="portal-deadline-list">
-                    @foreach (var deadline in data.UpcomingDeadlines)
-                    {
-                        <div class="portal-deadline-item portal-deadline-@deadline.Status.ToString().ToLowerInvariant()">
-                            <div class="portal-deadline-code">
-                                <span class="portal-deadline-return-code">@deadline.ReturnCode</span>
-                                <span class="portal-deadline-return-name">@deadline.ReturnName</span>
-                            </div>
-                            <div class="portal-deadline-freq">
-                                <span class="portal-badge portal-badge-neutral">@deadline.Frequency</span>
-                            </div>
-                            <div class="portal-deadline-due">
-                                <span class="portal-deadline-date">@deadline.DueDate.ToString("d MMM yyyy")</span>
-                                <span class="portal-deadline-days @GetDaysClass(deadline.DaysRemaining)">
-                                    @FormatDaysRemaining(deadline.DaysRemaining)
+            <!-- Activity Feed -->
+            <div class="portal-widget" id="widget-activity">
+                <div class="portal-dash-section-header">
+                    <h2 class="portal-dash-section-title">Activity Feed</h2>
+                    <a href="/submissions" class="portal-dash-section-link">View All</a>
+                </div>
+
+                @if (data.ActivityFeed.Any())
+                {
+                    <div class="portal-activity-feed">
+                        @foreach (var item in data.ActivityFeed)
+                        {
+                            <div class="portal-activity-item">
+                                <div class="portal-activity-icon portal-activity-icon-@item.Icon" aria-hidden="true">
+                                    @GetActivitySvg(item.Icon)
+                                </div>
+                                <div class="portal-activity-content">
+                                    <span class="portal-activity-message">
+                                        @if (item.LinkUrl is not null)
+                                        {
+                                            <a href="@item.LinkUrl" class="portal-activity-link">@item.Message</a>
+                                        }
+                                        else
+                                        {
+                                            @item.Message
+                                        }
+                                    </span>
+                                    <span class="portal-activity-time" title="@item.Timestamp.ToString("d MMM yyyy HH:mm")">
+                                        @FormatRelativeTime(item.Timestamp)
+                                    </span>
+                                </div>
+                                <span class="portal-badge @item.BadgeClass portal-activity-badge">
+                                    @item.Icon
                                 </span>
                             </div>
-                            <div class="portal-deadline-status">
-                                <span class="portal-badge @GetDeadlineBadgeClass(deadline.Status)">
-                                    @GetDeadlineStatusLabel(deadline.Status)
-                                </span>
-                            </div>
-                            <div class="portal-deadline-action">
-                                @if (deadline.Status == DeadlineStatus.Submitted)
-                                {
-                                    <a href="/submissions/@deadline.SubmissionId" class="portal-btn portal-btn-xs portal-btn-ghost-green">
-                                        View
-                                    </a>
-                                }
-                                else
-                                {
-                                    <a href="/submit" class="portal-btn portal-btn-xs portal-btn-primary">
-                                        Submit
-                                    </a>
-                                }
-                            </div>
-                        </div>
-                    }
-                </div>
-            }
-            else
-            {
-                <div class="portal-empty-state">
-                    <p>No upcoming deadlines. You're all caught up!</p>
-                </div>
-            }
-        </section>
+                        }
+                    </div>
+                }
+                else
+                {
+                    <div class="portal-empty-state"><p>No recent activity.</p></div>
+                }
+            </div>
+        </div>
 
         <!-- ═══════════════════════════════════════════════════════════
-             SECTION 5: Recent Submissions
+             SECTION 6: Recent Submissions Table
              ═══════════════════════════════════════════════════════════ -->
-        <section class="portal-dash-section" aria-label="Recent submissions">
+        <div class="portal-widget" id="widget-submissions">
             <div class="portal-dash-section-header">
                 <h2 class="portal-dash-section-title">Recent Submissions</h2>
                 <a href="/submissions" class="portal-dash-section-link">View All</a>
@@ -291,35 +343,21 @@ else if (data is not null)
                             @foreach (var sub in data.RecentSubmissions)
                             {
                                 <tr class="portal-table-row-clickable" @onclick="() => NavigateToSubmission(sub.SubmissionId)">
-                                    <td>
-                                        <span class="portal-table-primary">@sub.ReturnCode</span>
-                                    </td>
+                                    <td><span class="portal-table-primary">@sub.ReturnCode</span></td>
                                     <td>@sub.Period</td>
                                     <td>@sub.SubmittedDate.ToString("d MMM yyyy HH:mm")</td>
-                                    <td>
-                                        <span class="portal-badge @GetStatusBadgeClass(sub.Status)">
-                                            @GetStatusLabel(sub.Status)
-                                        </span>
-                                    </td>
+                                    <td><span class="portal-badge @GetStatusBadgeClass(sub.Status)">@GetStatusLabel(sub.Status)</span></td>
                                     <td>
                                         @if (sub.ErrorCount > 0)
-                                        {
-                                            <span class="portal-count-error">@sub.ErrorCount</span>
-                                        }
+                                        { <span class="portal-count-error">@sub.ErrorCount</span> }
                                         else
-                                        {
-                                            <span class="portal-count-zero">0</span>
-                                        }
+                                        { <span class="portal-count-zero">0</span> }
                                     </td>
                                     <td>
                                         @if (sub.WarningCount > 0)
-                                        {
-                                            <span class="portal-count-warning">@sub.WarningCount</span>
-                                        }
+                                        { <span class="portal-count-warning">@sub.WarningCount</span> }
                                         else
-                                        {
-                                            <span class="portal-count-zero">0</span>
-                                        }
+                                        { <span class="portal-count-zero">0</span> }
                                     </td>
                                     <td>
                                         <a href="/submissions/@sub.SubmissionId" class="portal-table-link" aria-label="View submission @sub.ReturnCode">
@@ -341,33 +379,7 @@ else if (data is not null)
                     <a href="/submit" class="portal-btn portal-btn-primary">Submit Your First Return</a>
                 </div>
             }
-        </section>
-
-        <!-- ═══════════════════════════════════════════════════════════
-             SECTION 6: Compliance Trend (CSS-only bar chart)
-             ═══════════════════════════════════════════════════════════ -->
-        <section class="portal-dash-section" aria-label="Compliance trend">
-            <div class="portal-dash-section-header">
-                <h2 class="portal-dash-section-title">Compliance Trend</h2>
-                <span class="portal-dash-section-meta">Last 6 months</span>
-            </div>
-
-            <div class="portal-trend-chart" role="img" aria-label="Compliance trend over the last 6 months">
-                @foreach (var month in data.ComplianceTrend)
-                {
-                    <div class="portal-trend-bar-group">
-                        <div class="portal-trend-bar-track">
-                            <div class="portal-trend-bar-fill"
-                                 style="width: @month.CompliancePercent%;"
-                                 title="@month.CompliancePercent% — @month.Submitted of @month.Total">
-                            </div>
-                        </div>
-                        <span class="portal-trend-bar-label">@month.MonthLabel</span>
-                        <span class="portal-trend-bar-value">@month.CompliancePercent%</span>
-                    </div>
-                }
-            </div>
-        </section>
+        </div>
 
     </div>
 }
@@ -391,48 +403,69 @@ else
 
     private DashboardData? data;
     private bool isLoading = true;
+    private bool chartsRendered = false;
     private string displayName = "";
     private string greeting = "";
+    private int selectedDays = 30;
+    private TemplateHealthItem? selectedTemplate;
+
+    private static readonly (string Label, int Days)[] dateRanges =
+    [
+        ("Today", 1),
+        ("7D", 7),
+        ("30D", 30),
+        ("90D", 90)
+    ];
+
+    private int institutionId;
+    private string institutionName = "";
+    private string institutionCode = "";
+
+    // ── Lifecycle ────────────────────────────────────────────────
 
     protected override async Task OnInitializedAsync()
     {
+        var state = await AuthState!;
+        var user = state.User;
+
+        displayName = user.FindFirst("DisplayName")?.Value
+                   ?? user.Identity?.Name
+                   ?? "User";
+
+        var hour = DateTime.Now.Hour;
+        greeting = hour <= 11 ? "Good morning" : hour <= 16 ? "Good afternoon" : "Good evening";
+
+        var institutionIdStr = user.FindFirst("InstitutionId")?.Value;
+        institutionName = user.FindFirst("InstitutionName")?.Value ?? "Unknown Institution";
+        institutionCode = institutionIdStr ?? "";
+        int.TryParse(institutionIdStr, out institutionId);
+
         await LoadDashboard();
     }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (data is null || isLoading) return;
+        if (chartsRendered && !firstRender) return;
+
+        chartsRendered = true;
+        await RenderAllCharts();
+    }
+
+    // ── Data Loading ─────────────────────────────────────────────
 
     private async Task LoadDashboard()
     {
         isLoading = true;
+        chartsRendered = false;
         StateHasChanged();
 
         try
         {
-            var state = await AuthState!;
-            var user = state.User;
-
-            displayName = user.FindFirst("DisplayName")?.Value
-                       ?? user.Identity?.Name
-                       ?? "User";
-
-            var hour = DateTime.Now.Hour;
-            if (hour <= 11)
-                greeting = "Good morning";
-            else if (hour <= 16)
-                greeting = "Good afternoon";
+            if (institutionId > 0)
+                data = await DashboardService.GetDashboardDataAsync(institutionId, institutionName, institutionCode, selectedDays);
             else
-                greeting = "Good evening";
-
-            var institutionIdStr = user.FindFirst("InstitutionId")?.Value;
-            var institutionName = user.FindFirst("InstitutionName")?.Value ?? "Unknown Institution";
-            var institutionCode = institutionIdStr ?? "";
-
-            if (int.TryParse(institutionIdStr, out var institutionId))
-            {
-                data = await DashboardService.GetDashboardDataAsync(institutionId, institutionName, institutionCode);
-            }
-            else
-            {
                 data = null;
-            }
         }
         catch
         {
@@ -445,72 +478,169 @@ else
         }
     }
 
-    private void NavigateToSubmission(int submissionId)
+    private async Task ChangeDateRange(int days)
     {
-        Navigation.NavigateTo($"/submissions/{submissionId}");
+        selectedDays = days;
+        selectedTemplate = null;
+        await LoadDashboard();
     }
 
-    // ── Helper Methods ──────────────────────────────────────────
+    // ── Chart Rendering ──────────────────────────────────────────
 
-    private static string GetComplianceColor(decimal percent) => percent switch
+    private async Task RenderAllCharts()
     {
-        >= 90 => "#006B3F",
-        >= 70 => "#f59e0b",
-        _ => "#ef4444"
-    };
+        if (data is null) return;
+
+        var widgetIds = new[] { "widget-volume", "widget-health", "widget-modules", "widget-heatmap", "widget-deadlines", "widget-activity", "widget-submissions" };
+        await Charts.RenderStaggered(widgetIds, 90);
+
+        // Animate hero counters
+        foreach (var m in data.HeroMetrics)
+            await Charts.AnimateCounter($"counter-{m.Id}", m.Value, 900, m.Suffix);
+
+        // Area chart
+        if (data.SubmissionVolume.Any())
+        {
+            var labels   = data.SubmissionVolume.Select(v => v.Label).ToArray();
+            var accepted = data.SubmissionVolume.Select(v => v.Accepted).ToArray();
+            var rejected = data.SubmissionVolume.Select(v => v.Rejected).ToArray();
+            var pending  = data.SubmissionVolume.Select(v => v.Pending).ToArray();
+            await Charts.RenderAreaChart("chart-volume", labels, accepted, rejected, pending);
+        }
+
+        // Donut chart (template health)
+        if (data.TemplateHealth.Any())
+        {
+            var trendData = new FC.Engine.Domain.Models.TrendData
+            {
+                Labels = data.TemplateHealth.Select(t => t.ReturnCode).ToList(),
+                Datasets = new List<FC.Engine.Domain.Models.TrendDataset>
+                {
+                    new()
+                    {
+                        Label = "Pass Rate",
+                        Data = data.TemplateHealth.Select(t => (double)t.PassRate).ToList(),
+                        BackgroundColor = data.TemplateHealth.Select(t => GetHealthColorHex(t.PassRate)).ToList()
+                    }
+                }
+            };
+            await Charts.RenderDoughnutChart("chart-health", trendData);
+        }
+
+        // Horizontal bar chart (top modules)
+        if (data.TopModules.Any())
+        {
+            var labels     = data.TopModules.Select(m => m.ReturnCode).ToArray();
+            var values     = data.TopModules.Select(m => m.SubmissionCount).ToArray();
+            var compliance = data.TopModules.Select(m => m.ComplianceRate).ToArray();
+            await Charts.RenderHorizontalBarChart("chart-modules", labels, values, compliance);
+        }
+
+        // Heatmap
+        if (data.HeatmapData.Any())
+        {
+            var heatmapPayload = data.HeatmapData.Select(d => new
+            {
+                date = d.Date.ToString("yyyy-MM-dd"),
+                count = d.Count,
+                intensity = d.Intensity
+            }).ToArray();
+            await Charts.RenderHeatmap("chart-heatmap", heatmapPayload);
+        }
+    }
+
+    // ── Interactivity ────────────────────────────────────────────
+
+    private void SelectTemplate(TemplateHealthItem? template)
+    {
+        selectedTemplate = template;
+    }
+
+    private void NavigateToSubmission(int submissionId)
+        => Navigation.NavigateTo($"/submissions/{submissionId}");
+
+    // ── Helper Methods ───────────────────────────────────────────
+
+    private static string GetHealthColor(decimal passRate)
+        => passRate >= 90 ? "#0f766e" : passRate >= 70 ? "#d97706" : "#ef4444";
+
+    private static string GetHealthColorHex(decimal passRate)
+        => passRate >= 90 ? "#0f766e" : passRate >= 70 ? "#d97706" : "#ef4444";
+
+    private static string GetComplianceColor(decimal percent)
+        => percent >= 90 ? "#006B3F" : percent >= 70 ? "#f59e0b" : "#ef4444";
 
     private static string GetDaysClass(int days)
     {
         if (days <= -1) return "portal-days-overdue";
-        if (days <= 3) return "portal-days-urgent";
-        if (days <= 7) return "portal-days-warning";
+        if (days <= 3)  return "portal-days-urgent";
+        if (days <= 7)  return "portal-days-warning";
         return "portal-days-ok";
     }
 
     private static string FormatDaysRemaining(int days)
     {
         if (days <= -1) return $"{Math.Abs(days)} days overdue";
-        if (days == 0) return "Due today";
-        if (days == 1) return "Due tomorrow";
+        if (days == 0)  return "Due today";
+        if (days == 1)  return "Due tomorrow";
         return $"{days} days left";
+    }
+
+    private static string FormatRelativeTime(DateTime dt)
+    {
+        var diff = DateTime.UtcNow - dt.ToUniversalTime();
+        if (diff.TotalMinutes < 1) return "just now";
+        if (diff.TotalHours < 1)   return $"{(int)diff.TotalMinutes}m ago";
+        if (diff.TotalDays < 1)    return $"{(int)diff.TotalHours}h ago";
+        if (diff.TotalDays < 7)    return $"{(int)diff.TotalDays}d ago";
+        return dt.ToString("d MMM");
     }
 
     private static string GetDeadlineBadgeClass(DeadlineStatus status) => status switch
     {
         DeadlineStatus.Submitted => "portal-badge-success",
-        DeadlineStatus.Overdue => "portal-badge-danger",
-        DeadlineStatus.Draft => "portal-badge-warning",
-        _ => "portal-badge-neutral"
+        DeadlineStatus.Overdue   => "portal-badge-danger",
+        DeadlineStatus.Draft     => "portal-badge-warning",
+        _                        => "portal-badge-neutral"
     };
 
     private static string GetDeadlineStatusLabel(DeadlineStatus status) => status switch
     {
         DeadlineStatus.Submitted => "Submitted",
-        DeadlineStatus.Overdue => "Overdue",
-        DeadlineStatus.Draft => "Draft",
-        _ => "Not Started"
+        DeadlineStatus.Overdue   => "Overdue",
+        DeadlineStatus.Draft     => "Draft",
+        _                        => "Not Started"
     };
 
     private static string GetStatusBadgeClass(SubmissionStatus status) => status switch
     {
-        SubmissionStatus.Accepted => "portal-badge-success",
-        SubmissionStatus.AcceptedWithWarnings => "portal-badge-warning",
-        SubmissionStatus.Rejected => "portal-badge-danger",
-        SubmissionStatus.PendingApproval => "portal-badge-info",
-        SubmissionStatus.ApprovalRejected => "portal-badge-danger",
-        _ => "portal-badge-neutral"
+        SubmissionStatus.Accepted              => "portal-badge-success",
+        SubmissionStatus.AcceptedWithWarnings  => "portal-badge-warning",
+        SubmissionStatus.Rejected              => "portal-badge-danger",
+        SubmissionStatus.PendingApproval       => "portal-badge-info",
+        SubmissionStatus.ApprovalRejected      => "portal-badge-danger",
+        _                                      => "portal-badge-neutral"
     };
 
     private static string GetStatusLabel(SubmissionStatus status) => status switch
     {
-        SubmissionStatus.Accepted => "Accepted",
+        SubmissionStatus.Accepted             => "Accepted",
         SubmissionStatus.AcceptedWithWarnings => "Accepted (Warnings)",
-        SubmissionStatus.Rejected => "Rejected",
-        SubmissionStatus.PendingApproval => "Pending Review",
-        SubmissionStatus.ApprovalRejected => "Returned",
-        SubmissionStatus.Draft => "Draft",
-        SubmissionStatus.Parsing => "Processing",
-        SubmissionStatus.Validating => "Validating",
-        _ => status.ToString()
+        SubmissionStatus.Rejected             => "Rejected",
+        SubmissionStatus.PendingApproval      => "Pending Review",
+        SubmissionStatus.ApprovalRejected     => "Returned",
+        SubmissionStatus.Draft                => "Draft",
+        SubmissionStatus.Parsing              => "Processing",
+        SubmissionStatus.Validating           => "Validating",
+        _                                     => status.ToString()
+    };
+
+    private static MarkupString GetActivitySvg(string icon) => icon switch
+    {
+        "approve" => new MarkupString("""<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>"""),
+        "reject"  => new MarkupString("""<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>"""),
+        "validate"=> new MarkupString("""<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>"""),
+        "draft"   => new MarkupString("""<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>"""),
+        _         => new MarkupString("""<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>""")
     };
 }
