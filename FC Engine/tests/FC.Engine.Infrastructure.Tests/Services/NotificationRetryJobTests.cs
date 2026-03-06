@@ -5,6 +5,7 @@ using FC.Engine.Domain.Enums;
 using FC.Engine.Domain.ValueObjects;
 using FC.Engine.Infrastructure.BackgroundJobs;
 using FluentAssertions;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Moq;
 
@@ -69,12 +70,14 @@ public class NotificationRetryJobTests
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync(new EmailSendResult { Success = true, ProviderMessageId = "msg-1" });
 
-        var sut = new NotificationRetryJob(
-            deliveryRepo.Object,
-            emailSender.Object,
-            smsSender.Object,
-            branding.Object,
-            logger.Object);
+        using var serviceProvider = new ServiceCollection()
+            .AddSingleton(deliveryRepo.Object)
+            .AddSingleton(emailSender.Object)
+            .AddSingleton(smsSender.Object)
+            .AddSingleton(branding.Object)
+            .BuildServiceProvider();
+
+        var sut = new NotificationRetryJob(serviceProvider, logger.Object);
 
         var retryMethod = typeof(NotificationRetryJob).GetMethod("RetryFailedDeliveries", BindingFlags.NonPublic | BindingFlags.Instance);
         retryMethod.Should().NotBeNull();
@@ -140,12 +143,14 @@ public class NotificationRetryJobTests
                 ErrorMessage = "smtp timeout"
             });
 
-        var sut = new NotificationRetryJob(
-            deliveryRepo.Object,
-            emailSender.Object,
-            smsSender.Object,
-            branding.Object,
-            logger.Object);
+        using var serviceProvider = new ServiceCollection()
+            .AddSingleton(deliveryRepo.Object)
+            .AddSingleton(emailSender.Object)
+            .AddSingleton(smsSender.Object)
+            .AddSingleton(branding.Object)
+            .BuildServiceProvider();
+
+        var sut = new NotificationRetryJob(serviceProvider, logger.Object);
 
         var retryMethod = typeof(NotificationRetryJob).GetMethod("RetryFailedDeliveries", BindingFlags.NonPublic | BindingFlags.Instance);
         retryMethod.Should().NotBeNull();

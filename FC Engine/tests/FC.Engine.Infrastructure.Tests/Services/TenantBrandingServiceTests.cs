@@ -7,6 +7,7 @@ using FC.Engine.Infrastructure.Services;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
 namespace FC.Engine.Infrastructure.Tests.Services;
@@ -28,7 +29,11 @@ public class TenantBrandingServiceTests : IDisposable
         _cache = new MemoryCache(new MemoryCacheOptions());
         _storage = new FakeStorageService();
 
-        _sut = new TenantBrandingService(_db, _cache, _storage);
+        _sut = new TenantBrandingService(
+            _db,
+            _cache,
+            _storage,
+            new ServiceCollection().BuildServiceProvider());
     }
 
     public void Dispose()

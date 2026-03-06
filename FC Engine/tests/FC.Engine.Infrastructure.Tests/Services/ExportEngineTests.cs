@@ -17,6 +17,7 @@ using FC.Engine.Infrastructure.BackgroundJobs;
 using FC.Engine.Infrastructure.Export;
 using FC.Engine.Infrastructure.Export.Adapters;
 using FluentAssertions;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using UglyToad.PdfPig;
@@ -930,11 +931,16 @@ public class ExportEngineTests
         };
         await exportRepo.Add(request);
 
-        var job = new ExportCleanupJob(exportRepo, storage, NullLogger<ExportCleanupJob>.Instance);
+        using var serviceProvider = new ServiceCollection()
+            .AddSingleton<IExportRequestRepository>(exportRepo)
+            .AddSingleton<IFileStorageService>(storage)
+            .BuildServiceProvider();
+
+        var job = new ExportCleanupJob(serviceProvider, NullLogger<ExportCleanupJob>.Instance);
 
         var method = typeof(ExportCleanupJob).GetMethod("RemoveExpiredExport", BindingFlags.NonPublic | BindingFlags.Instance);
         method.Should().NotBeNull();
-        await (Task)method!.Invoke(job, [request, CancellationToken.None])!;
+        await (Task)method!.Invoke(job, [request, exportRepo, storage, CancellationToken.None])!;
 
         storage.Deleted.Should().Contain("tenants/t1/exports/100/2.xlsx");
         request.FilePath.Should().BeNull();
