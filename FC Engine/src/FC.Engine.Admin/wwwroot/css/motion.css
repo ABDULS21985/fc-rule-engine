@@ -1,0 +1,924 @@
+/* ==================================================================
+   FC Engine — Motion Design System
+   Purposeful micro-interactions for elevated user experience.
+   All animations respect prefers-reduced-motion.
+   ================================================================== */
+
+
+/* ==================================================================
+   1. MOTION TOKENS
+   ================================================================== */
+
+:root {
+    /* Durations */
+    --motion-instant:  80ms;
+    --motion-fast:     150ms;
+    --motion-normal:   250ms;
+    --motion-slow:     350ms;
+    --motion-slower:   500ms;
+    --motion-slowest:  800ms;
+
+    /* Easing — standard Material-inspired curves */
+    --ease-out:        cubic-bezier(0.0, 0.0, 0.2, 1);
+    --ease-in:         cubic-bezier(0.4, 0.0, 1, 1);
+    --ease-in-out:     cubic-bezier(0.4, 0.0, 0.2, 1);
+
+    /* Easing — spring / bounce */
+    --ease-spring:     cubic-bezier(0.34, 1.56, 0.64, 1);
+    --ease-bounce:     cubic-bezier(0.68, -0.55, 0.265, 1.55);
+    --ease-snap:       cubic-bezier(0.5, 1.8, 0.5, 0.8);
+
+    /* Easing — gentle decelerate */
+    --ease-gentle:     cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+
+
+/* ==================================================================
+   2. PAGE TRANSITIONS — Cross-fade with slide
+   ================================================================== */
+
+/* Page wrapper gets cross-fade entrance */
+.fc-motion-page-enter {
+    animation: motionPageEnter var(--motion-slow) var(--ease-out) both;
+}
+
+@keyframes motionPageEnter {
+    from {
+        opacity: 0;
+        transform: translateY(12px);
+        filter: blur(2px);
+    }
+    60% {
+        filter: blur(0);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+        filter: blur(0);
+    }
+}
+
+/* Shared element transition — expand from source */
+.fc-motion-expand-enter {
+    animation: motionExpandEnter var(--motion-slow) var(--ease-out) both;
+}
+
+@keyframes motionExpandEnter {
+    from {
+        opacity: 0;
+        transform: scale(0.95);
+        transform-origin: top center;
+    }
+    to {
+        opacity: 1;
+        transform: scale(1);
+        transform-origin: top center;
+    }
+}
+
+/* Stagger children on page load */
+.fc-motion-stagger > * {
+    opacity: 0;
+    animation: motionStaggerIn var(--motion-normal) var(--ease-out) both;
+}
+
+.fc-motion-stagger > *:nth-child(1) { animation-delay: 0ms; }
+.fc-motion-stagger > *:nth-child(2) { animation-delay: 50ms; }
+.fc-motion-stagger > *:nth-child(3) { animation-delay: 100ms; }
+.fc-motion-stagger > *:nth-child(4) { animation-delay: 150ms; }
+.fc-motion-stagger > *:nth-child(5) { animation-delay: 200ms; }
+.fc-motion-stagger > *:nth-child(6) { animation-delay: 250ms; }
+.fc-motion-stagger > *:nth-child(7) { animation-delay: 300ms; }
+.fc-motion-stagger > *:nth-child(8) { animation-delay: 350ms; }
+
+@keyframes motionStaggerIn {
+    from {
+        opacity: 0;
+        transform: translateY(8px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+
+/* ==================================================================
+   3. BUTTON FEEDBACK — Scale, Ripple, Loading Morph
+   ================================================================== */
+
+/* Ripple container — the button must have position:relative; overflow:hidden */
+.fc-btn .fc-ripple {
+    position: absolute;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.35);
+    transform: scale(0);
+    animation: motionRipple var(--motion-slower) var(--ease-out) forwards;
+    pointer-events: none;
+}
+
+.fc-btn--outline .fc-ripple,
+.fc-btn--ghost .fc-ripple {
+    background: rgba(0, 107, 63, 0.1);
+}
+
+@keyframes motionRipple {
+    0% {
+        transform: scale(0);
+        opacity: 1;
+    }
+    70% {
+        opacity: 0.4;
+    }
+    100% {
+        transform: scale(2.5);
+        opacity: 0;
+    }
+}
+
+/* Loading morph — button text fades out, spinner fades in */
+.fc-btn--loading {
+    pointer-events: none;
+    position: relative;
+}
+
+.fc-btn--loading .fc-btn__text {
+    opacity: 0;
+    transition: opacity var(--motion-fast) var(--ease-in);
+}
+
+.fc-btn--loading .fc-btn__spinner {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 1;
+    animation: motionSpinnerIn var(--motion-normal) var(--ease-spring);
+}
+
+.fc-btn__spinner {
+    display: none;
+}
+
+.fc-btn--loading .fc-btn__spinner {
+    display: flex;
+}
+
+.fc-btn__spinner-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: currentColor;
+    margin: 0 2px;
+    animation: motionBtnDotPulse 0.8s var(--ease-in-out) infinite;
+}
+
+.fc-btn__spinner-dot:nth-child(2) { animation-delay: 0.15s; }
+.fc-btn__spinner-dot:nth-child(3) { animation-delay: 0.3s; }
+
+@keyframes motionSpinnerIn {
+    from {
+        opacity: 0;
+        transform: scale(0.5);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+@keyframes motionBtnDotPulse {
+    0%, 80%, 100% {
+        transform: scale(0.6);
+        opacity: 0.4;
+    }
+    40% {
+        transform: scale(1);
+        opacity: 1;
+    }
+}
+
+
+/* ==================================================================
+   4. FORM FIELD ANIMATIONS — Floating Labels, Border, Shake
+   ================================================================== */
+
+/* Floating label wrapper */
+.fc-floating-field {
+    position: relative;
+    margin-bottom: var(--space-4);
+}
+
+.fc-floating-field .fc-floating-input {
+    width: 100%;
+    padding: 1.25rem var(--space-3) 0.5rem;
+    border: 1.5px solid var(--cbn-border);
+    border-radius: var(--radius-md);
+    font-family: var(--font-sans);
+    font-size: var(--text-body);
+    color: var(--cbn-text);
+    background: var(--cbn-surface-elevated);
+    transition: border-color var(--motion-fast) var(--ease-out),
+                box-shadow var(--motion-fast) var(--ease-out);
+    outline: none;
+}
+
+.fc-floating-field .fc-floating-label {
+    position: absolute;
+    left: var(--space-3);
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: var(--text-body);
+    color: var(--cbn-text-muted);
+    pointer-events: none;
+    transform-origin: left center;
+    transition: transform var(--motion-fast) var(--ease-out),
+                font-size var(--motion-fast) var(--ease-out),
+                color var(--motion-fast) var(--ease-out),
+                top var(--motion-fast) var(--ease-out);
+}
+
+/* Float up on focus or when input has value */
+.fc-floating-field .fc-floating-input:focus ~ .fc-floating-label,
+.fc-floating-field .fc-floating-input:not(:placeholder-shown) ~ .fc-floating-label,
+.fc-floating-field .fc-floating-input.has-value ~ .fc-floating-label {
+    top: 0.55rem;
+    transform: translateY(0);
+    font-size: var(--text-caption);
+    color: var(--cbn-primary);
+}
+
+/* Border animates from center outward on focus */
+.fc-floating-field::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 50%;
+    width: 0;
+    height: 2px;
+    background: var(--cbn-primary);
+    border-radius: 1px;
+    transition: width var(--motion-normal) var(--ease-out),
+                left var(--motion-normal) var(--ease-out);
+}
+
+.fc-floating-field:focus-within::after {
+    left: 0;
+    width: 100%;
+}
+
+.fc-floating-field .fc-floating-input:focus {
+    border-color: var(--cbn-primary);
+    box-shadow: 0 0 0 3px var(--cbn-focus-ring);
+}
+
+/* Standard form input border-from-center animation */
+.fc-form-group-animated {
+    position: relative;
+}
+
+.fc-form-group-animated::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 50%;
+    width: 0;
+    height: 2px;
+    background: linear-gradient(90deg, var(--cbn-primary), var(--cbn-gold));
+    border-radius: 1px;
+    transition: width var(--motion-normal) var(--ease-out),
+                left var(--motion-normal) var(--ease-out);
+}
+
+.fc-form-group-animated:focus-within::after {
+    left: 0;
+    width: 100%;
+}
+
+/* Validation shake animation */
+.fc-motion-shake {
+    animation: motionShake var(--motion-slow) var(--ease-out);
+}
+
+@keyframes motionShake {
+    0%, 100% { transform: translateX(0); }
+    10%  { transform: translateX(-6px); }
+    20%  { transform: translateX(5px); }
+    30%  { transform: translateX(-4px); }
+    40%  { transform: translateX(3px); }
+    50%  { transform: translateX(-2px); }
+    60%  { transform: translateX(1px); }
+}
+
+/* Error state red pulse */
+.fc-form-input-error,
+.fc-floating-input--error {
+    border-color: var(--cbn-danger) !important;
+    animation: motionShake var(--motion-slow) var(--ease-out),
+               motionErrorPulse 0.3s var(--ease-out);
+}
+
+@keyframes motionErrorPulse {
+    0% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.3); }
+    100% { box-shadow: 0 0 0 4px rgba(220, 38, 38, 0); }
+}
+
+/* Floating field error state */
+.fc-floating-field--error .fc-floating-input {
+    border-color: var(--cbn-danger);
+}
+
+.fc-floating-field--error .fc-floating-label {
+    color: var(--cbn-danger);
+}
+
+.fc-floating-field--error::after {
+    background: var(--cbn-danger);
+}
+
+.fc-floating-error {
+    font-size: var(--text-caption);
+    color: var(--cbn-danger);
+    margin-top: var(--space-1);
+    animation: motionFadeUp var(--motion-fast) var(--ease-out);
+}
+
+/* Skeleton card wrapper */
+.fc-skel-card {
+    background: var(--cbn-surface-elevated);
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--cbn-border-subtle);
+    overflow: hidden;
+}
+
+
+/* ==================================================================
+   5. CARDS — Lift Shadow + 3D Perspective Tilt
+   ================================================================== */
+
+.fc-card,
+.fc-dash-stat-card,
+.fc-user-card,
+.fc-ia-stat-card {
+    transition: transform var(--motion-normal) var(--ease-out),
+                box-shadow var(--motion-normal) var(--ease-out);
+    will-change: transform;
+}
+
+/* 3D perspective tilt on hover */
+.fc-motion-tilt {
+    perspective: 800px;
+}
+
+.fc-motion-tilt > .fc-card,
+.fc-motion-tilt > .fc-dash-stat-card,
+.fc-motion-tilt > .fc-user-card,
+.fc-card.fc-motion-tilt-card {
+    transition: transform var(--motion-normal) var(--ease-out),
+                box-shadow var(--motion-normal) var(--ease-out);
+    transform-style: preserve-3d;
+}
+
+.fc-card.fc-motion-tilt-card:hover,
+.fc-motion-tilt > .fc-card:hover,
+.fc-motion-tilt > .fc-dash-stat-card:hover,
+.fc-motion-tilt > .fc-user-card:hover {
+    transform: translateY(-4px) rotateX(1.5deg) rotateY(-1.5deg);
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.08),
+                0 4px 12px rgba(0, 0, 0, 0.04),
+                0 0 0 1px rgba(0, 107, 63, 0.05);
+}
+
+/* Card content hover inner glow */
+.fc-card.fc-motion-tilt-card::before,
+.fc-motion-tilt > .fc-card::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    opacity: 0;
+    background: radial-gradient(
+        circle at var(--mouse-x, 50%) var(--mouse-y, 50%),
+        rgba(0, 107, 63, 0.04) 0%,
+        transparent 60%
+    );
+    transition: opacity var(--motion-normal) var(--ease-out);
+    pointer-events: none;
+    z-index: 0;
+}
+
+.fc-card.fc-motion-tilt-card:hover::before,
+.fc-motion-tilt > .fc-card:hover::before {
+    opacity: 1;
+}
+
+
+/* ==================================================================
+   6. TABLES — Row Highlight Slides In From Left
+   ================================================================== */
+
+.fc-table tbody tr {
+    position: relative;
+}
+
+.fc-table tbody tr::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 3px;
+    height: 100%;
+    background: var(--cbn-primary);
+    border-radius: 0 2px 2px 0;
+    transform: scaleY(0);
+    transition: transform var(--motion-fast) var(--ease-spring);
+    z-index: 1;
+}
+
+.fc-table tbody tr:hover::before {
+    transform: scaleY(1);
+}
+
+/* Row background slides from left */
+.fc-table tbody tr::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg,
+        rgba(0, 107, 63, 0.04) 0%,
+        rgba(0, 107, 63, 0.02) 30%,
+        transparent 100%);
+    transform: translateX(-100%);
+    transition: transform var(--motion-normal) var(--ease-out);
+    pointer-events: none;
+    z-index: 0;
+}
+
+.fc-table tbody tr:hover::after {
+    transform: translateX(0);
+}
+
+/* Ensure cell content sits above pseudo-elements */
+.fc-table tbody tr td {
+    position: relative;
+    z-index: 1;
+}
+
+
+/* ==================================================================
+   7. TOGGLES — Spring Physics Animation
+   ================================================================== */
+
+.fc-toggle {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    cursor: pointer;
+    gap: var(--space-2);
+    user-select: none;
+}
+
+.fc-toggle__track {
+    position: relative;
+    width: 44px;
+    height: 24px;
+    background: var(--cbn-gray-300);
+    border-radius: var(--radius-pill);
+    transition: background-color var(--motion-normal) var(--ease-out);
+    flex-shrink: 0;
+}
+
+.fc-toggle__thumb {
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 20px;
+    height: 20px;
+    background: white;
+    border-radius: var(--radius-full);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15), 0 1px 2px rgba(0, 0, 0, 0.1);
+    transition: transform var(--motion-normal) var(--ease-spring),
+                width var(--motion-fast) var(--ease-out);
+}
+
+/* Active press — thumb stretches */
+.fc-toggle:active .fc-toggle__thumb {
+    width: 24px;
+}
+
+/* Checked state */
+.fc-toggle__input {
+    position: absolute;
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.fc-toggle__input:checked ~ .fc-toggle__track {
+    background: var(--cbn-primary);
+}
+
+.fc-toggle__input:checked ~ .fc-toggle__track .fc-toggle__thumb {
+    transform: translateX(20px);
+}
+
+/* Spring overshoot on toggle */
+.fc-toggle__input:checked ~ .fc-toggle__track .fc-toggle__thumb {
+    animation: motionToggleOn var(--motion-normal) var(--ease-spring);
+}
+
+.fc-toggle__input:not(:checked) ~ .fc-toggle__track .fc-toggle__thumb {
+    animation: motionToggleOff var(--motion-normal) var(--ease-spring);
+}
+
+@keyframes motionToggleOn {
+    0% { transform: translateX(0); }
+    60% { transform: translateX(23px); }
+    80% { transform: translateX(18px); }
+    100% { transform: translateX(20px); }
+}
+
+@keyframes motionToggleOff {
+    0% { transform: translateX(20px); }
+    60% { transform: translateX(-3px); }
+    80% { transform: translateX(2px); }
+    100% { transform: translateX(0); }
+}
+
+/* Focus ring */
+.fc-toggle__input:focus-visible ~ .fc-toggle__track {
+    outline: 2px solid var(--cbn-primary);
+    outline-offset: 2px;
+}
+
+/* Toggle label */
+.fc-toggle__label {
+    font-size: var(--text-body);
+    color: var(--cbn-text);
+    line-height: var(--leading-normal);
+}
+
+
+/* ==================================================================
+   8. MODALS — Scale + Blur-in Entrance, Scale-down + Fade Exit
+   ================================================================== */
+
+/* Enhanced modal backdrop with blur-in */
+.fc-modal-backdrop {
+    transition: opacity var(--motion-normal) var(--ease-out),
+                visibility var(--motion-normal) var(--ease-out),
+                backdrop-filter var(--motion-slow) var(--ease-out);
+    backdrop-filter: blur(0px);
+    -webkit-backdrop-filter: blur(0px);
+}
+
+.fc-modal-backdrop-active {
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+}
+
+/* Enhanced modal entrance — scale up from 0.92 + fade */
+.fc-modal {
+    transform: scale(0.92) translateY(-10px);
+    opacity: 0;
+    filter: blur(4px);
+    transition: transform var(--motion-slow) var(--ease-spring),
+                opacity var(--motion-normal) var(--ease-out),
+                filter var(--motion-normal) var(--ease-out);
+}
+
+.fc-modal-active {
+    transform: scale(1) translateY(0);
+    opacity: 1;
+    filter: blur(0);
+}
+
+/* Exit animation class (applied via JS before removal) */
+.fc-modal-exit {
+    transform: scale(0.95) translateY(5px) !important;
+    opacity: 0 !important;
+    filter: blur(2px) !important;
+    transition: transform var(--motion-normal) var(--ease-in),
+                opacity var(--motion-fast) var(--ease-in),
+                filter var(--motion-fast) var(--ease-in) !important;
+}
+
+.fc-modal-backdrop-exit {
+    opacity: 0 !important;
+    backdrop-filter: blur(0px) !important;
+    -webkit-backdrop-filter: blur(0px) !important;
+}
+
+
+/* ==================================================================
+   9. TOASTS — Spring Bounce In, Progress Bar, Slide Out
+   ================================================================== */
+
+/* Enhanced toast entrance — slide from right with spring bounce */
+.fc-toast {
+    animation: motionToastIn var(--motion-slow) var(--ease-spring) both;
+}
+
+@keyframes motionToastIn {
+    0% {
+        opacity: 0;
+        transform: translateX(120%);
+    }
+    60% {
+        opacity: 1;
+        transform: translateX(-8px);
+    }
+    80% {
+        transform: translateX(3px);
+    }
+    100% {
+        transform: translateX(0);
+    }
+}
+
+/* Toast dismiss — slide out to right */
+.fc-toast-exiting {
+    animation: motionToastOut var(--motion-normal) var(--ease-in) forwards !important;
+}
+
+@keyframes motionToastOut {
+    0% {
+        opacity: 1;
+        transform: translateX(0);
+        max-height: 200px;
+        margin-bottom: var(--space-3);
+    }
+    50% {
+        opacity: 0;
+        transform: translateX(120%);
+        max-height: 200px;
+        margin-bottom: var(--space-3);
+    }
+    100% {
+        opacity: 0;
+        transform: translateX(120%);
+        max-height: 0;
+        margin-bottom: 0;
+        padding-top: 0;
+        padding-bottom: 0;
+        border-width: 0;
+    }
+}
+
+/* Progress bar — smooth countdown from full to zero */
+.fc-toast-progress {
+    transition: width 50ms linear;
+}
+
+
+/* ==================================================================
+   10. NUMBER COUNTERS — Smooth Counting Animation
+   ================================================================== */
+
+.fc-counter {
+    display: inline-block;
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: 'tnum';
+}
+
+/* Counter digits animate up */
+.fc-counter-digit {
+    display: inline-block;
+    overflow: hidden;
+    height: 1.2em;
+    line-height: 1.2em;
+    vertical-align: bottom;
+}
+
+.fc-counter-digit-inner {
+    display: block;
+    transition: transform var(--motion-slower) var(--ease-out);
+}
+
+/* Animate value change with scale pop */
+.fc-counter-pop {
+    animation: motionCounterPop var(--motion-normal) var(--ease-spring);
+}
+
+@keyframes motionCounterPop {
+    0% {
+        transform: scale(1);
+    }
+    40% {
+        transform: scale(1.15);
+        color: var(--cbn-primary);
+    }
+    100% {
+        transform: scale(1);
+    }
+}
+
+
+/* ==================================================================
+   11. SKELETON SCREENS — Enhanced Shimmer Wave
+   ================================================================== */
+
+/* Enhanced shimmer wave that moves left-to-right */
+.fc-skel {
+    position: relative;
+    overflow: hidden;
+    background: linear-gradient(
+        90deg,
+        var(--cbn-gray-100) 0%,
+        var(--cbn-gray-100) 100%
+    );
+}
+
+.fc-skel::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+        105deg,
+        transparent 0%,
+        transparent 35%,
+        rgba(255, 255, 255, 0.6) 45%,
+        rgba(200, 164, 21, 0.08) 50%,
+        rgba(255, 255, 255, 0.6) 55%,
+        transparent 65%,
+        transparent 100%
+    );
+    transform: translateX(-100%);
+    animation: motionShimmer 1.8s var(--ease-in-out) infinite;
+}
+
+@keyframes motionShimmer {
+    0% {
+        transform: translateX(-100%);
+    }
+    100% {
+        transform: translateX(100%);
+    }
+}
+
+/* Stagger shimmer for multiple skeleton rows */
+.fc-skel-row:nth-child(2) .fc-skel::after { animation-delay: 0.1s; }
+.fc-skel-row:nth-child(3) .fc-skel::after { animation-delay: 0.2s; }
+.fc-skel-row:nth-child(4) .fc-skel::after { animation-delay: 0.3s; }
+.fc-skel-row:nth-child(5) .fc-skel::after { animation-delay: 0.4s; }
+
+
+/* ==================================================================
+   12. UTILITY ANIMATIONS
+   ================================================================== */
+
+/* Fade in */
+.fc-motion-fade-in {
+    animation: motionFadeIn var(--motion-normal) var(--ease-out) both;
+}
+
+@keyframes motionFadeIn {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+}
+
+/* Fade in up */
+.fc-motion-fade-up {
+    animation: motionFadeUp var(--motion-normal) var(--ease-out) both;
+}
+
+@keyframes motionFadeUp {
+    from { opacity: 0; transform: translateY(12px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Fade in down */
+.fc-motion-fade-down {
+    animation: motionFadeDown var(--motion-normal) var(--ease-out) both;
+}
+
+@keyframes motionFadeDown {
+    from { opacity: 0; transform: translateY(-12px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Scale in */
+.fc-motion-scale-in {
+    animation: motionScaleIn var(--motion-normal) var(--ease-spring) both;
+}
+
+@keyframes motionScaleIn {
+    from { opacity: 0; transform: scale(0.9); }
+    to   { opacity: 1; transform: scale(1); }
+}
+
+/* Slide in from left */
+.fc-motion-slide-left {
+    animation: motionSlideLeft var(--motion-normal) var(--ease-out) both;
+}
+
+@keyframes motionSlideLeft {
+    from { opacity: 0; transform: translateX(-20px); }
+    to   { opacity: 1; transform: translateX(0); }
+}
+
+/* Slide in from right */
+.fc-motion-slide-right {
+    animation: motionSlideRight var(--motion-normal) var(--ease-out) both;
+}
+
+@keyframes motionSlideRight {
+    from { opacity: 0; transform: translateX(20px); }
+    to   { opacity: 1; transform: translateX(0); }
+}
+
+/* Pulse */
+.fc-motion-pulse {
+    animation: motionPulse 2s var(--ease-in-out) infinite;
+}
+
+@keyframes motionPulse {
+    0%, 100% { opacity: 1; }
+    50%      { opacity: 0.6; }
+}
+
+/* Attention bounce */
+.fc-motion-bounce {
+    animation: motionBounce var(--motion-slower) var(--ease-spring);
+}
+
+@keyframes motionBounce {
+    0%, 100% { transform: translateY(0); }
+    30%      { transform: translateY(-8px); }
+    50%      { transform: translateY(-3px); }
+    70%      { transform: translateY(-5px); }
+}
+
+
+/* ==================================================================
+   13. PREFERS-REDUCED-MOTION — Respect User Preferences
+   ================================================================== */
+
+@media (prefers-reduced-motion: reduce) {
+    /* Kill all animations */
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
+
+    /* Ensure visibility still works for modals/toasts */
+    .fc-modal-active {
+        transform: none;
+        opacity: 1;
+        filter: none;
+    }
+
+    .fc-modal-backdrop-active {
+        opacity: 1;
+        backdrop-filter: blur(4px);
+        -webkit-backdrop-filter: blur(4px);
+    }
+
+    .fc-toast {
+        transform: none;
+        opacity: 1;
+    }
+
+    .fc-toast-exiting {
+        opacity: 0;
+        transform: none;
+    }
+
+    /* No 3D tilt */
+    .fc-motion-tilt > .fc-card:hover,
+    .fc-motion-tilt > .fc-dash-stat-card:hover,
+    .fc-card.fc-motion-tilt-card:hover {
+        transform: translateY(-2px);
+    }
+
+    /* No table slide effect */
+    .fc-table tbody tr::before,
+    .fc-table tbody tr::after {
+        display: none;
+    }
+
+    /* Toggle snaps instantly */
+    .fc-toggle__thumb {
+        transition: none;
+    }
+
+    /* Skeleton stays static */
+    .fc-skel::after {
+        animation: none;
+        display: none;
+    }
+
+    .fc-skel {
+        background: var(--cbn-gray-100);
+    }
+
+    /* Counter has no pop */
+    .fc-counter-pop {
+        animation: none;
+    }
+}

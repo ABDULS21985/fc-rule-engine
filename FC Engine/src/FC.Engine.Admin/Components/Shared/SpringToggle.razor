@@ -1,0 +1,33 @@
+@* Toggle switch with spring physics animation *@
+
+<label class="fc-toggle" for="@_inputId">
+    <input type="checkbox"
+           id="@_inputId"
+           class="fc-toggle__input"
+           checked="@Value"
+           disabled="@Disabled"
+           @onchange="HandleToggle"
+           aria-label="@Label" />
+    <span class="fc-toggle__track" aria-hidden="true">
+        <span class="fc-toggle__thumb"></span>
+    </span>
+    @if (!string.IsNullOrEmpty(Label))
+    {
+        <span class="fc-toggle__label">@Label</span>
+    }
+</label>
+
+@code {
+    private string _inputId = $"fc-toggle-{Guid.NewGuid():N}"[..18];
+
+    [Parameter] public bool Value { get; set; }
+    [Parameter] public EventCallback<bool> ValueChanged { get; set; }
+    [Parameter] public string? Label { get; set; }
+    [Parameter] public bool Disabled { get; set; }
+
+    private async Task HandleToggle(ChangeEventArgs e)
+    {
+        var newValue = (bool)(e.Value ?? false);
+        await ValueChanged.InvokeAsync(newValue);
+    }
+}

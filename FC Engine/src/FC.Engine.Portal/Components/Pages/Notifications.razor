@@ -55,6 +55,10 @@
                 @onclick="() => SetFilter(NotificationType.SystemAnnouncement)" role="tab">
             System
         </button>
+        <button class="portal-notif-filter-tab @(activeFilter == NotificationType.AuditEvent ? "active" : "")"
+                @onclick="() => SetFilter(NotificationType.AuditEvent)" role="tab">
+            Audit
+        </button>
     </div>
 
     @if (isLoading)
@@ -68,11 +72,11 @@
     else if (filteredNotifications.Count == 0)
     {
         <div class="portal-empty-state portal-card" style="padding: 3rem;">
-            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#d1d5db" stroke-width="1.5" aria-hidden="true">
-                <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/>
-                <path d="M13.73 21a2 2 0 01-3.46 0"/>
+            <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="1.5" aria-hidden="true">
+                <path d="M22 11.08V12a10 10 0 11-5.93-9.14"/>
+                <polyline points="22 4 12 14.01 9 11.01"/>
             </svg>
-            <h3 class="portal-empty-state-title">No notifications</h3>
+            <h3 class="portal-empty-state-title">You're all caught up!</h3>
             <p class="portal-empty-state-desc">
                 @if (activeFilter.HasValue)
                 {
@@ -80,7 +84,7 @@
                 }
                 else
                 {
-                    @:You're all caught up! Notifications will appear here when there are updates.
+                    @:Notifications will appear here when there are updates to your submissions, approvals, and deadlines.
                 }
             </p>
         </div>
@@ -259,6 +263,7 @@
         NotificationType.ApprovalRequest or NotificationType.ApprovalResult => "portal-notif-icon-approval",
         NotificationType.SystemAnnouncement => "portal-notif-icon-system",
         NotificationType.TeamUpdate => "portal-notif-icon-team",
+        NotificationType.AuditEvent => "portal-notif-icon-audit",
         _ => "portal-notif-icon-system"
     };
 
@@ -274,6 +279,8 @@
             "<svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"><circle cx=\"12\" cy=\"12\" r=\"10\"/><line x1=\"12\" y1=\"16\" x2=\"12\" y2=\"12\"/><line x1=\"12\" y1=\"8\" x2=\"12.01\" y2=\"8\"/></svg>"),
         NotificationType.TeamUpdate => new(
             "<svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"><path d=\"M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2\"/><circle cx=\"9\" cy=\"7\" r=\"4\"/><path d=\"M23 21v-2a4 4 0 0 0-3-3.87\"/><path d=\"M16 3.13a4 4 0 0 1 0 7.75\"/></svg>"),
+        NotificationType.AuditEvent => new(
+            "<svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"><path d=\"M12 20h9\"/><path d=\"M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z\"/></svg>"),
         _ => new("")
     };
 }

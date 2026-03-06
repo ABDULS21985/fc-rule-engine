@@ -162,6 +162,39 @@ window.portalAnnounce = function (message) {
     }
 };
 
+// ═══════════════════════════════════════════════════════════════════════
+// Notification Sound — Play/Mute with localStorage persistence
+// ═══════════════════════════════════════════════════════════════════════
+
+window.portalNotifPlaySound = function () {
+    try {
+        var ctx = new (window.AudioContext || window.webkitAudioContext)();
+        var osc = ctx.createOscillator();
+        var gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.type = "sine";
+        osc.frequency.setValueAtTime(880, ctx.currentTime);
+        osc.frequency.setValueAtTime(1046.5, ctx.currentTime + 0.08);
+        gain.gain.setValueAtTime(0.15, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
+        osc.start(ctx.currentTime);
+        osc.stop(ctx.currentTime + 0.3);
+    } catch (e) { /* AudioContext not available */ }
+};
+
+window.portalNotifGetSoundPref = function () {
+    try {
+        return localStorage.getItem("portalNotifSound") === "true";
+    } catch (e) { return false; }
+};
+
+window.portalNotifSetSoundPref = function (enabled) {
+    try {
+        localStorage.setItem("portalNotifSound", enabled ? "true" : "false");
+    } catch (e) { /* storage not available */ }
+};
+
 // Guided Tour overlay helpers
 window.portalTour = (function () {
     var activeElement = null;

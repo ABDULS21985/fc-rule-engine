@@ -5,6 +5,7 @@
 @inject NotificationService NotificationSvc
 @inject NavigationManager Navigation
 @inject IHttpContextAccessor HttpContextAccessor
+@inject IJSRuntime JS
 @implements IAsyncDisposable
 
 <div class="portal-notif-bell-wrapper" @onkeydown="HandleKeyDown">
@@ -18,7 +19,13 @@
             <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/>
             <path d="M13.73 21a2 2 0 01-3.46 0"/>
         </svg>
-        @if (unreadCount > 0)
+        @if (hasUrgent && unreadCount > 0)
+        {
+            <span class="portal-notif-bell-badge portal-notif-bell-badge-urgent" aria-hidden="true">
+                @(unreadCount > 99 ? "99+" : unreadCount.ToString())
+            </span>
+        }
+        else if (unreadCount > 0)
         {
             <span class="portal-notif-bell-badge" aria-hidden="true">
                 @(unreadCount > 99 ? "99+" : unreadCount.ToString())
@@ -32,12 +39,56 @@
         <div class="portal-notif-dropdown" role="region" aria-label="Recent notifications">
             <div class="portal-notif-dropdown-header">
                 <span class="portal-notif-dropdown-title">Notifications</span>
-                @if (unreadCount > 0)
-                {
-                    <button class="portal-notif-dropdown-action" @onclick="MarkAllRead">
-                        Mark all read
+                <div class="portal-notif-dropdown-header-actions">
+                    <button class="portal-notif-sound-toggle"
+                            @onclick="ToggleSound"
+                            @onclick:stopPropagation="true"
+                            title="@(soundEnabled ? "Mute notification sounds" : "Enable notification sounds")"
+                            aria-label="@(soundEnabled ? "Mute sounds" : "Enable sounds")">
+                        @if (soundEnabled)
+                        {
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+                                <path d="M19.07 4.93a10 10 0 010 14.14"/>
+                                <path d="M15.54 8.46a5 5 0 010 7.07"/>
+                            </svg>
+                        }
+                        else
+                        {
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+                                <line x1="23" y1="9" x2="17" y2="15"/>
+                                <line x1="17" y1="9" x2="23" y2="15"/>
+                            </svg>
+                        }
                     </button>
-                }
+                    @if (unreadCount > 0)
+                    {
+                        <button class="portal-notif-dropdown-action" @onclick="MarkAllRead">
+                            Mark all read
+                        </button>
+                    }
+                </div>
+            </div>
+
+            <!-- Dropdown Tabs -->
+            <div class="portal-notif-dropdown-tabs" role="tablist">
+                <button class="portal-notif-dropdown-tab @(dropdownTab == DropdownTab.All ? "active" : "")"
+                        @onclick="() => SetDropdownTab(DropdownTab.All)" role="tab">
+                    All
+                </button>
+                <button class="portal-notif-dropdown-tab @(dropdownTab == DropdownTab.Alerts ? "active" : "")"
+                        @onclick="() => SetDropdownTab(DropdownTab.Alerts)" role="tab">
+                    Alerts
+                </button>
+                <button class="portal-notif-dropdown-tab @(dropdownTab == DropdownTab.System ? "active" : "")"
+                        @onclick="() => SetDropdownTab(DropdownTab.System)" role="tab">
+                    System
+                </button>
+                <button class="portal-notif-dropdown-tab @(dropdownTab == DropdownTab.Audit ? "active" : "")"
+                        @onclick="() => SetDropdownTab(DropdownTab.Audit)" role="tab">
+                    Audit
+                </button>
             </div>
 
             @if (isLoadingDropdown)
@@ -47,21 +98,31 @@
                     <div class="portal-skeleton portal-skeleton-block" style="height: 60px; margin: 0.5rem;"></div>
                 </div>
             }
-            else if (recentNotifications.Count == 0)
+            else if (filteredDropdownNotifications.Count == 0)
             {
                 <div class="portal-notif-dropdown-empty">
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#d1d5db"
+                    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#22c55e"
                          stroke-width="1.5" aria-hidden="true">
-                        <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/>
-                        <path d="M13.73 21a2 2 0 01-3.46 0"/>
+                        <path d="M22 11.08V12a10 10 0 11-5.93-9.14"/>
+                        <polyline points="22 4 12 14.01 9 11.01"/>
                     </svg>
-                    <span>No new notifications</span>
+                    <span class="portal-notif-dropdown-empty-title">You're all caught up!</span>
+                    <span class="portal-notif-dropdown-empty-desc">
+                        @if (dropdownTab != DropdownTab.All)
+                        {
+                            @:No notifications in this category.
+                        }
+                        else
+                        {
+                            @:No new notifications right now.
+                        }
+                    </span>
                 </div>
             }
             else
             {
                 <div class="portal-notif-dropdown-list">
-                    @foreach (var notif in recentNotifications)
+                    @foreach (var notif in filteredDropdownNotifications)
                     {
                         <a href="@(notif.Link ?? "/notifications")"
                            class="portal-notif-dropdown-item @(notif.IsRead ? "" : "portal-notif-dropdown-item-unread")"
@@ -76,7 +137,7 @@
                             </div>
                             @if (!notif.IsRead)
                             {
-                                <span class="portal-notif-dropdown-item-dot" aria-hidden="true"></span>
+                                <span class="portal-notif-dropdown-item-dot @GetPriorityDotClass(notif.Priority)" aria-hidden="true"></span>
                             }
                         </a>
                     }
@@ -94,11 +155,17 @@
     private bool isOpen;
     private bool isLoadingDropdown;
     private int unreadCount;
+    private bool hasUrgent;
+    private bool soundEnabled;
+    private DropdownTab dropdownTab = DropdownTab.All;
     private List<NotificationModel> recentNotifications = new();
+    private List<NotificationModel> filteredDropdownNotifications = new();
     private HubConnection? _hubConnection;
 
     private int userId;
     private int institutionId;
+
+    private enum DropdownTab { All, Alerts, System, Audit }
 
     [CascadingParameter]
     private Task<AuthenticationState>? AuthState { get; set; }
@@ -114,19 +181,32 @@
             int.TryParse(instIdStr, out institutionId);
 
             if (userId > 0 && institutionId > 0)
+            {
                 unreadCount = await NotificationSvc.GetUnreadCount(userId, institutionId);
+                var recent = await NotificationSvc.GetRecentUnread(userId, institutionId, 3);
+                hasUrgent = recent.Any(n => n.Priority >= NotificationPriority.High);
+            }
 
             await EnsureSignalRConnected();
         }
         catch { }
     }
 
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            try
+            {
+                soundEnabled = await JS.InvokeAsync<bool>("portalNotifGetSoundPref");
+            }
+            catch { soundEnabled = false; }
+        }
+    }
+
     private async Task EnsureSignalRConnected()
     {
-        if (_hubConnection is not null)
-        {
-            return;
-        }
+        if (_hubConnection is not null) return;
 
         try
         {
@@ -150,8 +230,16 @@
                 var updated = ApplyRealtimePayload(unreadCount, recentNotifications, payload);
                 unreadCount = updated.UnreadCount;
                 recentNotifications = updated.RecentNotifications;
+                hasUrgent = recentNotifications.Any(n => n.Priority >= NotificationPriority.High);
+                ApplyDropdownFilter();
 
                 await InvokeAsync(StateHasChanged);
+
+                if (soundEnabled)
+                {
+                    try { await JS.InvokeVoidAsync("portalNotifPlaySound"); }
+                    catch { /* non-fatal */ }
+                }
             });
 
             await _hubConnection.StartAsync();
@@ -172,6 +260,7 @@
 
         isOpen = true;
         isLoadingDropdown = true;
+        dropdownTab = DropdownTab.All;
         StateHasChanged();
 
         try
@@ -180,19 +269,21 @@
             {
                 recentNotifications = await NotificationSvc.GetRecentUnread(userId, institutionId, 5);
 
-                // If fewer than 5 unread, pad with recent ones
-                if (recentNotifications.Count < 5)
+                // If fewer than 7 unread, pad with recent ones
+                if (recentNotifications.Count < 7)
                 {
-                    var all = await NotificationSvc.GetNotifications(userId, institutionId, 1, 5);
+                    var all = await NotificationSvc.GetNotifications(userId, institutionId, 1, 7);
                     foreach (var n in all.Notifications)
                     {
                         if (recentNotifications.All(r => r.Id != n.Id))
                         {
                             recentNotifications.Add(n);
-                            if (recentNotifications.Count >= 5) break;
+                            if (recentNotifications.Count >= 7) break;
                         }
                     }
                 }
+
+                ApplyDropdownFilter();
             }
         }
         catch { }
@@ -201,6 +292,32 @@
             isLoadingDropdown = false;
             StateHasChanged();
         }
+    }
+
+    private void SetDropdownTab(DropdownTab tab)
+    {
+        dropdownTab = tab;
+        ApplyDropdownFilter();
+    }
+
+    private void ApplyDropdownFilter()
+    {
+        filteredDropdownNotifications = dropdownTab switch
+        {
+            DropdownTab.Alerts => recentNotifications
+                .Where(n => n.Type is NotificationType.SubmissionResult
+                    or NotificationType.DeadlineApproaching
+                    or NotificationType.ApprovalRequest
+                    or NotificationType.ApprovalResult)
+                .ToList(),
+            DropdownTab.System => recentNotifications
+                .Where(n => n.Type is NotificationType.SystemAnnouncement or NotificationType.TeamUpdate)
+                .ToList(),
+            DropdownTab.Audit => recentNotifications
+                .Where(n => n.Type == NotificationType.AuditEvent)
+                .ToList(),
+            _ => recentNotifications.ToList()
+        };
     }
 
     private void CloseDropdown() => isOpen = false;
@@ -228,9 +345,17 @@
         {
             await NotificationSvc.MarkAllAsRead(userId, institutionId);
             unreadCount = 0;
+            hasUrgent = false;
             foreach (var n in recentNotifications) n.IsRead = true;
             StateHasChanged();
         }
+        catch { }
+    }
+
+    private async Task ToggleSound()
+    {
+        soundEnabled = !soundEnabled;
+        try { await JS.InvokeVoidAsync("portalNotifSetSoundPref", soundEnabled); }
         catch { }
     }
 
@@ -247,7 +372,14 @@
         NotificationType.ApprovalRequest or NotificationType.ApprovalResult => "portal-notif-icon-approval",
         NotificationType.SystemAnnouncement => "portal-notif-icon-system",
         NotificationType.TeamUpdate => "portal-notif-icon-team",
+        NotificationType.AuditEvent => "portal-notif-icon-audit",
         _ => "portal-notif-icon-system"
+    };
+
+    private static string GetPriorityDotClass(NotificationPriority priority) => priority switch
+    {
+        NotificationPriority.Critical or NotificationPriority.High => "portal-notif-dot-urgent",
+        _ => ""
     };
 
     private static MarkupString GetNotifTypeIcon(NotificationType type) => type switch
@@ -262,6 +394,8 @@
             "<svg width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"><circle cx=\"12\" cy=\"12\" r=\"10\"/><line x1=\"12\" y1=\"16\" x2=\"12\" y2=\"12\"/><line x1=\"12\" y1=\"8\" x2=\"12.01\" y2=\"8\"/></svg>"),
         NotificationType.TeamUpdate => new(
             "<svg width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"><path d=\"M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2\"/><circle cx=\"9\" cy=\"7\" r=\"4\"/><path d=\"M23 21v-2a4 4 0 0 0-3-3.87\"/><path d=\"M16 3.13a4 4 0 0 1 0 7.75\"/></svg>"),
+        NotificationType.AuditEvent => new(
+            "<svg width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"><path d=\"M12 20h9\"/><path d=\"M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z\"/></svg>"),
         _ => new("")
     };
 
@@ -280,6 +414,10 @@
         if (eventType.StartsWith("subscription.", StringComparison.OrdinalIgnoreCase) ||
             string.Equals(eventType, "system.announcement", StringComparison.OrdinalIgnoreCase))
             return NotificationType.SystemAnnouncement;
+
+        if (eventType.StartsWith("breach.", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(eventType, "user.provisioned", StringComparison.OrdinalIgnoreCase))
+            return NotificationType.AuditEvent;
 
         return NotificationType.SubmissionResult;
     }
@@ -305,9 +443,7 @@
         });
 
         if (notifications.Count > 10)
-        {
             notifications.RemoveAt(10);
-        }
 
         return (currentUnreadCount + 1, notifications);
     }

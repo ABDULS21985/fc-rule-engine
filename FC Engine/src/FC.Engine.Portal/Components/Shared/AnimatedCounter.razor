@@ -1,0 +1,49 @@
+@* Animated number counter — smoothly counts up to target value with optional prefix/suffix *@
+@inject IJSRuntime JS
+@implements IDisposable
+
+<span id="@_elementId"
+      class="fc-counter"
+      aria-label="@($"{Prefix}{Value}{Suffix}")"
+      role="status">
+    @(Prefix)@(Value.ToString(DecimalPlaces > 0 ? "N" + DecimalPlaces : "N0"))@(Suffix)
+</span>
+
+@code {
+    private string _elementId = $"fc-counter-{Guid.NewGuid():N}"[..20];
+    private double _previousValue;
+    private bool _isFirstRender = true;
+
+    [Parameter] public double Value { get; set; }
+    [Parameter] public string Prefix { get; set; } = "";
+    [Parameter] public string Suffix { get; set; } = "";
+    [Parameter] public int Duration { get; set; } = 800;
+    [Parameter] public int DecimalPlaces { get; set; } = 0;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _isFirstRender = false;
+            _previousValue = Value;
+            await JS.InvokeVoidAsync("FCMotion.animateCounter",
+                _elementId, Value, Duration, Prefix, Suffix, DecimalPlaces);
+        }
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (!_isFirstRender && Math.Abs(Value - _previousValue) > 0.001)
+        {
+            _previousValue = Value;
+            try
+            {
+                await JS.InvokeVoidAsync("FCMotion.animateCounter",
+                    _elementId, Value, Duration, Prefix, Suffix, DecimalPlaces);
+            }
+            catch (JSDisconnectedException) { }
+        }
+    }
+
+    public void Dispose() { }
+}

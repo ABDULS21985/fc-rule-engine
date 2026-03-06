@@ -1,0 +1,58 @@
+@* Floating label input with animated border and validation shake *@
+@inject IJSRuntime JS
+
+<div class="fc-floating-field @(HasError ? "fc-floating-field--error" : "")" id="@_fieldId">
+    <input type="@InputType"
+           id="@_inputId"
+           class="fc-floating-input @(HasError ? "fc-floating-input--error" : "") @(!string.IsNullOrEmpty(Value) ? "has-value" : "")"
+           value="@Value"
+           placeholder=" "
+           disabled="@Disabled"
+           required="@Required"
+           @oninput="HandleInput"
+           @onfocus="HandleFocus"
+           @onblur="HandleBlur"
+           aria-describedby="@(HasError ? $"{_inputId}-error" : null)"
+           aria-invalid="@(HasError ? "true" : null)" />
+    <label class="fc-floating-label" for="@_inputId">@Label</label>
+
+    @if (HasError && !string.IsNullOrEmpty(ErrorMessage))
+    {
+        <div id="@($"{_inputId}-error")" class="fc-floating-error" role="alert">
+            @ErrorMessage
+        </div>
+    }
+</div>
+
+@code {
+    private string _fieldId = $"fc-field-{Guid.NewGuid():N}"[..18];
+    private string _inputId = $"fc-input-{Guid.NewGuid():N}"[..18];
+
+    [Parameter] public string? Value { get; set; }
+    [Parameter] public EventCallback<string> ValueChanged { get; set; }
+    [Parameter] public string Label { get; set; } = "Label";
+    [Parameter] public string InputType { get; set; } = "text";
+    [Parameter] public bool HasError { get; set; }
+    [Parameter] public string? ErrorMessage { get; set; }
+    [Parameter] public bool Disabled { get; set; }
+    [Parameter] public bool Required { get; set; }
+    [Parameter] public EventCallback OnFocus { get; set; }
+    [Parameter] public EventCallback OnBlur { get; set; }
+
+    private async Task HandleInput(ChangeEventArgs e)
+    {
+        await ValueChanged.InvokeAsync(e.Value?.ToString());
+    }
+
+    private async Task HandleFocus() => await OnFocus.InvokeAsync();
+    private async Task HandleBlur() => await OnBlur.InvokeAsync();
+
+    public async Task ShakeAsync()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("FCMotion.shakeElement", _fieldId);
+        }
+        catch (JSDisconnectedException) { }
+    }
+}
