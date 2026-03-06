@@ -27,6 +27,7 @@ public interface IRegulatorInboxService
         CancellationToken ct = default);
 
     Task<IReadOnlyList<ExaminerQuery>> GetQueries(Guid regulatorTenantId, int submissionId, CancellationToken ct = default);
+    Task<IReadOnlyList<ExaminerQuery>> GetSubmissionQueries(int submissionId, CancellationToken ct = default);
 
     Task<ExaminerQuery> RaiseQuery(
         Guid regulatorTenantId,
@@ -39,6 +40,12 @@ public interface IRegulatorInboxService
 
     Task<ExaminerQuery?> RespondToQuery(
         Guid regulatorTenantId,
+        int queryId,
+        int respondedBy,
+        string responseText,
+        CancellationToken ct = default);
+
+    Task<ExaminerQuery?> RespondToQueryAsInstitution(
         int queryId,
         int respondedBy,
         string responseText,

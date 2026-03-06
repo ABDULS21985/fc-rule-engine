@@ -51,6 +51,7 @@ public class NotificationOrchestrator : INotificationOrchestrator
 
     private readonly IPortalNotificationRepository _portalNotificationRepository;
     private readonly IInstitutionUserRepository _institutionUserRepository;
+    private readonly IPortalUserRepository _portalUserRepository;
     private readonly IInstitutionRepository _institutionRepository;
     private readonly INotificationPreferenceRepository _notificationPreferenceRepository;
     private readonly INotificationDeliveryRepository _notificationDeliveryRepository;
@@ -63,6 +64,7 @@ public class NotificationOrchestrator : INotificationOrchestrator
     public NotificationOrchestrator(
         IPortalNotificationRepository portalNotificationRepository,
         IInstitutionUserRepository institutionUserRepository,
+        IPortalUserRepository portalUserRepository,
         IInstitutionRepository institutionRepository,
         INotificationPreferenceRepository notificationPreferenceRepository,
         INotificationDeliveryRepository notificationDeliveryRepository,
@@ -74,6 +76,7 @@ public class NotificationOrchestrator : INotificationOrchestrator
     {
         _portalNotificationRepository = portalNotificationRepository;
         _institutionUserRepository = institutionUserRepository;
+        _portalUserRepository = portalUserRepository;
         _institutionRepository = institutionRepository;
         _notificationPreferenceRepository = notificationPreferenceRepository;
         _notificationDeliveryRepository = notificationDeliveryRepository;
@@ -300,6 +303,26 @@ public class NotificationOrchestrator : INotificationOrchestrator
                 Role = user.Role.ToString(),
                 Email = user.Email,
                 Phone = user.PhoneNumber ?? user.Institution?.ContactPhone
+            };
+        }
+
+        foreach (var portalUserId in request.RecipientPortalUserIds.Distinct())
+        {
+            var user = await _portalUserRepository.GetById(portalUserId, ct);
+            if (user is null || !user.IsActive || user.TenantId != request.TenantId)
+            {
+                continue;
+            }
+
+            recipients[user.Id] = new NotificationRecipient
+            {
+                UserId = user.Id,
+                TenantId = user.TenantId ?? request.TenantId,
+                InstitutionId = 0,
+                Name = string.IsNullOrWhiteSpace(user.DisplayName) ? user.Username : user.DisplayName,
+                Role = user.Role.ToString(),
+                Email = user.Email,
+                Phone = null
             };
         }
 

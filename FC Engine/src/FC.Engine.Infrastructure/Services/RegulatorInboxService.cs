@@ -14,7 +14,11 @@ public class RegulatorInboxService : IRegulatorInboxService
     private static readonly IReadOnlyDictionary<RegulatorReceiptStatus, HashSet<RegulatorReceiptStatus>> AllowedTransitions
         = new Dictionary<RegulatorReceiptStatus, HashSet<RegulatorReceiptStatus>>
         {
-            [RegulatorReceiptStatus.Received] = new() { RegulatorReceiptStatus.UnderReview },
+            [RegulatorReceiptStatus.Received] = new()
+            {
+                RegulatorReceiptStatus.UnderReview,
+                RegulatorReceiptStatus.QueriesRaised
+            },
             [RegulatorReceiptStatus.UnderReview] = new()
             {
                 RegulatorReceiptStatus.Accepted,
@@ -305,6 +309,15 @@ public class RegulatorInboxService : IRegulatorInboxService
             .ToListAsync(ct);
     }
 
+    public async Task<IReadOnlyList<ExaminerQuery>> GetSubmissionQueries(int submissionId, CancellationToken ct = default)
+    {
+        return await _db.ExaminerQueries
+            .AsNoTracking()
+            .Where(q => q.SubmissionId == submissionId)
+            .OrderByDescending(q => q.RaisedAt)
+            .ToListAsync(ct);
+    }
+
     public async Task<ExaminerQuery> RaiseQuery(
         Guid regulatorTenantId,
         int submissionId,
@@ -382,28 +395,30 @@ public class RegulatorInboxService : IRegulatorInboxService
         {
             return null;
         }
+        return await SaveQueryResponse(query, respondedBy, responseText, ct);
+    }
 
-        query.ResponseText = responseText.Trim();
-        query.RespondedBy = respondedBy;
-        query.RespondedAt = DateTime.UtcNow;
-        query.Status = ExaminerQueryStatus.Responded;
+    public async Task<ExaminerQuery?> RespondToQueryAsInstitution(
+        int queryId,
+        int respondedBy,
+        string responseText,
+        CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(responseText))
+        {
+            throw new ArgumentException("Response text is required.", nameof(responseText));
+        }
 
-        await _db.SaveChangesAsync(ct);
+        var query = await _db.ExaminerQueries
+            .Include(q => q.Submission)
+            .FirstOrDefaultAsync(q => q.Id == queryId, ct);
 
-        await UpdateReceiptStatus(
-            regulatorTenantId,
-            query.SubmissionId,
-            RegulatorReceiptStatus.ResponseReceived,
-            respondedBy,
-            "Institution response received.",
-            ct);
+        if (query is null)
+        {
+            return null;
+        }
 
-        _logger.LogInformation(
-            "Submission response recorded for examiner query {QueryId} (submission {SubmissionId})",
-            query.Id,
-            query.SubmissionId);
-
-        return query;
+        return await SaveQueryResponse(query, respondedBy, responseText, ct);
     }
 
     private IQueryable<Submission> BuildScopedSubmissionQuery(string regulatorCode)
@@ -429,5 +444,45 @@ public class RegulatorInboxService : IRegulatorInboxService
 
         return AllowedTransitions.TryGetValue(current, out var allowed)
                && allowed.Contains(next);
+    }
+
+    private async Task<ExaminerQuery> SaveQueryResponse(
+        ExaminerQuery query,
+        int respondedBy,
+        string responseText,
+        CancellationToken ct)
+    {
+        query.ResponseText = responseText.Trim();
+        query.RespondedBy = respondedBy;
+        query.RespondedAt = DateTime.UtcNow;
+        query.Status = ExaminerQueryStatus.Responded;
+
+        await _db.SaveChangesAsync(ct);
+
+        await UpdateReceiptStatus(
+            query.RegulatorTenantId,
+            query.SubmissionId,
+            RegulatorReceiptStatus.ResponseReceived,
+            respondedBy,
+            "Institution response received.",
+            ct);
+
+        await _notifications.Notify(new NotificationRequest
+        {
+            TenantId = query.RegulatorTenantId,
+            EventType = NotificationEvents.SystemAnnouncement,
+            Title = $"Institution response received for submission #{query.SubmissionId}",
+            Message = "An institution has responded to your examiner query.",
+            Priority = NotificationPriority.High,
+            RecipientPortalUserIds = new() { query.RaisedBy },
+            ActionUrl = $"/inbox/{query.SubmissionId}"
+        }, ct);
+
+        _logger.LogInformation(
+            "Submission response recorded for examiner query {QueryId} (submission {SubmissionId})",
+            query.Id,
+            query.SubmissionId);
+
+        return query;
     }
 }

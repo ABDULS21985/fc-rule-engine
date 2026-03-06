@@ -20,6 +20,7 @@ public class NotificationRequest
 
     // Targeting
     public List<int> RecipientUserIds { get; set; } = new();
+    public List<int> RecipientPortalUserIds { get; set; } = new();
     public List<string> RecipientRoles { get; set; } = new();
     public int? RecipientInstitutionId { get; set; }
 

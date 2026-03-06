@@ -8,6 +8,7 @@
 @inject ApprovalService ApprovalSvc
 @inject ExportService ExportSvc
 @inject IExportEngine ExportEngine
+@inject IRegulatorInboxService RegulatorInboxService
 @inject IJSRuntime JS
 @inject NavigationManager Navigation
 
@@ -234,6 +235,70 @@
                                     <span class="portal-badge portal-badge-danger" title="@export.ErrorMessage">Failed</span>
                                 }
                             </div>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+
+        <div class="portal-card" style="padding: 1rem 1.25rem; margin-top: 0.85rem;">
+            <div style="display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; flex-wrap: wrap;">
+                <h3 class="portal-detail-section-title" style="margin: 0;">Examiner Queries</h3>
+                <button class="portal-btn portal-btn-ghost portal-btn-sm" @onclick="LoadExaminerQueries">Refresh</button>
+            </div>
+
+            @if (!string.IsNullOrWhiteSpace(queryActionMessage))
+            {
+                <div class="portal-alert portal-alert-info" style="margin-top: 0.75rem;">@queryActionMessage</div>
+            }
+
+            @if (!examinerQueries.Any())
+            {
+                <p style="margin: 0.85rem 0 0 0; color: #6b7280; font-size: 0.88rem;">
+                    No examiner queries for this submission.
+                </p>
+            }
+            else
+            {
+                <div style="margin-top: 0.85rem; display: grid; gap: 0.7rem;">
+                    @foreach (var query in examinerQueries.OrderByDescending(x => x.RaisedAt))
+                    {
+                        <div style="border: 1px solid #e5e7eb; border-radius: 10px; padding: 0.75rem;">
+                            <div style="display: flex; align-items: center; gap: 0.45rem; flex-wrap: wrap;">
+                                <span class="portal-badge portal-badge-neutral">Field: @(string.IsNullOrWhiteSpace(query.FieldCode) ? "General" : query.FieldCode)</span>
+                                <span class="portal-badge portal-badge-warning">@query.Priority</span>
+                                <span class="portal-badge portal-badge-info">@query.Status</span>
+                                <span style="font-size: 0.8rem; color: #6b7280;">Raised @query.RaisedAt.ToString("dd MMM yyyy HH:mm")</span>
+                            </div>
+
+                            <p style="margin: 0.6rem 0 0 0; font-size: 0.9rem;">@query.QueryText</p>
+
+                            @if (string.IsNullOrWhiteSpace(query.ResponseText))
+                            {
+                                <div style="margin-top: 0.6rem; display: grid; gap: 0.45rem;">
+                                    <textarea class="portal-input"
+                                              style="min-height: 84px;"
+                                              placeholder="Enter your response to this examiner query"
+                                              value="@GetQueryDraft(query.Id)"
+                                              @oninput="e => SetQueryDraft(query.Id, e.Value?.ToString())"></textarea>
+                                    <div style="display: flex; justify-content: flex-end;">
+                                        <button class="portal-btn portal-btn-primary portal-btn-sm"
+                                                disabled="@isRespondingQuery"
+                                                @onclick="() => RespondToExaminerQuery(query.Id)">
+                                            Respond
+                                        </button>
+                                    </div>
+                                </div>
+                            }
+                            else
+                            {
+                                <div style="margin-top: 0.6rem; padding: 0.55rem 0.6rem; background: #f8fafc; border-radius: 8px;">
+                                    <div style="font-size: 0.75rem; color: #6b7280; margin-bottom: 0.3rem;">
+                                        Response @if (query.RespondedAt.HasValue) { <text>on @query.RespondedAt.Value.ToString("dd MMM yyyy HH:mm")</text> }
+                                    </div>
+                                    <div style="font-size: 0.88rem;">@query.ResponseText</div>
+                                </div>
+                            }
                         </div>
                     }
                 </div>
@@ -646,6 +711,10 @@
     private List<ExportRequest> exports = new();
     private bool isRequestingExport;
     private string? exportStatusMessage;
+    private List<ExaminerQuery> examinerQueries = new();
+    private Dictionary<int, string> queryDraftResponses = new();
+    private bool isRespondingQuery;
+    private string? queryActionMessage;
 
     protected override async Task OnInitializedAsync()
     {
@@ -747,6 +816,7 @@
         }
 
         await LoadExportHistory();
+        await LoadExaminerQueries();
 
         isLoading = false;
     }
@@ -945,6 +1015,70 @@
 
         var history = await ExportEngine.GetExportHistory(tenantId, submission.Id);
         exports = history;
+    }
+
+    private async Task LoadExaminerQueries()
+    {
+        if (submission is null)
+        {
+            examinerQueries.Clear();
+            return;
+        }
+
+        try
+        {
+            examinerQueries = (await RegulatorInboxService.GetSubmissionQueries(submission.Id)).ToList();
+        }
+        catch
+        {
+            examinerQueries.Clear();
+        }
+    }
+
+    private string GetQueryDraft(int queryId)
+    {
+        return queryDraftResponses.TryGetValue(queryId, out var value) ? value : string.Empty;
+    }
+
+    private void SetQueryDraft(int queryId, string? value)
+    {
+        queryDraftResponses[queryId] = value ?? string.Empty;
+    }
+
+    private async Task RespondToExaminerQuery(int queryId)
+    {
+        if (!currentUserId.HasValue)
+        {
+            queryActionMessage = "Unable to identify current user for query response.";
+            return;
+        }
+
+        var response = GetQueryDraft(queryId);
+        if (string.IsNullOrWhiteSpace(response))
+        {
+            queryActionMessage = "Response text is required.";
+            return;
+        }
+
+        isRespondingQuery = true;
+        queryActionMessage = null;
+
+        try
+        {
+            await RegulatorInboxService.RespondToQueryAsInstitution(queryId, currentUserId.Value, response.Trim());
+            queryDraftResponses.Remove(queryId);
+            queryActionMessage = "Response sent successfully.";
+            await LoadExaminerQueries();
+        }
+        catch (Exception ex)
+        {
+            queryActionMessage = $"Failed to send response: {ex.Message}";
+        }
+        finally
+        {
+            isRespondingQuery = false;
+            StateHasChanged();
+        }
     }
 
     // ── Display Helpers ─────────────────────────────────────
