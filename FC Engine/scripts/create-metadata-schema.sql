@@ -291,7 +291,7 @@ CREATE TABLE dbo.saved_reports (
     InstitutionId       INT NOT NULL,
     Name                NVARCHAR(200) NOT NULL,
     Description         NVARCHAR(500) NULL,
-    Definition          NVARCHAR(MAX) NOT NULL DEFAULT '{}',
+    Definition          NVARCHAR(MAX) NOT NULL,
     IsShared            BIT NOT NULL DEFAULT 0,
     CreatedByUserId     INT NOT NULL,
     ScheduleCron        NVARCHAR(100) NULL,
