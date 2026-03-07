@@ -1,0 +1,122 @@
+@implements IAsyncDisposable
+@inject OnboardingStateService OnboardingState
+
+@if (_showConfetti)
+{
+    <div class="portal-confetti" aria-hidden="true">
+        @foreach (var p in _particles)
+        {
+            <div class="portal-confetti-particle"
+                 style="left:@(p.X)%; animation-delay:@(p.Delay)ms; animation-duration:@(p.Duration)ms; background:@(p.Color); transform:rotate(@(p.Rotation)deg)">
+            </div>
+        }
+    </div>
+}
+
+@if (_showCard)
+{
+    <div class="portal-first-sub-card" role="dialog" aria-modal="true" aria-labelledby="portal-first-sub-title">
+        <button class="portal-first-sub-close" @onclick="Dismiss" type="button" aria-label="Close">&times;</button>
+        <div class="portal-first-sub-icon" aria-hidden="true">&#x1F389;</div>
+        <h2 class="portal-first-sub-title" id="portal-first-sub-title">First submission complete!</h2>
+        <p class="portal-first-sub-body">
+            Your return has been submitted successfully. Here's what happens next:
+        </p>
+        <ol class="portal-first-sub-steps">
+            <li>
+                <strong>Validation check</strong> — Regulators will validate your submission data within 24 hours.
+            </li>
+            <li>
+                <strong>Acknowledgement email</strong> — You'll receive a confirmation once reviewed.
+            </li>
+            <li>
+                <strong>Track progress</strong> — Monitor status on your dashboard or in My Submissions.
+            </li>
+        </ol>
+        <div class="portal-first-sub-actions">
+            <a href="/submissions" class="portal-btn portal-btn-primary portal-btn-sm" @onclick="Dismiss">View my submissions</a>
+            <a href="/calendar" class="portal-btn portal-btn-outline portal-btn-sm" @onclick="Dismiss">Check upcoming deadlines</a>
+        </div>
+    </div>
+}
+
+@code {
+    private bool _showConfetti;
+    private bool _showCard;
+    private List<Particle> _particles = [];
+
+    private static readonly string[] Colors =
+        ["#006B3F", "#C8A415", "#3B82F6", "#EF4444", "#F59E0B", "#10B981", "#8B5CF6"];
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+
+        // Subscribe for celebrations triggered during this session
+        OnboardingState.OnCelebrationTriggered += HandleCelebrationTriggered;
+
+        // Also check for a pending flag from a previous session (e.g., submitted then navigated away)
+        if (await OnboardingState.IsCelebrationPendingAsync())
+        {
+            await TriggerCelebrationUiAsync();
+        }
+    }
+
+    private async void HandleCelebrationTriggered()
+    {
+        await InvokeAsync(TriggerCelebrationUiAsync);
+    }
+
+    private async Task TriggerCelebrationUiAsync()
+    {
+        await OnboardingState.ClearCelebrationAsync();
+        GenerateParticles();
+        _showConfetti = true;
+        _showCard = true;
+        await InvokeAsync(StateHasChanged);
+
+        // Auto-clear confetti after 4 s (card stays until user dismisses)
+        _ = Task.Delay(4000).ContinueWith(_ => InvokeAsync(() =>
+        {
+            _showConfetti = false;
+            _particles = [];
+            StateHasChanged();
+        }));
+    }
+
+    private void GenerateParticles()
+    {
+        var rng = new Random();
+        _particles = Enumerable.Range(0, 42).Select(i => new Particle
+        {
+            X = rng.Next(2, 98),
+            Delay = rng.Next(0, 900),
+            Duration = rng.Next(2000, 3400),
+            Color = Colors[i % Colors.Length],
+            Rotation = rng.Next(0, 360)
+        }).ToList();
+    }
+
+    private void Dismiss()
+    {
+        _showCard = false;
+        _showConfetti = false;
+        _particles = [];
+        StateHasChanged();
+    }
+
+    public ValueTask DisposeAsync()
+    {
+        OnboardingState.OnCelebrationTriggered -= HandleCelebrationTriggered;
+        return ValueTask.CompletedTask;
+    }
+
+    private sealed class Particle
+    {
+        public int X { get; set; }
+        public int Delay { get; set; }
+        public int Duration { get; set; }
+        public string Color { get; set; } = "#006B3F";
+        public int Rotation { get; set; }
+    }
+}

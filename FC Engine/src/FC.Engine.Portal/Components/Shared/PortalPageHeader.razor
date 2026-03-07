@@ -12,31 +12,14 @@
                     bool needsTruncation = items.Count > 2;
                 }
 
-                @* Mobile ellipsis: shown only when more than 2 items and not yet expanded *@
-                @if (needsTruncation)
-                {
-                    <li class="portal-ph-bc-item portal-ph-bc-ellipsis-item @(_mobileExpanded ? "portal-ph-bc-ellipsis-item--hidden" : "")" aria-hidden="@(_mobileExpanded ? "true" : "false")">
-                        <button class="portal-ph-bc-expand-btn"
-                                @onclick="() => _mobileExpanded = true"
-                                aria-label="Show full breadcrumb path"
-                                aria-expanded="@_mobileExpanded.ToString().ToLower()">
-                            <span aria-hidden="true">…</span>
-                        </button>
-                        <span class="portal-ph-bc-sep" aria-hidden="true">
-                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg>
-                        </span>
-                    </li>
-                }
-
                 @for (int i = 0; i < items.Count; i++)
                 {
                     var item = items[i];
                     var isLast = i == items.Count - 1;
-                    // On mobile: hide all segments except the last 2 unless the user has expanded
-                    var mobileHidden = needsTruncation && !_mobileExpanded && i < items.Count - 2;
-                    var isMobileParent = needsTruncation && i == items.Count - 2;
+                    // On mobile: hide middle items (1..Count-2), always show Home[0] and Current[last]
+                    var mobileHidden = needsTruncation && !_mobileExpanded && i > 0 && !isLast;
 
-                    <li class="portal-ph-bc-item @(mobileHidden ? "portal-ph-bc-item--mobile-hidden" : "") @(isMobileParent ? "portal-ph-bc-item--mobile-parent" : "")">
+                    <li class="portal-ph-bc-item @(mobileHidden ? "portal-ph-bc-item--mobile-hidden" : "")">
                         @if (item.IsCurrent || string.IsNullOrEmpty(item.Url))
                         {
                             @if (item.ChipTooltip is not null)
@@ -69,6 +52,21 @@
                             </span>
                         }
                     </li>
+                    @* After Home (item 0): show collapse ellipsis on mobile when middle items are hidden *@
+                    @if (needsTruncation && !_mobileExpanded && i == 0)
+                    {
+                        <li class="portal-ph-bc-item portal-ph-bc-ellipsis-item" aria-hidden="false">
+                            <button class="portal-ph-bc-expand-btn"
+                                    @onclick="() => _mobileExpanded = true"
+                                    aria-label="Show full breadcrumb path"
+                                    aria-expanded="false">
+                                <span aria-hidden="true">…</span>
+                            </button>
+                            <span class="portal-ph-bc-sep" aria-hidden="true">
+                                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg>
+                            </span>
+                        </li>
+                    }
                 }
             </ol>
         </nav>

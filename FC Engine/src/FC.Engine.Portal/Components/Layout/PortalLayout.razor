@@ -7,7 +7,11 @@
 @inject ITenantContext TenantContext
 @inject SandboxService SandboxService
 @inject TourStateService TourState
-@implements IDisposable
+@inject FC.Engine.Portal.Services.PartnerViewAsService ViewAsService
+@inject OnboardingStateService OnboardingState
+@inject IJSRuntime JS
+@inject PortalShortcutService ShortcutService
+@implements IAsyncDisposable
 
 <TenantThemeProvider />
 
@@ -125,6 +129,20 @@
         </header>
 
         <main id="main-content" class="portal-content" role="main">
+            @if (ViewAsService.IsViewingAs)
+            {
+                <div class="pd-viewing-banner pd-viewing-banner--gold" role="alert">
+                    <span class="pd-viewing-banner__text">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14" aria-hidden="true" style="display:inline-block;vertical-align:-2px;margin-right:6px"><path d="M15 3h4a2 2 0 012 2v14a2 2 0 01-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
+                        Viewing as: <strong>@ViewAsService.ViewingAsTenantName</strong>
+                        <span class="pd-viewing-banner__sub">— All actions reflect this institution's context.</span>
+                    </span>
+                    <button class="pd-viewing-banner__stop" type="button" @onclick="StopViewingAs" aria-label="Stop viewing as @ViewAsService.ViewingAsTenantName">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="12" height="12" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                        Stop viewing
+                    </button>
+                </div>
+            }
             @if (_sandboxContext?.IsSandbox == true)
             {
                 <div class="portal-sandbox-banner">
@@ -197,6 +215,25 @@
 <CommandPalette />
 <ShortcutsOverlay />
 
+<!-- ── Progressive Onboarding System ── -->
+<!-- First-login welcome splash (checks localStorage, shows only once) -->
+<WelcomeSplash />
+<!-- Floating action button + checklist drawer (bottom-right) -->
+<OnboardingFab />
+<!-- Confetti celebration + first-submission success card -->
+<ConfettiOverlay />
+<!-- Contextual spotlight for the current page (shows on first page visit) -->
+@{
+    var spotlight = GetCurrentSpotlight();
+}
+@if (spotlight is not null)
+{
+    <ContextualSpotlight PageKey="@spotlight.PageKey"
+                         TargetSelector="@spotlight.Selector"
+                         Title="@spotlight.Title"
+                         Description="@spotlight.Description" />
+}
+
 <!-- ARIA live region for screen reader announcements (page transitions) -->
 <div class="portal-live-region" aria-live="polite" aria-atomic="true" role="status">
     @_liveAnnouncement
@@ -207,16 +244,56 @@
     private bool _navigating;
     private bool _progressComplete;
     private string _currentPageName = "Dashboard";
+    private string _currentPath = "";
     private string _liveAnnouncement = "";
     private BrandingConfig _branding = BrandingConfig.WithDefaults();
     private SandboxContext? _sandboxContext;
     private bool _sandboxBusy;
     private string? _sandboxMessage;
+    private DotNetObjectReference<PortalLayout>? _shortcutsRef;
+
+    // ── Contextual spotlight map: path → config ────────────────────────────
+    private sealed record SpotlightConfig(string PageKey, string Selector, string Title, string Description);
+
+    private static readonly Dictionary<string, SpotlightConfig> SpotlightMap = new()
+    {
+        ["/submit"] = new(
+            "submit-form",
+            ".portal-submit-primary, .portal-form-submit-btn, button[type='submit']",
+            "Start here",
+            "Fill in the data fields and click Submit to complete your first regulatory return."
+        ),
+        ["/calendar"] = new(
+            "calendar-view",
+            ".portal-cal-grid, .portal-calendar-container, .portal-calendar",
+            "Your deadline calendar",
+            "Each cell shows a submission deadline. Click any date to see what returns are due."
+        ),
+        ["/reports/compliance"] = new(
+            "compliance-reports",
+            ".portal-report-btn, .portal-report-generate, .portal-btn-generate",
+            "Generate reports",
+            "Select a period and click Generate to download a compliance report."
+        ),
+    };
+
+    private SpotlightConfig? GetCurrentSpotlight() =>
+        SpotlightMap.GetValueOrDefault(_currentPath);
 
     protected override void OnInitialized()
     {
         Navigation.LocationChanged += OnLocationChanged;
+        ViewAsService.OnChange += OnViewAsChanged;
         UpdatePageName(Navigation.Uri);
+        _currentPath = new Uri(Navigation.Uri).AbsolutePath.ToLowerInvariant();
+    }
+
+    private void OnViewAsChanged() => InvokeAsync(StateHasChanged);
+
+    private void StopViewingAs()
+    {
+        ViewAsService.StopViewing();
+        Navigation.NavigateTo("/partner/dashboard");
     }
 
     protected override async Task OnInitializedAsync()
@@ -228,13 +305,36 @@
         }
     }
 
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        _shortcutsRef = DotNetObjectReference.Create(this);
+        await JS.InvokeVoidAsync("portalShortcuts.init", _shortcutsRef);
+    }
+
+    // ── JSInvokable: called from portalShortcuts.js ────────────────────────────
+    [JSInvokable]
+    public void OnNavigationShortcut(string route) => Navigation.NavigateTo(route);
+
+    [JSInvokable]
+    public async Task OnGlobalShortcut(string shortcutId)
+        => await ShortcutService.FireAsync(shortcutId);
+
     private async void OnLocationChanged(object? sender, LocationChangedEventArgs e)
     {
         _navigating = true;
         _progressComplete = false;
         UpdatePageName(e.Location);
+        _currentPath = new Uri(e.Location).AbsolutePath.ToLowerInvariant();
         _sidebarOpen = false;
         _liveAnnouncement = $"Navigated to {_currentPageName}";
+
+        // Track calendar / reports visits for the onboarding checklist
+        if (_currentPath == "/calendar")
+            _ = OnboardingState.MarkPageVisitedAsync("calendar");
+        else if (_currentPath.StartsWith("/reports"))
+            _ = OnboardingState.MarkPageVisitedAsync("reports");
+
         StateHasChanged();
 
         await Task.Delay(300);
@@ -245,6 +345,9 @@
         await Task.Delay(500);
         _progressComplete = false;
         StateHasChanged();
+
+        // Re-scan for new tables that need keyboard navigation
+        try { await JS.InvokeVoidAsync("portalShortcuts.reinitTableNav"); } catch { }
     }
 
     private void UpdatePageName(string uri)
@@ -345,8 +448,14 @@
         return name[..Math.Min(2, name.Length)].ToUpperInvariant();
     }
 
-    public void Dispose()
+    public async ValueTask DisposeAsync()
     {
         Navigation.LocationChanged -= OnLocationChanged;
+        ViewAsService.OnChange -= OnViewAsChanged;
+        if (_shortcutsRef is not null)
+        {
+            try { await JS.InvokeVoidAsync("portalShortcuts.dispose"); } catch { }
+            _shortcutsRef.Dispose();
+        }
     }
 }

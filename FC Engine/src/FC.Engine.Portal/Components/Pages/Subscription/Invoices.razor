@@ -1,20 +1,23 @@
 @page "/subscription/invoices"
 @attribute [Authorize(Policy = "InstitutionUser")]
-@using FC.Engine.Domain.Abstractions
-@using FC.Engine.Domain.Enums
 @inject ISubscriptionService SubscriptionService
 @inject ITenantContext TenantContext
+@inject IJSRuntime JS
 
 <PageTitle>My Invoices</PageTitle>
 
 <div class="portal-sub-shell">
+
+    <SubscriptionOverdueBanner />
+
     <header class="portal-page-header portal-page-header-split">
         <div class="portal-page-header-main">
             <p class="portal-sub-kicker">Subscription</p>
             <h1 class="portal-page-title">Invoices</h1>
-            <p class="portal-page-subtitle">Review invoice lifecycle, issue drafts, and record manual payments.</p>
+            <p class="portal-page-subtitle">Review invoice lifecycle, issue drafts, and download records.</p>
         </div>
         <div class="portal-page-header-actions portal-sub-actions-top">
+            <a class="portal-btn portal-btn-outline portal-btn-sm" href="/subscription/payments">Payment History</a>
             <button class="portal-btn portal-btn-primary portal-btn-sm"
                     disabled="@(_busyInvoiceId.HasValue)"
                     @onclick="GenerateInvoice">
@@ -48,85 +51,224 @@
             </article>
             <article class="portal-stat-card">
                 <div class="portal-stat-label">Outstanding</div>
-                <div class="portal-stat-value">@FormatCurrency(_invoices.Where(i => i.Status is InvoiceStatus.Issued or InvoiceStatus.Overdue).Sum(i => i.TotalAmount))</div>
-                <div class="portal-stat-detail">issued and overdue</div>
+                <div class="portal-stat-value">
+                    @FormatCurrency(_invoices
+                        .Where(i => i.Status is InvoiceStatus.Issued or InvoiceStatus.Overdue)
+                        .Sum(i => i.TotalAmount))
+                </div>
+                <div class="portal-stat-detail">issued + overdue</div>
             </article>
             <article class="portal-stat-card">
-                <div class="portal-stat-label">Paid</div>
-                <div class="portal-stat-value">@FormatCurrency(_invoices.Where(i => i.Status == InvoiceStatus.Paid).Sum(i => i.TotalAmount))</div>
+                <div class="portal-stat-label">Total Paid</div>
+                <div class="portal-stat-value">
+                    @FormatCurrency(_invoices
+                        .Where(i => i.Status == InvoiceStatus.Paid)
+                        .Sum(i => i.TotalAmount))
+                </div>
                 <div class="portal-stat-detail">confirmed payments</div>
             </article>
             <article class="portal-stat-card">
-                <div class="portal-stat-label">Draft</div>
-                <div class="portal-stat-value">@_invoices.Count(i => i.Status == InvoiceStatus.Draft)</div>
-                <div class="portal-stat-detail">pending issue</div>
+                <div class="portal-stat-label">Overdue</div>
+                <div class="portal-stat-value @(_invoices.Any(i => i.Status == InvoiceStatus.Overdue) ? "portal-stat-value--danger" : "")">
+                    @_invoices.Count(i => i.Status == InvoiceStatus.Overdue)
+                </div>
+                <div class="portal-stat-detail">require immediate payment</div>
             </article>
         </section>
 
-        <section class="portal-card">
-            <div class="portal-table-container">
-                <table class="portal-table">
-                    <thead>
-                        <tr>
-                            <th>Invoice</th>
-                            <th>Status</th>
-                            <th>Period</th>
-                            <th>Total (NGN)</th>
-                            <th>Due Date</th>
-                            <th>Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @if (!_invoices.Any())
-                        {
-                            <tr>
-                                <td colspan="6" class="portal-table-primary">No invoices yet. Generate your first draft invoice.</td>
-                            </tr>
-                        }
-                        else
-                        {
-                            @foreach (var invoice in _invoices)
+        @if (!_invoices.Any())
+        {
+            <section class="portal-card">
+                <div class="portal-empty-state">
+                    <p>No invoices yet. Generate your first draft invoice above.</p>
+                </div>
+            </section>
+        }
+        else
+        {
+            <div class="portal-sub-inv-grid">
+                @foreach (var invoice in _invoices.OrderByDescending(i => i.CreatedAt))
+                {
+                    var isExpanded = _expandedInvoiceIds.Contains(invoice.Id);
+                    var invoiceId = invoice.Id;
+                    var isOverdue = invoice.Status == InvoiceStatus.Overdue;
+                    var isDueSoon = invoice.DueDate.HasValue
+                        && invoice.Status == InvoiceStatus.Issued
+                        && (invoice.DueDate.Value.ToDateTime(TimeOnly.MinValue) - DateTime.UtcNow).TotalDays <= 7;
+
+                    <article class="portal-sub-inv-card @(isOverdue ? "portal-sub-inv-card--overdue" : "")">
+
+                        <div class="portal-sub-inv-card-head">
+                            <div>
+                                <p class="portal-sub-inv-number">@invoice.InvoiceNumber</p>
+                                <p class="portal-sub-inv-amount">
+                                    <span class="portal-sub-inv-currency">NGN</span>
+                                    @FormatCurrency(invoice.TotalAmount)
+                                </p>
+                            </div>
+                            <span class="portal-badge portal-badge-lg @GetStatusBadgeClass(invoice.Status)">
+                                @invoice.Status
+                            </span>
+                        </div>
+
+                        <div class="portal-sub-inv-body">
+                            <div class="portal-sub-inv-row">
+                                <span class="portal-sub-inv-row-label">Period</span>
+                                <span>@invoice.PeriodStart.ToString("dd MMM") – @invoice.PeriodEnd.ToString("dd MMM yyyy")</span>
+                            </div>
+                            <div class="portal-sub-inv-row">
+                                <span class="portal-sub-inv-row-label">Subtotal</span>
+                                <span>NGN @FormatCurrency(invoice.Subtotal)</span>
+                            </div>
+                            <div class="portal-sub-inv-row">
+                                <span class="portal-sub-inv-row-label">VAT (@((invoice.VatRate * 100).ToString("0.##"))%)</span>
+                                <span>NGN @FormatCurrency(invoice.VatAmount)</span>
+                            </div>
+                            @if (invoice.DueDate.HasValue)
                             {
-                                <tr>
-                                    <td>
-                                        <span class="portal-table-primary">@invoice.InvoiceNumber</span>
-                                    </td>
-                                    <td>
-                                        <span class="portal-badge @GetStatusBadgeClass(invoice.Status)">@invoice.Status</span>
-                                    </td>
-                                    <td>
-                                        @invoice.PeriodStart.ToString("yyyy-MM-dd")<br />
-                                        <span class="portal-text-sm">to @invoice.PeriodEnd.ToString("yyyy-MM-dd")</span>
-                                    </td>
-                                    <td>@FormatCurrency(invoice.TotalAmount)</td>
-                                    <td>@(invoice.DueDate?.ToString("yyyy-MM-dd") ?? "-")</td>
-                                    <td>
-                                        <div class="portal-sub-action-stack">
-                                            @if (invoice.Status == InvoiceStatus.Draft)
-                                            {
-                                                <button class="portal-btn portal-btn-outline portal-btn-sm"
-                                                        disabled="@(_busyInvoiceId == invoice.Id)"
-                                                        @onclick="() => Issue(invoice.Id)">
-                                                    Issue
-                                                </button>
-                                            }
-                                            else if (invoice.Status is InvoiceStatus.Issued or InvoiceStatus.Overdue)
-                                            {
-                                                <span class="portal-sub-caption">Awaiting payment confirmation</span>
-                                            }
-                                            else
-                                            {
-                                                <span class="portal-sub-caption">No actions</span>
-                                            }
-                                        </div>
-                                    </td>
-                                </tr>
+                                var dueClass = isOverdue ? "portal-sub-inv-due-urgent"
+                                    : isDueSoon ? "portal-sub-inv-due-soon" : "";
+                                <div class="portal-sub-inv-row">
+                                    <span class="portal-sub-inv-row-label">Due Date</span>
+                                    <span class="@dueClass">
+                                        @invoice.DueDate.Value.ToString("dd MMM yyyy")
+                                        @if (isOverdue)
+                                        {
+                                            <span> — Overdue!</span>
+                                        }
+                                        else if (isDueSoon)
+                                        {
+                                            var daysLeft = (int)(invoice.DueDate.Value.ToDateTime(TimeOnly.MinValue) - DateTime.UtcNow).TotalDays;
+                                            <span> — @daysLeft day@(daysLeft == 1 ? "" : "s") left</span>
+                                        }
+                                    </span>
+                                </div>
                             }
+                            @if (invoice.PaidAt.HasValue)
+                            {
+                                <div class="portal-sub-inv-row">
+                                    <span class="portal-sub-inv-row-label">Paid On</span>
+                                    <span>@invoice.PaidAt.Value.ToString("dd MMM yyyy")</span>
+                                </div>
+                            }
+                        </div>
+
+                        <footer class="portal-sub-inv-footer">
+                            <div class="portal-sub-action-stack">
+                                @if (invoice.Status == InvoiceStatus.Draft)
+                                {
+                                    <button class="portal-btn portal-btn-primary portal-btn-sm"
+                                            disabled="@(_busyInvoiceId == invoiceId)"
+                                            @onclick="() => Issue(invoiceId)">
+                                        @if (_busyInvoiceId == invoiceId)
+                                        {
+                                            <span class="portal-btn-spinner" aria-hidden="true"></span>
+                                        }
+                                        Issue Invoice
+                                    </button>
+                                }
+                                else if (invoice.Status is InvoiceStatus.Issued or InvoiceStatus.Overdue)
+                                {
+                                    <span class="portal-sub-caption">Awaiting payment</span>
+                                }
+
+                                <button class="portal-btn portal-btn-outline portal-btn-sm"
+                                        @onclick="() => DownloadInvoice(invoice)"
+                                        title="Download invoice as HTML">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                                         width="14" height="14" aria-hidden="true">
+                                        <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+                                        <polyline points="7 10 12 15 17 10"/>
+                                        <line x1="12" y1="15" x2="12" y2="3"/>
+                                    </svg>
+                                    Download PDF
+                                </button>
+                            </div>
+
+                            <button class="portal-sub-inv-timeline-toggle"
+                                    @onclick="() => ToggleTimeline(invoiceId)"
+                                    aria-expanded="@isExpanded.ToString().ToLower()">
+                                @(isExpanded ? "Hide timeline ▲" : "Show timeline ▼")
+                            </button>
+                        </footer>
+
+                        @if (isExpanded)
+                        {
+                            <div class="portal-sub-inv-timeline">
+                                <p class="portal-sub-inv-timeline-title">Payment Timeline</p>
+                                <ol class="portal-sub-tl">
+
+                                    <li class="portal-sub-tl-item">
+                                        <div class="portal-sub-tl-dot portal-sub-tl-dot--done" aria-hidden="true">✓</div>
+                                        <div class="portal-sub-tl-content">
+                                            <p class="portal-sub-tl-label">Invoice Generated</p>
+                                            <p class="portal-sub-tl-date">@invoice.CreatedAt.ToString("dd MMM yyyy, HH:mm") UTC</p>
+                                        </div>
+                                    </li>
+
+                                    <li class="portal-sub-tl-item">
+                                        @if (invoice.IssuedAt.HasValue)
+                                        {
+                                            <div class="portal-sub-tl-dot portal-sub-tl-dot--done" aria-hidden="true">✓</div>
+                                            <div class="portal-sub-tl-content">
+                                                <p class="portal-sub-tl-label">Invoice Issued</p>
+                                                <p class="portal-sub-tl-date">@invoice.IssuedAt.Value.ToString("dd MMM yyyy, HH:mm") UTC</p>
+                                            </div>
+                                        }
+                                        else
+                                        {
+                                            <div class="portal-sub-tl-dot portal-sub-tl-dot--pending" aria-hidden="true"></div>
+                                            <div class="portal-sub-tl-content">
+                                                <p class="portal-sub-tl-label portal-sub-tl-label--muted">Pending Issue</p>
+                                                <p class="portal-sub-tl-date">Draft — not yet issued</p>
+                                            </div>
+                                        }
+                                    </li>
+
+                                    @if (isOverdue)
+                                    {
+                                        <li class="portal-sub-tl-item">
+                                            <div class="portal-sub-tl-dot portal-sub-tl-dot--overdue" aria-hidden="true">!</div>
+                                            <div class="portal-sub-tl-content">
+                                                <p class="portal-sub-tl-label portal-sub-tl-label--danger">Payment Overdue</p>
+                                                <p class="portal-sub-tl-date">Due @(invoice.DueDate?.ToString("dd MMM yyyy") ?? "—")</p>
+                                            </div>
+                                        </li>
+                                    }
+
+                                    <li class="portal-sub-tl-item">
+                                        @if (invoice.PaidAt.HasValue)
+                                        {
+                                            <div class="portal-sub-tl-dot portal-sub-tl-dot--done" aria-hidden="true">✓</div>
+                                            <div class="portal-sub-tl-content">
+                                                <p class="portal-sub-tl-label portal-sub-tl-label--success">Payment Confirmed</p>
+                                                <p class="portal-sub-tl-date">@invoice.PaidAt.Value.ToString("dd MMM yyyy, HH:mm") UTC</p>
+                                            </div>
+                                        }
+                                        else if (invoice.VoidedAt.HasValue)
+                                        {
+                                            <div class="portal-sub-tl-dot portal-sub-tl-dot--pending" aria-hidden="true"></div>
+                                            <div class="portal-sub-tl-content">
+                                                <p class="portal-sub-tl-label portal-sub-tl-label--muted">Invoice Voided</p>
+                                                <p class="portal-sub-tl-date">@invoice.VoidedAt.Value.ToString("dd MMM yyyy")</p>
+                                            </div>
+                                        }
+                                        else
+                                        {
+                                            <div class="portal-sub-tl-dot portal-sub-tl-dot--pending" aria-hidden="true"></div>
+                                            <div class="portal-sub-tl-content">
+                                                <p class="portal-sub-tl-label portal-sub-tl-label--muted">Awaiting Payment</p>
+                                                <p class="portal-sub-tl-date">Pending confirmation</p>
+                                            </div>
+                                        }
+                                    </li>
+                                </ol>
+                            </div>
                         }
-                    </tbody>
-                </table>
+                    </article>
+                }
             </div>
-        </section>
+        }
     }
 </div>
 
@@ -136,7 +278,8 @@
     private string? _message;
     private int? _busyInvoiceId;
     private Guid _tenantId;
-    private List<FC.Engine.Domain.Entities.Invoice> _invoices = new();
+    private List<Invoice> _invoices = new();
+    private readonly HashSet<int> _expandedInvoiceIds = new();
 
     protected override async Task OnInitializedAsync()
     {
@@ -168,12 +311,17 @@
         }
     }
 
+    private void ToggleTimeline(int invoiceId)
+    {
+        if (!_expandedInvoiceIds.Remove(invoiceId))
+            _expandedInvoiceIds.Add(invoiceId);
+    }
+
     private async Task GenerateInvoice()
     {
         _busyInvoiceId = -1;
         _error = null;
         _message = null;
-
         try
         {
             var invoice = await SubscriptionService.GenerateInvoice(_tenantId);
@@ -195,11 +343,10 @@
         _busyInvoiceId = invoiceId;
         _error = null;
         _message = null;
-
         try
         {
             var invoice = await SubscriptionService.IssueInvoice(invoiceId);
-            _message = $"Issued invoice {invoice.InvoiceNumber}.";
+            _message = $"Invoice {invoice.InvoiceNumber} has been issued.";
             await Load();
         }
         catch (Exception ex)
@@ -210,6 +357,104 @@
         {
             _busyInvoiceId = null;
         }
+    }
+
+    private async Task DownloadInvoice(Invoice invoice)
+    {
+        var html = GenerateInvoiceHtml(invoice);
+        await JS.InvokeVoidAsync("portalDownloadFile", html,
+            $"invoice-{invoice.InvoiceNumber}.html", "text/html;charset=utf-8");
+    }
+
+    private static string GenerateInvoiceHtml(Invoice invoice)
+    {
+        var lineItemsHtml = invoice.LineItems.Any()
+            ? string.Join("", invoice.LineItems.OrderBy(l => l.DisplayOrder).Select(li =>
+                $"<tr><td>{System.Web.HttpUtility.HtmlEncode(li.Description)}</td>" +
+                $"<td style='text-align:right'>{li.Quantity}</td>" +
+                $"<td style='text-align:right'>NGN {li.UnitPrice:N2}</td>" +
+                $"<td style='text-align:right'>NGN {li.LineTotal:N2}</td></tr>"))
+            : "<tr><td colspan='4' style='text-align:center;color:#9ca3af'>No line items</td></tr>";
+
+        var dueDateHtml = invoice.DueDate.HasValue
+            ? invoice.DueDate.Value.ToString("dd MMM yyyy")
+            : "—";
+
+        var notesHtml = !string.IsNullOrWhiteSpace(invoice.Notes)
+            ? $"<div class='inv-section'><h3>Notes</h3><p>{System.Web.HttpUtility.HtmlEncode(invoice.Notes)}</p></div>"
+            : "";
+
+        var vatRatePct = (invoice.VatRate * 100).ToString("0.##");
+        var statusLower = invoice.Status.ToString().ToLower();
+
+        return $@"<!DOCTYPE html>
+<html lang=""en"">
+<head>
+<meta charset=""UTF-8""/>
+<title>Invoice {invoice.InvoiceNumber}</title>
+<style>
+body{{font-family:'Segoe UI',Arial,sans-serif;color:#1f2937;margin:0;padding:40px;background:#fff;max-width:800px;margin:0 auto}}
+.inv-header{{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:40px;padding-bottom:24px;border-bottom:2px solid #006B3F}}
+.inv-logo{{font-size:28px;font-weight:800;color:#006B3F;letter-spacing:-0.5px}}
+.inv-logo span{{display:block;font-size:12px;font-weight:400;color:#6b7280;margin-top:2px}}
+.inv-ref{{text-align:right}}
+.inv-ref strong{{display:block;font-size:22px;color:#1f2937;font-weight:700}}
+.inv-ref small{{color:#6b7280;font-size:12px}}
+.inv-badge{{display:inline-block;padding:4px 12px;border-radius:999px;font-size:12px;font-weight:600;margin-top:6px}}
+.badge-draft{{background:#dbeafe;color:#1e40af}}
+.badge-issued{{background:#fef3c7;color:#92400e}}
+.badge-overdue{{background:#fee2e2;color:#b91c1c}}
+.badge-paid{{background:#dcfce7;color:#15803d}}
+.badge-voided{{background:#f3f4f6;color:#6b7280}}
+.inv-grid{{display:grid;grid-template-columns:1fr 1fr 1fr;gap:24px;margin-bottom:32px}}
+.inv-cell h3{{font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:#9ca3af;margin:0 0 4px}}
+.inv-cell p{{margin:0;font-size:14px;color:#1f2937}}
+table{{width:100%;border-collapse:collapse;margin-bottom:24px}}
+th{{text-align:left;padding:10px 12px;background:#f9fafb;border-bottom:2px solid #e5e7eb;font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:.04em}}
+td{{padding:10px 12px;border-bottom:1px solid #f3f4f6;font-size:13px}}
+.totals{{width:280px;margin-left:auto}}
+.totals td{{border:none;padding:5px 12px;font-size:13px}}
+.totals .total-row{{font-weight:700;font-size:15px;border-top:2px solid #e5e7eb;padding-top:10px}}
+.footer{{margin-top:48px;padding-top:20px;border-top:1px solid #e5e7eb;font-size:11px;color:#9ca3af;text-align:center}}
+@media print{{body{{padding:0;max-width:100%}}}}
+</style>
+</head>
+<body>
+<div class=""inv-header"">
+  <div class=""inv-logo"">FC Engine<span>Financial Returns Collection System</span></div>
+  <div class=""inv-ref"">
+    <strong>INVOICE</strong>
+    <small>{invoice.InvoiceNumber}</small><br/>
+    <span class=""inv-badge badge-{statusLower}"">{invoice.Status}</span>
+  </div>
+</div>
+
+<div class=""inv-grid"">
+  <div class=""inv-cell""><h3>Invoice Date</h3><p>{invoice.CreatedAt:dd MMM yyyy}</p></div>
+  <div class=""inv-cell""><h3>Due Date</h3><p>{dueDateHtml}</p></div>
+  <div class=""inv-cell""><h3>Billing Period</h3><p>{invoice.PeriodStart:dd MMM yyyy} – {invoice.PeriodEnd:dd MMM yyyy}</p></div>
+</div>
+
+<table>
+  <thead><tr><th>Description</th><th style=""text-align:right"">Qty</th><th style=""text-align:right"">Unit Price</th><th style=""text-align:right"">Total</th></tr></thead>
+  <tbody>{lineItemsHtml}</tbody>
+</table>
+
+<table class=""totals"">
+  <tr><td>Subtotal</td><td style=""text-align:right"">NGN {invoice.Subtotal:N2}</td></tr>
+  <tr><td>VAT ({vatRatePct}%)</td><td style=""text-align:right"">NGN {invoice.VatAmount:N2}</td></tr>
+  <tr class=""total-row""><td>Total (NGN)</td><td style=""text-align:right"">{invoice.TotalAmount:N2}</td></tr>
+</table>
+
+{notesHtml}
+
+<div class=""footer"">
+  FC Engine &mdash; Financial Returns Collection System &nbsp;|&nbsp;
+  Generated {DateTime.UtcNow:dd MMM yyyy HH:mm} UTC &nbsp;|&nbsp;
+  Open in browser and print (Ctrl+P) to save as PDF.
+</div>
+</body>
+</html>";
     }
 
     private static string GetStatusBadgeClass(InvoiceStatus status) => status switch

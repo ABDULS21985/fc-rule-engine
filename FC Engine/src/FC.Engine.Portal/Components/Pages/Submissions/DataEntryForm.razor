@@ -28,38 +28,88 @@
         <!-- ═══════════════════════════════════════════════════════════
              SUCCESS STATE
              ═══════════════════════════════════════════════════════════ -->
-        <div class="portal-card" style="padding: 3rem; text-align: center;">
-            <div style="margin-bottom: 1.5rem;">
-                <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="var(--cbn-success-text, #16a34a)" stroke-width="1.5" aria-hidden="true">
-                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
-                </svg>
+        @{
+            var _vr           = submissionResult?.ValidationReport;
+            var _errCount     = _vr?.ErrorCount ?? 0;
+            var _warnCount    = _vr?.WarningCount ?? 0;
+            var _isAccepted   = submissionResult?.Status is "Accepted" or "AcceptedWithWarnings";
+            var _statusBadge  = submissionResult?.Status == "Accepted"             ? "portal-badge-success"
+                              : submissionResult?.Status == "AcceptedWithWarnings" ? "portal-badge-warning"
+                              : "portal-badge-danger";
+            var _iconColor    = _isAccepted ? "var(--cbn-success-text, #16a34a)" : "#dc2626";
+        }
+        <div class="portal-card portal-form-success-card">
+            <!-- Icon + title -->
+            <div class="portal-form-success-hero">
+                @if (_isAccepted)
+                {
+                    <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="@_iconColor" stroke-width="1.5" aria-hidden="true">
+                        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
+                    </svg>
+                }
+                else
+                {
+                    <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="@_iconColor" stroke-width="1.5" aria-hidden="true">
+                        <circle cx="12" cy="12" r="10"/>
+                        <line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>
+                    </svg>
+                }
+                <div>
+                    <h2 class="portal-page-title" style="margin:0 0 4px;">
+                        @(_isAccepted ? "Submission Complete" : "Submission Rejected")
+                    </h2>
+                    <p class="portal-text-muted" style="margin:0;">
+                        <strong>@ReturnCode</strong> · Submission <strong>#@submittedId</strong>
+                    </p>
+                </div>
             </div>
-            <h2 class="portal-page-title">Submission Complete</h2>
-            <p class="portal-page-subtitle" style="margin-bottom: 0.5rem;">
-                Your return for <strong>@ReturnCode</strong> has been submitted successfully.
-            </p>
-            <p class="portal-text-muted" style="margin-bottom: 2rem;">Submission ID: <strong>#@submittedId</strong></p>
 
-            @if (submissionResult is not null && submissionResult.ValidationReport is not null)
+            <!-- Validation summary strip -->
+            @if (_vr is not null)
             {
-                <div class="portal-form-result-stats">
-                    <span class="portal-badge portal-badge-lg @(submissionResult.Status == "Accepted" ? "portal-badge-success" : "portal-badge-warning")">
-                        @submissionResult.Status
+                <div class="portal-form-success-summary">
+                    <span class="portal-badge portal-badge-lg @_statusBadge">
+                        @submissionResult!.Status
                     </span>
-                    @if (submissionResult.ValidationReport.ErrorCount > 0)
+                    <div class="portal-form-success-counts">
+                        <div class="portal-form-success-count @(_errCount > 0 ? "portal-form-success-count--err" : "portal-form-success-count--ok")">
+                            <span class="portal-form-success-count-num">@_errCount</span>
+                            <span class="portal-form-success-count-lbl">Error@(_errCount == 1 ? "" : "s")</span>
+                        </div>
+                        <div class="portal-form-success-count @(_warnCount > 0 ? "portal-form-success-count--warn" : "portal-form-success-count--ok")">
+                            <span class="portal-form-success-count-num">@_warnCount</span>
+                            <span class="portal-form-success-count-lbl">Warning@(_warnCount == 1 ? "" : "s")</span>
+                        </div>
+                    </div>
+
+                    @if (_errCount > 0 || _warnCount > 0)
                     {
-                        <span class="portal-text-danger">@submissionResult.ValidationReport.ErrorCount errors</span>
-                    }
-                    @if (submissionResult.ValidationReport.WarningCount > 0)
-                    {
-                        <span class="portal-text-warning">@submissionResult.ValidationReport.WarningCount warnings</span>
+                        <a href="/validation/hub/@submittedId"
+                           class="portal-btn portal-btn-primary portal-btn-sm portal-form-success-hub-btn">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                                <circle cx="12" cy="12" r="10"/>
+                                <line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>
+                            </svg>
+                            View Validation Hub
+                        </a>
                     }
                 </div>
             }
 
-            <div style="display: flex; gap: var(--space-3); justify-content: center; margin-top: 2rem;">
-                <a href="/submissions/@submittedId" class="portal-btn portal-btn-primary">View Submission</a>
-                <a href="/submit" class="portal-btn portal-btn-outline">Submit Another</a>
+            <!-- Actions -->
+            <div class="portal-form-success-actions">
+                <a href="/submissions/@submittedId" class="portal-btn portal-btn-outline">View Submission</a>
+                @if ((_errCount > 0 || _warnCount > 0) && submittedId > 0)
+                {
+                    <a href="/validation/hub/@submittedId" class="portal-btn portal-btn-primary">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                            <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/>
+                            <rect x="9" y="3" width="6" height="4" rx="1"/><path d="M9 14l2 2 4-4"/>
+                        </svg>
+                        Review &amp; Fix Errors
+                    </a>
+                }
+                <a href="/submit" class="portal-btn portal-btn-ghost">Submit Another</a>
             </div>
         </div>
     }
@@ -1148,6 +1198,8 @@
 
 @code {
     [Parameter] public string ReturnCode { get; set; } = "";
+    [SupplyParameterFromQuery(Name = "highlightField")] public string? HighlightField { get; set; }
+    [SupplyParameterFromQuery(Name = "periodId")]       public int?    PreselectedPeriodId { get; set; }
 
     [CascadingParameter]
     private Task<AuthenticationState>? AuthState { get; set; }
@@ -1336,6 +1388,14 @@
         try
         {
             availablePeriods = await SubmissionSvc.GetOpenPeriods(institutionId, ReturnCode);
+
+            // Pre-select period from query param (e.g. when navigating from Validation Hub)
+            if (PreselectedPeriodId.HasValue
+                && availablePeriods.Any(p => p.ReturnPeriodId == PreselectedPeriodId.Value))
+            {
+                selectedPeriodId = PreselectedPeriodId.Value;
+                await InitializeDraftSession();
+            }
         }
         catch
         {
@@ -1354,6 +1414,12 @@
             _dotNetRef = DotNetObjectReference.Create(this);
             await JS.InvokeVoidAsync("portalDataEntryForm.init", _dotNetRef);
             _locationChangingRegistration = Navigation.RegisterLocationChangingHandler(OnLocationChanging);
+
+            // If navigated from Validation Hub with a field highlight request, scroll to it
+            if (!string.IsNullOrWhiteSpace(HighlightField))
+            {
+                await JS.InvokeVoidAsync("portalHighlightField", HighlightField);
+            }
         }
 
         // Init row drag-sort once when MultiRow table first appears
@@ -2775,6 +2841,11 @@
         else
         { inputType = "text"; placeholder = ""; }
 
+        // inputmode for mobile numeric keyboard (prevents iOS auto-zoom on number inputs)
+        var inputMode = dt is "Money" or "Decimal" or "Percentage" ? "decimal"
+                      : dt == "Integer" ? "numeric"
+                      : "";
+
         var errorId = $"{field.FieldName}-{rowIdx}-error";
         var fieldId = $"{field.FieldName}-{rowIdx}";
 
@@ -2818,6 +2889,7 @@
                                step="@step"
                                placeholder="@placeholder"
                                readonly="@(isComputedTarget || isReadOnlyLocked)"
+                               inputmode="@inputMode"
                                aria-label="@field.DisplayName"
                                aria-describedby="@(hasError ? errorId : null)"
                                aria-invalid="@(hasError ? "true" : null)"
@@ -2931,6 +3003,7 @@
                            step="@step"
                            placeholder="@placeholder"
                            readonly="@(isComputedTarget || isReadOnlyLocked)"
+                           inputmode="@inputMode"
                            aria-label="@field.DisplayName"
                            aria-describedby="@(hasError ? errorId : null)"
                            aria-invalid="@(hasError ? "true" : null)"

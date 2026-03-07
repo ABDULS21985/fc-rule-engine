@@ -1,14 +1,18 @@
 @page "/subscription/modules"
 @attribute [Authorize(Policy = "InstitutionUser")]
-@using FC.Engine.Domain.Abstractions
-@using FC.Engine.Portal.Utilities
 @inject ISubscriptionService SubscriptionService
 @inject ITenantContext TenantContext
 @inject ToastService Toast
+@inject DialogService Dialog
 
 <PageTitle>Subscription Modules</PageTitle>
 
+<ConfirmDialog />
+
 <div class="portal-sub-shell">
+
+    <SubscriptionOverdueBanner />
+
     <header class="portal-page-header portal-page-header-split">
         <div class="portal-page-header-main">
             <p class="portal-sub-kicker">Subscription</p>
@@ -17,7 +21,7 @@
         </div>
         <div class="portal-page-header-actions portal-sub-actions-top">
             <a class="portal-btn portal-btn-outline portal-btn-sm" href="/subscription/my-plan">Back to Plan</a>
-            <a class="portal-btn portal-btn-primary portal-btn-sm" href="/subscription/invoices">Review Invoices</a>
+            <a class="portal-btn portal-btn-primary portal-btn-sm" href="/subscription/invoices">View Invoices</a>
         </div>
     </header>
 
@@ -51,7 +55,9 @@
             </article>
             <article class="portal-stat-card">
                 <div class="portal-stat-label">Monthly Spend</div>
-                <div class="portal-stat-value">@FormatCurrency(_modules.Where(m => m.IsActive).Sum(m => m.PriceMonthly ?? 0))</div>
+                <div class="portal-stat-value">
+                    @FormatCurrency(_modules.Where(m => m.IsActive).Sum(m => m.PriceMonthly ?? 0))
+                </div>
                 <div class="portal-stat-detail">active module charges</div>
             </article>
         </section>
@@ -75,7 +81,14 @@
                 <div class="portal-sub-module-grid">
                     @foreach (var module in FilteredModules)
                     {
-                        <article class="portal-sub-module-card">
+                        var moduleCode = module.ModuleCode;
+                        var canToggle = (module.IsEligible && module.IsAvailableOnPlan)
+                                        || module.IsActive;
+                        var isBusy = _busyModuleCode == moduleCode;
+
+                        <article class="portal-sub-module-card @(module.IsActive ? "portal-sub-module-card--active" : "")">
+
+                            @* Header: name + badge *@
                             <header class="portal-sub-module-head">
                                 <div>
                                     <h3>@module.ModuleName</h3>
@@ -84,61 +97,85 @@
                                 <span class="portal-badge @GetModuleBadgeClass(module)">@GetModuleLabel(module)</span>
                             </header>
 
+                            @* Toggle row *@
+                            <div class="portal-sub-module-toggle-row">
+                                <div>
+                                    <p class="portal-sub-caption">Module Status</p>
+                                    <SpringToggle Value="@module.IsActive"
+                                                  ValueChanged="@(v => OnToggle(moduleCode, v))"
+                                                  Label="@(module.IsActive ? "Active" : "Inactive")"
+                                                  Disabled="@(!canToggle || isBusy || module.IsRequired)" />
+                                </div>
+                                @if (module.IsRequired)
+                                {
+                                    <span class="portal-badge portal-badge-neutral portal-badge-sm">Required</span>
+                                }
+                            </div>
+
+                            @* Pricing row *@
                             <div class="portal-sub-module-meta">
                                 <div>
                                     <span class="portal-sub-caption">Monthly</span>
-                                    <strong>@(module.PriceMonthly.HasValue ? FormatCurrency(module.PriceMonthly.Value) : "-") NGN</strong>
+                                    <p class="portal-sub-module-price-big">
+                                        @(module.PriceMonthly.HasValue ? $"NGN {module.PriceMonthly.Value:N2}" : "—")
+                                        <span>/mo</span>
+                                    </p>
                                 </div>
                                 <div>
                                     <span class="portal-sub-caption">Annual</span>
-                                    <strong>@(module.PriceAnnual.HasValue ? FormatCurrency(module.PriceAnnual.Value) : "-") NGN</strong>
+                                    <strong>@(module.PriceAnnual.HasValue ? $"NGN {module.PriceAnnual.Value:N2}" : "—")</strong>
                                 </div>
                                 <div>
-                                    <span class="portal-sub-caption">Requirement</span>
+                                    <span class="portal-sub-caption">Type</span>
                                     <strong>@(module.IsRequired ? "Required" : "Optional")</strong>
                                 </div>
                             </div>
 
-                            <p class="portal-sub-module-message">@module.Message</p>
+                            @* Availability message *@
+                            @if (!string.IsNullOrWhiteSpace(module.Message) && module.Message != "Active")
+                            {
+                                <p class="portal-sub-module-message">@module.Message</p>
+                            }
 
+                            @* Footer actions *@
                             <footer class="portal-sub-module-actions">
-                                @if (module.IsActive)
+                                @if (!module.IsEligible)
+                                {
+                                    <span class="portal-sub-caption">Not licence-eligible</span>
+                                }
+                                else if (!module.IsAvailableOnPlan)
+                                {
+                                    <a class="portal-btn portal-btn-outline portal-btn-sm"
+                                       href="/subscription/my-plan">
+                                        Upgrade Plan
+                                    </a>
+                                }
+                                else if (module.IsActive && !module.IsRequired)
                                 {
                                     <button class="portal-btn portal-btn-danger portal-btn-sm"
-                                            disabled="@(_busyModuleCode == module.ModuleCode || module.IsRequired)"
-                                            @onclick="() => Deactivate(module.ModuleCode)">
-                                        @if (_busyModuleCode == module.ModuleCode)
+                                            disabled="@isBusy"
+                                            @onclick="() => ConfirmDeactivate(moduleCode)">
+                                        @if (isBusy)
                                         {
                                             <span class="portal-btn-spinner" aria-hidden="true"></span>
-                                            <span>Deactivating...</span>
                                         }
-                                        else
-                                        {
-                                            <span>Deactivate</span>
-                                        }
+                                        Remove
                                     </button>
                                 }
-                                else if (module.IsEligible && module.IsAvailableOnPlan)
+                                else if (!module.IsActive)
                                 {
                                     <button class="portal-btn portal-btn-primary portal-btn-sm"
-                                            disabled="@(_busyModuleCode == module.ModuleCode)"
-                                            @onclick="() => Activate(module.ModuleCode)">
-                                        @if (_busyModuleCode == module.ModuleCode)
+                                            disabled="@isBusy"
+                                            @onclick="() => Activate(moduleCode)">
+                                        @if (isBusy)
                                         {
                                             <span class="portal-btn-spinner" aria-hidden="true"></span>
-                                            <span>Activating...</span>
                                         }
-                                        else
-                                        {
-                                            <span>Activate</span>
-                                        }
+                                        Activate
                                     </button>
                                 }
-                                else
-                                {
-                                    <button class="portal-btn portal-btn-outline portal-btn-sm" disabled="true">Not Available</button>
-                                }
                             </footer>
+
                         </article>
                     }
                 </div>
@@ -200,6 +237,12 @@
 
     private void SetFilter(string filter) => _filter = filter;
 
+    private Task OnToggle(string moduleCode, bool value)
+    {
+        if (value) return Activate(moduleCode);
+        return ConfirmDeactivate(moduleCode);
+    }
+
     private async Task Activate(string moduleCode)
     {
         var module = _modules.FirstOrDefault(m => m.ModuleCode == moduleCode);
@@ -214,7 +257,6 @@
             action: async () =>
             {
                 await SubscriptionService.ActivateModule(_tenantId, moduleCode);
-                // Quiet background refresh to pick up updated Message field
                 var refreshed = await SubscriptionService.GetAvailableModules(_tenantId);
                 _modules = refreshed.OrderBy(m => m.ModuleCode).ToList();
             },
@@ -225,6 +267,26 @@
 
         _busyModuleCode = null;
         StateHasChanged();
+    }
+
+    private async Task ConfirmDeactivate(string moduleCode)
+    {
+        var module = _modules.FirstOrDefault(m => m.ModuleCode == moduleCode);
+        if (module is null) return;
+
+        var confirmed = await Dialog.Confirm(new ConfirmRequest
+        {
+            Title = $"Remove {module.ModuleName}?",
+            Message = $"Deactivating \"{module.ModuleName}\" will immediately remove access for all users. This can be re-enabled at any time.",
+            ConfirmText = "Remove Module",
+            CancelText = "Keep Active",
+            IsDestructive = true,
+            Icon = "warning"
+        });
+
+        if (!confirmed) return;
+
+        await Deactivate(moduleCode);
     }
 
     private async Task Deactivate(string moduleCode)
@@ -254,45 +316,23 @@
     }
 
     private string GetFilterClass(string filter)
-        => _filter == filter ? "portal-btn portal-btn-sm portal-btn-primary" : "portal-btn portal-btn-sm portal-btn-outline";
+        => _filter == filter
+            ? "portal-btn portal-btn-sm portal-btn-primary"
+            : "portal-btn portal-btn-sm portal-btn-outline";
 
     private static string GetModuleBadgeClass(ModuleAvailability module)
     {
-        if (module.IsActive)
-        {
-            return "portal-badge-success";
-        }
-
-        if (!module.IsEligible)
-        {
-            return "portal-badge-danger";
-        }
-
-        if (!module.IsAvailableOnPlan)
-        {
-            return "portal-badge-warning";
-        }
-
+        if (module.IsActive) return "portal-badge-success";
+        if (!module.IsEligible) return "portal-badge-danger";
+        if (!module.IsAvailableOnPlan) return "portal-badge-warning";
         return "portal-badge-info";
     }
 
     private static string GetModuleLabel(ModuleAvailability module)
     {
-        if (module.IsActive)
-        {
-            return "Active";
-        }
-
-        if (!module.IsEligible)
-        {
-            return "Not Eligible";
-        }
-
-        if (!module.IsAvailableOnPlan)
-        {
-            return "Upgrade Required";
-        }
-
+        if (module.IsActive) return "Active";
+        if (!module.IsEligible) return "Not Eligible";
+        if (!module.IsAvailableOnPlan) return "Upgrade Required";
         return "Available";
     }
 

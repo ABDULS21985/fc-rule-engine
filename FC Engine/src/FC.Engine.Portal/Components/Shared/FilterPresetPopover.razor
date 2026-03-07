@@ -1,0 +1,203 @@
+@using System.Text.Json
+@using FC.Engine.Portal.Models
+@inject IJSRuntime JS
+
+@* ─────────────────────────────────────────────────────────────────────────────
+   FilterPresetPopover — "★ Saved Filters" toggle with save / apply / delete
+   Usage: <FilterPresetPopover PageKey="submissions" CurrentFilters="@GetCurrentFilters()"
+                                OnPresetApplied="ApplyFilterPreset" />
+───────────────────────────────────────────────────────────────────────────── *@
+
+<div class="portal-fpp" @ref="_container">
+    <button class="portal-btn portal-btn-ghost portal-btn-sm portal-fpp__toggle @(_open ? "portal-fpp__toggle--active" : "")"
+            @onclick="TogglePopover"
+            aria-expanded="@_open.ToString().ToLowerInvariant()"
+            aria-haspopup="true"
+            title="Saved filter presets">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="@(_presets.Count > 0 ? "currentColor" : "none")"
+             stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+        </svg>
+        Saved Filters
+        @if (_presets.Count > 0)
+        {
+            <span class="portal-fpp__count">@_presets.Count</span>
+        }
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+             class="portal-fpp__chevron @(_open ? "portal-fpp__chevron--up" : "")" aria-hidden="true">
+            <polyline points="6 9 12 15 18 9"/>
+        </svg>
+    </button>
+
+    @if (_open)
+    {
+        <div class="portal-fpp__backdrop" @onclick="ClosePopover" aria-hidden="true"></div>
+        <div class="portal-fpp__popover" role="dialog" aria-label="Saved filter presets" aria-modal="true">
+            @if (_presets.Count > 0)
+            {
+                <div class="portal-fpp__section-label">Saved presets</div>
+                <ul class="portal-fpp__list" role="listbox">
+                    @foreach (var preset in _presets)
+                    {
+                        <li class="portal-fpp__item" role="option">
+                            <div class="portal-fpp__item-body">
+                                <span class="portal-fpp__item-name">@preset.Name</span>
+                                <span class="portal-fpp__item-meta">
+                                    @(preset.Filters.Count(kv => !string.IsNullOrEmpty(kv.Value))) filter(s)
+                                    &bull; @preset.SavedAt.ToString("d MMM")
+                                </span>
+                            </div>
+                            <div class="portal-fpp__item-actions">
+                                <button class="portal-btn portal-btn-xs portal-btn-outline"
+                                        @onclick="() => ApplyPreset(preset)"
+                                        title="Apply @preset.Name">
+                                    Apply
+                                </button>
+                                <button class="portal-btn portal-btn-xs portal-btn-ghost portal-fpp__delete-btn"
+                                        @onclick="() => DeletePreset(preset)"
+                                        title="Delete @preset.Name"
+                                        aria-label="Delete @preset.Name">
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
+                                        <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                                    </svg>
+                                </button>
+                            </div>
+                        </li>
+                    }
+                </ul>
+                <div class="portal-fpp__divider"></div>
+            }
+
+            <div class="portal-fpp__save-section">
+                <div class="portal-fpp__section-label">Save current filters</div>
+                @if (HasActiveFilters)
+                {
+                    <div class="portal-fpp__active-preview">
+                        @foreach (var kv in CurrentFilters.Where(kv => !string.IsNullOrEmpty(kv.Value)))
+                        {
+                            <span class="portal-chip">@kv.Key: @kv.Value</span>
+                        }
+                    </div>
+                }
+                <div class="portal-fpp__save-row">
+                    <input type="text"
+                           class="portal-form-input"
+                           style="flex:1; font-size:0.8125rem;"
+                           placeholder="Name this filter…"
+                           @bind="_newPresetName"
+                           @bind:event="oninput"
+                           @onkeydown="OnInputKeyDown"
+                           maxlength="40"
+                           aria-label="Filter preset name" />
+                    <button class="portal-btn portal-btn-primary portal-btn-xs"
+                            @onclick="SaveCurrentFilter"
+                            disabled="@(string.IsNullOrWhiteSpace(_newPresetName) || !HasActiveFilters)">
+                        Save
+                    </button>
+                </div>
+                @if (!HasActiveFilters)
+                {
+                    <p class="portal-fpp__hint">Apply at least one filter before saving.</p>
+                }
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    /// <summary>Unique key per page, used as the localStorage storage key.</summary>
+    [Parameter] public string PageKey { get; set; } = "default";
+
+    /// <summary>Current active filter values; keys are param names (q, status, template, sort, …).</summary>
+    [Parameter] public Dictionary<string, string> CurrentFilters { get; set; } = new();
+
+    /// <summary>Fires when the user clicks "Apply" on a preset. Receives the preset's filter dict.</summary>
+    [Parameter] public EventCallback<Dictionary<string, string>> OnPresetApplied { get; set; }
+
+    private bool _open;
+    private bool _loaded;
+    private string _newPresetName = "";
+    private List<FilterPreset> _presets = new();
+    private ElementReference _container;
+
+    private bool HasActiveFilters => CurrentFilters.Any(kv => !string.IsNullOrEmpty(kv.Value));
+    private string StorageKey => $"fc_fpreset_{PageKey}";
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && !_loaded)
+        {
+            _loaded = true;
+            await LoadFromStorage();
+        }
+    }
+
+    private async Task LoadFromStorage()
+    {
+        try
+        {
+            var json = await JS.InvokeAsync<string>("portalLoadFilterPresets", StorageKey);
+            _presets = JsonSerializer.Deserialize<List<FilterPreset>>(json,
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new();
+            StateHasChanged();
+        }
+        catch { _presets = new(); }
+    }
+
+    private async Task SaveCurrentFilter()
+    {
+        var name = _newPresetName.Trim();
+        if (string.IsNullOrEmpty(name) || !HasActiveFilters) return;
+
+        var preset = new FilterPreset
+        {
+            Name = name,
+            Filters = CurrentFilters
+                .Where(kv => !string.IsNullOrEmpty(kv.Value))
+                .ToDictionary(kv => kv.Key, kv => kv.Value),
+            SavedAt = DateTime.Now
+        };
+        _presets.Add(preset);
+        await PersistToStorage();
+        _newPresetName = "";
+    }
+
+    private async Task DeletePreset(FilterPreset preset)
+    {
+        _presets.Remove(preset);
+        await PersistToStorage();
+    }
+
+    private async Task ApplyPreset(FilterPreset preset)
+    {
+        _open = false;
+        await OnPresetApplied.InvokeAsync(new Dictionary<string, string>(preset.Filters));
+    }
+
+    private async Task PersistToStorage()
+    {
+        try
+        {
+            var json = JsonSerializer.Serialize(_presets);
+            await JS.InvokeVoidAsync("portalSaveFilterPresets", StorageKey, json);
+        }
+        catch { }
+        StateHasChanged();
+    }
+
+    private void TogglePopover()
+    {
+        _open = !_open;
+    }
+
+    private void ClosePopover()
+    {
+        _open = false;
+    }
+
+    private async Task OnInputKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await SaveCurrentFilter();
+        else if (e.Key == "Escape") _open = false;
+    }
+}

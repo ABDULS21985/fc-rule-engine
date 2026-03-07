@@ -14,13 +14,38 @@
     <div class="portal-report-filter-bar">
         <h2 class="portal-report-filter-title">Saved Reports</h2>
         <div class="portal-report-filter-row">
-            <input type="text" class="portal-form-input" placeholder="Search reports..."
-                   @bind="searchTerm" @bind:event="oninput" style="max-width:280px;" />
+            <div class="portal-input-wrapper" style="flex:1; max-width:320px;">
+                <span class="portal-input-icon" aria-hidden="true">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                    </svg>
+                </span>
+                <input type="text" class="portal-form-input portal-form-input-icon"
+                       placeholder="Search reports…"
+                       @bind="searchTerm" @bind:event="oninput"
+                       @bind:after="OnSearchChanged"
+                       aria-label="Search saved reports" />
+            </div>
             <button class="portal-btn portal-btn-primary portal-btn-sm" @onclick='() => Nav.NavigateTo("/reports/builder")'>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
                 New Report
             </button>
         </div>
+        @if (!string.IsNullOrEmpty(searchTerm))
+        {
+            <div class="portal-toolbar-active-filters" style="margin-top:10px; padding-top:10px; border-top:1px solid var(--cbn-border-subtle,#f3f4f6);">
+                <span class="portal-toolbar-active-label">
+                    Filters <span class="portal-filter-count-badge">1</span>:
+                </span>
+                <button class="portal-chip portal-chip-removable" @onclick="ClearSearch">
+                    Search: @searchTerm
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true">
+                        <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                    </svg>
+                </button>
+                <button class="portal-btn portal-btn-ghost portal-btn-xs" @onclick="ClearSearch">Clear All</button>
+            </div>
+        }
     </div>
 
     @if (isLoading)
@@ -31,12 +56,18 @@
     }
     else if (filteredReports.Count == 0)
     {
-        <div class="portal-card" style="padding: 2rem; text-align: center;">
-            <p style="color: var(--cbn-gray-500); margin-bottom: 1rem;">No saved reports found.</p>
-            <button class="portal-btn portal-btn-primary portal-btn-sm" @onclick='() => Nav.NavigateTo("/reports/builder")'>
-                Create Your First Report
-            </button>
-        </div>
+        @if (!string.IsNullOrWhiteSpace(searchTerm))
+        {
+            <PortalEmptyState Variant="reports" HasFilter="true"
+                              ActionText="Clear search"
+                              OnAction="EventCallback.Factory.Create(this, () => { searchTerm = string.Empty; })" />
+        }
+        else
+        {
+            <PortalEmptyState Variant="reports" HasFilter="false"
+                              ActionText="Create your first report"
+                              ActionUrl="/reports/builder" />
+        }
     }
     else
     {
@@ -159,6 +190,9 @@
     [CascadingParameter]
     private Task<AuthenticationState>? AuthState { get; set; }
 
+    // URL param — makes search bookmarkable
+    [SupplyParameterFromQuery(Name = "q")] public string? Q { get; set; }
+
     private Guid tenantId;
     private int institutionId;
     private bool isLoading = true;
@@ -186,7 +220,24 @@
         tenantId = Guid.Parse(state.User.FindFirst("TenantId")!.Value);
         institutionId = int.Parse(state.User.FindFirst("InstitutionId")!.Value);
 
+        // Restore search from URL (makes search bookmarkable / shareable)
+        if (!string.IsNullOrEmpty(Q)) searchTerm = Q;
+
         await LoadReports();
+    }
+
+    private void OnSearchChanged()
+    {
+        var url = string.IsNullOrEmpty(searchTerm)
+            ? "/reports/saved"
+            : $"/reports/saved?q={Uri.EscapeDataString(searchTerm)}";
+        Nav.NavigateTo(url, replace: true);
+    }
+
+    private void ClearSearch()
+    {
+        searchTerm = "";
+        Nav.NavigateTo("/reports/saved", replace: true);
     }
 
     private async Task LoadReports()

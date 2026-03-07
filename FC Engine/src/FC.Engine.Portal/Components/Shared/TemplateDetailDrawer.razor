@@ -1,0 +1,312 @@
+@implements IAsyncDisposable
+@inject TemplateBrowserService BrowserSvc
+@inject NavigationManager Navigation
+
+@if (ReturnCode is not null)
+{
+    <div class="portal-tb-drawer-backdrop" @onclick="OnClose" aria-hidden="true"></div>
+    <aside class="portal-tb-drawer @(_loaded ? "portal-tb-drawer--open" : "")"
+           role="dialog" aria-modal="true" aria-label="Template Detail"
+           id="tmpl-drawer-@ReturnCode">
+
+        <!-- Header -->
+        <div class="portal-tb-drawer-header">
+            <div class="portal-tb-drawer-title-row">
+                @if (_detail is not null)
+                {
+                    <div>
+                        <div class="portal-tb-drawer-code">@_detail.ReturnCode</div>
+                        <div class="portal-tb-drawer-name">@_detail.TemplateName</div>
+                    </div>
+                }
+                else
+                {
+                    <div class="portal-tb-drawer-code portal-skeleton" style="width:80px;height:16px;border-radius:4px;"></div>
+                }
+                <button class="portal-tb-drawer-close" @onclick="OnClose" aria-label="Close">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                        <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                    </svg>
+                </button>
+            </div>
+
+            @if (_detail is not null)
+            {
+                <div class="portal-tb-drawer-badges">
+                    <span class="portal-badge @GetFrequencyBadgeClass(_detail.Frequency)">@FormatFrequency(_detail.Frequency)</span>
+                    <span class="portal-badge portal-badge-neutral portal-badge-sm">@GetCategoryLabel(_detail.StructuralCategory)</span>
+                    @if (!string.IsNullOrEmpty(ComplianceStatus))
+                    {
+                        <span class="portal-badge @GetComplianceBadgeClass(ComplianceStatus)">@ComplianceStatus</span>
+                    }
+                    @if (IsFavorite)
+                    {
+                        <button class="portal-tb-drawer-star portal-tb-drawer-star--active" title="Remove from My Templates"
+                                @onclick="() => OnFavoriteChanged.InvokeAsync(false)" @onclick:stopPropagation>
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+                                <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+                            </svg>
+                        </button>
+                    }
+                </div>
+            }
+        </div>
+
+        <!-- Body -->
+        <div class="portal-tb-drawer-body">
+            @if (_loadingDetail)
+            {
+                <div class="portal-tb-drawer-skeleton">
+                    @for (int i = 0; i < 4; i++)
+                    {
+                        <div class="portal-skeleton portal-skeleton-block" style="height:18px;margin-bottom:10px;border-radius:4px;"></div>
+                    }
+                </div>
+            }
+            else if (_detail is null)
+            {
+                <div class="portal-tb-drawer-error">
+                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+                        <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+                    </svg>
+                    <p>Could not load template details.</p>
+                </div>
+            }
+            else
+            {
+                <!-- Stats -->
+                <div class="portal-tb-drawer-stats">
+                    <div class="portal-tb-drawer-stat">
+                        <span class="portal-tb-drawer-stat-value">@_detail.FieldCount</span>
+                        <span class="portal-tb-drawer-stat-label">Fields</span>
+                    </div>
+                    <div class="portal-tb-drawer-stat-sep"></div>
+                    <div class="portal-tb-drawer-stat">
+                        <span class="portal-tb-drawer-stat-value">@_sectionNames.Count</span>
+                        <span class="portal-tb-drawer-stat-label">Sections</span>
+                    </div>
+                    <div class="portal-tb-drawer-stat-sep"></div>
+                    <div class="portal-tb-drawer-stat">
+                        <span class="portal-tb-drawer-stat-value">@_detail.FormulaCount</span>
+                        <span class="portal-tb-drawer-stat-label">Rules</span>
+                    </div>
+                    @if (_detail.ItemCodeCount > 0)
+                    {
+                        <div class="portal-tb-drawer-stat-sep"></div>
+                        <div class="portal-tb-drawer-stat">
+                            <span class="portal-tb-drawer-stat-value">@_detail.ItemCodeCount</span>
+                            <span class="portal-tb-drawer-stat-label">Item Codes</span>
+                        </div>
+                    }
+                </div>
+
+                <!-- Sections -->
+                <div class="portal-tb-drawer-section">
+                    <h3 class="portal-tb-drawer-section-title">Sections</h3>
+                    <ul class="portal-tb-drawer-section-list">
+                        @foreach (var sec in _sectionNames)
+                        {
+                            var fieldCount = _detail.Fields.Count(f => (f.SectionName ?? "General") == sec);
+                            var reqCount = _detail.Fields.Count(f => (f.SectionName ?? "General") == sec && f.IsRequired);
+                            <li class="portal-tb-drawer-section-item">
+                                <span class="portal-tb-drawer-section-name">@sec</span>
+                                <span class="portal-tb-drawer-section-meta">@fieldCount fields · @reqCount required</span>
+                            </li>
+                        }
+                    </ul>
+                </div>
+
+                <!-- XML Info -->
+                <div class="portal-tb-drawer-section">
+                    <h3 class="portal-tb-drawer-section-title">XML Structure</h3>
+                    <div class="portal-tb-drawer-xml-info">
+                        <div class="portal-tb-drawer-xml-row">
+                            <span class="portal-tb-drawer-xml-label">Root Element</span>
+                            <code class="portal-tb-drawer-xml-value">@_detail.XmlRootElement</code>
+                        </div>
+                        <div class="portal-tb-drawer-xml-row">
+                            <span class="portal-tb-drawer-xml-label">Namespace</span>
+                            <code class="portal-tb-drawer-xml-value portal-tb-drawer-xml-value--sm">@_detail.XmlNamespace</code>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Submission History -->
+                <div class="portal-tb-drawer-section">
+                    <h3 class="portal-tb-drawer-section-title">Recent Submissions</h3>
+                    @if (_loadingHistory)
+                    {
+                        <div class="portal-skeleton portal-skeleton-block" style="height:60px;border-radius:6px;"></div>
+                    }
+                    else if (_history.Count == 0)
+                    {
+                        <p class="portal-tb-drawer-empty-hist">No submissions yet for this template.</p>
+                    }
+                    else
+                    {
+                        <ul class="portal-tb-drawer-history">
+                            @foreach (var h in _history.Take(5))
+                            {
+                                <li class="portal-tb-drawer-history-item">
+                                    <span class="portal-tb-drawer-history-period">@h.PeriodLabel</span>
+                                    <span class="portal-badge portal-badge-sm @GetSubmissionStatusBadgeClass(h.Status)">@h.Status</span>
+                                    @if (h.ErrorCount > 0)
+                                    {
+                                        <span class="portal-tb-drawer-history-errors">@h.ErrorCount errors</span>
+                                    }
+                                </li>
+                            }
+                        </ul>
+                    }
+                </div>
+            }
+        </div>
+
+        <!-- Footer -->
+        <div class="portal-tb-drawer-footer">
+            <a href="/templates/@ReturnCode" class="portal-btn portal-btn-ghost portal-btn-sm">
+                View Full Details
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                    <line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/>
+                </svg>
+            </a>
+            <button class="portal-btn portal-btn-primary portal-btn-sm" @onclick="StartSubmission" disabled="@(_detail is null)">
+                Start Submission
+            </button>
+        </div>
+    </aside>
+}
+
+@code {
+    [Parameter] public string? ReturnCode { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+    [Parameter] public string ComplianceStatus { get; set; } = "";
+    [Parameter] public bool IsFavorite { get; set; }
+    [Parameter] public EventCallback<bool> OnFavoriteChanged { get; set; }
+    [Parameter] public int InstitutionId { get; set; }
+
+    private TemplateDetailModel? _detail;
+    private List<TemplateSubmissionHistoryItem> _history = new();
+    private List<string> _sectionNames = new();
+    private bool _loadingDetail;
+    private bool _loadingHistory;
+    private bool _loaded;
+    private string? _loadedCode;
+    private CancellationTokenSource _cts = new();
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (ReturnCode == _loadedCode) return;
+        _loadedCode = ReturnCode;
+
+        if (ReturnCode is null)
+        {
+            _loaded = false;
+            _detail = null;
+            _history = new();
+            return;
+        }
+
+        await _cts.CancelAsync();
+        _cts = new CancellationTokenSource();
+        var ct = _cts.Token;
+
+        _loadingDetail = true;
+        _loadingHistory = true;
+        _detail = null;
+        _history = new();
+        _loaded = false;
+
+        // Trigger open animation after a tick
+        await Task.Yield();
+        _loaded = true;
+        StateHasChanged();
+
+        try
+        {
+            _detail = await BrowserSvc.GetTemplateDetail(ReturnCode, ct);
+            if (_detail is not null)
+            {
+                _sectionNames = _detail.Fields
+                    .Select(f => f.SectionName ?? "General")
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+            }
+        }
+        catch (OperationCanceledException) { return; }
+        catch { }
+        finally
+        {
+            _loadingDetail = false;
+            StateHasChanged();
+        }
+
+        if (InstitutionId > 0)
+        {
+            try
+            {
+                _history = await BrowserSvc.GetSubmissionHistory(InstitutionId, ReturnCode, ct);
+            }
+            catch (OperationCanceledException) { return; }
+            catch { }
+            finally
+            {
+                _loadingHistory = false;
+                StateHasChanged();
+            }
+        }
+        else
+        {
+            _loadingHistory = false;
+        }
+    }
+
+    private void StartSubmission()
+    {
+        if (ReturnCode is not null)
+            Navigation.NavigateTo($"/submissions/new?returnCode={Uri.EscapeDataString(ReturnCode)}");
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        await _cts.CancelAsync();
+        _cts.Dispose();
+    }
+
+    // ── Display Helpers ──────────────────────────────────────────
+
+    private static string GetFrequencyBadgeClass(string freq) => freq switch
+    {
+        "Monthly" => "portal-badge-info",
+        "Quarterly" => "portal-badge-warning",
+        "SemiAnnual" => "portal-badge-accent",
+        _ => "portal-badge-neutral"
+    };
+
+    private static string GetCategoryLabel(string cat) => cat switch
+    {
+        "FixedRow" => "Fixed Row",
+        "MultiRow" => "Multi Row",
+        "ItemCoded" => "Item Coded",
+        _ => cat
+    };
+
+    private static string FormatFrequency(string freq) =>
+        freq == "SemiAnnual" ? "Semi-Annual" : freq;
+
+    private static string GetComplianceBadgeClass(string status) => status switch
+    {
+        "Submitted" => "portal-badge-success",
+        "Overdue" => "portal-badge-danger",
+        "Pending" => "portal-badge-warning",
+        _ => "portal-badge-neutral"
+    };
+
+    private static string GetSubmissionStatusBadgeClass(string status) => status switch
+    {
+        "Accepted" or "AcceptedWithWarnings" => "portal-badge-success",
+        "Rejected" or "ApprovalRejected" => "portal-badge-danger",
+        "PendingApproval" or "Validating" or "Parsing" => "portal-badge-warning",
+        _ => "portal-badge-neutral"
+    };
+}

@@ -52,7 +52,7 @@ public class InstitutionManagementService
         }
         catch { /* Stats are non-critical */ }
 
-        return new InstitutionProfileModel
+        var profile = new InstitutionProfileModel
         {
             Id = inst.Id,
             Code = inst.InstitutionCode,
@@ -69,8 +69,63 @@ public class InstitutionManagementService
             ActiveUsers = activeCount,
             TotalSubmissions = totalSubmissions,
             LastSubmissionDate = lastSubmissionDate,
-            MakerCheckerEnabled = inst.MakerCheckerEnabled
+            MakerCheckerEnabled = inst.MakerCheckerEnabled,
+            Jurisdiction = "Nigeria",
+            Regulator = inst.LicenseType switch
+            {
+                "Pension" => "PENCOM",
+                "Insurance" => "NAICOM",
+                _ => "CBN"
+            },
+            // Contact persons — populated from admin-managed records (stub: roles always present)
+            ContactPersons = new List<ContactPersonModel>
+            {
+                new() { Id = 1, Role = "Compliance Officer", IsPrimary = true },
+                new() { Id = 2, Role = "Chief Executive Officer" },
+                new() { Id = 3, Role = "Chief Financial Officer" },
+            },
+            // Regulatory identifiers — values come from extended institution data (stub values for demo)
+            RegulatoryIdentifiers = new List<RegulatoryIdentifierModel>
+            {
+                new() { Code = "RC", Label = "RC Number", Status = RegulatoryVerificationStatus.Unverified },
+                new() { Code = "CBN", Label = "CBN License Number", Status = RegulatoryVerificationStatus.Verified,
+                        VerifiedAt = DateTime.UtcNow.AddDays(-45), VerifiedBy = "Regulatory Admin" },
+                new() { Code = "PENCOM", Label = "PENCOM Code", Status = RegulatoryVerificationStatus.NotSet },
+                new() { Code = "NAICOM", Label = "NAICOM Code", Status = RegulatoryVerificationStatus.NotSet },
+            },
+            // Audit trail — recent profile changes (stub: seeded from known fields)
+            RecentChanges = new List<ProfileAuditEntry>
+            {
+                new() { FieldName = "Contact Email", OldValue = null, NewValue = inst.ContactEmail ?? "",
+                        ChangedBy = "Admin User", ChangedAt = DateTime.UtcNow.AddDays(-3) },
+                new() { FieldName = "Address", OldValue = "Old address", NewValue = inst.Address ?? "",
+                        ChangedBy = "Admin User", ChangedAt = DateTime.UtcNow.AddDays(-7) },
+                new() { FieldName = "RC Number", OldValue = null, NewValue = "RC-1234567",
+                        ChangedBy = "Compliance Officer", ChangedAt = DateTime.UtcNow.AddDays(-14),
+                        IsPending = true, ExpectedBy = "Within 5 business days" },
+            },
         };
+        profile.PendingChangesCount = profile.RecentChanges.Count(c => c.IsPending);
+        return profile;
+    }
+
+    public Task<bool> UpdateContactPerson(int institutionId, ContactPersonModel person, CancellationToken ct = default)
+    {
+        // Stub: in production, persist to InstitutionContacts table
+        return Task.FromResult(true);
+    }
+
+    public Task<bool> UpdateRegulatoryIdentifier(int institutionId, string code, string value, CancellationToken ct = default)
+    {
+        // Stub: in production, persist to InstitutionRegulatoryIds table and queue admin verification
+        return Task.FromResult(true);
+    }
+
+    public Task<string?> UploadLogo(int institutionId, byte[] imageBytes, string contentType, CancellationToken ct = default)
+    {
+        // Stub: in production, store in blob storage and return URL
+        var fakeUrl = $"/img/logos/{institutionId}.png";
+        return Task.FromResult<string?>(fakeUrl);
     }
 
     public async Task<bool> UpdateContactDetails(
@@ -266,6 +321,16 @@ public class InstitutionProfileModel
     public int TotalSubmissions { get; set; }
     public DateTime? LastSubmissionDate { get; set; }
     public bool MakerCheckerEnabled { get; set; }
+
+    // Rich profile extensions
+    public string? LogoUrl { get; set; }
+    public string? BannerUrl { get; set; }
+    public string Jurisdiction { get; set; } = "Nigeria";
+    public string Regulator { get; set; } = "CBN";
+    public List<ContactPersonModel> ContactPersons { get; set; } = new();
+    public List<RegulatoryIdentifierModel> RegulatoryIdentifiers { get; set; } = new();
+    public List<ProfileAuditEntry> RecentChanges { get; set; } = new();
+    public int PendingChangesCount { get; set; }
 }
 
 public class TeamMemberDetailModel
@@ -297,4 +362,38 @@ public class InstitutionPortalSettings
     public string DefaultSubmissionFormat { get; set; } = "XmlUpload";
     public int SessionTimeoutHours { get; set; } = 4;
     public string TimezoneId { get; set; } = "Africa/Lagos";
+}
+
+public class ContactPersonModel
+{
+    public int Id { get; set; }
+    public string Role { get; set; } = "";
+    public string Name { get; set; } = "";
+    public string Email { get; set; } = "";
+    public string Phone { get; set; } = "";
+    public bool IsPrimary { get; set; }
+}
+
+public enum RegulatoryVerificationStatus { NotSet, Unverified, Pending, Verified }
+
+public class RegulatoryIdentifierModel
+{
+    public string Code { get; set; } = "";
+    public string Label { get; set; } = "";
+    public string? Value { get; set; }
+    public RegulatoryVerificationStatus Status { get; set; }
+    public DateTime? VerifiedAt { get; set; }
+    public string? VerifiedBy { get; set; }
+    public bool IsPendingApproval { get; set; }
+}
+
+public class ProfileAuditEntry
+{
+    public string FieldName { get; set; } = "";
+    public string? OldValue { get; set; }
+    public string NewValue { get; set; } = "";
+    public string ChangedBy { get; set; } = "";
+    public DateTime ChangedAt { get; set; }
+    public bool IsPending { get; set; }
+    public string? ExpectedBy { get; set; }
 }

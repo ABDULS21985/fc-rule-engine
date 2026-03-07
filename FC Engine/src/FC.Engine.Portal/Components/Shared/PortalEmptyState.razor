@@ -1,0 +1,274 @@
+@*
+    PortalEmptyState — Contextual empty-state component for the portal.
+
+    Variants: submissions | approvals | notifications | calendar | templates | reports
+              | search | error | offline | loading-failed
+
+    Key params:
+      Variant                  — which illustration & default copy to show
+      HasFilter                — true = "no results" copy; false = "no data yet" copy
+      HasEntitlementRestriction — true = upgrade-plan prompt instead of action buttons
+      Title / Description      — override default copy
+      ActionText + ActionUrl   — primary button (link)
+      ActionText + OnAction    — primary button (EventCallback)
+      SecondaryActionText + SecondaryActionUrl / OnSecondaryAction — secondary button
+      Actions (RenderFragment) — fully custom buttons slot (takes precedence over Action params)
+      NextDeadlineLabel        — calendar variant: adjacent-month hint text
+      OnNavigateToDeadline     — calendar variant: "Go →" button callback
+      AsCard                   — wraps in card chrome (default true)
+      Class                    — extra CSS classes on root element
+*@
+
+<div class="portal-es portal-es--@Variant @(AsCard ? "portal-es--card" : "") @Class">
+
+    <div class="portal-es-icon" aria-hidden="true">
+        @switch (Variant)
+        {
+            case "submissions":
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                     stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="22 12 16 12 14 15 10 15 8 12 2 12" />
+                    <path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z" />
+                </svg>
+                break;
+
+            case "approvals":
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                     stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+                    <polyline points="22 4 12 14.01 9 11.01" />
+                </svg>
+                break;
+
+            case "notifications":
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                     stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+                    <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+                </svg>
+                break;
+
+            case "calendar":
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                     stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                    <line x1="16" y1="2" x2="16" y2="6" />
+                    <line x1="8" y1="2" x2="8" y2="6" />
+                    <line x1="3" y1="10" x2="21" y2="10" />
+                </svg>
+                break;
+
+            case "templates":
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                     stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                    <polyline points="14 2 14 8 20 8" />
+                    <line x1="16" y1="13" x2="8" y2="13" />
+                    <line x1="16" y1="17" x2="8" y2="17" />
+                    <polyline points="10 9 9 9 8 9" />
+                </svg>
+                break;
+
+            case "reports":
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                     stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="18" y1="20" x2="18" y2="10" />
+                    <line x1="12" y1="20" x2="12" y2="4" />
+                    <line x1="6" y1="20" x2="6" y2="14" />
+                </svg>
+                break;
+
+            case "search":
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                     stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="11" cy="11" r="8" />
+                    <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                </svg>
+                break;
+
+            case "error":
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                     stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                    <line x1="12" y1="9" x2="12" y2="13" />
+                    <line x1="12" y1="17" x2="12.01" y2="17" />
+                </svg>
+                break;
+
+            case "offline":
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                     stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="1" y1="1" x2="23" y2="23" />
+                    <path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55" />
+                    <path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39" />
+                    <path d="M10.71 5.05A16 16 0 0 1 22.56 9" />
+                    <path d="M1.42 9a15.91 15.91 0 0 1 4.7-2.88" />
+                    <path d="M8.53 16.11a6 6 0 0 1 6.95 0" />
+                    <line x1="12" y1="20" x2="12.01" y2="20" />
+                </svg>
+                break;
+
+            case "loading-failed":
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                     stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z" />
+                    <line x1="12" y1="12" x2="16" y2="16" />
+                    <line x1="16" y1="12" x2="12" y2="16" />
+                </svg>
+                break;
+
+            default:
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                     stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10" />
+                    <line x1="12" y1="8" x2="12" y2="12" />
+                    <line x1="12" y1="16" x2="12.01" y2="16" />
+                </svg>
+                break;
+        }
+    </div>
+
+    <h2 class="portal-es-title">@(Title ?? GetDefaultTitle())</h2>
+    <p class="portal-es-desc">@(Description ?? GetDefaultDescription())</p>
+
+    @if (HasEntitlementRestriction)
+    {
+        <div class="portal-es-upgrade">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                 stroke-width="2" aria-hidden="true" style="flex-shrink:0;">
+                <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+            </svg>
+            <span>Your plan doesn't include this feature.</span>
+            <a href="/subscription" class="portal-btn portal-btn-accent portal-btn-sm">Upgrade Plan</a>
+        </div>
+    }
+    else if (Actions != null)
+    {
+        <div class="portal-es-actions">@Actions</div>
+    }
+    else if (!string.IsNullOrEmpty(ActionText))
+    {
+        <div class="portal-es-actions">
+            @if (!string.IsNullOrEmpty(ActionUrl))
+            {
+                <a href="@ActionUrl" class="portal-btn portal-btn-primary portal-btn-sm">@ActionText</a>
+            }
+            else
+            {
+                <button type="button" class="portal-btn portal-btn-primary portal-btn-sm" @onclick="OnAction">@ActionText</button>
+            }
+            @if (!string.IsNullOrEmpty(SecondaryActionText))
+            {
+                @if (!string.IsNullOrEmpty(SecondaryActionUrl))
+                {
+                    <a href="@SecondaryActionUrl" class="portal-btn portal-btn-outline portal-btn-sm">@SecondaryActionText</a>
+                }
+                else
+                {
+                    <button type="button" class="portal-btn portal-btn-outline portal-btn-sm" @onclick="OnSecondaryAction">@SecondaryActionText</button>
+                }
+            }
+        </div>
+    }
+
+    @if (Variant == "calendar" && !string.IsNullOrEmpty(NextDeadlineLabel))
+    {
+        <div class="portal-es-deadline-hint">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                 stroke-width="2" aria-hidden="true">
+                <circle cx="12" cy="12" r="10" />
+                <polyline points="12 6 12 12 16 14" />
+            </svg>
+            <span>@NextDeadlineLabel</span>
+            @if (OnNavigateToDeadline.HasDelegate)
+            {
+                <button type="button" class="portal-es-deadline-btn" @onclick="OnNavigateToDeadline">Go →</button>
+            }
+        </div>
+    }
+
+</div>
+
+@code {
+    /// <summary>Which illustration and default copy to render.</summary>
+    [Parameter] public string Variant { get; set; } = "search";
+
+    /// <summary>Override the default heading text.</summary>
+    [Parameter] public string? Title { get; set; }
+
+    /// <summary>Override the default description text.</summary>
+    [Parameter] public string? Description { get; set; }
+
+    /// <summary>True when a search or filter is active — switches to "no results" copy.</summary>
+    [Parameter] public bool HasFilter { get; set; }
+
+    /// <summary>Show an upgrade-plan prompt instead of normal action buttons.</summary>
+    [Parameter] public bool HasEntitlementRestriction { get; set; }
+
+    // ── Primary action ──────────────────────────────────────────────────────
+    [Parameter] public string? ActionText { get; set; }
+    [Parameter] public string? ActionUrl { get; set; }
+    [Parameter] public EventCallback OnAction { get; set; }
+
+    // ── Secondary action ────────────────────────────────────────────────────
+    [Parameter] public string? SecondaryActionText { get; set; }
+    [Parameter] public string? SecondaryActionUrl { get; set; }
+    [Parameter] public EventCallback OnSecondaryAction { get; set; }
+
+    // ── Calendar time-aware hint ────────────────────────────────────────────
+    /// <summary>Adjacent-month deadline label, e.g. "Next deadline: April 5 — FINREP Q1".</summary>
+    [Parameter] public string? NextDeadlineLabel { get; set; }
+    [Parameter] public EventCallback OnNavigateToDeadline { get; set; }
+
+    // ── Layout ──────────────────────────────────────────────────────────────
+    /// <summary>Render with card chrome (background + border + radius). Default true.</summary>
+    [Parameter] public bool AsCard { get; set; } = true;
+
+    /// <summary>Extra CSS classes on the root element.</summary>
+    [Parameter] public string? Class { get; set; }
+
+    /// <summary>Fully custom action buttons (takes precedence over ActionText params).</summary>
+    [Parameter] public RenderFragment? Actions { get; set; }
+
+    // ── Default copy ────────────────────────────────────────────────────────
+
+    private string GetDefaultTitle() => (Variant, HasFilter) switch
+    {
+        ("submissions",    true)  => "No submissions match your filters",
+        ("submissions",    false) => "No submissions yet",
+        ("approvals",      true)  => "No approvals match your filters",
+        ("approvals",      false) => "Nothing awaiting approval",
+        ("notifications",  true)  => "No notifications in this category",
+        ("notifications",  false) => "You're all caught up",
+        ("calendar",       _)     => "No deadlines this period",
+        ("templates",      true)  => "No templates match your search",
+        ("templates",      false) => "No templates yet",
+        ("reports",        true)  => "No reports match your search",
+        ("reports",        false) => "No saved reports yet",
+        ("search",         _)     => "No results found",
+        ("error",          _)     => "Something went wrong",
+        ("offline",        _)     => "You're offline",
+        ("loading-failed", _)     => "Couldn't load data",
+        _                         => "Nothing here yet"
+    };
+
+    private string GetDefaultDescription() => (Variant, HasFilter) switch
+    {
+        ("submissions",    true)  => "Try adjusting your search or filters to find what you're looking for.",
+        ("submissions",    false) => "Start your first return to see it here. Your submissions will appear in this list.",
+        ("approvals",      true)  => "Adjust your filters to find the approval you're looking for.",
+        ("approvals",      false) => "All submissions are up to date. New approval requests will appear here.",
+        ("notifications",  true)  => "There are no notifications of this type right now.",
+        ("notifications",  false) => "Notifications will appear here when there are updates to your submissions, approvals, and deadlines.",
+        ("calendar",       _)     => "There are no returns due in the selected period.",
+        ("templates",      true)  => "Try a different search term or clear your filters.",
+        ("templates",      false) => "Templates define the structure of your regulatory returns.",
+        ("reports",        true)  => "Try a different search term to find your report.",
+        ("reports",        false) => "Build and save custom report views for quick access.",
+        ("search",         _)     => "Try different keywords or check for typos.",
+        ("error",          _)     => "An unexpected error occurred. Please try again or contact support.",
+        ("offline",        _)     => "Check your internet connection and try again.",
+        ("loading-failed", _)     => "We couldn't retrieve this data. This might be a temporary issue.",
+        _                         => "Nothing to display right now."
+    };
+}

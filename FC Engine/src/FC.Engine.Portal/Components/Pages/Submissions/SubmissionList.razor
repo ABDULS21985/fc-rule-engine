@@ -100,12 +100,18 @@
                     <option value="returncode">Return Code</option>
                 </select>
             </div>
+
+            <FilterPresetPopover PageKey="submissions"
+                                 CurrentFilters="@GetCurrentFilters()"
+                                 OnPresetApplied="ApplyFilterPreset" />
         </div>
 
-        @if (!string.IsNullOrEmpty(searchQuery) || !string.IsNullOrEmpty(filterStatus) || !string.IsNullOrEmpty(filterReturnCode))
+        @if (HasFilters)
         {
             <div class="portal-toolbar-active-filters">
-                <span class="portal-toolbar-active-label">Active filters:</span>
+                <span class="portal-toolbar-active-label">
+                    Filters <span class="portal-filter-count-badge" aria-label="@ActiveFilterCount active filters">@ActiveFilterCount</span>:
+                </span>
                 @if (!string.IsNullOrEmpty(searchQuery))
                 {
                     <button class="portal-chip portal-chip-removable" @onclick="() => { searchQuery = string.Empty; ApplyFilters(); }">
@@ -133,6 +139,24 @@
                         </svg>
                     </button>
                 }
+                @if (sortBy != "date-desc")
+                {
+                    <button class="portal-chip portal-chip-removable" @onclick='() => { sortBy = "date-desc"; ApplyFilters(); }'>
+                        Sort: @GetSortLabel(sortBy)
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true">
+                            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                        </svg>
+                    </button>
+                }
+                @if (_smartDefaultApplied)
+                {
+                    <span class="portal-smart-default-indicator" title="Pre-filtered based on your role">
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                            <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+                        </svg>
+                        Smart default
+                    </span>
+                }
                 <button class="portal-btn portal-btn-ghost portal-btn-xs" @onclick="ClearAllFilters">Clear All</button>
             </div>
         }
@@ -152,28 +176,19 @@
     }
     else if (!filteredSubmissions.Any())
     {
-        <div class="portal-empty-state portal-card">
-            <div class="portal-empty-state-icon" aria-hidden="true">
-                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" stroke-width="1.5">
-                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                    <polyline points="14 2 14 8 20 8"/>
-                    <line x1="16" y1="13" x2="8" y2="13"/>
-                    <line x1="16" y1="17" x2="8" y2="17"/>
-                </svg>
-            </div>
-            @if (string.IsNullOrEmpty(searchQuery) && string.IsNullOrEmpty(filterStatus) && string.IsNullOrEmpty(filterReturnCode))
-            {
-                <h3 class="portal-empty-state-title">No Submissions Yet</h3>
-                <p class="portal-empty-state-desc">Start by submitting your first return to see it here.</p>
-                <a href="/submit" class="portal-btn portal-btn-primary">Submit Your First Return</a>
-            }
-            else
-            {
-                <h3 class="portal-empty-state-title">No Matching Submissions</h3>
-                <p class="portal-empty-state-desc">Try adjusting your filters or search query.</p>
-                <button class="portal-btn portal-btn-outline" @onclick="ClearAllFilters">Clear Filters</button>
-            }
-        </div>
+        var hasActiveFilter = !string.IsNullOrEmpty(searchQuery) || !string.IsNullOrEmpty(filterStatus) || !string.IsNullOrEmpty(filterReturnCode);
+        <PortalEmptyState Variant="submissions" HasFilter="hasActiveFilter">
+            <Actions>
+                @if (hasActiveFilter)
+                {
+                    <button type="button" class="portal-btn portal-btn-outline portal-btn-sm" @onclick="ClearAllFilters">Clear filters</button>
+                }
+                else
+                {
+                    <a href="/submit" class="portal-btn portal-btn-primary portal-btn-sm">Start your first return</a>
+                }
+            </Actions>
+        </PortalEmptyState>
     }
     else if (viewMode == "kanban")
     {
@@ -352,7 +367,7 @@
         <!-- ── Desktop Table ── -->
         <div class="portal-card portal-card-flush portal-hide-mobile">
             <div class="portal-table-container">
-                <table class="portal-table" id="submissions-table" aria-label="Submissions list">
+                <table class="portal-table" id="submissions-table" data-keyboard-nav="true" aria-label="Submissions list">
                     <thead>
                         <tr>
                             <th class="portal-th-cb" scope="col">
@@ -578,12 +593,17 @@
 <TourBeaconSet TourKey="submissions-v1" Beacons="@_submissionBeacons" Steps="@_submissionTourSteps" />
 
 @code {
-    // ── Query params: restores filter state when navigating back from detail page ──
+    // ── URL query params — full filter state is encoded so every filtered view is bookmarkable ──
     [SupplyParameterFromQuery(Name = "q")] public string? Q { get; set; }
     [SupplyParameterFromQuery(Name = "status")] public string? StatusParam { get; set; }
     [SupplyParameterFromQuery(Name = "template")] public string? TemplateParam { get; set; }
+    [SupplyParameterFromQuery(Name = "sort")] public string? SortParam { get; set; }
+    [SupplyParameterFromQuery(Name = "page")] public int? PageParam { get; set; }
+    [SupplyParameterFromQuery(Name = "view")] public string? ViewParam { get; set; }
 
     private bool isLoading = true;
+    private bool _initialized;
+    private bool _smartDefaultApplied;
     private List<SubmissionListItem> submissions = new();
     private List<SubmissionListItem> filteredSubmissions = new();
     private List<string> availableReturnCodes = new();
@@ -606,7 +626,17 @@
     private bool AllPageSelected => pagedSubmissions.Any() && pagedSubmissions.All(s => _selectedIds.Contains(s.Id));
     private bool SomePageSelected => pagedSubmissions.Any(s => _selectedIds.Contains(s.Id));
     private int SelectedCount => _allMatchingSelected ? filteredSubmissions.Count : _selectedIds.Count;
-    private bool HasFilters => !string.IsNullOrEmpty(searchQuery) || !string.IsNullOrEmpty(filterStatus) || !string.IsNullOrEmpty(filterReturnCode);
+    private bool HasFilters =>
+        !string.IsNullOrEmpty(searchQuery) ||
+        !string.IsNullOrEmpty(filterStatus) ||
+        !string.IsNullOrEmpty(filterReturnCode) ||
+        sortBy != "date-desc";
+
+    private int ActiveFilterCount =>
+        (string.IsNullOrEmpty(searchQuery) ? 0 : 1) +
+        (string.IsNullOrEmpty(filterStatus) ? 0 : 1) +
+        (string.IsNullOrEmpty(filterReturnCode) ? 0 : 1) +
+        (sortBy == "date-desc" ? 0 : 1);
     private string BulkBarCss => _selectedIds.Any() ? "portal-bulk-bar portal-bulk-bar--visible" : "portal-bulk-bar";
 
     private int currentPage = 1;
@@ -661,10 +691,34 @@
     protected override async Task OnInitializedAsync()
     {
         _dotNetRef = DotNetObjectReference.Create(this);
-        // Restore filter state from URL params (set when navigating back from detail page)
-        if (!string.IsNullOrEmpty(Q)) searchQuery = Q;
-        if (!string.IsNullOrEmpty(StatusParam)) filterStatus = StatusParam;
-        if (!string.IsNullOrEmpty(TemplateParam)) filterReturnCode = TemplateParam;
+        _initialized = true;
+
+        // Restore all filter state from URL params (makes every filtered view bookmarkable)
+        bool hasUrlParams = !string.IsNullOrEmpty(Q) || !string.IsNullOrEmpty(StatusParam)
+            || !string.IsNullOrEmpty(TemplateParam) || !string.IsNullOrEmpty(SortParam)
+            || PageParam.HasValue || !string.IsNullOrEmpty(ViewParam);
+
+        if (hasUrlParams)
+        {
+            if (!string.IsNullOrEmpty(Q)) searchQuery = Q;
+            if (!string.IsNullOrEmpty(StatusParam)) filterStatus = StatusParam;
+            if (!string.IsNullOrEmpty(TemplateParam)) filterReturnCode = TemplateParam;
+            if (!string.IsNullOrEmpty(SortParam)) sortBy = SortParam;
+            if (PageParam is > 0) currentPage = PageParam.Value;
+            if (!string.IsNullOrEmpty(ViewParam)) viewMode = ViewParam;
+        }
+        else
+        {
+            // Smart defaults: pre-apply role-based filters on first visit (no URL params)
+            var state = await AuthState!;
+            var role = state.User.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value;
+            if (role == "Checker")
+            {
+                filterStatus = "PendingApproval";
+                _smartDefaultApplied = true;
+            }
+        }
+
         await LoadSubmissions();
     }
 
@@ -696,7 +750,7 @@
         if (viewMode == mode) return;
         viewMode = mode;
         colReorderInitialized = false;
-        StateHasChanged();
+        Navigation.NavigateTo(BuildFilterUrl(), replace: true);
 
         if (mode == "kanban")
         {
@@ -806,7 +860,7 @@
                 .OrderBy(c => c)
                 .ToList();
 
-            ApplyFilters();
+            ApplyFilters(updateUrl: false);
         }
         catch
         {
@@ -819,7 +873,9 @@
         }
     }
 
-    private void ApplyFilters()
+    /// <param name="updateUrl">When true (default), pushes the current filter state to the URL query string.
+    /// Pass false when called from LoadSubmissions (URL is already correct on initial load).</param>
+    private void ApplyFilters(bool updateUrl = true)
     {
         _selectedIds.Clear();
         _allMatchingSelected = false;
@@ -855,7 +911,12 @@
 
         filteredSubmissions = query.ToList();
         currentPage = 1;
-        StateHasChanged();
+
+        if (updateUrl)
+            // replace: true → no browser history entry for filter changes (filter navigation is not back-button worthy)
+            Navigation.NavigateTo(BuildFilterUrl(), replace: true);
+        else
+            StateHasChanged();
     }
 
     private void ClearAllFilters()
@@ -864,8 +925,40 @@
         filterStatus = "";
         filterReturnCode = "";
         sortBy = "date-desc";
+        _smartDefaultApplied = false;
+        Navigation.NavigateTo("/submissions", replace: true);
+        ApplyFilters(updateUrl: false);
+    }
+
+    /// <summary>Returns the current filter state as a dictionary for the FilterPresetPopover.</summary>
+    private Dictionary<string, string> GetCurrentFilters() => new()
+    {
+        ["q"] = searchQuery,
+        ["status"] = filterStatus,
+        ["template"] = filterReturnCode,
+        ["sort"] = sortBy == "date-desc" ? "" : sortBy,
+        ["view"] = viewMode == "table" ? "" : viewMode
+    };
+
+    /// <summary>Called when the user applies a saved filter preset.</summary>
+    private void ApplyFilterPreset(Dictionary<string, string> filters)
+    {
+        searchQuery = filters.GetValueOrDefault("q", "");
+        filterStatus = filters.GetValueOrDefault("status", "");
+        filterReturnCode = filters.GetValueOrDefault("template", "");
+        sortBy = filters.GetValueOrDefault("sort") is { Length: > 0 } s ? s : "date-desc";
+        viewMode = filters.GetValueOrDefault("view") is { Length: > 0 } v ? v : "table";
+        _smartDefaultApplied = false;
         ApplyFilters();
     }
+
+    private static string GetSortLabel(string sort) => sort switch
+    {
+        "date-asc" => "Oldest First",
+        "status" => "Status",
+        "returncode" => "Return Code",
+        _ => "Newest First"
+    };
 
     private void ToggleSelectAll()
     {
@@ -957,20 +1050,23 @@
     }
 
     /// <summary>
-    /// Builds the back-URL for this list page, encoding any active filters so the detail
-    /// page can restore them when the user navigates back.
+    /// Builds the canonical URL for the current list state, encoding all active filters,
+    /// sort, page, and view so filtered views are bookmarkable and shareable.
     /// </summary>
-    private string BuildBackUrl()
+    private string BuildFilterUrl()
     {
         var parts = new List<string>();
         if (!string.IsNullOrEmpty(searchQuery)) parts.Add($"q={Uri.EscapeDataString(searchQuery)}");
         if (!string.IsNullOrEmpty(filterStatus)) parts.Add($"status={Uri.EscapeDataString(filterStatus)}");
         if (!string.IsNullOrEmpty(filterReturnCode)) parts.Add($"template={Uri.EscapeDataString(filterReturnCode)}");
+        if (sortBy != "date-desc") parts.Add($"sort={Uri.EscapeDataString(sortBy)}");
+        if (currentPage > 1) parts.Add($"page={currentPage}");
+        if (viewMode != "table") parts.Add($"view={Uri.EscapeDataString(viewMode)}");
         return parts.Count > 0 ? "/submissions?" + string.Join("&", parts) : "/submissions";
     }
 
     /// <summary>Returns a detail URL that embeds the current filter state as a back-link.</summary>
-    private string DetailUrl(int id) => $"/submissions/{id}?back={Uri.EscapeDataString(BuildBackUrl())}";
+    private string DetailUrl(int id) => $"/submissions/{id}?back={Uri.EscapeDataString(BuildFilterUrl())}";
 
     private void ViewDetail(int submissionId)
     {
@@ -983,7 +1079,7 @@
         {
             currentPage = page;
             _lastSelectedPageIndex = -1;
-            StateHasChanged();
+            Navigation.NavigateTo(BuildFilterUrl(), replace: true);
         }
     }
 

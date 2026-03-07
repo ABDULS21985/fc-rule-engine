@@ -2,19 +2,101 @@
 @attribute [Authorize(Policy = "InstitutionUser")]
 @using Microsoft.AspNetCore.Components.Authorization
 @using System.Security.Claims
+@implements IAsyncDisposable
 
 <PageTitle>Institution Profile — FC Engine Portal</PageTitle>
 
-<div class="portal-page">
-
-    <div class="portal-page-header">
-        <div class="portal-page-header-main">
-            <h1 class="portal-page-title">Institution Profile</h1>
-            <p class="portal-page-subtitle">View and manage your institution's details</p>
+<!-- Logo Upload/Crop Modal -->
+@if (_showLogoModal)
+{
+    <div class="portal-modal-backdrop" @onclick="CloseLogoModal" role="dialog" aria-modal="true" aria-label="Upload institution logo">
+        <div class="portal-modal portal-ip-crop-modal" @onclick:stopPropagation>
+            <div class="portal-modal-header">
+                <h3 class="portal-modal-title">Upload Institution Logo</h3>
+                <button class="portal-modal-close" @onclick="CloseLogoModal" aria-label="Close">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
+            </div>
+            <div class="portal-modal-body">
+                @if (_cropImageSrc is null)
+                {
+                    <label class="portal-ip-drop-target">
+                        <InputFile OnChange="OnLogoFileSelected" accept="image/png,image/jpeg,image/webp" style="display:none" />
+                        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+                            <rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/>
+                            <polyline points="21 15 16 10 5 21"/>
+                        </svg>
+                        <span>Drop an image here, or click to browse</span>
+                        <span class="portal-ip-drop-hint">PNG, JPG or WebP · Max 2 MB · Recommended 400×400 px</span>
+                    </label>
+                }
+                else
+                {
+                    <div class="portal-ip-crop-workspace">
+                        <div class="portal-ip-crop-stage-wrap">
+                            <div class="portal-ip-crop-stage @(_cropAspect == "16:9" ? "portal-ip-crop-stage--wide" : "")"
+                                 id="portal-crop-container">
+                                <img src="@_cropImageSrc" id="portal-crop-img" class="portal-ip-crop-img" alt="Logo preview" draggable="false"/>
+                                <div class="portal-ip-crop-overlay" aria-hidden="true"></div>
+                            </div>
+                        </div>
+                        <div class="portal-ip-crop-controls">
+                            <div class="portal-ip-crop-control-row">
+                                <label class="portal-ip-crop-control-label">Zoom</label>
+                                <input type="range" min="100" max="300" step="5" value="@_cropZoom"
+                                       class="portal-ip-zoom-slider"
+                                       @oninput="OnZoomChanged" />
+                                <span class="portal-ip-zoom-val">@_cropZoom%</span>
+                            </div>
+                            <div class="portal-ip-crop-control-row">
+                                <label class="portal-ip-crop-control-label">Aspect Ratio</label>
+                                <div class="portal-ip-aspect-btns">
+                                    <button class="portal-btn portal-btn-sm @(_cropAspect == "1:1" ? "portal-btn-primary" : "portal-btn-outline")"
+                                            @onclick='() => SetAspect("1:1")'>Square</button>
+                                    <button class="portal-btn portal-btn-sm @(_cropAspect == "16:9" ? "portal-btn-primary" : "portal-btn-outline")"
+                                            @onclick='() => SetAspect("16:9")'>Banner (16:9)</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="portal-ip-crop-preview-row">
+                        <div class="portal-ip-crop-preview-item">
+                            <span class="portal-ip-crop-preview-label">Portal Header Preview</span>
+                            <div class="portal-ip-header-preview">
+                                <div class="portal-ip-header-preview-bar">
+                                    <div class="portal-ip-header-preview-logo">
+                                        <img src="@_cropImageSrc" alt="" />
+                                    </div>
+                                    <span class="portal-ip-header-preview-name">FC Engine</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="portal-ip-crop-preview-item">
+                            <span class="portal-ip-crop-preview-label">Profile Avatar</span>
+                            <div class="portal-ip-avatar-preview">
+                                <img src="@_cropImageSrc" alt="" />
+                            </div>
+                        </div>
+                    </div>
+                }
+            </div>
+            @if (_cropImageSrc is not null)
+            {
+                <div class="portal-modal-footer">
+                    <button class="portal-btn portal-btn-ghost" @onclick="() => { _cropImageSrc = null; _cropZoom = 100; }">Change Image</button>
+                    <button class="portal-btn portal-btn-primary" @onclick="SaveLogo" disabled="@_savingLogo">
+                        @if (_savingLogo) { <span class="portal-btn-spinner" aria-hidden="true"></span> }
+                        Apply Logo
+                    </button>
+                </div>
+            }
         </div>
     </div>
+}
 
-    <!-- Institution Sub-Nav -->
+<div class="portal-page">
+
+    <!-- Sub-Nav -->
     <nav class="portal-inst-subnav" aria-label="Institution sections">
         <a href="/institution" class="portal-inst-subnav-item portal-inst-subnav-item-active">Profile</a>
         <a href="/institution/team" class="portal-inst-subnav-item">
@@ -24,47 +106,121 @@
                 <span class="portal-badge portal-badge-sm portal-badge-neutral">@profile.TotalUsers</span>
             }
         </a>
-        @if (isAdmin)
+        @if (_isAdmin)
         {
             <a href="/institution/settings" class="portal-inst-subnav-item">Settings</a>
         }
     </nav>
 
-    @if (isLoading)
+    @if (_isLoading)
     {
-        <div class="portal-skeleton portal-skeleton-block" style="height: 200px; margin-bottom: 1rem;"></div>
-        <div class="portal-skeleton portal-skeleton-block" style="height: 300px;"></div>
+        <div class="portal-skeleton portal-skeleton-block" style="height:240px;margin-bottom:1rem;border-radius:16px;"></div>
+        <div style="display:grid;grid-template-columns:1fr 280px;gap:1rem;">
+            <div class="portal-skeleton portal-skeleton-block" style="height:320px;border-radius:12px;"></div>
+            <div class="portal-skeleton portal-skeleton-block" style="height:320px;border-radius:12px;"></div>
+        </div>
     }
     else if (profile is null)
     {
-        <div class="portal-empty-state portal-card" style="padding: 3rem;">
+        <div class="portal-empty-state portal-card" style="padding:3rem;">
             <h3 class="portal-empty-state-title">Institution Not Found</h3>
             <p class="portal-empty-state-desc">Unable to load institution details.</p>
         </div>
     }
     else
     {
-        <!-- Institution Hero Card -->
-        <div class="portal-card portal-inst-hero">
-            <div class="portal-inst-hero-top">
-                <div class="portal-inst-hero-icon">
-                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
-                        <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
-                        <polyline points="9 22 9 12 15 12 15 22"/>
-                    </svg>
-                </div>
-                <div class="portal-inst-hero-title-section">
-                    <h2 class="portal-inst-hero-name">@profile.Name</h2>
-                    <span class="portal-inst-hero-code">@profile.Code</span>
-                </div>
-                <div class="portal-inst-hero-badges">
-                    <span class="portal-badge portal-badge-lg @(profile.IsActive ? "portal-badge-success" : "portal-badge-danger")">
-                        @(profile.IsActive ? "Active" : "Suspended")
-                    </span>
-                    <span class="portal-badge portal-badge-lg portal-badge-info">@profile.SubscriptionTier</span>
-                    @if (profile.MakerCheckerEnabled)
+        <!-- ══ HERO CARD ══════════════════════════════════════════════════════ -->
+        <div class="portal-card portal-ip-hero">
+            <div class="portal-ip-hero-inner">
+
+                <!-- Logo Upload Zone -->
+                <div class="portal-ip-logo-zone @(profile.LogoUrl is null ? "portal-ip-logo-zone--empty" : "")"
+                     role="button" tabindex="0" aria-label="Upload institution logo"
+                     @onclick="OpenLogoModal" @onkeydown="OnLogoKeyDown">
+                    @if (profile.LogoUrl is not null)
                     {
-                        <span class="portal-badge portal-badge-lg portal-badge-warning">Maker-Checker</span>
+                        <img src="@profile.LogoUrl" alt="@profile.Name logo" class="portal-ip-logo-img" />
+                    }
+                    else
+                    {
+                        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+                            <rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/>
+                            <polyline points="21 15 16 10 5 21"/>
+                        </svg>
+                    }
+                    <span class="portal-ip-logo-overlay" aria-hidden="true">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                        Upload
+                    </span>
+                </div>
+
+                <!-- Identity -->
+                <div class="portal-ip-hero-identity">
+                    <h1 class="portal-ip-hero-name">@profile.Name</h1>
+                    <div class="portal-ip-hero-meta">
+                        <span class="portal-ip-hero-code">@profile.Code</span>
+                        <span class="portal-ip-badge-jurisdiction">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 010 20M12 2a15.3 15.3 0 000 20"/></svg>
+                            @profile.Jurisdiction
+                        </span>
+                        <span class="portal-ip-badge-regulator">@profile.Regulator</span>
+                        <span class="portal-badge portal-badge-sm @(profile.IsActive ? "portal-badge-success" : "portal-badge-danger")">
+                            @(profile.IsActive ? "Active" : "Suspended")
+                        </span>
+                        <span class="portal-ip-plan-chip">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+                            @profile.SubscriptionTier
+                        </span>
+                        @if (profile.MakerCheckerEnabled)
+                        {
+                            <span class="portal-badge portal-badge-sm portal-badge-warning">Maker-Checker</span>
+                        }
+                        @if (profile.PendingChangesCount > 0)
+                        {
+                            <span class="portal-ip-pending-chip" title="@profile.PendingChangesCount change(s) awaiting admin approval">
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                                @profile.PendingChangesCount pending
+                            </span>
+                        }
+                    </div>
+                </div>
+
+                <!-- Completeness Ring (inline SVG) -->
+                <div class="portal-ip-ring-wrap">
+                    <svg viewBox="0 0 120 120" class="portal-ip-ring-svg" role="img" aria-label="Profile @_completeness% complete">
+                        <circle cx="60" cy="60" r="50" fill="none" stroke="var(--portal-border-subtle,#e2e8f0)" stroke-width="10"/>
+                        <circle cx="60" cy="60" r="50" fill="none"
+                                stroke="@(_completeness >= 80 ? "var(--portal-success,#16a34a)" : _completeness >= 50 ? "var(--portal-warning,#d97706)" : "var(--portal-danger,#dc2626)")"
+                                stroke-width="10"
+                                stroke-dasharray="@((314.159 * _completeness / 100).ToString("F2")) 314.159"
+                                stroke-linecap="round"
+                                transform="rotate(-90 60 60)"
+                                style="transition:stroke-dasharray .6s ease"/>
+                        <text x="60" y="55" text-anchor="middle" class="portal-ip-ring-pct">@_completeness%</text>
+                        <text x="60" y="72" text-anchor="middle" class="portal-ip-ring-label">Profile</text>
+                    </svg>
+                    @if (_missingFields.Count > 0)
+                    {
+                        <ul class="portal-ip-missing-list" aria-label="Missing profile fields">
+                            @foreach (var f in _missingFields.Take(4))
+                            {
+                                <li class="portal-ip-missing-item">
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                                    @f
+                                </li>
+                            }
+                            @if (_missingFields.Count > 4)
+                            {
+                                <li class="portal-ip-missing-more">+@(_missingFields.Count - 4) more</li>
+                            }
+                        </ul>
+                    }
+                    else
+                    {
+                        <p class="portal-ip-complete-msg">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
+                            Profile complete!
+                        </p>
                     }
                 </div>
             </div>
@@ -72,9 +228,7 @@
             <!-- Stats Row -->
             <div class="portal-inst-stats-row">
                 <div class="portal-inst-stat">
-                    <span class="portal-inst-stat-value">
-                        @profile.ActiveUsers<span class="portal-inst-stat-secondary">/@profile.MaxUsersAllowed</span>
-                    </span>
+                    <span class="portal-inst-stat-value">@profile.ActiveUsers<span class="portal-inst-stat-secondary">/@profile.MaxUsersAllowed</span></span>
                     <span class="portal-inst-stat-label">Active Users</span>
                 </div>
                 <div class="portal-inst-stat">
@@ -92,101 +246,358 @@
             </div>
         </div>
 
-        <!-- Contact Details (editable by Admin) -->
-        <div class="portal-card portal-form-section">
-            <div class="portal-form-section-header">
-                <h3 class="portal-form-section-title">Contact Details</h3>
-                @if (isAdmin && !isEditingContact)
-                {
-                    <button class="portal-btn portal-btn-outline portal-btn-sm" @onclick="StartEditContact">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
-                            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
-                        </svg>
-                        Edit
-                    </button>
-                }
-            </div>
+        <!-- ══ MAIN GRID ═════════════════════════════════════════════════════ -->
+        <div class="portal-ip-grid">
 
-            @if (!string.IsNullOrEmpty(contactSuccessMsg))
-            {
-                <div class="portal-alert portal-alert-success" role="alert">@contactSuccessMsg</div>
-            }
+            <!-- LEFT COLUMN ─────────────────────────────────────────────── -->
+            <div class="portal-ip-main-col">
 
-            @if (isEditingContact)
-            {
-                <div class="portal-form-grid" style="max-width: 600px;">
-                    <div class="portal-form-group">
-                        <label for="instEmail" class="portal-form-label">Email</label>
-                        <input id="instEmail" type="email" class="portal-form-input" @bind="editEmail" />
+                <!-- Contact Persons Table -->
+                <div class="portal-card portal-ip-section">
+                    <div class="portal-ip-section-header">
+                        <div class="portal-ip-section-title-row">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>
+                            <h2 class="portal-ip-section-title">Contact Persons</h2>
+                        </div>
+                        <span class="portal-ip-section-hint">Click any cell to edit inline</span>
                     </div>
-                    <div class="portal-form-group">
-                        <label for="instPhone" class="portal-form-label">Phone</label>
-                        <input id="instPhone" type="tel" class="portal-form-input" @bind="editPhone" />
-                    </div>
-                    <div class="portal-form-group" style="grid-column: 1 / -1;">
-                        <label for="instAddress" class="portal-form-label">Address</label>
-                        <textarea id="instAddress" class="portal-form-input" rows="2" @bind="editAddress"></textarea>
+
+                    <div class="portal-ip-contact-table-wrap">
+                        <table class="portal-ip-contact-table" aria-label="Contact persons">
+                            <thead>
+                                <tr>
+                                    <th>Role</th>
+                                    <th>Name</th>
+                                    <th>Email</th>
+                                    <th>Phone</th>
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var cp in profile.ContactPersons)
+                                {
+                                    bool editing = _editingContactId == cp.Id;
+                                    <tr class="portal-ip-contact-row @(editing ? "portal-ip-contact-row--editing" : "")">
+                                        <td class="portal-ip-contact-role">
+                                            @cp.Role
+                                            @if (cp.IsPrimary)
+                                            {
+                                                <span class="portal-badge portal-badge-xs portal-badge-info" style="margin-left:6px">Primary</span>
+                                            }
+                                        </td>
+
+                                        @if (editing)
+                                        {
+                                            <td><input class="portal-ip-cell-input" @bind="_editCpName" placeholder="Full name" /></td>
+                                            <td><input class="portal-ip-cell-input" type="email" @bind="_editCpEmail" placeholder="email@institution.ng" /></td>
+                                            <td><input class="portal-ip-cell-input" type="tel" @bind="_editCpPhone" placeholder="+234 800 000 0000" /></td>
+                                            <td class="portal-ip-contact-actions">
+                                                <button class="portal-btn portal-btn-xs portal-btn-primary" @onclick="() => SaveContactPerson(cp)" disabled="@_savingContact">
+                                                    @if (_savingContact) { <span class="portal-btn-spinner" aria-hidden="true"></span> }
+                                                    else { <span>Save</span> }
+                                                </button>
+                                                <button class="portal-btn portal-btn-xs portal-btn-ghost" @onclick="CancelEditContact">Cancel</button>
+                                            </td>
+                                        }
+                                        else
+                                        {
+                                            <td class="portal-ip-editable-cell" @onclick="() => StartEditContact(cp)" tabindex="0" @onkeydown="e => OnCellKey(e, cp)" role="button" aria-label="Edit name for @cp.Role">
+                                                @if (!string.IsNullOrEmpty(cp.Name)) { @cp.Name }
+                                                else { <span class="portal-ip-cell-empty">—</span> }
+                                            </td>
+                                            <td class="portal-ip-editable-cell" @onclick="() => StartEditContact(cp)" tabindex="0" role="button" aria-label="Edit email for @cp.Role">
+                                                @if (!string.IsNullOrEmpty(cp.Email)) { @cp.Email }
+                                                else { <span class="portal-ip-cell-empty">—</span> }
+                                            </td>
+                                            <td class="portal-ip-editable-cell" @onclick="() => StartEditContact(cp)" tabindex="0" role="button" aria-label="Edit phone for @cp.Role">
+                                                @if (!string.IsNullOrEmpty(cp.Phone)) { @cp.Phone }
+                                                else { <span class="portal-ip-cell-empty">—</span> }
+                                            </td>
+                                            <td></td>
+                                        }
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
                     </div>
                 </div>
-                <div style="display: flex; gap: 0.5rem; margin-top: 1rem;">
-                    <button class="portal-btn portal-btn-primary portal-btn-sm" @onclick="SaveContact" disabled="@isSavingContact">
-                        @if (isSavingContact)
+
+                <!-- Regulatory Identifiers -->
+                <div class="portal-card portal-ip-section">
+                    <div class="portal-ip-section-header">
+                        <div class="portal-ip-section-title-row">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                            <h2 class="portal-ip-section-title">Regulatory Identifiers</h2>
+                        </div>
+                        <span class="portal-ip-section-hint">Changes require admin verification</span>
+                    </div>
+
+                    <div class="portal-ip-reg-grid">
+                        @foreach (var rid in profile.RegulatoryIdentifiers)
                         {
-                            <span class="portal-btn-spinner" aria-hidden="true"></span>
-                            <span>Saving...</span>
+                            bool editingRid = _editingRidCode == rid.Code;
+                            string badgeClass, badgeIcon, badgeLabel;
+                            switch (rid.Status)
+                            {
+                                case RegulatoryVerificationStatus.Verified:
+                                    badgeClass = "portal-ip-verif-badge--verified"; badgeIcon = "✓"; badgeLabel = "Verified"; break;
+                                case RegulatoryVerificationStatus.Unverified:
+                                    badgeClass = "portal-ip-verif-badge--unverified"; badgeIcon = "?"; badgeLabel = "Unverified"; break;
+                                case RegulatoryVerificationStatus.Pending:
+                                    badgeClass = "portal-ip-verif-badge--pending"; badgeIcon = "⧖"; badgeLabel = "Pending"; break;
+                                default:
+                                    badgeClass = "portal-ip-verif-badge--notset"; badgeIcon = "—"; badgeLabel = "Not set"; break;
+                            }
+                            string verifTitle = rid.Status == RegulatoryVerificationStatus.Verified
+                                ? $"Verified by {rid.VerifiedBy} on {rid.VerifiedAt?.ToString("d MMM yyyy")}"
+                                : badgeLabel;
+
+                            <div class="portal-ip-reg-card @(rid.IsPendingApproval ? "portal-ip-reg-card--pending" : "")">
+                                <div class="portal-ip-reg-card-header">
+                                    <span class="portal-ip-reg-code">@rid.Code</span>
+                                    <span class="portal-ip-verif-badge @badgeClass" title="@verifTitle">@badgeIcon @badgeLabel</span>
+                                </div>
+                                <p class="portal-ip-reg-label">@rid.Label</p>
+                                @if (editingRid)
+                                {
+                                    <div class="portal-ip-reg-edit-row">
+                                        <input class="portal-ip-cell-input" @bind="_editRidValue" placeholder="Enter @rid.Label" />
+                                        <button class="portal-btn portal-btn-xs portal-btn-primary" @onclick="() => SaveRegulatoryId(rid)" disabled="@_savingRid">Save</button>
+                                        <button class="portal-btn portal-btn-xs portal-btn-ghost" @onclick="() => _editingRidCode = null">✕</button>
+                                    </div>
+                                }
+                                else
+                                {
+                                    <div class="portal-ip-reg-value-row">
+                                        <span class="portal-ip-reg-value @(rid.Value is null ? "portal-ip-reg-value--empty" : "")">
+                                            @(rid.Value ?? "Not provided")
+                                        </span>
+                                        <button class="portal-btn portal-btn-xs portal-btn-ghost" @onclick="() => StartEditRid(rid)" aria-label="Edit @rid.Label">
+                                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                                        </button>
+                                    </div>
+                                    @if (rid.IsPendingApproval)
+                                    {
+                                        <span class="portal-ip-pending-inline">
+                                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                                            Pending approval · Expected within 5 business days
+                                        </span>
+                                    }
+                                }
+                            </div>
                         }
-                        else { <span>Save Changes</span> }
-                    </button>
-                    <button class="portal-btn portal-btn-ghost portal-btn-sm" @onclick="CancelEditContact">Cancel</button>
+                    </div>
                 </div>
-            }
-            else
+
+                <!-- Address + Map -->
+                <div class="portal-card portal-ip-section">
+                    <div class="portal-ip-section-header">
+                        <div class="portal-ip-section-title-row">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>
+                            <h2 class="portal-ip-section-title">Address &amp; Location</h2>
+                        </div>
+                        @if (_isAdmin && !_editingAddress)
+                        {
+                            <button class="portal-btn portal-btn-outline portal-btn-sm" @onclick="StartEditAddress">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                                Edit
+                            </button>
+                        }
+                    </div>
+
+                    <div class="portal-ip-address-layout">
+                        <div class="portal-ip-address-left">
+                            @if (_editingAddress)
+                            {
+                                <textarea class="portal-form-input" rows="4" @bind="_editAddress"
+                                          placeholder="Full physical address including city, state and postal code"></textarea>
+                                <div class="portal-ip-address-actions">
+                                    <button class="portal-btn portal-btn-primary portal-btn-sm" @onclick="SaveAddress" disabled="@_savingAddress">
+                                        @if (_savingAddress) { <span class="portal-btn-spinner" aria-hidden="true"></span> }
+                                        Save Address
+                                    </button>
+                                    <button class="portal-btn portal-btn-ghost portal-btn-sm" @onclick="() => _editingAddress = false">Cancel</button>
+                                </div>
+                            }
+                            else
+                            {
+                                <p class="portal-ip-address-text">@(string.IsNullOrEmpty(profile.Address) ? "No address provided." : profile.Address)</p>
+                                @if (!string.IsNullOrEmpty(profile.Address))
+                                {
+                                    <a href="https://www.openstreetmap.org/search?query=@Uri.EscapeDataString(profile.Address)"
+                                       target="_blank" rel="noopener noreferrer" class="portal-ip-map-link">
+                                        View on OpenStreetMap
+                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                                    </a>
+                                }
+                            }
+
+                            <div class="portal-ip-contact-details">
+                                <div class="portal-ip-contact-detail-item">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+                                    <span>@(string.IsNullOrEmpty(profile.Email) ? "—" : profile.Email)</span>
+                                </div>
+                                <div class="portal-ip-contact-detail-item">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.07 9.81 19.79 19.79 0 01.07 1.18 2 2 0 012.03 0h3a2 2 0 012 1.72 12.84 12.84 0 00.7 2.81 2 2 0 01-.45 2.11L6.09 7.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45 12.84 12.84 0 002.81.7A2 2 0 0122 14.92z"/></svg>
+                                    <span>@(string.IsNullOrEmpty(profile.PhoneNumber) ? "—" : profile.PhoneNumber)</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        @if (!string.IsNullOrEmpty(profile.Address))
+                        {
+                            <div class="portal-ip-map-frame-wrap">
+                                <iframe class="portal-ip-map-frame"
+                                        src="https://www.openstreetmap.org/export/embed.html?bbox=3.1%2C6.3%2C3.5%2C6.7&amp;layer=mapnik"
+                                        title="Map preview (OpenStreetMap)"
+                                        loading="lazy"
+                                        sandbox="allow-scripts allow-same-origin"></iframe>
+                                <div class="portal-ip-map-badge" aria-hidden="true">
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>
+                                    © OpenStreetMap
+                                </div>
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="portal-ip-map-placeholder">
+                                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" opacity=".3" aria-hidden="true"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>
+                                <span>Add an address to see the map</span>
+                            </div>
+                        }
+                    </div>
+                </div>
+
+            </div><!-- /main col -->
+
+            <!-- RIGHT COLUMN ────────────────────────────────────────────── -->
+            <div class="portal-ip-side-col">
+                <div class="portal-card portal-ip-section portal-ip-info-card">
+                    <h2 class="portal-ip-section-title" style="margin-bottom:1rem">Institution Info</h2>
+                    <dl class="portal-ip-info-list">
+                        <div class="portal-ip-info-row">
+                            <dt>License Type</dt>
+                            <dd>@(string.IsNullOrEmpty(profile.LicenseType) ? "—" : profile.LicenseType)</dd>
+                        </div>
+                        <div class="portal-ip-info-row">
+                            <dt>Institution ID</dt>
+                            <dd class="portal-table-mono">#@profile.Id</dd>
+                        </div>
+                        <div class="portal-ip-info-row">
+                            <dt>Registered</dt>
+                            <dd>@profile.CreatedAt.ToString("d MMMM yyyy")</dd>
+                        </div>
+                        <div class="portal-ip-info-row">
+                            <dt>Jurisdiction</dt>
+                            <dd>@profile.Jurisdiction</dd>
+                        </div>
+                        <div class="portal-ip-info-row">
+                            <dt>Regulator</dt>
+                            <dd>@profile.Regulator</dd>
+                        </div>
+                        <div class="portal-ip-info-row">
+                            <dt>Subscription</dt>
+                            <dd>@profile.SubscriptionTier</dd>
+                        </div>
+                    </dl>
+                </div>
+            </div><!-- /side col -->
+
+        </div><!-- /grid -->
+
+        <!-- ══ CHANGE HISTORY ACCORDION ══════════════════════════════════════ -->
+        <div class="portal-card portal-ip-section portal-ip-audit-card">
+            <button class="portal-ip-audit-toggle" @onclick="() => _auditExpanded = !_auditExpanded"
+                    aria-expanded="@_auditExpanded" aria-controls="portal-ip-audit-body">
+                <div class="portal-ip-audit-toggle-left">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+                    <span>Recent Changes</span>
+                    <span class="portal-badge portal-badge-sm portal-badge-neutral">@profile.RecentChanges.Count</span>
+                    @if (profile.PendingChangesCount > 0)
+                    {
+                        <span class="portal-badge portal-badge-sm portal-badge-warning">@profile.PendingChangesCount pending</span>
+                    }
+                </div>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                     class="portal-ip-audit-chevron @(_auditExpanded ? "portal-ip-audit-chevron--open" : "")" aria-hidden="true">
+                    <polyline points="6 9 12 15 18 9"/>
+                </svg>
+            </button>
+
+            @if (_auditExpanded)
             {
-                <div class="portal-settings-info-grid portal-settings-info-grid-wide">
-                    <div class="portal-settings-info-item">
-                        <span class="portal-settings-info-label">Email</span>
-                        <span class="portal-settings-info-value">@(string.IsNullOrEmpty(profile.Email) ? "\u2014" : profile.Email)</span>
-                    </div>
-                    <div class="portal-settings-info-item">
-                        <span class="portal-settings-info-label">Phone</span>
-                        <span class="portal-settings-info-value">@(string.IsNullOrEmpty(profile.PhoneNumber) ? "\u2014" : profile.PhoneNumber)</span>
-                    </div>
-                    <div class="portal-settings-info-item">
-                        <span class="portal-settings-info-label">Address</span>
-                        <span class="portal-settings-info-value">@(string.IsNullOrEmpty(profile.Address) ? "\u2014" : profile.Address)</span>
-                    </div>
-                    <div class="portal-settings-info-item">
-                        <span class="portal-settings-info-label">License Type</span>
-                        <span class="portal-settings-info-value">@(string.IsNullOrEmpty(profile.LicenseType) ? "\u2014" : profile.LicenseType)</span>
-                    </div>
-                    <div class="portal-settings-info-item">
-                        <span class="portal-settings-info-label">Institution ID</span>
-                        <span class="portal-settings-info-value portal-table-mono">#@profile.Id</span>
-                    </div>
-                    <div class="portal-settings-info-item">
-                        <span class="portal-settings-info-label">Registered</span>
-                        <span class="portal-settings-info-value">@profile.CreatedAt.ToString("d MMMM yyyy")</span>
-                    </div>
+                <div class="portal-ip-audit-body" id="portal-ip-audit-body">
+                    @foreach (var entry in profile.RecentChanges.OrderByDescending(e => e.ChangedAt))
+                    {
+                        <div class="portal-ip-audit-row @(entry.IsPending ? "portal-ip-audit-row--pending" : "")">
+                            <div class="portal-ip-audit-dot @(entry.IsPending ? "portal-ip-audit-dot--pending" : "")"></div>
+                            <div class="portal-ip-audit-content">
+                                <div class="portal-ip-audit-field">
+                                    <strong>@entry.FieldName</strong> changed
+                                    @if (!string.IsNullOrEmpty(entry.OldValue))
+                                    {
+                                        <span> from <code class="portal-ip-audit-val">@entry.OldValue</code></span>
+                                    }
+                                    <span> to <code class="portal-ip-audit-val">@entry.NewValue</code></span>
+                                </div>
+                                <div class="portal-ip-audit-meta">
+                                    by @entry.ChangedBy · @entry.ChangedAt.ToString("d MMM yyyy, HH:mm")
+                                    @if (entry.IsPending)
+                                    {
+                                        <span class="portal-ip-pending-inline" style="margin-left:8px">
+                                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                                            Pending · @entry.ExpectedBy
+                                        </span>
+                                    }
+                                </div>
+                            </div>
+                        </div>
+                    }
                 </div>
             }
         </div>
-    }
+
+    }<!-- /profile loaded -->
 </div>
 
 @code {
-    private bool isLoading = true;
-    private bool isAdmin;
+    private bool _isLoading = true;
+    private bool _isAdmin;
     private InstitutionProfileModel? profile;
+    private int _institutionId;
 
-    // Contact editing
-    private bool isEditingContact;
-    private bool isSavingContact;
-    private string editEmail = "", editPhone = "", editAddress = "";
-    private string? contactSuccessMsg;
+    // Completeness
+    private int _completeness;
+    private List<string> _missingFields = new();
+
+    // Logo modal
+    private bool _showLogoModal;
+    private string? _cropImageSrc;
+    private string _cropAspect = "1:1";
+    private int _cropZoom = 100;
+    private bool _savingLogo;
+
+    // Contact persons inline edit
+    private int? _editingContactId;
+    private string _editCpName = "", _editCpEmail = "", _editCpPhone = "";
+    private bool _savingContact;
+
+    // Regulatory IDs
+    private string? _editingRidCode;
+    private string _editRidValue = "";
+    private bool _savingRid;
+
+    // Address edit
+    private bool _editingAddress;
+    private string _editAddress = "";
+    private bool _savingAddress;
+
+    // Audit accordion
+    private bool _auditExpanded;
 
     [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
     [Inject] private InstitutionManagementService MgmtSvc { get; set; } = default!;
+    [Inject] private IJSRuntime JS { get; set; } = default!;
 
     protected override async Task OnInitializedAsync()
     {
@@ -195,47 +606,184 @@
             var state = await AuthState!;
             var role = state.User.FindFirst(ClaimTypes.Role)?.Value;
             var instIdStr = state.User.FindFirst("InstitutionId")?.Value;
-            int.TryParse(instIdStr, out var institutionId);
+            int.TryParse(instIdStr, out _institutionId);
 
-            isAdmin = role == "Admin";
-            profile = await MgmtSvc.GetProfile(institutionId);
+            _isAdmin = role == "Admin";
+            profile = await MgmtSvc.GetProfile(_institutionId);
+            if (profile is not null) ComputeCompleteness();
         }
         catch { profile = null; }
-        finally { isLoading = false; }
+        finally { _isLoading = false; }
     }
 
-    private void StartEditContact()
+    protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (profile is null) return;
-        editEmail = profile.Email;
-        editPhone = profile.PhoneNumber;
-        editAddress = profile.Address;
-        contactSuccessMsg = null;
-        isEditingContact = true;
+        if (firstRender)
+            await JS.InvokeVoidAsync("portalLogoCropper.init");
     }
 
-    private void CancelEditContact() => isEditingContact = false;
+    // ── Completeness ──────────────────────────────────────────────────────────
 
-    private async Task SaveContact()
+    private void ComputeCompleteness()
     {
         if (profile is null) return;
-        isSavingContact = true;
-        StateHasChanged();
+        _missingFields.Clear();
+        int score = 0;
 
+        if (profile.LogoUrl is not null) score += 15; else _missingFields.Add("Institution logo");
+        if (!string.IsNullOrEmpty(profile.Email)) score += 10; else _missingFields.Add("Contact email");
+        if (!string.IsNullOrEmpty(profile.PhoneNumber)) score += 10; else _missingFields.Add("Contact phone");
+        if (!string.IsNullOrEmpty(profile.Address)) score += 10; else _missingFields.Add("Physical address");
+
+        var rc = profile.RegulatoryIdentifiers.FirstOrDefault(r => r.Code == "RC");
+        if (rc?.Value is not null) score += 10; else _missingFields.Add("RC Number");
+        var cbn = profile.RegulatoryIdentifiers.FirstOrDefault(r => r.Code == "CBN");
+        if (cbn?.Value is not null) score += 10; else _missingFields.Add("CBN License Number");
+
+        var co = profile.ContactPersons.FirstOrDefault(c => c.Role.Contains("Compliance"));
+        if (!string.IsNullOrEmpty(co?.Name)) score += 15; else _missingFields.Add("Compliance Officer details");
+        var ceo = profile.ContactPersons.FirstOrDefault(c => c.Role.Contains("Chief Executive"));
+        if (!string.IsNullOrEmpty(ceo?.Name)) score += 10; else _missingFields.Add("CEO details");
+        var cfo = profile.ContactPersons.FirstOrDefault(c => c.Role.Contains("Chief Financial"));
+        if (!string.IsNullOrEmpty(cfo?.Name)) score += 10; else _missingFields.Add("CFO details");
+
+        _completeness = score;
+    }
+
+    // ── Logo ──────────────────────────────────────────────────────────────────
+
+    private void OpenLogoModal() { _showLogoModal = true; _cropImageSrc = null; _cropZoom = 100; }
+    private void CloseLogoModal() { _showLogoModal = false; _cropImageSrc = null; }
+
+    private void OnLogoKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" || e.Key == " ") OpenLogoModal();
+    }
+
+    private async Task OnLogoFileSelected(InputFileChangeEventArgs e)
+    {
+        var file = e.File;
+        if (file.Size > 2 * 1024 * 1024) return; // 2 MB guard
+        using var ms = new System.IO.MemoryStream();
+        await file.OpenReadStream(2 * 1024 * 1024).CopyToAsync(ms);
+        var bytes = ms.ToArray();
+        var b64 = Convert.ToBase64String(bytes);
+        _cropImageSrc = $"data:{file.ContentType};base64,{b64}";
+        await JS.InvokeVoidAsync("portalLogoCropper.load", "portal-crop-container", _cropImageSrc);
+    }
+
+    private async Task OnZoomChanged(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out var zoom))
+        {
+            _cropZoom = zoom;
+            await JS.InvokeVoidAsync("portalLogoCropper.setZoom", zoom / 100.0);
+        }
+    }
+
+    private void SetAspect(string aspect) => _cropAspect = aspect;
+
+    private async Task SaveLogo()
+    {
+        if (profile is null || _cropImageSrc is null) return;
+        _savingLogo = true;
         try
         {
-            var ok = await MgmtSvc.UpdateContactDetails(
-                profile.Id, editEmail.Trim(), editPhone.Trim(), editAddress.Trim());
-            if (ok)
-            {
-                profile.Email = editEmail.Trim();
-                profile.PhoneNumber = editPhone.Trim();
-                profile.Address = editAddress.Trim();
-                isEditingContact = false;
-                contactSuccessMsg = "Contact details updated successfully.";
-            }
+            await MgmtSvc.UploadLogo(profile.Id, Array.Empty<byte>(), "image/png");
+            profile.LogoUrl = _cropImageSrc;
+            _showLogoModal = false;
+            ComputeCompleteness();
         }
-        catch { /* show error */ }
-        finally { isSavingContact = false; StateHasChanged(); }
+        finally { _savingLogo = false; }
     }
+
+    // ── Contact Persons ───────────────────────────────────────────────────────
+
+    private void StartEditContact(ContactPersonModel cp)
+    {
+        _editingContactId = cp.Id;
+        _editCpName = cp.Name;
+        _editCpEmail = cp.Email;
+        _editCpPhone = cp.Phone;
+    }
+
+    private void CancelEditContact() => _editingContactId = null;
+
+    private void OnCellKey(KeyboardEventArgs e, ContactPersonModel cp)
+    {
+        if (e.Key == "Enter" || e.Key == " ") StartEditContact(cp);
+    }
+
+    private async Task SaveContactPerson(ContactPersonModel cp)
+    {
+        _savingContact = true;
+        try
+        {
+            cp.Name = _editCpName.Trim();
+            cp.Email = _editCpEmail.Trim();
+            cp.Phone = _editCpPhone.Trim();
+            await MgmtSvc.UpdateContactPerson(_institutionId, cp);
+            _editingContactId = null;
+            ComputeCompleteness();
+        }
+        finally { _savingContact = false; }
+    }
+
+    // ── Regulatory Identifiers ────────────────────────────────────────────────
+
+    private void StartEditRid(RegulatoryIdentifierModel rid)
+    {
+        _editingRidCode = rid.Code;
+        _editRidValue = rid.Value ?? "";
+    }
+
+    private async Task SaveRegulatoryId(RegulatoryIdentifierModel rid)
+    {
+        _savingRid = true;
+        try
+        {
+            await MgmtSvc.UpdateRegulatoryIdentifier(_institutionId, rid.Code, _editRidValue.Trim());
+            rid.Value = _editRidValue.Trim();
+            rid.Status = RegulatoryVerificationStatus.Unverified;
+            rid.IsPendingApproval = true;
+            profile!.RecentChanges.Insert(0, new ProfileAuditEntry
+            {
+                FieldName = rid.Label,
+                OldValue = null,
+                NewValue = rid.Value,
+                ChangedBy = "You",
+                ChangedAt = DateTime.UtcNow,
+                IsPending = true,
+                ExpectedBy = "Within 5 business days"
+            });
+            profile.PendingChangesCount++;
+            _editingRidCode = null;
+            ComputeCompleteness();
+        }
+        finally { _savingRid = false; }
+    }
+
+    // ── Address ───────────────────────────────────────────────────────────────
+
+    private void StartEditAddress()
+    {
+        _editAddress = profile?.Address ?? "";
+        _editingAddress = true;
+    }
+
+    private async Task SaveAddress()
+    {
+        if (profile is null) return;
+        _savingAddress = true;
+        try
+        {
+            await MgmtSvc.UpdateContactDetails(profile.Id, profile.Email, profile.PhoneNumber, _editAddress.Trim());
+            profile.Address = _editAddress.Trim();
+            _editingAddress = false;
+            ComputeCompleteness();
+        }
+        finally { _savingAddress = false; }
+    }
+
+    public ValueTask DisposeAsync() => ValueTask.CompletedTask;
 }

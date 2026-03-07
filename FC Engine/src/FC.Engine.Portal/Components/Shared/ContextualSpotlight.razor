@@ -1,0 +1,81 @@
+@implements IAsyncDisposable
+@inject OnboardingStateService OnboardingState
+@inject IJSRuntime JS
+
+@if (_show)
+{
+    <div class="portal-spotlight-backdrop" @onclick="Dismiss" role="presentation" aria-hidden="true"></div>
+
+    <div class="portal-spotlight-tooltip"
+         style="top:@(_rect.Bottom + 14)px; left:@(Math.Max(16, _rect.Left))px;"
+         role="tooltip">
+        <div class="portal-spotlight-tooltip-header">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13" aria-hidden="true">
+                <circle cx="12" cy="12" r="10"/>
+                <line x1="12" y1="8" x2="12" y2="12"/>
+                <circle cx="12" cy="16.5" r=".75" fill="currentColor"/>
+            </svg>
+            <span>@Title</span>
+        </div>
+        <p class="portal-spotlight-tooltip-text">@Description</p>
+        <button class="portal-spotlight-dismiss" @onclick="Dismiss" type="button">Got it</button>
+    </div>
+}
+
+@code {
+    /// <summary>Unique key to track whether this page has been visited before.</summary>
+    [Parameter, EditorRequired] public string PageKey { get; set; } = "";
+
+    /// <summary>CSS selector for the element to ring-highlight.</summary>
+    [Parameter, EditorRequired] public string TargetSelector { get; set; } = "";
+
+    /// <summary>Short label shown in the amber header of the tooltip (default: "Start here").</summary>
+    [Parameter] public string Title { get; set; } = "Start here";
+
+    /// <summary>Tooltip body text.</summary>
+    [Parameter] public string Description { get; set; } = "Click to get started.";
+
+    private bool _show;
+    private SpotlightRect _rect = new();
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender || string.IsNullOrEmpty(PageKey)) return;
+
+        if (await OnboardingState.HasVisitedPageAsync(PageKey)) return;
+
+        var rect = await JS.InvokeAsync<SpotlightRect?>("portalOnboarding.getRect", TargetSelector);
+        if (rect is null || rect.Width <= 0) return;
+
+        _rect = rect;
+        await JS.InvokeVoidAsync("portalOnboarding.addSpotlightRing", TargetSelector);
+
+        _show = true;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task Dismiss()
+    {
+        _show = false;
+        try { await JS.InvokeVoidAsync("portalOnboarding.removeSpotlightRing", TargetSelector); }
+        catch { }
+        await OnboardingState.MarkPageVisitedAsync(PageKey);
+        StateHasChanged();
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        try { await JS.InvokeVoidAsync("portalOnboarding.removeSpotlightRing", TargetSelector); }
+        catch { }
+    }
+
+    private sealed class SpotlightRect
+    {
+        public double Top { get; set; }
+        public double Left { get; set; }
+        public double Bottom { get; set; }
+        public double Right { get; set; }
+        public double Width { get; set; }
+        public double Height { get; set; }
+    }
+}

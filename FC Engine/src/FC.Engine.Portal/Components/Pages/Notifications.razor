@@ -81,23 +81,16 @@
     }
     else if (groupedNotifications.Count == 0)
     {
-        <div class="portal-empty-state portal-card" style="padding: 3rem;">
-            <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="1.5" aria-hidden="true">
-                <path d="M22 11.08V12a10 10 0 11-5.93-9.14"/>
-                <polyline points="22 4 12 14.01 9 11.01"/>
-            </svg>
-            <h3 class="portal-empty-state-title">You're all caught up!</h3>
-            <p class="portal-empty-state-desc">
-                @if (activeFilter.HasValue)
-                {
-                    @:No notifications in this category.
-                }
-                else
-                {
-                    @:Notifications will appear here when there are updates to your submissions, approvals, and deadlines.
-                }
-            </p>
-        </div>
+        @if (activeFilter.HasValue)
+        {
+            <PortalEmptyState Variant="notifications" HasFilter="true"
+                              ActionText="View all notifications"
+                              OnAction="EventCallback.Factory.Create(this, () => SetFilter(null))" />
+        }
+        else
+        {
+            <PortalEmptyState Variant="notifications" HasFilter="false" />
+        }
     }
     else
     {

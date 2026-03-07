@@ -1,66 +1,197 @@
 @page "/onboarding/sandbox"
-@attribute [Authorize(Roles = "Admin")]
+@attribute [Authorize]
 @inject SandboxService SandboxService
 @inject ITenantContext TenantContext
 @inject NavigationManager Navigation
 
-<PageTitle>Sandbox Training Environment — FC Engine Portal</PageTitle>
+<PageTitle>Training Sandbox — FC Engine Portal</PageTitle>
 
 <div class="portal-page">
-    <div class="portal-page-header">
-        <h1 class="portal-page-title">Sandbox Training Environment</h1>
-        <p class="portal-page-subtitle">Create or reset a training tenant with realistic sample data.</p>
+
+    <!-- Hero section with guided context -->
+    <div class="portal-sandbox-hero">
+        <div class="portal-sandbox-hero-badge" aria-label="Training environment">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                 width="13" height="13" aria-hidden="true">
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+            </svg>
+            Training Sandbox
+        </div>
+        <h1 class="portal-sandbox-hero-title">Explore FC Engine safely</h1>
+        <p class="portal-sandbox-hero-sub">
+            The sandbox is a risk-free copy of the portal pre-loaded with sample data.
+            Practice submissions, explore reports, and build confidence — nothing here affects production.
+        </p>
+
+        @if (_context?.IsSandbox == true)
+        {
+            <div style="display:flex;gap:.75rem;justify-content:center;flex-wrap:wrap;margin-top:.25rem">
+                <button class="portal-btn portal-btn-outline" @onclick="ResetSandbox" disabled="@_busy" type="button">
+                    @(_busy ? "Resetting…" : "Reset sandbox data")
+                </button>
+                @if (!string.IsNullOrWhiteSpace(_context.ProductionLoginUrl))
+                {
+                    <a class="portal-btn portal-btn-primary" href="@_context.ProductionLoginUrl">
+                        Switch to production
+                    </a>
+                }
+            </div>
+        }
+        else if (_context is not null)
+        {
+            <button class="portal-btn portal-btn-primary" @onclick="CreateSandbox" disabled="@_busy" type="button"
+                    style="margin-top:.25rem">
+                @(_busy ? "Provisioning sandbox…" : "Create training sandbox")
+            </button>
+        }
     </div>
 
     @if (!string.IsNullOrWhiteSpace(_message))
     {
-        <div class="portal-alert portal-alert-success">@_message</div>
+        <div class="portal-alert portal-alert-success" style="margin-bottom:1rem">@_message</div>
     }
     @if (!string.IsNullOrWhiteSpace(_error))
     {
-        <div class="portal-alert portal-alert-danger">@_error</div>
+        <div class="portal-alert portal-alert-danger" style="margin-bottom:1rem">@_error</div>
     }
-
-    @if (_context is null)
+    @if (_provisionResult is { Success: true })
     {
-        <div class="portal-card"><div class="portal-card-body">Tenant context unavailable.</div></div>
-    }
-    else
-    {
-        <div class="portal-card">
-            <div class="portal-card-body">
-                @if (_context.IsSandbox)
-                {
-                    <p>You are currently in <strong>@_context.CurrentTenantName</strong>.</p>
-                    <div class="portal-onboarding-actions">
-                        <button class="portal-btn portal-btn-outline" @onclick="ResetSandbox" disabled="@_busy" type="button">Reset Sandbox Data</button>
-                        @if (!string.IsNullOrWhiteSpace(_context.ProductionLoginUrl))
-                        {
-                            <a class="portal-btn portal-btn-primary" href="@_context.ProductionLoginUrl">Switch to Production Login</a>
-                        }
-                    </div>
-                }
-                else
-                {
-                    <p>Create a sandbox clone for hands-on training. Production data is not copied.</p>
-                    <button class="portal-btn portal-btn-primary" @onclick="CreateSandbox" disabled="@_busy" type="button">
-                        @(_busy ? "Provisioning..." : "Create Sandbox")
-                    </button>
-
-                    @if (_provisionResult is not null && _provisionResult.Success)
-                    {
-                        <div class="portal-alert portal-alert-warning" style="margin-top: 1rem;">
-                            <p><strong>Sandbox URL:</strong> <a href="@_provisionResult.LoginUrl">@_provisionResult.LoginUrl</a></p>
-                            @if (!string.IsNullOrWhiteSpace(_provisionResult.AdminTemporaryPassword))
-                            {
-                                <p><strong>Sandbox admin temporary password:</strong> @_provisionResult.AdminTemporaryPassword</p>
-                            }
-                        </div>
-                    }
-                }
-            </div>
+        <div class="portal-alert portal-alert-warning" style="margin-bottom:1.25rem">
+            <strong>Sandbox ready.</strong>
+            Login URL: <a href="@_provisionResult.LoginUrl">@_provisionResult.LoginUrl</a>
+            @if (!string.IsNullOrWhiteSpace(_provisionResult.AdminTemporaryPassword))
+            {
+                <span style="margin-left:.5rem">— Temp password: <strong>@_provisionResult.AdminTemporaryPassword</strong></span>
+            }
         </div>
     }
+
+    <!-- Guided walkthrough steps -->
+    <h2 style="font-size:1rem;font-weight:600;color:var(--cbn-text,#111);margin:0 0 1rem">
+        What to try in the sandbox
+    </h2>
+    <div class="portal-sandbox-steps">
+        <div class="portal-sandbox-step">
+            <div class="portal-sandbox-step-num">1</div>
+            <p class="portal-sandbox-step-title">Submit a sample return</p>
+            <p class="portal-sandbox-step-desc">
+                Go to <a href="/submit">Submit Return</a> and fill in the pre-populated data form.
+                See how validation and auto-save work without any real consequences.
+            </p>
+        </div>
+        <div class="portal-sandbox-step">
+            <div class="portal-sandbox-step-num">2</div>
+            <p class="portal-sandbox-step-title">Explore the calendar</p>
+            <p class="portal-sandbox-step-desc">
+                Visit the <a href="/calendar">Reporting Calendar</a> to see upcoming deadlines,
+                hover over dates for details, and understand the submission cycle.
+            </p>
+        </div>
+        <div class="portal-sandbox-step">
+            <div class="portal-sandbox-step-num">3</div>
+            <p class="portal-sandbox-step-title">Track a submission</p>
+            <p class="portal-sandbox-step-desc">
+                Check <a href="/submissions">My Submissions</a> to see statuses, download
+                acknowledgements, and navigate the Kanban board view.
+            </p>
+        </div>
+        <div class="portal-sandbox-step">
+            <div class="portal-sandbox-step-num">4</div>
+            <p class="portal-sandbox-step-title">Run a compliance report</p>
+            <p class="portal-sandbox-step-desc">
+                Head to <a href="/reports/compliance">Compliance Reports</a> to generate a
+                period summary and download the export — great for finance team handoffs.
+            </p>
+        </div>
+        <div class="portal-sandbox-step">
+            <div class="portal-sandbox-step-num">5</div>
+            <p class="portal-sandbox-step-title">Try bulk upload</p>
+            <p class="portal-sandbox-step-desc">
+                Go to <a href="/submit/bulk">Bulk Upload</a> and drag in the sample CSV included
+                in your sandbox. See how the portal validates rows in real time.
+            </p>
+        </div>
+        <div class="portal-sandbox-step">
+            <div class="portal-sandbox-step-num">6</div>
+            <p class="portal-sandbox-step-title">Invite a team member</p>
+            <p class="portal-sandbox-step-desc">
+                Visit <a href="/institution/team">Team Members</a> to practise adding a
+                checker role — the maker-checker workflow is fully active in the sandbox.
+            </p>
+        </div>
+    </div>
+
+    <!-- Annotated UI guides -->
+    <h2 style="font-size:1rem;font-weight:600;color:var(--cbn-text,#111);margin:1.5rem 0 .75rem">
+        Understanding the interface
+    </h2>
+
+    <div class="portal-sandbox-annotation">
+        <svg class="portal-sandbox-annotation-icon" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" stroke-width="2" width="16" height="16" aria-hidden="true">
+            <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/>
+            <polyline points="9 22 9 12 15 12 15 22"/>
+        </svg>
+        <div class="portal-sandbox-annotation-text">
+            <strong>Sidebar navigation</strong> — The left panel groups all portal sections.
+            The green dot next to each item shows how many returns are overdue in that area.
+        </div>
+    </div>
+
+    <div class="portal-sandbox-annotation">
+        <svg class="portal-sandbox-annotation-icon" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" stroke-width="2" width="16" height="16" aria-hidden="true">
+            <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+        </svg>
+        <div class="portal-sandbox-annotation-text">
+            <strong>Command palette</strong> — Press <kbd>Ctrl K</kbd> (or <kbd>⌘ K</kbd> on Mac)
+            anywhere to search pages, submissions, and templates without using the mouse.
+        </div>
+    </div>
+
+    <div class="portal-sandbox-annotation">
+        <svg class="portal-sandbox-annotation-icon" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" stroke-width="2" width="16" height="16" aria-hidden="true">
+            <path d="M18 20V10M12 20V4M6 20v-6"/>
+        </svg>
+        <div class="portal-sandbox-annotation-text">
+            <strong>Dashboard widgets</strong> — The home screen cards and charts update live.
+            Drag the widget tiles to rearrange them to match your daily workflow.
+        </div>
+    </div>
+
+    <div class="portal-sandbox-annotation">
+        <svg class="portal-sandbox-annotation-icon" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" stroke-width="2" width="16" height="16" aria-hidden="true">
+            <polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/>
+            <path d="M5.45 5.11L2 12v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.45-6.89A2 2 0 0016.76 4H7.24a2 2 0 00-1.79 1.11z"/>
+        </svg>
+        <div class="portal-sandbox-annotation-text">
+            <strong>Submission status badges</strong> — Returns move through Draft → Pending Review
+            → Accepted (or Rejected). The colour of each badge maps to a stage in the lifecycle.
+        </div>
+    </div>
+
+    <div class="portal-sandbox-annotation">
+        <svg class="portal-sandbox-annotation-icon" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" stroke-width="2" width="16" height="16" aria-hidden="true">
+            <circle cx="12" cy="12" r="10"/>
+            <line x1="12" y1="8" x2="12" y2="12"/>
+            <circle cx="12" cy="16.5" r=".75" fill="currentColor"/>
+        </svg>
+        <div class="portal-sandbox-annotation-text">
+            <strong>Green circle (bottom-right)</strong> — That's your onboarding progress tracker.
+            Click it to see your checklist and get shortcuts to each key task.
+        </div>
+    </div>
+
+    <div style="margin-top:1.5rem;padding:1rem;background:var(--cbn-surface,#F9FAFB);border-radius:12px;font-size:.8125rem;color:var(--cbn-text-muted,#6B7280);line-height:1.6">
+        <strong style="color:var(--cbn-text,#111)">Ready to go live?</strong>
+        When you're confident, switch back to your production environment using the button above.
+        All sandbox data stays here — production is untouched.
+        Need help? Visit the <a href="/help" style="color:var(--cbn-primary,#006B3F)">Help Centre</a>
+        or contact your administrator.
+    </div>
 </div>
 
 @code {
@@ -72,11 +203,7 @@
 
     protected override async Task OnInitializedAsync()
     {
-        if (!TenantContext.CurrentTenantId.HasValue)
-        {
-            return;
-        }
-
+        if (!TenantContext.CurrentTenantId.HasValue) return;
         _context = await SandboxService.GetContext(TenantContext.CurrentTenantId.Value);
     }
 
@@ -85,15 +212,9 @@
         _busy = true;
         _message = null;
         _error = null;
-
         try
         {
-            if (!TenantContext.CurrentTenantId.HasValue)
-            {
-                _error = "Tenant context unavailable.";
-                return;
-            }
-
+            if (!TenantContext.CurrentTenantId.HasValue) { _error = "Tenant context unavailable."; return; }
             _provisionResult = await SandboxService.CreateSandbox(TenantContext.CurrentTenantId.Value);
             if (!_provisionResult.Success)
             {
@@ -102,17 +223,10 @@
                     : "Sandbox provisioning failed.";
                 return;
             }
-
             _message = "Sandbox provisioned successfully.";
         }
-        catch (Exception ex)
-        {
-            _error = ex.Message;
-        }
-        finally
-        {
-            _busy = false;
-        }
+        catch (Exception ex) { _error = ex.Message; }
+        finally { _busy = false; }
     }
 
     private async Task ResetSandbox()
@@ -120,24 +234,13 @@
         _busy = true;
         _message = null;
         _error = null;
-
         try
         {
-            if (_context is null)
-            {
-                return;
-            }
-
+            if (_context is null) return;
             await SandboxService.ResetSandbox(_context.CurrentTenantId);
             _message = "Sandbox data reset and sample data reloaded.";
         }
-        catch (Exception ex)
-        {
-            _error = ex.Message;
-        }
-        finally
-        {
-            _busy = false;
-        }
+        catch (Exception ex) { _error = ex.Message; }
+        finally { _busy = false; }
     }
 }

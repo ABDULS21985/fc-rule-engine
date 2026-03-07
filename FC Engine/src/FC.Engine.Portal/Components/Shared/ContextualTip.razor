@@ -1,0 +1,46 @@
+@inject OnboardingStateService OnboardingState
+
+@if (_show)
+{
+    <span class="portal-ctx-tip @(_dismissing ? "portal-ctx-tip--out" : "")" role="note">
+        <svg class="portal-ctx-tip-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2" width="13" height="13" aria-hidden="true">
+            <circle cx="12" cy="12" r="10"/>
+            <line x1="12" y1="8" x2="12" y2="12"/>
+            <circle cx="12" cy="16.5" r=".75" fill="currentColor"/>
+        </svg>
+        <span class="portal-ctx-tip-text">@Text</span>
+        <button class="portal-ctx-tip-close" @onclick="Dismiss" type="button" aria-label="Dismiss tip">&times;</button>
+    </span>
+}
+
+@code {
+    /// <summary>Unique key so "dismissed" state is stored per tip.</summary>
+    [Parameter, EditorRequired] public string TipKey { get; set; } = "";
+
+    /// <summary>The tip text shown in the chip.</summary>
+    [Parameter, EditorRequired] public string Text { get; set; } = "";
+
+    private bool _show;
+    private bool _dismissing;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        if (!await OnboardingState.HasDismissedTipAsync(TipKey))
+        {
+            _show = true;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task Dismiss()
+    {
+        _dismissing = true;
+        StateHasChanged();
+        await Task.Delay(280);
+        _show = false;
+        await OnboardingState.DismissTipAsync(TipKey);
+        StateHasChanged();
+    }
+}

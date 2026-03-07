@@ -40,6 +40,29 @@ window.portalCopyToClipboard = function (text) {
     return navigator.clipboard.writeText(text);
 };
 
+// ── Validation Hub: highlight & scroll to a field by name ─────────────────────
+window.portalHighlightField = function (fieldName) {
+    if (!fieldName) return;
+    // Try multiple selector strategies: data-field, id, name attribute
+    var el = document.querySelector('[data-field="' + CSS.escape(fieldName) + '"]')
+          || document.getElementById('field-' + fieldName)
+          || document.querySelector('[name="' + CSS.escape(fieldName) + '"]')
+          || document.querySelector('input[id*="' + CSS.escape(fieldName) + '"]');
+
+    if (!el) return;
+
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+    // Apply pulsing highlight ring
+    el.classList.add('portal-field-highlight');
+    setTimeout(function () {
+        el.classList.add('portal-field-highlight--active');
+    }, 50);
+    setTimeout(function () {
+        el.classList.remove('portal-field-highlight', 'portal-field-highlight--active');
+    }, 4000);
+};
+
 window.portalDownloadFile = function (content, filename, contentType) {
     var blob = new Blob([content], { type: contentType });
     var url = URL.createObjectURL(blob);
@@ -1167,3 +1190,106 @@ window.portalNotifHub = (function () {
         initLongPress:             initLongPress,
     };
 })();
+
+// ── Filter Preset localStorage helpers ──────────────────────────────────────
+window.portalLoadFilterPresets = function (key) {
+    try { return localStorage.getItem(key) || '[]'; } catch { return '[]'; }
+};
+window.portalSaveFilterPresets = function (key, json) {
+    try { localStorage.setItem(key, json); } catch { }
+};
+
+// ============================================================
+//  portalOnboarding — contextual spotlight & page-visit helpers
+// ============================================================
+window.portalOnboarding = (function () {
+    'use strict';
+
+    /** Return the bounding rect (plus Bottom) of the first element matching selector, or null. */
+    function getRect(selector) {
+        try {
+            var el = document.querySelector(selector);
+            if (!el) return null;
+            var r = el.getBoundingClientRect();
+            if (r.width === 0 && r.height === 0) return null;
+            return {
+                top:    r.top,
+                left:   r.left,
+                bottom: r.bottom,
+                right:  r.right,
+                width:  r.width,
+                height: r.height
+            };
+        } catch (e) { return null; }
+    }
+
+    /** Add a visible spotlight ring class to the target element and raise its z-index. */
+    function addSpotlightRing(selector) {
+        try {
+            var el = document.querySelector(selector);
+            if (el) el.classList.add('portal-spotlight-ring');
+        } catch (e) {}
+    }
+
+    /** Remove the spotlight ring class. */
+    function removeSpotlightRing(selector) {
+        try {
+            var el = document.querySelector(selector);
+            if (el) el.classList.remove('portal-spotlight-ring');
+        } catch (e) {}
+    }
+
+    return { getRect: getRect, addSpotlightRing: addSpotlightRing, removeSpotlightRing: removeSpotlightRing };
+}());
+
+// ═══════════════════════════════════════════════════════════════════
+// TEMPLATE BROWSER — localStorage utilities
+// ═══════════════════════════════════════════════════════════════════
+window.portalTmpl = {
+    _k: {
+        favs: 'fc_tmpl_favorites',
+        recent: 'fc_tmpl_recently_used',
+        searches: 'fc_tmpl_recent_searches'
+    },
+    _get: function (key) {
+        try { return JSON.parse(localStorage.getItem(key) || '[]'); } catch { return []; }
+    },
+    _set: function (key, arr) {
+        try { localStorage.setItem(key, JSON.stringify(arr)); } catch { }
+    },
+
+    /** @returns {string[]} */
+    getFavorites: function () { return window.portalTmpl._get(window.portalTmpl._k.favs); },
+
+    /** Toggle a returnCode in favorites; returns updated array */
+    toggleFavorite: function (code) {
+        var list = window.portalTmpl.getFavorites();
+        var idx = list.indexOf(code);
+        if (idx >= 0) list.splice(idx, 1);
+        else list.push(code);
+        window.portalTmpl._set(window.portalTmpl._k.favs, list);
+        return list;
+    },
+
+    /** @returns {string[]} */
+    getRecentlyUsed: function () { return window.portalTmpl._get(window.portalTmpl._k.recent); },
+
+    /** Move code to front of recently-used list (capped at 12) */
+    markRecentlyUsed: function (code) {
+        var list = window.portalTmpl.getRecentlyUsed().filter(function (c) { return c !== code; });
+        list.unshift(code);
+        window.portalTmpl._set(window.portalTmpl._k.recent, list.slice(0, 12));
+    },
+
+    /** @returns {string[]} */
+    getRecentSearches: function () { return window.portalTmpl._get(window.portalTmpl._k.searches); },
+
+    /** Add a query to front of recent-searches list (capped at 8; ignores short queries) */
+    addRecentSearch: function (q) {
+        if (!q || q.trim().length < 2) return;
+        var trimmed = q.trim();
+        var list = window.portalTmpl.getRecentSearches().filter(function (s) { return s !== trimmed; });
+        list.unshift(trimmed);
+        window.portalTmpl._set(window.portalTmpl._k.searches, list.slice(0, 8));
+    }
+};

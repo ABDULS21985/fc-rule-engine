@@ -1,0 +1,38 @@
+@inject ISubscriptionService SubscriptionService
+@inject ITenantContext TenantContext
+
+@if (_overdueAmount > 0)
+{
+    <div class="portal-sub-overdue-banner" role="alert" aria-live="polite">
+        <div class="portal-sub-overdue-banner-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                 stroke-linecap="round" stroke-linejoin="round" width="20" height="20">
+                <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+                <line x1="12" y1="9" x2="12" y2="13"/>
+                <line x1="12" y1="17" x2="12.01" y2="17"/>
+            </svg>
+        </div>
+        <div class="portal-sub-overdue-banner-text">
+            You have an overdue invoice totalling
+            <strong>NGN @_overdueAmount.ToString("N2")</strong>. Continued access may be suspended.
+        </div>
+        <a class="portal-sub-overdue-banner-cta" href="/subscription/invoices">Pay Now →</a>
+    </div>
+}
+
+@code {
+    private decimal _overdueAmount;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!TenantContext.CurrentTenantId.HasValue) return;
+        try
+        {
+            var invoices = await SubscriptionService.GetInvoices(TenantContext.CurrentTenantId.Value, 1, 100);
+            _overdueAmount = invoices
+                .Where(i => i.Status == InvoiceStatus.Overdue)
+                .Sum(i => i.TotalAmount);
+        }
+        catch { /* non-critical — banner is informational */ }
+    }
+}

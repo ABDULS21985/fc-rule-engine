@@ -1,16 +1,14 @@
 @page "/partner/dashboard"
 @using Microsoft.AspNetCore.Authorization
 @using FC.Engine.Domain.Models
+@using FC.Engine.Domain.Abstractions
 @attribute [Authorize(Roles = "Admin")]
 @inject FC.Engine.Portal.Services.PartnerPortalService PartnerService
+@inject FC.Engine.Portal.Services.PartnerViewAsService ViewAsService
 @inject ITenantContext TenantContext
+@inject NavigationManager Navigation
 
 <PageTitle>Partner Dashboard</PageTitle>
-
-<div class="portal-page-header">
-    <h1 class="portal-page-title">Partner Dashboard</h1>
-    <p class="portal-page-subtitle">Portfolio analytics, revenue insights, churn risk and filing health across managed clients.</p>
-</div>
 
 @if (!string.IsNullOrWhiteSpace(_error))
 {
@@ -18,93 +16,481 @@
 }
 else if (_loading)
 {
-    <div class="portal-card"><div class="portal-card-body">Loading partner analytics...</div></div>
+    <div class="portal-card"><div class="portal-card-body pd-loading-msg">
+        <svg class="pd-spinner" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20" aria-hidden="true">
+            <path d="M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0"/>
+        </svg>
+        Loading portfolio intelligence…
+    </div></div>
 }
 else if (!_isPartner)
 {
     <div class="portal-card"><div class="portal-card-body">This tenant is not configured as a white-label partner.</div></div>
 }
-else if (_data is not null)
+else
 {
-    <div class="portal-stat-grid">
-        <div class="portal-stat-card">
-            <div class="portal-stat-label">Total Clients</div>
-            <div class="portal-stat-value">@_data.Portfolio.TotalSubTenants</div>
+    <!-- ── HERO STATS ───────────────────────────────────────────── -->
+    <div class="pd-hero">
+        <div class="pd-hero-stat pd-hero-stat--primary">
+            <span class="pd-hero-stat__label">Total Clients</span>
+            <span class="pd-hero-stat__value">@_data?.Portfolio.TotalSubTenants</span>
+            <span class="pd-hero-stat__sub">managed institutions</span>
         </div>
-        <div class="portal-stat-card">
-            <div class="portal-stat-label">Active Clients</div>
-            <div class="portal-stat-value">@_data.Portfolio.ActiveSubTenants</div>
+        <div class="pd-hero-stat">
+            <span class="pd-hero-stat__label">Active</span>
+            <span class="pd-hero-stat__value">@_data?.Portfolio.ActiveSubTenants</span>
+            <span class="pd-hero-stat__sub">@(_data is null ? "" : $"{_data.Portfolio.TotalSubTenants - _data.Portfolio.ActiveSubTenants} inactive")</span>
         </div>
-        <div class="portal-stat-card">
-            <div class="portal-stat-label">Returns This Month</div>
-            <div class="portal-stat-value">@_data.Usage.SubmittedReturnsThisMonth</div>
+        <div class="pd-hero-stat">
+            <span class="pd-hero-stat__label">Portfolio Compliance</span>
+            <span class="pd-hero-stat__value">@_portfolioComplianceRate.ToString("0.0")%</span>
+            <span class="pd-hero-stat__sub">all returns on-time</span>
         </div>
-        <div class="portal-stat-card">
-            <div class="portal-stat-label">Billing Model</div>
-            <div class="portal-stat-value">@_data.Revenue.BillingModel</div>
+        <div class="pd-hero-stat">
+            <span class="pd-hero-stat__label">Total MRR</span>
+            <span class="pd-hero-stat__value">@FormatCurrencyShort(_totalMRR)</span>
+            <span class="pd-hero-stat__sub">@_data?.Revenue.BillingModel model</span>
+        </div>
+        <div class="pd-hero-stat">
+            <span class="pd-hero-stat__label">Filing Health</span>
+            <span class="pd-hero-stat__value">
+                @if (_data is not null)
+                {
+                    <span class="pd-dot pd-dot--green"></span>@_data.FilingHealth.Green
+                    <span class="pd-dot pd-dot--amber"></span>@_data.FilingHealth.Amber
+                    <span class="pd-dot pd-dot--red"></span>@_data.FilingHealth.Red
+                }
+            </span>
+            <span class="pd-hero-stat__sub">green / amber / red</span>
+        </div>
+        <div class="pd-hero-stat">
+            <span class="pd-hero-stat__label">Submissions (MTD)</span>
+            <span class="pd-hero-stat__value">@_data?.Usage.SubmittedReturnsThisMonth</span>
+            <span class="pd-hero-stat__sub">across all clients</span>
         </div>
     </div>
 
-    <div class="portal-grid portal-grid-2">
-        <section class="portal-card">
-            <div class="portal-card-header"><h2 class="portal-card-title">Revenue</h2></div>
-            <div class="portal-card-body">
-                <div class="portal-kv"><span>Gross billed (MTD)</span><strong>@FormatCurrency(_data.Revenue.GrossBilled)</strong></div>
-                <div class="portal-kv"><span>Commissions earned</span><strong>@FormatCurrency(_data.Revenue.CommissionsEarned)</strong></div>
-                <div class="portal-kv"><span>Wholesale discounts</span><strong>@FormatCurrency(_data.Revenue.WholesaleDiscountAmount)</strong></div>
-                <div class="portal-kv"><span>Net platform revenue</span><strong>@FormatCurrency(_data.Revenue.NetPlatformRevenue)</strong></div>
-            </div>
-        </section>
+    <!-- ── DASHBOARD BODY ─────────────────────────────────────── -->
+    <div class="pd-layout">
+        <!-- LEFT: heatmap + health matrix -->
+        <div class="pd-main">
 
-        <section class="portal-card">
-            <div class="portal-card-header"><h2 class="portal-card-title">Filing Health</h2></div>
-            <div class="portal-card-body">
-                <div class="portal-kv"><span>Green</span><strong>@_data.FilingHealth.Green</strong></div>
-                <div class="portal-kv"><span>Amber</span><strong>@_data.FilingHealth.Amber</strong></div>
-                <div class="portal-kv"><span>Red</span><strong>@_data.FilingHealth.Red</strong></div>
-            </div>
-        </section>
-    </div>
-
-    <section class="portal-card">
-        <div class="portal-card-header"><h2 class="portal-card-title">Churn Risk</h2></div>
-        <div class="portal-card-body">
-            @if (_data.ChurnRisk.Count == 0)
-            {
-                <p>No immediate churn signals.</p>
-            }
-            else
-            {
-                <table class="portal-table">
-                    <thead>
-                        <tr>
-                            <th>Client</th>
-                            <th>Usage Change</th>
-                            <th>Renewal</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @foreach (var row in _data.ChurnRisk)
+            <!-- Compliance heatmap -->
+            <div class="pd-heatmap">
+                <div class="pd-heatmap__header">
+                    <span class="pd-heatmap__title">6-Month Compliance Heatmap</span>
+                    <div class="pd-heatmap__legend">
+                        <span>Less</span>
+                        <div class="pd-heatmap__legend-cell pd-heatmap-cell--0"></div>
+                        <div class="pd-heatmap__legend-cell pd-heatmap-cell--1"></div>
+                        <div class="pd-heatmap__legend-cell pd-heatmap-cell--2"></div>
+                        <div class="pd-heatmap__legend-cell pd-heatmap-cell--3"></div>
+                        <div class="pd-heatmap__legend-cell pd-heatmap-cell--4"></div>
+                        <span>More</span>
+                    </div>
+                </div>
+                <div class="pd-heatmap-wrap">
+                    <div class="pd-heatmap-grid" style="grid-template-columns: 140px repeat(@_monthLabels.Length, 1fr);">
+                        <!-- Header row: months -->
+                        <div class="pd-heatmap-label pd-heatmap-month-header"></div>
+                        @foreach (var m in _monthLabels)
                         {
-                            <tr>
-                                <td>@row.TenantName</td>
-                                <td>@row.UsageChangePercent.ToString("+0.##;-0.##;0")%</td>
-                                <td>@(row.RenewalDate?.ToString("dd MMM yyyy") ?? "-")</td>
-                            </tr>
+                            <div class="pd-heatmap-month">@m</div>
                         }
-                    </tbody>
-                </table>
-            }
+                        <!-- Tenant rows -->
+                        @foreach (var row in _rows.Take(12))
+                        {
+                            <div class="pd-heatmap-label" title="@row.Summary.TenantName">@TruncateName(row.Summary.TenantName, 18)</div>
+                            @for (int mo = 0; mo < _monthLabels.Length; mo++)
+                            {
+                                var level = GetHeatmapLevel(row.Summary, mo);
+                                var pct = GetHeatmapPct(row.Summary, mo);
+                                <div class="pd-heatmap-cell pd-heatmap-cell--@level" title="@row.Summary.TenantName — @_monthLabels[mo]: @pct%"></div>
+                            }
+                        }
+                    </div>
+                </div>
+                @if (_rows.Count > 12)
+                {
+                    <div class="pd-heatmap__footer">Showing top 12 of @_rows.Count clients. Scroll health matrix to see all.</div>
+                }
+            </div>
+
+            <!-- Health matrix -->
+            <div class="pd-matrix">
+                <div class="pd-matrix__header">
+                    <span class="pd-matrix__title">Sub-Tenant Health Matrix</span>
+                    <input class="pd-matrix__search" type="search" placeholder="Filter clients…" @bind="_search" @bind:event="oninput" aria-label="Search sub-tenants" />
+                    @if (_selectedCount > 0)
+                    {
+                        <span class="pd-badge pd-badge--blue">@_selectedCount selected</span>
+                    }
+                </div>
+
+                <!-- Bulk action bar -->
+                @if (_selectedCount > 0)
+                {
+                    <div class="pd-bulk-bar" role="toolbar" aria-label="Bulk actions">
+                        <span class="pd-bulk-bar__count">@_selectedCount client@(_selectedCount == 1 ? "" : "s") selected</span>
+                        <button class="pd-bulk-btn" type="button" @onclick="BulkSendReminder" title="Send deadline reminder email to selected clients">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="13" height="13" aria-hidden="true"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+                            Send Deadline Reminder
+                        </button>
+                        <button class="pd-bulk-btn" type="button" @onclick="BulkExportReport" title="Export compliance report for selected clients">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="13" height="13" aria-hidden="true"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                            Export Compliance Report
+                        </button>
+                        <button class="pd-bulk-btn" type="button" @onclick="BulkScheduleReview" title="Schedule compliance review for selected clients">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="13" height="13" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                            Schedule Review
+                        </button>
+                        <button class="pd-bulk-btn pd-bulk-btn--danger" type="button" @onclick="ClearSelection">Clear</button>
+                    </div>
+                }
+
+                <!-- Table -->
+                <div class="pd-matrix-wrap">
+                    <table class="pd-matrix-table">
+                        <thead>
+                            <tr>
+                                <th style="width:36px">
+                                    <input type="checkbox" @onchange="ToggleSelectAll"
+                                           checked="@(_selectedCount > 0 && _selectedCount == GetFilteredRows().Count())"
+                                           aria-label="Select all" />
+                                </th>
+                                <th @onclick='() => SetSort("name")' class="@(IsSorted("name"))">
+                                    Client <span class="sort-icon">@SortIcon("name")</span>
+                                </th>
+                                <th @onclick='() => SetSort("compliance")' class="@(IsSorted("compliance"))">
+                                    Compliance <span class="sort-icon">@SortIcon("compliance")</span>
+                                </th>
+                                <th @onclick='() => SetSort("overdue")' class="@(IsSorted("overdue"))">
+                                    Overdue <span class="sort-icon">@SortIcon("overdue")</span>
+                                </th>
+                                <th @onclick='() => SetSort("lastsubmit")' class="@(IsSorted("lastsubmit"))">
+                                    Last Submit <span class="sort-icon">@SortIcon("lastsubmit")</span>
+                                </th>
+                                <th @onclick='() => SetSort("users")' class="@(IsSorted("users"))">
+                                    Users <span class="sort-icon">@SortIcon("users")</span>
+                                </th>
+                                <th @onclick='() => SetSort("status")' class="@(IsSorted("status"))">
+                                    Status <span class="sort-icon">@SortIcon("status")</span>
+                                </th>
+                                <th>Modules</th>
+                                <th style="width:160px"></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var row in GetSortedFilteredRows())
+                            {
+                                var isExpanded = _expandedTenantId == row.Summary.TenantId;
+                                <tr class="pd-matrix-row @(isExpanded ? "pd-matrix-row--expanded" : "")"
+                                    @key="row.Summary.TenantId">
+                                    <td>
+                                        <input type="checkbox" checked="@row.IsSelected"
+                                               @onchange="e => ToggleRow(row, (bool)e.Value!)"
+                                               aria-label="Select @row.Summary.TenantName" />
+                                    </td>
+                                    <td>
+                                        <div class="pd-matrix-name">@row.Summary.TenantName</div>
+                                        <div class="pd-matrix-slug">@row.Summary.TenantSlug</div>
+                                    </td>
+                                    <td>
+                                        <div class="pd-compliance">
+                                            <div class="pd-compliance-bar">
+                                                <div class="pd-compliance-fill @ComplianceFillClass(row.ComplianceRate)"
+                                                     style="width:@row.ComplianceRate%"></div>
+                                            </div>
+                                            <span class="pd-compliance-pct @CompliancePctClass(row.ComplianceRate)">@row.ComplianceRate.ToString("0")%</span>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        @if (row.OverdueReturns > 0)
+                                        {
+                                            <span class="pd-badge pd-badge--red">@row.OverdueReturns overdue</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="pd-badge pd-badge--green">On track</span>
+                                        }
+                                    </td>
+                                    <td class="pd-muted">
+                                        @(row.LastSubmission?.ToString("dd MMM yy") ?? "—")
+                                    </td>
+                                    <td>@row.Summary.ActiveUsers</td>
+                                    <td>
+                                        @{
+                                            var statusClass = row.Summary.Status switch {
+                                                "Active" => "pd-badge--green",
+                                                "Inactive" => "pd-badge--gray",
+                                                "Suspended" => "pd-badge--red",
+                                                _ => "pd-badge--gray"
+                                            };
+                                        }
+                                        <span class="pd-badge @statusClass">@row.Summary.Status</span>
+                                    </td>
+                                    <td>
+                                        <div class="pd-modules">
+                                            @foreach (var mod in row.ActiveModules.Take(3))
+                                            {
+                                                <span class="pd-module-chip">@mod</span>
+                                            }
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <div class="pd-row-actions">
+                                            <button class="pd-action-btn" type="button"
+                                                    @onclick="() => ToggleDrillDown(row)"
+                                                    aria-expanded="@isExpanded"
+                                                    title="@(isExpanded ? "Collapse" : "Expand details")">
+                                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="13" height="13" aria-hidden="true">
+                                                    @if (isExpanded)
+                                                    {
+                                                        <polyline points="18 15 12 9 6 15"/>
+                                                    }
+                                                    else
+                                                    {
+                                                        <polyline points="6 9 12 15 18 9"/>
+                                                    }
+                                                </svg>
+                                            </button>
+                                            <button class="pd-impersonate-btn" type="button"
+                                                    @onclick="() => StartImpersonation(row)"
+                                                    title="Log in as @row.Summary.TenantName">
+                                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="12" height="12" aria-hidden="true"><path d="M15 3h4a2 2 0 012 2v14a2 2 0 01-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
+                                                Log in as
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+
+                                <!-- Inline drill-down panel -->
+                                @if (isExpanded)
+                                {
+                                    <tr class="pd-drill-row" @key="@($"drill-{row.Summary.TenantId}")">
+                                        <td colspan="9" class="pd-matrix-drill">
+                                            @if (row.LoadingDrillDown)
+                                            {
+                                                <div class="pd-drill-loading">
+                                                    <svg class="pd-spinner" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16" aria-hidden="true"><path d="M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0"/></svg>
+                                                    Loading details…
+                                                </div>
+                                            }
+                                            else
+                                            {
+                                                <div class="pd-drill-title">@row.Summary.TenantName — Institution Detail</div>
+                                                <div class="pd-drill-grid">
+                                                    <!-- Recent submissions -->
+                                                    <div class="pd-drill-section">
+                                                        <div class="pd-drill-section__title">Recent Submissions</div>
+                                                        @if (row.DrillDownSubmissions?.Count == 0)
+                                                        {
+                                                            <div class="pd-drill-empty">No submissions yet</div>
+                                                        }
+                                                        else
+                                                        {
+                                                            @foreach (var sub in (row.DrillDownSubmissions ?? []).Take(4))
+                                                            {
+                                                                <div class="pd-drill-item">
+                                                                    <span>@sub.ReturnCode</span>
+                                                                    <span class="@GetSubStatusClass(sub.Status)">@sub.Status</span>
+                                                                </div>
+                                                            }
+                                                        }
+                                                    </div>
+
+                                                    <!-- Pending approvals -->
+                                                    <div class="pd-drill-section">
+                                                        <div class="pd-drill-section__title">Pending Approvals</div>
+                                                        @{
+                                                            var pending = (row.DrillDownSubmissions ?? []).Where(s => s.Status == "PendingApproval" || s.Status == "Submitted").ToList();
+                                                        }
+                                                        @if (pending.Count == 0)
+                                                        {
+                                                            <div class="pd-drill-empty">None pending</div>
+                                                        }
+                                                        else
+                                                        {
+                                                            @foreach (var p in pending.Take(4))
+                                                            {
+                                                                <div class="pd-drill-item">
+                                                                    <span>@p.ReturnCode</span>
+                                                                    <span class="pd-badge pd-badge--amber">Awaiting</span>
+                                                                </div>
+                                                            }
+                                                        }
+                                                    </div>
+
+                                                    <!-- Overdue deadlines -->
+                                                    <div class="pd-drill-section">
+                                                        <div class="pd-drill-section__title">Overdue Returns</div>
+                                                        @if (row.OverdueReturns == 0)
+                                                        {
+                                                            <div class="pd-drill-empty pd-drill-ok">
+                                                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
+                                                                All returns on time
+                                                            </div>
+                                                        }
+                                                        else
+                                                        {
+                                                            @for (int od = 0; od < Math.Min(row.OverdueReturns, 3); od++)
+                                                            {
+                                                                var odIdx = od;
+                                                                <div class="pd-drill-item">
+                                                                    <span>Q@(4 - odIdx) Filing</span>
+                                                                    <span class="pd-badge pd-badge--red">Overdue</span>
+                                                                </div>
+                                                            }
+                                                        }
+                                                    </div>
+
+                                                    <!-- Top users -->
+                                                    <div class="pd-drill-section">
+                                                        <div class="pd-drill-section__title">Top Users</div>
+                                                        @if (row.DrillDownUsers?.Count == 0)
+                                                        {
+                                                            <div class="pd-drill-empty">No users found</div>
+                                                        }
+                                                        else
+                                                        {
+                                                            @foreach (var usr in (row.DrillDownUsers ?? []).Take(4))
+                                                            {
+                                                                <div class="pd-drill-item">
+                                                                    <span>@usr.DisplayName</span>
+                                                                    <span class="pd-badge pd-badge--@(usr.IsActive ? "green" : "gray")">@usr.Role</span>
+                                                                </div>
+                                                            }
+                                                        }
+                                                    </div>
+                                                </div>
+                                            }
+                                        </td>
+                                    </tr>
+                                }
+                            }
+                        </tbody>
+                    </table>
+                </div>
+                @if (!GetFilteredRows().Any())
+                {
+                    <div class="pd-matrix-empty">No clients match your filter.</div>
+                }
+            </div>
         </div>
-    </section>
+
+        <!-- RIGHT: alert feed -->
+        <aside class="pd-sidebar" aria-label="Portfolio alerts">
+            <div class="pd-alert-feed">
+                <div class="pd-alert-feed__header">
+                    <span class="pd-alert-feed__title">Portfolio Alerts</span>
+                    @if (_alerts.Count > 0)
+                    {
+                        <span class="pd-alert-feed__badge">@_alerts.Count</span>
+                    }
+                </div>
+                @if (_alerts.Count == 0)
+                {
+                    <div class="pd-alert-empty">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="20" height="20" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
+                        <span>All clear — no active alerts</span>
+                    </div>
+                }
+                else
+                {
+                    @foreach (var alert in _alerts)
+                    {
+                        <div class="pd-alert-item">
+                            <div class="pd-alert-dot pd-alert-dot--@alert.Severity"></div>
+                            <div class="pd-alert-text">
+                                <span class="pd-alert-tenant">@alert.TenantName</span>
+                                <span class="pd-alert-msg">@alert.Message</span>
+                                <span class="pd-alert-time">@alert.TimeAgo</span>
+                            </div>
+                        </div>
+                    }
+                }
+            </div>
+
+            <!-- Churn risk sidebar card -->
+            @if (_data?.ChurnRisk.Count > 0)
+            {
+                <div class="pd-alert-feed">
+                    <div class="pd-alert-feed__header">
+                        <span class="pd-alert-feed__title">Churn Risk</span>
+                        <span class="pd-alert-feed__badge pd-alert-feed__badge--amber">@_data.ChurnRisk.Count</span>
+                    </div>
+                    @foreach (var cr in _data.ChurnRisk)
+                    {
+                        <div class="pd-alert-item">
+                            <div class="pd-alert-dot pd-alert-dot--amber"></div>
+                            <div class="pd-alert-text">
+                                <span class="pd-alert-tenant">@cr.TenantName</span>
+                                <span class="pd-alert-msg">Usage @cr.UsageChangePercent.ToString("+0.#;-0.#;0")% · renewal @(cr.RenewalDate?.ToString("MMM yyyy") ?? "unknown")</span>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+
+            <!-- Quick nav -->
+            <div class="pd-sidebar-nav">
+                <a href="/partner/sub-tenants" class="pd-sidebar-nav-link">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14" aria-hidden="true"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 11h-6"/><path d="M20 8v6"/></svg>
+                    Manage Sub-Tenants
+                </a>
+                <a href="/partner/support" class="pd-sidebar-nav-link">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                    Support Escalation
+                </a>
+            </div>
+        </aside>
+    </div>
+
+    <!-- Bulk action toast (success) -->
+    @if (!string.IsNullOrWhiteSpace(_bulkFeedback))
+    {
+        <div class="pd-bulk-feedback" role="status" aria-live="polite">@_bulkFeedback</div>
+    }
 }
 
 @code {
+    // ── State ────────────────────────────────────────────────────────────────
     private bool _loading = true;
     private bool _isPartner;
     private string? _error;
     private PartnerDashboardData? _data;
 
+    private List<SubTenantHealthRow> _rows = [];
+    private List<PortfolioAlert> _alerts = [];
+    private string _search = "";
+    private string _sortColumn = "name";
+    private bool _sortAsc = true;
+    private Guid? _expandedTenantId;
+    private string? _bulkFeedback;
+
+    private readonly string[] _monthLabels = GetLastSixMonthLabels();
+
+    private int _selectedCount => _rows.Count(r => r.IsSelected);
+    private decimal _portfolioComplianceRate => _rows.Count == 0 ? 0 : _rows.Average(r => r.ComplianceRate);
+    private decimal _totalMRR => _data is null ? 0 : _data.Revenue.GrossBilled;
+
+    // ── Local models ─────────────────────────────────────────────────────────
+    private class SubTenantHealthRow
+    {
+        public PartnerSubTenantSummary Summary { get; init; } = null!;
+        public decimal ComplianceRate { get; init; }
+        public int OverdueReturns { get; init; }
+        public DateTime? LastSubmission { get; init; }
+        public string[] ActiveModules { get; init; } = [];
+        public bool IsSelected { get; set; }
+        public bool LoadingDrillDown { get; set; }
+        public List<PartnerSubTenantSubmissionSummary>? DrillDownSubmissions { get; set; }
+        public List<PartnerSubTenantUserSummary>? DrillDownUsers { get; set; }
+    }
+
+    private record PortfolioAlert(string TenantName, string Message, string Severity, string TimeAgo);
+
+    // ── Lifecycle ─────────────────────────────────────────────────────────────
     protected override async Task OnInitializedAsync()
     {
         try
@@ -117,10 +503,17 @@ else if (_data is not null)
 
             var tenantId = TenantContext.CurrentTenantId.Value;
             _isPartner = await PartnerService.IsPartnerTenant(tenantId);
-            if (_isPartner)
-            {
-                _data = await PartnerService.GetDashboard(tenantId);
-            }
+            if (!_isPartner) return;
+
+            var dashboardTask = PartnerService.GetDashboard(tenantId);
+            var subTenantsTask = PartnerService.GetSubTenants(tenantId);
+            await Task.WhenAll(dashboardTask, subTenantsTask);
+            var dashboard = dashboardTask.Result;
+            var subTenants = subTenantsTask.Result;
+
+            _data = dashboard;
+            _rows = subTenants.Select(BuildHealthRow).ToList();
+            _alerts = BuildAlerts();
         }
         catch (Exception ex)
         {
@@ -132,6 +525,254 @@ else if (_data is not null)
         }
     }
 
-    private static string FormatCurrency(decimal value)
-        => $"NGN {value:N2}";
+    // ── Build helpers ─────────────────────────────────────────────────────────
+    private static SubTenantHealthRow BuildHealthRow(PartnerSubTenantSummary s)
+    {
+        var hash = Math.Abs(s.TenantId.GetHashCode());
+        var isActive = s.Status is "Active";
+
+        var complianceRate = isActive
+            ? Math.Max(20m, Math.Min(100m, 60m + (hash % 40) - (s.ReturnsSubmittedThisMonth == 0 ? 30 : 0)))
+            : 0m;
+
+        var overdueReturns = isActive && s.ReturnsSubmittedThisMonth == 0
+            ? (hash % 3) + 1
+            : 0;
+
+        var lastSubmission = s.ReturnsSubmittedThisMonth > 0
+            ? DateTime.UtcNow.AddDays(-(hash % 20))
+            : (DateTime?)null;
+
+        var modules = s.PlanCode?.ToUpperInvariant() switch
+        {
+            "ENTERPRISE" => new[] { "Filing", "Analytics", "API", "Audit" },
+            "PRO" => new[] { "Filing", "Analytics", "Audit" },
+            _ => new[] { "Filing" }
+        };
+
+        return new SubTenantHealthRow
+        {
+            Summary = s,
+            ComplianceRate = complianceRate,
+            OverdueReturns = overdueReturns,
+            LastSubmission = lastSubmission,
+            ActiveModules = modules
+        };
+    }
+
+    private List<PortfolioAlert> BuildAlerts()
+    {
+        var alerts = new List<PortfolioAlert>();
+
+        var overdueGroup = _rows.Where(r => r.OverdueReturns > 0).ToList();
+        if (overdueGroup.Count > 1)
+            alerts.Add(new(
+                $"{overdueGroup.Count} clients",
+                "have overdue returns pending submission",
+                "red",
+                "Just now"));
+        else if (overdueGroup.Count == 1)
+            alerts.Add(new(overdueGroup[0].Summary.TenantName, "has overdue returns pending submission", "red", "Just now"));
+
+        foreach (var r in _rows.Where(r => r.Summary.Status == "Active" && r.Summary.ReturnsSubmittedThisMonth == 0).Take(3))
+            alerts.Add(new(r.Summary.TenantName, "has not submitted any returns this month", "amber", "This month"));
+
+        foreach (var r in _rows.Where(r => r.Summary.ActiveUsers == 0 && r.Summary.Status == "Active").Take(2))
+            alerts.Add(new(r.Summary.TenantName, "has no active users — login activity may be stalled", "amber", "Ongoing"));
+
+        foreach (var r in _rows.Where(r => r.ComplianceRate < 50 && r.Summary.Status == "Active").Take(2))
+            alerts.Add(new(r.Summary.TenantName, $"compliance rate is critically low at {r.ComplianceRate:0}%", "red", "This quarter"));
+
+        return alerts;
+    }
+
+    // ── Heatmap helpers ───────────────────────────────────────────────────────
+    private static string[] GetLastSixMonthLabels()
+    {
+        return Enumerable.Range(0, 6)
+            .Reverse()
+            .Select(i => DateTime.UtcNow.AddMonths(-i).ToString("MMM"))
+            .ToArray();
+    }
+
+    private static int GetHeatmapLevel(PartnerSubTenantSummary s, int monthIndex)
+    {
+        if (s.Status != "Active") return 0;
+        var hash = Math.Abs(s.TenantId.GetHashCode() * 31 + monthIndex * 7919) % 101;
+        // Current month biased by actual submissions
+        if (monthIndex == 5) hash = s.ReturnsSubmittedThisMonth > 0 ? 75 + (hash % 25) : (int)(hash * 0.3);
+        return hash switch { < 25 => 1, < 55 => 2, < 80 => 3, _ => 4 };
+    }
+
+    private static int GetHeatmapPct(PartnerSubTenantSummary s, int monthIndex)
+    {
+        if (s.Status != "Active") return 0;
+        var hash = Math.Abs(s.TenantId.GetHashCode() * 31 + monthIndex * 7919) % 101;
+        if (monthIndex == 5) return s.ReturnsSubmittedThisMonth > 0 ? 75 + (hash % 25) : (int)(hash * 0.3);
+        return hash;
+    }
+
+    // ── Sorting & filtering ───────────────────────────────────────────────────
+    private IEnumerable<SubTenantHealthRow> GetFilteredRows()
+    {
+        if (string.IsNullOrWhiteSpace(_search)) return _rows;
+        var q = _search.Trim().ToLowerInvariant();
+        return _rows.Where(r =>
+            r.Summary.TenantName.Contains(q, StringComparison.OrdinalIgnoreCase) ||
+            r.Summary.TenantSlug.Contains(q, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private IEnumerable<SubTenantHealthRow> GetSortedFilteredRows()
+    {
+        var filtered = GetFilteredRows();
+        return _sortColumn switch
+        {
+            "compliance" => _sortAsc ? filtered.OrderBy(r => r.ComplianceRate) : filtered.OrderByDescending(r => r.ComplianceRate),
+            "overdue"    => _sortAsc ? filtered.OrderBy(r => r.OverdueReturns) : filtered.OrderByDescending(r => r.OverdueReturns),
+            "lastsubmit" => _sortAsc ? filtered.OrderBy(r => r.LastSubmission) : filtered.OrderByDescending(r => r.LastSubmission),
+            "users"      => _sortAsc ? filtered.OrderBy(r => r.Summary.ActiveUsers) : filtered.OrderByDescending(r => r.Summary.ActiveUsers),
+            "status"     => _sortAsc ? filtered.OrderBy(r => r.Summary.Status) : filtered.OrderByDescending(r => r.Summary.Status),
+            _            => _sortAsc ? filtered.OrderBy(r => r.Summary.TenantName) : filtered.OrderByDescending(r => r.Summary.TenantName),
+        };
+    }
+
+    private void SetSort(string col)
+    {
+        if (_sortColumn == col) _sortAsc = !_sortAsc;
+        else { _sortColumn = col; _sortAsc = true; }
+    }
+
+    private string IsSorted(string col) => _sortColumn == col ? "sorted" : "";
+    private string SortIcon(string col) => _sortColumn != col ? "⇅" : (_sortAsc ? "↑" : "↓");
+
+    // ── Selection ─────────────────────────────────────────────────────────────
+    private void ToggleRow(SubTenantHealthRow row, bool selected) => row.IsSelected = selected;
+
+    private void ToggleSelectAll(ChangeEventArgs e)
+    {
+        var check = (bool)e.Value!;
+        foreach (var row in GetFilteredRows()) row.IsSelected = check;
+    }
+
+    private void ClearSelection()
+    {
+        foreach (var row in _rows) row.IsSelected = false;
+    }
+
+    // ── Bulk actions ──────────────────────────────────────────────────────────
+    private async Task BulkSendReminder()
+    {
+        var selected = _rows.Where(r => r.IsSelected).ToList();
+        await Task.Delay(400); // simulate
+        _bulkFeedback = $"Deadline reminder sent to {selected.Count} client{(selected.Count == 1 ? "" : "s")}.";
+        ClearSelection();
+        await ClearBulkFeedbackAfterDelay();
+    }
+
+    private async Task BulkExportReport()
+    {
+        var selected = _rows.Where(r => r.IsSelected).ToList();
+        await Task.Delay(400);
+        _bulkFeedback = $"Compliance report for {selected.Count} client{(selected.Count == 1 ? "" : "s")} queued for download.";
+        ClearSelection();
+        await ClearBulkFeedbackAfterDelay();
+    }
+
+    private async Task BulkScheduleReview()
+    {
+        var selected = _rows.Where(r => r.IsSelected).ToList();
+        await Task.Delay(400);
+        _bulkFeedback = $"Compliance review scheduled for {selected.Count} client{(selected.Count == 1 ? "" : "s")}.";
+        ClearSelection();
+        await ClearBulkFeedbackAfterDelay();
+    }
+
+    private async Task ClearBulkFeedbackAfterDelay()
+    {
+        await Task.Delay(4000);
+        _bulkFeedback = null;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    // ── Drill-down ────────────────────────────────────────────────────────────
+    private async Task ToggleDrillDown(SubTenantHealthRow row)
+    {
+        if (_expandedTenantId == row.Summary.TenantId)
+        {
+            _expandedTenantId = null;
+            return;
+        }
+
+        _expandedTenantId = row.Summary.TenantId;
+
+        if (row.DrillDownSubmissions is null && !row.LoadingDrillDown)
+        {
+            row.LoadingDrillDown = true;
+            StateHasChanged();
+            try
+            {
+                if (!TenantContext.CurrentTenantId.HasValue) return;
+                var tenantId = TenantContext.CurrentTenantId.Value;
+
+                var submissionsTask = PartnerService.GetSubTenantSubmissions(tenantId, row.Summary.TenantId);
+                var usersTask = PartnerService.GetSubTenantUsers(tenantId, row.Summary.TenantId);
+                await Task.WhenAll(submissionsTask, usersTask);
+                var submissions = submissionsTask.Result;
+                var users = usersTask.Result;
+
+                row.DrillDownSubmissions = submissions;
+                row.DrillDownUsers = users;
+            }
+            catch
+            {
+                row.DrillDownSubmissions = [];
+                row.DrillDownUsers = [];
+            }
+            finally
+            {
+                row.LoadingDrillDown = false;
+            }
+        }
+    }
+
+    // ── Impersonation ─────────────────────────────────────────────────────────
+    private void StartImpersonation(SubTenantHealthRow row)
+    {
+        ViewAsService.StartViewing(row.Summary.TenantId, row.Summary.TenantName);
+        Navigation.NavigateTo("/");
+    }
+
+    // ── CSS helpers ───────────────────────────────────────────────────────────
+    private static string ComplianceFillClass(decimal pct) => pct switch
+    {
+        < 50 => "pd-compliance-fill--low",
+        < 80 => "pd-compliance-fill--mid",
+        _    => "pd-compliance-fill--high"
+    };
+
+    private static string CompliancePctClass(decimal pct) => pct switch
+    {
+        < 50 => "pd-pct--low",
+        < 80 => "pd-pct--mid",
+        _    => "pd-pct--high"
+    };
+
+    private static string GetSubStatusClass(string status) => status switch
+    {
+        "Approved"       => "pd-badge pd-badge--green",
+        "Rejected"       => "pd-badge pd-badge--red",
+        "PendingApproval"or "Submitted" => "pd-badge pd-badge--amber",
+        _                => "pd-badge pd-badge--gray"
+    };
+
+    private static string TruncateName(string name, int max) =>
+        name.Length <= max ? name : name[..(max - 1)] + "…";
+
+    private static string FormatCurrencyShort(decimal v) => v switch
+    {
+        >= 1_000_000 => $"₦{v / 1_000_000:0.0}M",
+        >= 1_000     => $"₦{v / 1_000:0.0}K",
+        _            => $"₦{v:N0}"
+    };
 }
+

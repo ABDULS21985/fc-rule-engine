@@ -783,6 +783,25 @@ public class SubscriptionService : ISubscriptionService
             .ToDictionary(g => g.Key, g => g.Any(x => x.IsRequired));
     }
 
+    public async Task<List<SubscriptionPlan>> GetAvailablePlans(Guid tenantId, CancellationToken ct = default)
+    {
+        var sub = await _db.Subscriptions
+            .Include(s => s.Plan)
+            .AsNoTracking()
+            .FirstOrDefaultAsync(s => s.TenantId == tenantId
+                && s.Status != SubscriptionStatus.Cancelled
+                && s.Status != SubscriptionStatus.Expired, ct);
+
+        var currentTier = sub?.Plan?.Tier ?? 0;
+
+        return await _db.SubscriptionPlans
+            .AsNoTracking()
+            .Where(p => p.IsActive && p.Tier > currentTier)
+            .OrderBy(p => p.DisplayOrder)
+            .ThenBy(p => p.Tier)
+            .ToListAsync(ct);
+    }
+
     private static string ResolveAvailabilityMessage(bool isEligible, bool isOnPlan, bool isActive)
     {
         if (isActive)

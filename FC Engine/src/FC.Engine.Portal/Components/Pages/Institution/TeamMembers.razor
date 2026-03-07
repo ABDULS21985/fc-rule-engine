@@ -4,6 +4,7 @@
 @using System.Security.Claims
 @using FC.Engine.Domain.Enums
 @using FC.Engine.Portal.Utilities
+@inject NavigationManager Navigation
 
 <PageTitle>Team Members — FC Engine Portal</PageTitle>
 
@@ -122,6 +123,80 @@
             </div>
         }
 
+        <!-- Search & Filter Toolbar -->
+        <div class="portal-tm-toolbar" role="search" aria-label="Filter team members">
+            <div class="portal-tm-toolbar-row">
+                <div class="portal-tm-toolbar-search">
+                    <div class="portal-input-wrapper">
+                        <span class="portal-input-icon" aria-hidden="true">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                            </svg>
+                        </span>
+                        <input type="text" class="portal-form-input portal-form-input-icon"
+                               placeholder="Search by name or email…"
+                               @bind="tmSearch" @bind:event="oninput"
+                               @bind:after="ApplyTmFilters"
+                               aria-label="Search team members" />
+                    </div>
+                </div>
+                <div class="portal-tm-toolbar-filter">
+                    <label for="tmFilterRole" class="portal-sr-only">Role</label>
+                    <select id="tmFilterRole" class="portal-form-select" @bind="tmFilterRole" @bind:after="ApplyTmFilters">
+                        <option value="">All Roles</option>
+                        @foreach (var r in Enum.GetNames<InstitutionRole>())
+                        {
+                            <option value="@r">@r</option>
+                        }
+                    </select>
+                </div>
+                <div class="portal-tm-toolbar-filter">
+                    <label for="tmFilterStatus" class="portal-sr-only">Status</label>
+                    <select id="tmFilterStatus" class="portal-form-select" @bind="tmFilterStatus" @bind:after="ApplyTmFilters">
+                        <option value="">All Statuses</option>
+                        <option value="active">Active</option>
+                        <option value="inactive">Inactive</option>
+                    </select>
+                </div>
+            </div>
+            @if (TmHasFilters)
+            {
+                <div class="portal-tm-toolbar-active-filters">
+                    <span class="portal-toolbar-active-label">
+                        Filters <span class="portal-filter-count-badge" aria-label="@TmActiveFilterCount active filters">@TmActiveFilterCount</span>:
+                    </span>
+                    @if (!string.IsNullOrEmpty(tmSearch))
+                    {
+                        <button class="portal-chip portal-chip-removable" @onclick="() => { tmSearch = string.Empty; ApplyTmFilters(); }">
+                            Search: @tmSearch
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true">
+                                <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                            </svg>
+                        </button>
+                    }
+                    @if (!string.IsNullOrEmpty(tmFilterRole))
+                    {
+                        <button class="portal-chip portal-chip-removable" @onclick="() => { tmFilterRole = string.Empty; ApplyTmFilters(); }">
+                            Role: @tmFilterRole
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true">
+                                <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                            </svg>
+                        </button>
+                    }
+                    @if (!string.IsNullOrEmpty(tmFilterStatus))
+                    {
+                        <button class="portal-chip portal-chip-removable" @onclick="() => { tmFilterStatus = string.Empty; ApplyTmFilters(); }">
+                            Status: @(tmFilterStatus == "active" ? "Active" : "Inactive")
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true">
+                                <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                            </svg>
+                        </button>
+                    }
+                    <button class="portal-btn portal-btn-ghost portal-btn-xs" @onclick="ClearTmFilters">Clear All</button>
+                </div>
+            }
+        </div>
+
         <!-- Team Table -->
         <div class="portal-card portal-card-flush">
             <div class="portal-table-responsive">
@@ -141,7 +216,26 @@
                         </tr>
                     </thead>
                     <tbody>
-                        @foreach (var member in teamMembers)
+                        @if (!filteredTeamMembers.Any())
+                        {
+                            <tr>
+                                <td colspan="@(isAdmin ? 7 : 6)" style="padding: 0; border: none;">
+                                    @if (TmHasFilters)
+                                    {
+                                        <PortalEmptyState Variant="search" AsCard="false"
+                                                          Title="No members match your filters"
+                                                          Description="Try adjusting your search or filter criteria." />
+                                    }
+                                    else
+                                    {
+                                        <PortalEmptyState Variant="search" AsCard="false"
+                                                          Title="No team members yet"
+                                                          Description="Add your first team member to get started. They will appear here once added." />
+                                    }
+                                </td>
+                            </tr>
+                        }
+                        @foreach (var member in filteredTeamMembers)
                         {
                             <tr class="@(!member.IsActive ? "portal-table-row-dimmed" : "")">
                                 <td>
@@ -253,12 +347,55 @@
 </div>
 
 @code {
+    // URL params for filter state persistence
+    [SupplyParameterFromQuery(Name = "q")] public string? Q { get; set; }
+    [SupplyParameterFromQuery(Name = "role")] public string? RoleParam { get; set; }
+    [SupplyParameterFromQuery(Name = "status")] public string? StatusParam { get; set; }
+
     private bool isLoading = true;
     private bool isAdmin;
     private int currentUserId;
     private int institutionId;
     private List<TeamMemberDetailModel> teamMembers = new();
     private (int current, int max) userCount;
+
+    // Filter state
+    private string tmSearch = "";
+    private string tmFilterRole = "";
+    private string tmFilterStatus = "";
+
+    private bool TmHasFilters =>
+        !string.IsNullOrEmpty(tmSearch) ||
+        !string.IsNullOrEmpty(tmFilterRole) ||
+        !string.IsNullOrEmpty(tmFilterStatus);
+
+    private int TmActiveFilterCount =>
+        (string.IsNullOrEmpty(tmSearch) ? 0 : 1) +
+        (string.IsNullOrEmpty(tmFilterRole) ? 0 : 1) +
+        (string.IsNullOrEmpty(tmFilterStatus) ? 0 : 1);
+
+    private List<TeamMemberDetailModel> filteredTeamMembers
+    {
+        get
+        {
+            var query = teamMembers.AsEnumerable();
+            if (!string.IsNullOrWhiteSpace(tmSearch))
+            {
+                var s = tmSearch.Trim();
+                query = query.Where(m =>
+                    m.DisplayName.Contains(s, StringComparison.OrdinalIgnoreCase) ||
+                    m.Email.Contains(s, StringComparison.OrdinalIgnoreCase) ||
+                    m.Username.Contains(s, StringComparison.OrdinalIgnoreCase));
+            }
+            if (!string.IsNullOrEmpty(tmFilterRole))
+                query = query.Where(m => m.Role.Equals(tmFilterRole, StringComparison.OrdinalIgnoreCase));
+            if (tmFilterStatus == "active")
+                query = query.Where(m => m.IsActive);
+            else if (tmFilterStatus == "inactive")
+                query = query.Where(m => !m.IsActive);
+            return query.ToList();
+        }
+    }
 
     // Add member form
     private bool showAddForm;
@@ -294,10 +431,33 @@
             int.TryParse(userIdStr, out currentUserId);
             isAdmin = role == "Admin";
 
+            // Restore filter state from URL
+            if (!string.IsNullOrEmpty(Q)) tmSearch = Q;
+            if (!string.IsNullOrEmpty(RoleParam)) tmFilterRole = RoleParam;
+            if (!string.IsNullOrEmpty(StatusParam)) tmFilterStatus = StatusParam;
+
             await LoadData();
         }
         catch { }
         finally { isLoading = false; }
+    }
+
+    private void ApplyTmFilters()
+    {
+        var parts = new List<string>();
+        if (!string.IsNullOrEmpty(tmSearch)) parts.Add($"q={Uri.EscapeDataString(tmSearch)}");
+        if (!string.IsNullOrEmpty(tmFilterRole)) parts.Add($"role={Uri.EscapeDataString(tmFilterRole)}");
+        if (!string.IsNullOrEmpty(tmFilterStatus)) parts.Add($"status={Uri.EscapeDataString(tmFilterStatus)}");
+        var url = parts.Count > 0 ? "/institution/team?" + string.Join("&", parts) : "/institution/team";
+        Navigation.NavigateTo(url, replace: true);
+    }
+
+    private void ClearTmFilters()
+    {
+        tmSearch = "";
+        tmFilterRole = "";
+        tmFilterStatus = "";
+        Navigation.NavigateTo("/institution/team", replace: true);
     }
 
     private async Task LoadData()

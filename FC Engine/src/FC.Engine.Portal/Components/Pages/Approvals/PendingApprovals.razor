@@ -1,41 +1,45 @@
 @page "/approvals"
 @attribute [Authorize(Policy = "InstitutionUser")]
 @inject NavigationManager Navigation
+@inject ToastService Toast
+@implements IDisposable
 
 <PageTitle>Pending Approvals — FC Engine Portal</PageTitle>
 
 <div class="portal-page">
+
+    <!-- ── Page Header ──────────────────────────────────────────── -->
     <div class="portal-page-header">
         <div class="portal-page-header-main">
             <h1 class="portal-page-title">
                 Pending Approvals
-                @if (!isLoading && pendingItems.Any())
+                @if (!_isLoading && _cards.Any())
                 {
-                    <span class="portal-badge portal-badge-danger" style="margin-left: 0.5rem; vertical-align: middle;">@pendingItems.Count</span>
+                    <span class="portal-badge portal-badge-danger" style="margin-left:0.5rem;vertical-align:middle;">@_cards.Count</span>
                 }
             </h1>
             <p class="portal-page-subtitle">Review and approve or reject submissions from your team</p>
         </div>
     </div>
 
-    @if (isLoading)
+    @if (_isLoading)
     {
-        <div class="portal-card" style="padding: 2rem;">
-            <div class="portal-skeleton portal-skeleton-block" style="height: 200px;"></div>
+        <div class="portal-card" style="padding:2rem;">
+            <div class="portal-skeleton portal-skeleton-block" style="height:200px;"></div>
         </div>
     }
-    else if (!isCheckerOrAdmin)
+    else if (!_isCheckerOrAdmin)
     {
-        <div class="portal-empty-state portal-card" style="padding: 3rem;">
+        <div class="portal-empty-state portal-card" style="padding:3rem;">
             <h3 class="portal-empty-state-title">Access Restricted</h3>
             <p class="portal-empty-state-desc">Only Checker and Admin users can review pending approvals.</p>
             <a href="/" class="portal-btn portal-btn-primary">Back to Dashboard</a>
         </div>
     }
-    else if (!pendingItems.Any())
+    else if (!_cards.Any() && !_pendingActions.Any())
     {
-        <div class="portal-empty-state portal-card" style="padding: 3rem;">
-            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="1.5" aria-hidden="true" style="margin-bottom: 1rem;">
+        <div class="portal-empty-state portal-card" style="padding:3rem;">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="1.5" aria-hidden="true" style="margin-bottom:1rem;">
                 <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
             </svg>
             <h3 class="portal-empty-state-title">All Caught Up</h3>
@@ -44,258 +48,598 @@
     }
     else
     {
-        <div class="portal-card portal-card-flush">
-            <div class="portal-table-responsive">
-                <table class="portal-table portal-table-hover" aria-label="Pending approvals">
-                    <thead>
-                        <tr>
-                            <th>ID</th>
-                            <th>Return Code</th>
-                            <th>Period</th>
-                            <th>Submitted By</th>
-                            <th>Submitted At</th>
-                            <th>Validation</th>
-                            <th>Notes</th>
-                            <th class="portal-table-th-actions">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @foreach (var item in pendingItems)
-                        {
-                            var current = item;
-                            <tr class="portal-table-row-clickable"
-                                @onclick="() => NavigateToDetail(current.SubmissionId)">
-                                <td><span class="portal-table-mono">#@current.SubmissionId</span></td>
-                                <td>
-                                    <span class="portal-table-code">@current.ReturnCode</span>
-                                    @if (!string.IsNullOrEmpty(current.TemplateName) && current.TemplateName != current.ReturnCode)
-                                    {
-                                        <br/><span class="portal-text-muted" style="font-size: 0.75rem;">@current.TemplateName</span>
-                                    }
-                                </td>
-                                <td>@current.Period</td>
-                                <td>@current.SubmittedBy</td>
-                                <td>
-                                    <span>@current.SubmittedAt.ToString("d MMM yyyy")</span>
-                                    <br/><span class="portal-text-muted" style="font-size: 0.75rem;">@current.SubmittedAt.ToString("HH:mm")</span>
-                                </td>
-                                <td>
-                                    @if (current.ValidationPassed)
-                                    {
-                                        <span class="portal-badge portal-badge-success portal-badge-sm">
-                                            Passed
-                                        </span>
-                                        @if (current.WarningCount > 0)
-                                        {
-                                            <span class="portal-badge portal-badge-warning portal-badge-sm" style="margin-left: 0.25rem;">
-                                                @current.WarningCount warn
-                                            </span>
-                                        }
-                                    }
-                                    else
-                                    {
-                                        <span class="portal-badge portal-badge-danger portal-badge-sm">
-                                            @current.ErrorCount errors
-                                        </span>
-                                    }
-                                </td>
-                                <td>
-                                    @if (!string.IsNullOrEmpty(current.SubmitterNotes))
-                                    {
-                                        <span class="portal-approval-notes-preview" title="@current.SubmitterNotes">
-                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6b7280" stroke-width="2" aria-hidden="true">
-                                                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-                                            </svg>
-                                        </span>
-                                    }
-                                    else
-                                    {
-                                        <span class="portal-text-muted">—</span>
-                                    }
-                                </td>
-                                <td class="portal-table-th-actions" @onclick:stopPropagation>
-                                    <div class="portal-approval-quick-actions">
-                                        <button class="portal-btn portal-btn-sm portal-btn-success"
-                                                @onclick="() => QuickApprove(current.SubmissionId)"
-                                                title="Approve this submission">
-                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                                                <polyline points="20 6 9 17 4 12"/>
-                                            </svg>
-                                        </button>
-                                        <a href="/submissions/@current.SubmissionId"
-                                           class="portal-btn portal-btn-ghost portal-btn-sm"
-                                           title="Review details"
-                                           @onclick:stopPropagation>
-                                            Review
-                                        </a>
-                                    </div>
-                                </td>
-                            </tr>
-                        }
-                    </tbody>
-                </table>
-            </div>
-        </div>
-
-        <!-- Quick Approve Confirmation Modal -->
-        @if (showQuickApproveConfirm)
+        <!-- ── Batch action bar (visible when items are selected) ── -->
+        @if (_selectedCount > 0)
         {
-            <div class="portal-modal-overlay" @onclick="CancelQuickApprove" aria-label="Confirmation dialog">
-                <div class="portal-modal portal-modal-sm" @onclick:stopPropagation>
-                    <div class="portal-modal-header">
-                        <h3 class="portal-modal-title">Confirm Approval</h3>
+            <div class="pa-batch-bar" role="toolbar" aria-label="Batch actions">
+                <span class="pa-batch-label">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true" style="margin-right:0.375rem;vertical-align:-1px;">
+                        <polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
+                    </svg>
+                    @_selectedCount selected
+                </span>
+                <button class="portal-btn portal-btn-success portal-btn-sm"
+                        @onclick="OpenBatchConfirm"
+                        aria-haspopup="dialog">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
+                        <polyline points="20 6 9 17 4 12"/>
+                    </svg>
+                    Approve Selected (@_selectedCount)
+                </button>
+                <button class="portal-btn portal-btn-ghost portal-btn-sm" @onclick="ClearSelection">
+                    Clear
+                </button>
+            </div>
+        }
+
+        <!-- ── Cards ──────────────────────────────────────────────── -->
+        <div class="pa-cards" role="list" aria-label="Pending approval submissions">
+            @foreach (var card in _cards)
+            {
+                var c = card;
+                <div class="pa-card @(c.IsExiting ? "pa-card--exiting" : "") @(c.IsEntering ? "pa-card--entering" : "")"
+                     id="pa-card-@c.Item.SubmissionId"
+                     role="listitem">
+
+                    <!-- Hover-revealed checkbox -->
+                    <div class="pa-card-check" @onclick:stopPropagation>
+                        <input type="checkbox"
+                               class="pa-checkbox"
+                               checked="@c.IsChecked"
+                               @onchange="() => ToggleCheck(c)"
+                               aria-label="Select submission #@c.Item.SubmissionId" />
                     </div>
-                    <div class="portal-modal-body">
-                        <p>Are you sure you want to approve submission <strong>#@quickApproveId</strong>?</p>
-                        <p class="portal-text-muted" style="font-size: 0.8125rem; margin-top: 0.5rem;">
-                            This will finalize the submission and it will be officially accepted.
-                        </p>
-                        <div class="portal-form-group" style="margin-top: 1rem;">
-                            <label for="approveComments" class="portal-form-label">Comments (optional)</label>
-                            <textarea id="approveComments" class="portal-form-input" rows="2"
-                                      @bind="quickApproveComments" placeholder="Optional reviewer comments..."></textarea>
-                        </div>
-                    </div>
-                    <div class="portal-modal-footer">
-                        <button class="portal-btn portal-btn-ghost portal-btn-sm" @onclick="CancelQuickApprove">Cancel</button>
-                        <button class="portal-btn portal-btn-success portal-btn-sm" @onclick="ConfirmQuickApprove" disabled="@isProcessingApproval">
-                            @if (isProcessingApproval)
+
+                    <!-- Main body (click → detail page) -->
+                    <div class="pa-card-body" @onclick="() => NavigateToDetail(c.Item.SubmissionId)" role="button" tabindex="0" aria-label="View submission #@c.Item.SubmissionId">
+                        <!-- Top row: ID, code, template, period, validation -->
+                        <div class="pa-card-meta">
+                            <span class="pa-card-id">#@c.Item.SubmissionId</span>
+                            <span class="pa-card-code">@c.Item.ReturnCode</span>
+                            @if (!string.IsNullOrEmpty(c.Item.TemplateName) && c.Item.TemplateName != c.Item.ReturnCode)
                             {
-                                <span class="portal-btn-spinner" aria-hidden="true"></span>
-                                <span>Approving...</span>
+                                <span class="pa-card-template">@c.Item.TemplateName</span>
+                            }
+                            <span class="pa-card-period">@c.Item.Period</span>
+                            @if (c.Item.ValidationPassed)
+                            {
+                                <span class="portal-badge portal-badge-success portal-badge-sm">Passed</span>
+                                @if (c.Item.WarningCount > 0)
+                                {
+                                    <span class="portal-badge portal-badge-warning portal-badge-sm">@c.Item.WarningCount warn</span>
+                                }
                             }
                             else
                             {
-                                <span>Approve</span>
+                                <span class="portal-badge portal-badge-danger portal-badge-sm">@c.Item.ErrorCount error@(c.Item.ErrorCount == 1 ? "" : "s")</span>
                             }
+                        </div>
+                        <!-- Bottom row: submitter, date, notes -->
+                        <div class="pa-card-info">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
+                            </svg>
+                            <span>@c.Item.SubmittedBy</span>
+                            <span class="pa-dot" aria-hidden="true">·</span>
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                                <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+                            </svg>
+                            <span>@c.Item.SubmittedAt.ToString("d MMM yyyy, HH:mm")</span>
+                            @if (!string.IsNullOrEmpty(c.Item.SubmitterNotes))
+                            {
+                                <span class="pa-dot" aria-hidden="true">·</span>
+                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                                </svg>
+                                <span class="pa-card-notes" title="@c.Item.SubmitterNotes">@c.Item.SubmitterNotes</span>
+                            }
+                        </div>
+                    </div>
+
+                    <!-- Action buttons -->
+                    <div class="pa-card-actions" @onclick:stopPropagation>
+                        <button class="portal-btn portal-btn-success portal-btn-sm"
+                                @onclick="() => ApproveOptimistic(c.Item.SubmissionId, null)"
+                                title="Approve this submission"
+                                aria-label="Approve submission #@c.Item.SubmissionId">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
+                                <polyline points="20 6 9 17 4 12"/>
+                            </svg>
+                        </button>
+                        <button class="portal-btn portal-btn-danger portal-btn-sm"
+                                @onclick="() => OpenRejectModal(c.Item.SubmissionId)"
+                                title="Reject this submission"
+                                aria-label="Reject submission #@c.Item.SubmissionId">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
+                                <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                            </svg>
+                        </button>
+                        <a href="/submissions/@c.Item.SubmissionId"
+                           class="portal-btn portal-btn-ghost portal-btn-sm"
+                           @onclick:stopPropagation>
+                            Review
+                        </a>
+                    </div>
+
+                </div>
+            }
+        </div>
+    }
+
+    <!-- ── Reject Reason Modal ────────────────────────────────────── -->
+    @if (_showRejectModal)
+    {
+        <div class="portal-modal-overlay" @onclick="DismissRejectModal" aria-label="Rejection reason dialog">
+            <div class="portal-modal portal-modal-sm"
+                 @onclick:stopPropagation
+                 role="dialog"
+                 aria-modal="true"
+                 aria-labelledby="pa-reject-title">
+                <div class="portal-modal-header">
+                    <h3 class="portal-modal-title" id="pa-reject-title" style="display:flex;align-items:center;gap:0.375rem;">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2" aria-hidden="true">
+                            <circle cx="12" cy="12" r="10"/>
+                            <line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>
+                        </svg>
+                        Reject Submission #@_rejectTargetId
+                    </h3>
+                </div>
+                <div class="portal-modal-body">
+                    <p style="font-size:0.875rem;color:var(--portal-text-muted,#6b7280);margin-bottom:0.875rem;">
+                        Provide a reason for rejection. This will be sent to the submitter so they can correct and resubmit.
+                    </p>
+                    <div class="portal-form-group">
+                        <label for="pa-reject-reason" class="portal-form-label">
+                            Rejection Reason <span style="color:#ef4444;" aria-hidden="true">*</span>
+                        </label>
+                        <textarea id="pa-reject-reason"
+                                  class="portal-form-input"
+                                  style="@(_rejectValidationFailed ? "border-color:#ef4444;" : "")"
+                                  rows="3"
+                                  @bind="_rejectReason"
+                                  placeholder="e.g. Figures in Section 2 do not match the source report…"
+                                  maxlength="2000"
+                                  aria-required="true"
+                                  aria-describedby="@(_rejectValidationFailed ? "pa-reject-error" : "pa-reject-hint")"></textarea>
+                        @if (_rejectValidationFailed)
+                        {
+                            <span id="pa-reject-error" class="portal-form-error" role="alert">A rejection reason is required.</span>
+                        }
+                        <span id="pa-reject-hint" class="portal-form-hint" style="text-align:right;display:block;">
+                            @(_rejectReason?.Length ?? 0) / 2000
+                        </span>
+                    </div>
+                </div>
+                <div class="portal-modal-footer">
+                    <button class="portal-btn portal-btn-ghost portal-btn-sm" @onclick="DismissRejectModal">Cancel</button>
+                    <button class="portal-btn portal-btn-danger portal-btn-sm"
+                            @onclick="ConfirmReject"
+                            disabled="@_isProcessingReject">
+                        @if (_isProcessingReject)
+                        {
+                            <span class="portal-btn-spinner" aria-hidden="true"></span>
+                            <span>Rejecting…</span>
+                        }
+                        else
+                        {
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
+                                <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                            </svg>
+                            <span>Reject</span>
+                        }
+                    </button>
+                </div>
+            </div>
+        </div>
+    }
+
+    <!-- ── Batch Confirm Modal ────────────────────────────────────── -->
+    @if (_showBatchConfirm)
+    {
+        <div class="portal-modal-overlay" @onclick="() => _showBatchConfirm = false" aria-label="Batch approval confirmation">
+            <div class="portal-modal portal-modal-sm"
+                 @onclick:stopPropagation
+                 role="dialog"
+                 aria-modal="true"
+                 aria-labelledby="pa-batch-title">
+                <div class="portal-confirm-body">
+                    <div class="portal-confirm-icon portal-confirm-icon-primary">
+                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                            <polyline points="20 6 9 17 4 12"/>
+                        </svg>
+                    </div>
+                    <h3 class="portal-confirm-title" id="pa-batch-title">
+                        Approve @_selectedCount Submission@(_selectedCount == 1 ? "" : "s")?
+                    </h3>
+                    <p class="portal-confirm-message">
+                        This will approve all @_selectedCount selected submission@(_selectedCount == 1 ? "" : "s") and notify their submitters.
+                        Approvals will be processed in parallel.
+                    </p>
+                    <div class="portal-confirm-actions">
+                        <button class="portal-btn portal-btn-ghost portal-btn-sm" @onclick="() => _showBatchConfirm = false">Cancel</button>
+                        <button class="portal-btn portal-btn-success portal-btn-sm" @onclick="ExecuteBatchApprove">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
+                                <polyline points="20 6 9 17 4 12"/>
+                            </svg>
+                            Approve @_selectedCount Submission@(_selectedCount == 1 ? "" : "s")
                         </button>
                     </div>
                 </div>
             </div>
-        }
-
-        <!-- Action Result Banner -->
-        @if (!string.IsNullOrEmpty(actionMessage))
-        {
-            <div class="portal-alert @(actionSuccess ? "portal-alert-success" : "portal-alert-error")" role="alert" style="margin-top: 1rem;">
-                @actionMessage
-            </div>
-        }
+        </div>
     }
+
 </div>
 
 @code {
-    // ── State ────────────────────────────────────────────────────
-    private bool isLoading = true;
-    private bool isCheckerOrAdmin;
-    private List<PendingApprovalItem> pendingItems = new();
 
-    // Quick approve
-    private bool showQuickApproveConfirm;
-    private int quickApproveId;
-    private string quickApproveComments = "";
-    private bool isProcessingApproval;
+    // ── Card state wrapper ────────────────────────────────────────
+    private sealed class ApprovalCard
+    {
+        public PendingApprovalItem Item    { get; init; } = default!;
+        public bool                IsChecked  { get; set; }
+        public bool                IsExiting  { get; set; }
+        public bool                IsEntering { get; set; }
+    }
 
-    // Action result
-    private string? actionMessage;
-    private bool actionSuccess;
+    // ── Component state ───────────────────────────────────────────
+    private bool               _isLoading      = true;
+    private bool               _isCheckerOrAdmin;
+    private List<ApprovalCard> _cards          = new();
 
-    // ── Services ─────────────────────────────────────────────────
-    [CascadingParameter]
-    private Task<AuthenticationState>? AuthState { get; set; }
+    // Reject modal — reason is preserved across dismissals (decision memory)
+    private bool   _showRejectModal;
+    private bool   _rejectValidationFailed;
+    private int    _rejectTargetId;
+    private string _rejectReason        = "";
+    private bool   _isProcessingReject;
 
+    // Batch
+    private bool _showBatchConfirm;
+
+    // Pending deferred actions: submissionId → CancellationTokenSource
+    // Each action waits 5 s before hitting the server (allowing undo within that window)
+    private readonly Dictionary<int, CancellationTokenSource> _pendingActions = new();
+    private readonly Dictionary<int, PendingApprovalItem>     _undoSnapshots  = new();
+
+    private int _selectedCount => _cards.Count(c => c.IsChecked);
+
+    // ── Services ──────────────────────────────────────────────────
+    [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
     [Inject] private ApprovalService ApprovalSvc { get; set; } = default!;
 
-    private int institutionId;
-    private int currentUserId;
+    private int _institutionId;
+    private int _currentUserId;
 
-    // ── Lifecycle ────────────────────────────────────────────────
+    // ── Lifecycle ─────────────────────────────────────────────────
     protected override async Task OnInitializedAsync()
     {
         try
         {
-            var state = await AuthState!;
-            var role = state.User.FindFirst(ClaimTypes.Role)?.Value ?? "";
+            var state     = await AuthState!;
+            var role      = state.User.FindFirst(ClaimTypes.Role)?.Value ?? "";
             var instIdStr = state.User.FindFirst("InstitutionId")?.Value;
-            int.TryParse(instIdStr, out institutionId);
             var userIdStr = state.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-            int.TryParse(userIdStr, out currentUserId);
+            int.TryParse(instIdStr, out _institutionId);
+            int.TryParse(userIdStr, out _currentUserId);
 
-            isCheckerOrAdmin = role == "Checker" || role == "Admin";
+            _isCheckerOrAdmin = role is "Checker" or "Admin";
 
-            if (isCheckerOrAdmin && institutionId > 0)
+            if (_isCheckerOrAdmin && _institutionId > 0)
             {
-                pendingItems = await ApprovalSvc.GetPendingApprovals(institutionId);
+                var items = await ApprovalSvc.GetPendingApprovals(_institutionId);
+                _cards = items.Select(i => new ApprovalCard { Item = i }).ToList();
             }
         }
         catch
         {
-            // Log
+            // log
         }
         finally
         {
-            isLoading = false;
+            _isLoading = false;
         }
     }
 
-    // ── Navigation ───────────────────────────────────────────────
+    // ── Navigation ────────────────────────────────────────────────
+    private void NavigateToDetail(int id) => Navigation.NavigateTo($"/submissions/{id}");
 
-    private void NavigateToDetail(int submissionId)
+    // ── Selection ─────────────────────────────────────────────────
+    private void ToggleCheck(ApprovalCard card) => card.IsChecked = !card.IsChecked;
+
+    private void ClearSelection()
     {
-        Navigation.NavigateTo($"/submissions/{submissionId}");
+        foreach (var c in _cards) c.IsChecked = false;
     }
 
-    // ── Quick Approve ────────────────────────────────────────────
-
-    private void QuickApprove(int submissionId)
+    // ── Single Approve (Optimistic + 5-second deferred execution) ─
+    private async Task ApproveOptimistic(int submissionId, string? comments)
     {
-        quickApproveId = submissionId;
-        quickApproveComments = "";
-        showQuickApproveConfirm = true;
-    }
+        var card = _cards.FirstOrDefault(c => c.Item.SubmissionId == submissionId);
+        if (card == null) return;
 
-    private void CancelQuickApprove()
-    {
-        showQuickApproveConfirm = false;
-    }
+        // 1. Animate card out immediately (optimistic)
+        card.IsExiting = true;
+        StateHasChanged();
+        await Task.Delay(260);      // let CSS transition complete
 
-    private async Task ConfirmQuickApprove()
-    {
-        isProcessingApproval = true;
+        // 2. Remove from visible list
+        var snapshot = card.Item;
+        _cards.Remove(card);
         StateHasChanged();
 
+        // 3. Register deferred action with 5-second undo window
+        var cts = new CancellationTokenSource();
+        _pendingActions[submissionId] = cts;
+        _undoSnapshots[submissionId]  = snapshot;
+
+        // 4. Show "Approved" toast with Undo button
+        Toast.Success(
+            $"#{submissionId} approved",
+            title: "Approved",
+            actionLabel: "Undo",
+            actionCallback: () => _ = InvokeAsync(() => UndoActionAsync(submissionId)));
+
+        // 5. Fire deferred API call (cancellable via undo)
+        _ = ExecuteAfterUndoWindowAsync(submissionId, comments, cts, isApproval: true);
+    }
+
+    // ── Deferred execution (shared by approve + reject) ───────────
+    private async Task ExecuteAfterUndoWindowAsync(
+        int submissionId, string? comments,
+        CancellationTokenSource cts, bool isApproval)
+    {
         try
         {
-            var comments = string.IsNullOrWhiteSpace(quickApproveComments) ? null : quickApproveComments;
-            var result = await ApprovalSvc.Approve(quickApproveId, currentUserId, comments);
+            // Wait for undo window to expire
+            await Task.Delay(5_000, cts.Token);
 
-            if (result == ApprovalActionResult.Success)
+            // Execute the actual server call
+            var result = isApproval
+                ? await ApprovalSvc.Approve(submissionId, _currentUserId, comments)
+                : await ApprovalSvc.Reject(submissionId, _currentUserId, comments ?? "");
+
+            if (result != ApprovalActionResult.Success)
             {
-                pendingItems.RemoveAll(p => p.SubmissionId == quickApproveId);
-                actionMessage = $"Submission #{quickApproveId} has been approved.";
-                actionSuccess = true;
+                await InvokeAsync(() =>
+                {
+                    RestoreCard(submissionId);
+                    var msg = result switch
+                    {
+                        ApprovalActionResult.SelfApprovalNotAllowed => "You cannot approve your own submission.",
+                        ApprovalActionResult.AlreadyProcessed        => "This submission has already been reviewed.",
+                        _                                            => isApproval
+                                                                            ? "Could not approve — please try again"
+                                                                            : "Could not reject — please try again"
+                    };
+                    Toast.Error(msg);
+                    StateHasChanged();
+                });
             }
             else
             {
-                actionMessage = result switch
+                // Clean up tracking on success
+                await InvokeAsync(() =>
                 {
-                    ApprovalActionResult.SelfApprovalNotAllowed => "You cannot approve your own submission.",
-                    ApprovalActionResult.AlreadyProcessed => "This submission has already been reviewed.",
-                    _ => "Failed to approve. Please try again."
-                };
-                actionSuccess = false;
+                    _pendingActions.Remove(submissionId);
+                    _undoSnapshots.Remove(submissionId);
+                });
             }
         }
-        catch (Exception ex)
+        catch (OperationCanceledException)
         {
-            actionMessage = $"Error: {ex.Message}";
-            actionSuccess = false;
+            // Undo was triggered — card already restored by UndoActionAsync
         }
-        finally
+        catch
         {
-            isProcessingApproval = false;
-            showQuickApproveConfirm = false;
+            try
+            {
+                await InvokeAsync(() =>
+                {
+                    RestoreCard(submissionId);
+                    Toast.Error(isApproval
+                        ? "Could not approve — please try again"
+                        : "Could not reject — please try again");
+                    StateHasChanged();
+                });
+            }
+            catch { /* component disposed */ }
+        }
+    }
+
+    // ── Undo ──────────────────────────────────────────────────────
+    private async Task UndoActionAsync(int submissionId)
+    {
+        if (!_pendingActions.TryGetValue(submissionId, out var cts)) return;
+
+        cts.Cancel();               // abort the deferred API call
+        RestoreCard(submissionId);  // re-insert card with entering animation
+        StateHasChanged();
+
+        // Clean up entering class after animation completes
+        try
+        {
+            await Task.Delay(350);
+            await InvokeAsync(() =>
+            {
+                var card = _cards.FirstOrDefault(c => c.Item.SubmissionId == submissionId);
+                if (card != null) { card.IsEntering = false; StateHasChanged(); }
+            });
+        }
+        catch { /* component disposed */ }
+    }
+
+    // Restores a card from snapshots with entering animation; must be called on component thread
+    private void RestoreCard(int submissionId)
+    {
+        if (!_undoSnapshots.TryGetValue(submissionId, out var snapshot)) return;
+        _cards.Insert(0, new ApprovalCard { Item = snapshot, IsEntering = true });
+        _undoSnapshots.Remove(submissionId);
+        _pendingActions.Remove(submissionId);
+    }
+
+    // ── Reject Modal ──────────────────────────────────────────────
+    private void OpenRejectModal(int submissionId)
+    {
+        _rejectTargetId      = submissionId;
+        _rejectValidationFailed = false;
+        // _rejectReason intentionally preserved (decision memory: user dismissed accidentally)
+        _showRejectModal = true;
+    }
+
+    private void DismissRejectModal()
+    {
+        // Leave _rejectReason and card checkboxes untouched — decision memory
+        _showRejectModal        = false;
+        _rejectValidationFailed = false;
+    }
+
+    private async Task ConfirmReject()
+    {
+        if (string.IsNullOrWhiteSpace(_rejectReason))
+        {
+            _rejectValidationFailed = true;
+            return;
+        }
+
+        _isProcessingReject = true;
+        StateHasChanged();
+
+        var submissionId = _rejectTargetId;
+        var reason       = _rejectReason;
+
+        // Commit: clear modal state
+        _rejectReason           = "";
+        _showRejectModal        = false;
+        _rejectValidationFailed = false;
+        _isProcessingReject     = false;
+
+        var card = _cards.FirstOrDefault(c => c.Item.SubmissionId == submissionId);
+        if (card == null) return;
+
+        // Animate out
+        card.IsExiting = true;
+        StateHasChanged();
+        await Task.Delay(260);
+
+        var snapshot = card.Item;
+        _cards.Remove(card);
+        StateHasChanged();
+
+        // Register deferred action
+        var cts = new CancellationTokenSource();
+        _pendingActions[submissionId] = cts;
+        _undoSnapshots[submissionId]  = snapshot;
+
+        // Amber "Rejected" toast with Undo
+        Toast.Warning(
+            $"#{submissionId} rejected",
+            title: "Rejected",
+            actionLabel: "Undo",
+            actionCallback: () => _ = InvokeAsync(() => UndoActionAsync(submissionId)));
+
+        _ = ExecuteAfterUndoWindowAsync(submissionId, reason, cts, isApproval: false);
+    }
+
+    // ── Batch Approve ─────────────────────────────────────────────
+    private void OpenBatchConfirm() => _showBatchConfirm = true;
+
+    private async Task ExecuteBatchApprove()
+    {
+        _showBatchConfirm = false;
+
+        var selected = _cards.Where(c => c.IsChecked).ToList();
+        var total    = selected.Count;
+        if (total == 0) return;
+
+        // Save snapshots for failure restoration
+        var snapshots = selected.ToDictionary(c => c.Item.SubmissionId, c => c.Item);
+
+        // Staggered exit animations (40 ms between each card)
+        for (int i = 0; i < selected.Count; i++)
+        {
+            selected[i].IsExiting = true;
             StateHasChanged();
+            if (i < selected.Count - 1)
+                await Task.Delay(40);
+        }
+        await Task.Delay(280);  // wait for the last card's transition
+
+        foreach (var c in selected) _cards.Remove(c);
+        StateHasChanged();
+
+        // Show progress loading toast
+        var progressId = Toast.ShowLoading($"Approving 0/{total} submission{(total == 1 ? "" : "s")}…");
+        int done = 0;
+
+        // Execute all approvals in parallel
+        var tasks = selected.Select(c => Task.Run(async () =>
+        {
+            try
+            {
+                var result = await ApprovalSvc.Approve(c.Item.SubmissionId, _currentUserId, null);
+                if (result == ApprovalActionResult.Success)
+                {
+                    var current = Interlocked.Increment(ref done);
+                    await InvokeAsync(() =>
+                        Toast.UpdateToast(progressId, ToastVariant.Loading,
+                            $"Approving {current}/{total} submission{(total == 1 ? "" : "s")}…"));
+                    return (c.Item.SubmissionId, Success: true);
+                }
+                return (c.Item.SubmissionId, Success: false);
+            }
+            catch
+            {
+                return (c.Item.SubmissionId, Success: false);
+            }
+        })).ToList();
+
+        var results   = await Task.WhenAll(tasks);
+        int succeeded = results.Count(r => r.Success);
+        int failed    = total - succeeded;
+
+        // Finalize progress toast
+        if (failed == 0)
+        {
+            Toast.UpdateToast(progressId, ToastVariant.Success,
+                $"{succeeded} submission{(succeeded == 1 ? "" : "s")} approved");
+        }
+        else
+        {
+            Toast.UpdateToast(progressId, ToastVariant.Warning,
+                $"{succeeded}/{total} approved — {failed} could not be processed");
+
+            // Restore failed cards with entering animation
+            await InvokeAsync(() =>
+            {
+                foreach (var (id, success) in results)
+                {
+                    if (!success && snapshots.TryGetValue(id, out var snap))
+                        _cards.Insert(0, new ApprovalCard { Item = snap, IsEntering = true });
+                }
+                StateHasChanged();
+            });
+
+            // Clean up entering class after animation
+            try
+            {
+                await Task.Delay(350);
+                await InvokeAsync(() =>
+                {
+                    foreach (var c in _cards) c.IsEntering = false;
+                    StateHasChanged();
+                });
+            }
+            catch { /* component disposed */ }
+        }
+    }
+
+    // ── IDisposable ───────────────────────────────────────────────
+    public void Dispose()
+    {
+        foreach (var cts in _pendingActions.Values)
+        {
+            try { cts.Cancel(); cts.Dispose(); } catch { /* ignore */ }
         }
     }
 }

@@ -1,0 +1,542 @@
+@page "/validation/hub/{SubmissionId:int}"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Policy = "InstitutionUser")]
+@using Microsoft.AspNetCore.Components.Authorization
+@using System.Security.Claims
+@using FC.Engine.Portal.Services
+@using FC.Engine.Domain.Enums
+@inject ValidationHubService HubSvc
+@inject IJSRuntime JS
+
+<PageTitle>Validation Hub — FC Engine Portal</PageTitle>
+
+@if (_loading)
+{
+    <div class="portal-page">
+        <div class="portal-vh-skeleton-header">
+            <div class="skeleton" style="width: 240px; height: 22px; margin-bottom: 8px;"></div>
+            <div class="skeleton" style="width: 380px; height: 16px;"></div>
+        </div>
+        <div class="portal-vh-score-row">
+            @for (var i = 0; i < 4; i++)
+            {
+                <div class="portal-card portal-vh-stat-skeleton">
+                    <div class="skeleton" style="width: 56px; height: 56px; border-radius: 50%;"></div>
+                    <div class="skeleton" style="width: 80px; height: 14px; margin-top: 8px;"></div>
+                </div>
+            }
+        </div>
+        <div class="portal-card" style="padding: 1.5rem;">
+            @for (var i = 0; i < 3; i++)
+            {
+                <div class="skeleton" style="height: 54px; margin-bottom: 10px; border-radius: 8px;"></div>
+            }
+        </div>
+    </div>
+}
+else if (_data is null)
+{
+    <div class="portal-page">
+        <div class="portal-empty-state portal-card">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="48" height="48" aria-hidden="true">
+                <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+                <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+            </svg>
+            <h3>Validation report not found</h3>
+            <p>The submission could not be found or you do not have access to view it.</p>
+            <a href="/submissions" class="portal-btn portal-btn-primary" style="margin-top: 1rem;">Back to Submissions</a>
+        </div>
+    </div>
+}
+else
+{
+    <!-- ══════════════════════════════════════════════════════════════════
+         BREADCRUMB HEADER
+         ══════════════════════════════════════════════════════════════════ -->
+    @{
+        var _bcItems = new List<BreadcrumbItem>
+        {
+            new("Home", "/"),
+            new("Submissions", "/submissions"),
+            new($"#{_data.SubmissionId}", $"/submissions/{_data.SubmissionId}"),
+            new("Validation Report", IsCurrent: true),
+        };
+    }
+    <PortalPageHeader Breadcrumb="@_bcItems" BackUrl="/submissions/@_data.SubmissionId">
+        <PrimaryAction>
+            <button class="portal-btn portal-btn-outline portal-btn-sm portal-vh-print-btn"
+                    @onclick="PrintHub" title="Export PDF validation report">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                    <polyline points="6 9 6 2 18 2 18 9"/>
+                    <path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/>
+                    <rect x="6" y="14" width="12" height="8"/>
+                </svg>
+                Export PDF
+            </button>
+        </PrimaryAction>
+    </PortalPageHeader>
+
+    <div id="portal-vh-printable" class="portal-page portal-vh-page">
+
+        <!-- ── Print-only header ───────────────────────────────────────────── -->
+        <div class="portal-vh-print-header no-screen">
+            <div class="portal-vh-print-logo">
+                @if (!string.IsNullOrWhiteSpace(_data.Branding?.LogoUrl))
+                {
+                    <img src="@_data.Branding.LogoUrl" alt="Logo" style="height:40px;" />
+                }
+                else
+                {
+                    <span style="font-weight:800;font-size:1.25rem;color:var(--cbn-primary,#006B3F)">CBN</span>
+                }
+            </div>
+            <div>
+                <h1 style="margin:0;font-size:1.125rem;">Validation Intelligence Report</h1>
+                <p style="margin:2px 0 0;color:#6b7280;font-size:0.8125rem;">
+                    @_data.ReturnCode — @_data.PeriodName · Generated @DateTime.UtcNow.ToString("dd MMM yyyy HH:mm") UTC
+                </p>
+            </div>
+        </div>
+
+        <!-- ── Page title (screen only) ──────────────────────────────────── -->
+        <div class="portal-vh-page-title no-print">
+            <h1 class="portal-vh-main-title">Validation Intelligence Report</h1>
+            <p class="portal-vh-main-sub">
+                <strong>@_data.ReturnCode</strong> — @_data.PeriodName &nbsp;·&nbsp;
+                Submitted by @_data.SubmittedBy &nbsp;·&nbsp;
+                Validated @_data.ValidatedAt.ToString("dd MMM yyyy HH:mm") UTC
+            </p>
+        </div>
+
+        <!-- ══════════════════════════════════════════════════════════════════
+             COMPLIANCE SCORE + STAT CARDS
+             ══════════════════════════════════════════════════════════════════ -->
+        <div class="portal-vh-score-row">
+
+            <!-- Compliance ring card -->
+            <div class="portal-card portal-vh-ring-card">
+                @{
+                    var _radius        = 46;
+                    var _circ          = Math.Round(2 * Math.PI * _radius, 1);
+                    var _offset        = Math.Round(_circ * (1 - (double)_data.ComplianceScore / 100), 1);
+                    var _ringColor     = _data.ComplianceScore >= 90 ? "#16a34a"
+                                      : _data.ComplianceScore >= 70 ? "#d97706"
+                                      : "#dc2626";
+                    var _ringLabel     = _data.ComplianceScore >= 90 ? "Excellent"
+                                      : _data.ComplianceScore >= 70 ? "Fair"
+                                      : "Needs Work";
+                    var _statusText    = _data.Status switch
+                    {
+                        SubmissionStatus.Accepted             => "Accepted",
+                        SubmissionStatus.AcceptedWithWarnings => "Accepted with Warnings",
+                        SubmissionStatus.Rejected             => "Rejected",
+                        SubmissionStatus.PendingApproval      => "Pending Approval",
+                        _                                     => _data.Status.ToString(),
+                    };
+                    var _statusVariant = _data.Status switch
+                    {
+                        SubmissionStatus.Accepted             => "portal-badge-success",
+                        SubmissionStatus.AcceptedWithWarnings => "portal-badge-warning",
+                        SubmissionStatus.Rejected             => "portal-badge-danger",
+                        _                                     => "portal-badge-info",
+                    };
+                }
+                <svg class="portal-vh-ring-svg" viewBox="0 0 @(_radius * 2 + 20) @(_radius * 2 + 20)"
+                     width="116" height="116" aria-hidden="true">
+                    <circle cx="@(_radius + 10)" cy="@(_radius + 10)" r="@_radius"
+                            fill="none" stroke="#e5e7eb" stroke-width="8" />
+                    <circle cx="@(_radius + 10)" cy="@(_radius + 10)" r="@_radius"
+                            fill="none" stroke="@_ringColor" stroke-width="8"
+                            stroke-linecap="round"
+                            stroke-dasharray="@_circ"
+                            stroke-dashoffset="@_offset"
+                            transform="rotate(-90 @(_radius + 10) @(_radius + 10))"
+                            class="portal-vh-ring-arc" />
+                </svg>
+                <div class="portal-vh-ring-inner">
+                    <span class="portal-vh-ring-score" style="color: @_ringColor">
+                        @_data.ComplianceScore<span style="font-size:0.85em">%</span>
+                    </span>
+                    <span class="portal-vh-ring-sublabel">@_ringLabel</span>
+                </div>
+                <div class="portal-vh-ring-meta">
+                    <span class="portal-badge portal-badge-sm @_statusVariant">@_statusText</span>
+                    <span class="portal-vh-ring-period">@_data.PeriodName</span>
+                </div>
+            </div>
+
+            <!-- Stat chips -->
+            <div class="portal-vh-stats-grid">
+                <div class="portal-card portal-vh-stat-card portal-vh-stat-total">
+                    <span class="portal-vh-stat-number">@_data.TotalRulesChecked</span>
+                    <span class="portal-vh-stat-label">Rules Checked</span>
+                    <svg class="portal-vh-stat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20" aria-hidden="true">
+                        <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/>
+                        <rect x="9" y="3" width="6" height="4" rx="1"/>
+                    </svg>
+                </div>
+                <div class="portal-card portal-vh-stat-card portal-vh-stat-pass">
+                    <span class="portal-vh-stat-number">@_data.PassedCount</span>
+                    <span class="portal-vh-stat-label">Passed</span>
+                    <svg class="portal-vh-stat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="20" height="20" aria-hidden="true">
+                        <polyline points="20 6 9 17 4 12"/>
+                    </svg>
+                </div>
+                <div class="portal-card portal-vh-stat-card portal-vh-stat-warn">
+                    <span class="portal-vh-stat-number">@_data.SoftFailureCount</span>
+                    <span class="portal-vh-stat-label">Soft Failures</span>
+                    <svg class="portal-vh-stat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20" aria-hidden="true">
+                        <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+                        <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+                    </svg>
+                </div>
+                <div class="portal-card portal-vh-stat-card portal-vh-stat-err">
+                    <span class="portal-vh-stat-number">@_data.HardFailureCount</span>
+                    <span class="portal-vh-stat-label">Hard Failures</span>
+                    <svg class="portal-vh-stat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="20" height="20" aria-hidden="true">
+                        <circle cx="12" cy="12" r="10"/>
+                        <line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>
+                    </svg>
+                </div>
+            </div>
+        </div>
+
+        <!-- ══════════════════════════════════════════════════════════════════
+             GROUPED ERROR ACCORDIONS
+             ══════════════════════════════════════════════════════════════════ -->
+        @if (_data.ErrorGroups.Count == 0)
+        {
+            <div class="portal-card portal-vh-all-clear">
+                <svg viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="2" width="40" height="40" aria-hidden="true">
+                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
+                </svg>
+                <h3>All validation checks passed</h3>
+                <p>No errors or warnings were found for this submission.</p>
+            </div>
+        }
+        else
+        {
+            <section class="portal-vh-groups-section">
+                <h2 class="portal-vh-section-title">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18" aria-hidden="true">
+                        <circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>
+                    </svg>
+                    Validation Issues
+                    <span class="portal-vh-total-badge">@(_data.HardFailureCount + _data.SoftFailureCount) total</span>
+                </h2>
+
+                <div class="portal-vh-groups">
+                    @foreach (var group in _data.ErrorGroups)
+                    {
+                        var isOpen     = _expandedGroups.Contains(group.Key);
+                        var groupIcon  = group.Key switch
+                        {
+                            "crosssheet" => """<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>""",
+                            "mandatory"  => """<path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><line x1="9" y1="12" x2="15" y2="12"/>""",
+                            "formula"    => """<path d="M12 2l1.68 5.16H19l-4.42 3.21L16.26 16 12 12.79 7.74 16l1.68-5.63L5 7.16h5.32z"/>""",
+                            "datatype"   => """<polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/>""",
+                            _            => """<path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/>""",
+                        };
+                        var groupColor = group.Errors.Any(e => e.Severity == "Error") ? "error" : "warning";
+
+                        <div class="portal-card portal-vh-group @(isOpen ? "portal-vh-group--open" : "")">
+                            <button class="portal-vh-group-header" @onclick="() => ToggleGroup(group.Key)"
+                                    aria-expanded="@isOpen.ToString().ToLowerInvariant()">
+                                <span class="portal-vh-group-icon portal-vh-group-icon--@groupColor">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16" aria-hidden="true">
+                                        @((MarkupString)groupIcon)
+                                    </svg>
+                                </span>
+                                <span class="portal-vh-group-name">@group.Name</span>
+                                <span class="portal-vh-group-badge portal-vh-group-badge--@groupColor">@group.Count</span>
+                                <svg class="portal-vh-chevron @(isOpen ? "portal-vh-chevron--open" : "")"
+                                     viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16" aria-hidden="true">
+                                    <polyline points="6 9 12 15 18 9"/>
+                                </svg>
+                            </button>
+
+                            @if (isOpen)
+                            {
+                                <div class="portal-vh-group-body">
+                                    @foreach (var err in group.Errors)
+                                    {
+                                        var errKey    = $"{group.Key}:{err.RuleCode}:{err.FieldName}";
+                                        var fixOpen   = _expandedFixes.Contains(errKey);
+                                        var isCrossSheet = !string.IsNullOrWhiteSpace(err.ReferencedReturnCode);
+                                        var sevClass  = err.Severity == "Error" ? "portal-vh-err--hard" : "portal-vh-err--soft";
+
+                                        <div class="portal-vh-err @sevClass">
+                                            <!-- Error header row -->
+                                            <div class="portal-vh-err-head">
+                                                <span class="portal-vh-err-sev-dot portal-vh-err-sev-dot--@err.Severity.ToLowerInvariant()"
+                                                      title="@err.Severity" aria-label="@err.Severity"></span>
+                                                <code class="portal-vh-rule-code">@err.RuleCode</code>
+                                                @if (!string.IsNullOrWhiteSpace(err.FieldName))
+                                                {
+                                                    <span class="portal-vh-field-tag">
+                                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="10" height="10" aria-hidden="true">
+                                                            <rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/>
+                                                        </svg>
+                                                        @err.FieldName
+                                                    </span>
+                                                }
+                                                @if (err.NavigationUrl is not null)
+                                                {
+                                                    <a href="@err.NavigationUrl"
+                                                       class="portal-vh-goto-btn portal-btn portal-btn-sm portal-btn-outline"
+                                                       title="Navigate to this field in the data entry form">
+                                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12" aria-hidden="true">
+                                                            <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/>
+                                                            <polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>
+                                                        </svg>
+                                                        Go to Field
+                                                    </a>
+                                                }
+                                            </div>
+
+                                            <!-- Plain-English explanation -->
+                                            <p class="portal-vh-err-plain">@err.PlainEnglish</p>
+
+                                            <!-- Expected vs Actual -->
+                                            @if (err.ExpectedValue is not null || err.ActualValue is not null)
+                                            {
+                                                <div class="portal-vh-compare">
+                                                    @if (err.ExpectedValue is not null)
+                                                    {
+                                                        <div class="portal-vh-compare-cell portal-vh-compare-expected">
+                                                            <span class="portal-vh-compare-label">Expected</span>
+                                                            <code class="portal-vh-compare-val">@err.ExpectedValue</code>
+                                                        </div>
+                                                    }
+                                                    @if (err.ActualValue is not null)
+                                                    {
+                                                        <div class="portal-vh-compare-cell portal-vh-compare-actual">
+                                                            <span class="portal-vh-compare-label">Submitted</span>
+                                                            <code class="portal-vh-compare-val portal-vh-compare-val--bad">@err.ActualValue</code>
+                                                        </div>
+                                                    }
+                                                    @if (err.ExpectedValue is not null && err.ActualValue is not null)
+                                                    {
+                                                        if (decimal.TryParse(err.ExpectedValue?.Replace(",",""), out var exp)
+                                                            && decimal.TryParse(err.ActualValue?.Replace(",",""), out var act))
+                                                        {
+                                                            var diff = act - exp;
+                                                            <div class="portal-vh-compare-cell portal-vh-compare-diff">
+                                                                <span class="portal-vh-compare-label">Difference</span>
+                                                                <code class="portal-vh-compare-val @(diff < 0 ? "portal-vh-compare-val--neg" : "portal-vh-compare-val--pos")">
+                                                                    @(diff >= 0 ? "+" : "")@diff.ToString("N2")
+                                                                </code>
+                                                            </div>
+                                                        }
+                                                    }
+                                                </div>
+                                            }
+
+                                            <!-- Cross-Sheet Side-by-Side Visualization -->
+                                            @if (isCrossSheet)
+                                            {
+                                                <div class="portal-vh-xs-viz">
+                                                    <div class="portal-vh-xs-viz-title">
+                                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14" aria-hidden="true">
+                                                            <path d="M16 4h2a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h2"/>
+                                                            <rect x="9" y="3" width="6" height="4" rx="1"/>
+                                                        </svg>
+                                                        Cross-Sheet Comparison
+                                                    </div>
+                                                    <table class="portal-vh-xs-table">
+                                                        <thead>
+                                                            <tr>
+                                                                <th>Template</th>
+                                                                <th>Field</th>
+                                                                <th>Value</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody>
+                                                            <tr>
+                                                                <td><code>@_data.ReturnCode</code></td>
+                                                                <td><code>@err.FieldName</code></td>
+                                                                <td class="portal-vh-xs-val portal-vh-xs-val--submitted">
+                                                                    @(err.ActualValue ?? "—")
+                                                                </td>
+                                                            </tr>
+                                                            <tr>
+                                                                <td><code>@err.ReferencedReturnCode</code></td>
+                                                                <td><code>@err.FieldName</code></td>
+                                                                <td class="portal-vh-xs-val portal-vh-xs-val--reference">
+                                                                    @(err.ExpectedValue ?? "—")
+                                                                </td>
+                                                            </tr>
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                            }
+
+                                            <!-- How to Fix (expandable) -->
+                                            <div class="portal-vh-fix">
+                                                <button class="portal-vh-fix-toggle"
+                                                        @onclick="() => ToggleFix(errKey)"
+                                                        aria-expanded="@fixOpen.ToString().ToLowerInvariant()">
+                                                    <svg class="portal-vh-chevron @(fixOpen ? "portal-vh-chevron--open" : "")"
+                                                         viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13" aria-hidden="true">
+                                                        <polyline points="6 9 12 15 18 9"/>
+                                                    </svg>
+                                                    How to fix this
+                                                </button>
+                                                @if (fixOpen)
+                                                {
+                                                    <ol class="portal-vh-fix-steps">
+                                                        @foreach (var step in err.HowToFix.Split('\n',
+                                                            StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+                                                        {
+                                                            <li>@step.TrimStart('1','2','3','4','5','.').Trim()</li>
+                                                        }
+                                                    </ol>
+                                                }
+                                            </div>
+                                        </div>
+                                    }
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+            </section>
+        }
+
+        <!-- ══════════════════════════════════════════════════════════════════
+             VALIDATION HISTORY
+             ══════════════════════════════════════════════════════════════════ -->
+        @if (_data.History.Count > 1)
+        {
+            <section class="portal-card portal-vh-history-section">
+                <h2 class="portal-vh-section-title">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18" aria-hidden="true">
+                        <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+                    </svg>
+                    Validation History
+                    <span class="portal-vh-history-badge">@_data.History.Count attempt@(_data.History.Count == 1 ? "" : "s")</span>
+                </h2>
+
+                <p class="portal-vh-history-summary">
+                    @{
+                        var _first = _data.History.First();
+                        var _last  = _data.History.Last();
+                        var _trend = _last.ErrorCount < _first.ErrorCount ? "improved"
+                                   : _last.ErrorCount > _first.ErrorCount ? "increased"
+                                   : "unchanged";
+                    }
+                    @_data.History.Count submission attempt@(_data.History.Count == 1 ? "" : "s") for
+                    <strong>@_data.ReturnCode</strong> — <strong>@_data.PeriodName</strong>.
+                    Error count has @_trend from <strong>@_first.ErrorCount</strong> → <strong>@_last.ErrorCount</strong>.
+                </p>
+
+                <!-- Sparkline track -->
+                <div class="portal-vh-history-track" role="list">
+                    @foreach (var attempt in _data.History)
+                    {
+                        var isCur    = attempt.IsCurrent;
+                        var dotClass = attempt.ErrorCount == 0 ? "portal-vh-hd--ok"
+                                     : attempt.Status == "Rejected" ? "portal-vh-hd--fail"
+                                     : "portal-vh-hd--warn";
+                        <div class="portal-vh-history-item @(isCur ? "portal-vh-history-item--current" : "")" role="listitem">
+                            <div class="portal-vh-hd @dotClass" title="Attempt @attempt.AttemptNumber">
+                                @if (attempt.ErrorCount == 0)
+                                {
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" width="10" height="10" aria-hidden="true">
+                                        <polyline points="20 6 9 17 4 12"/>
+                                    </svg>
+                                }
+                                else
+                                {
+                                    <span>@attempt.ErrorCount</span>
+                                }
+                            </div>
+                            <div class="portal-vh-history-meta">
+                                <span class="portal-vh-history-attempt">
+                                    Attempt @attempt.AttemptNumber
+                                    @if (isCur) { <span class="portal-vh-cur-tag">current</span> }
+                                </span>
+                                <span class="portal-vh-history-date">@attempt.AttemptedAt.ToString("dd MMM HH:mm")</span>
+                                <span class="portal-vh-history-counts">
+                                    @if (attempt.ErrorCount > 0)
+                                    {
+                                        <span class="portal-vh-hc-err">@attempt.ErrorCount error@(attempt.ErrorCount == 1 ? "" : "s")</span>
+                                    }
+                                    @if (attempt.WarningCount > 0)
+                                    {
+                                        <span class="portal-vh-hc-warn">@attempt.WarningCount warning@(attempt.WarningCount == 1 ? "" : "s")</span>
+                                    }
+                                    @if (attempt.ErrorCount == 0 && attempt.WarningCount == 0)
+                                    {
+                                        <span class="portal-vh-hc-ok">Clean</span>
+                                    }
+                                </span>
+                                @if (!isCur)
+                                {
+                                    <a href="/validation/hub/@attempt.SubmissionId"
+                                       class="portal-vh-history-link">View report</a>
+                                }
+                            </div>
+                        </div>
+                    }
+                </div>
+            </section>
+        }
+
+        <!-- ══════════════════════════════════════════════════════════════════
+             PRINT FOOTER
+             ══════════════════════════════════════════════════════════════════ -->
+        <footer class="portal-vh-print-footer no-screen">
+            <div class="portal-vh-print-footer-line"></div>
+            <p>Generated by <strong>FC Engine</strong> — Central Bank of Nigeria</p>
+            <p>Submission #@_data.SubmissionId · @_data.ReturnCode · @_data.PeriodName</p>
+        </footer>
+
+    </div><!-- /#portal-vh-printable -->
+}
+
+@code {
+    [Parameter] public int SubmissionId { get; set; }
+    [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
+    [Inject] private NavigationManager Nav { get; set; } = default!;
+
+    private bool _loading = true;
+    private ValidationHubData? _data;
+    private HashSet<string> _expandedGroups = new();
+    private HashSet<string> _expandedFixes  = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var state = await AuthState!;
+            var instIdStr = state.User.FindFirst("InstitutionId")?.Value;
+            if (!int.TryParse(instIdStr, out var institutionId) || institutionId <= 0)
+            {
+                _loading = false;
+                return;
+            }
+            _data = await HubSvc.GetHubDataAsync(SubmissionId, institutionId);
+
+            // Auto-expand first group that has errors
+            if (_data?.ErrorGroups is { Count: > 0 } groups)
+                _expandedGroups.Add(groups[0].Key);
+        }
+        catch { _data = null; }
+        finally { _loading = false; }
+    }
+
+    private void ToggleGroup(string key)
+    {
+        if (!_expandedGroups.Remove(key))
+            _expandedGroups.Add(key);
+    }
+
+    private void ToggleFix(string key)
+    {
+        if (!_expandedFixes.Remove(key))
+            _expandedFixes.Add(key);
+    }
+
+    private async Task PrintHub()
+        => await JS.InvokeVoidAsync("portalPrintElement", "portal-vh-printable");
+}

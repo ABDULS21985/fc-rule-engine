@@ -1,0 +1,131 @@
+@implements IAsyncDisposable
+@inject OnboardingStateService OnboardingState
+
+<div class="portal-onb-fab-wrapper">
+
+    @if (_drawerOpen)
+    {
+        <div class="portal-onb-drawer" role="dialog" aria-label="Getting started checklist" aria-modal="false">
+            <div class="portal-onb-drawer-header">
+                <h3 class="portal-onb-drawer-title">Getting started</h3>
+                <button class="portal-onb-drawer-close" @onclick="CloseDrawer" type="button" aria-label="Close checklist">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                        <line x1="18" y1="6" x2="6" y2="18"/>
+                        <line x1="6" y1="6" x2="18" y2="18"/>
+                    </svg>
+                </button>
+            </div>
+
+            <div class="portal-onb-drawer-progress">
+                <div class="portal-onb-progress-bar" role="progressbar" aria-valuenow="@_progress" aria-valuemin="0" aria-valuemax="100">
+                    <div class="portal-onb-progress-fill" style="width: @_progress%"></div>
+                </div>
+                <span class="portal-onb-progress-label">@_progress% complete</span>
+            </div>
+
+            <ul class="portal-onb-checklist" role="list">
+                @foreach (var item in GetChecklistItems())
+                {
+                    <li class="portal-onb-item @(item.Done ? "portal-onb-item--done" : "")">
+                        <span class="portal-onb-item-icon" aria-hidden="true">
+                            @if (item.Done)
+                            {
+                                <svg viewBox="0 0 24 24" fill="none" stroke="#006B3F" stroke-width="2.5" width="16" height="16">
+                                    <path d="M20 6L9 17l-5-5"/>
+                                </svg>
+                            }
+                            else
+                            {
+                                <span class="portal-onb-item-dot"></span>
+                            }
+                        </span>
+                        <div class="portal-onb-item-body">
+                            <span class="portal-onb-item-label">@item.Label</span>
+                            @if (!item.Done && !string.IsNullOrEmpty(item.ActionUrl))
+                            {
+                                <a href="@item.ActionUrl" class="portal-onb-item-action" @onclick="CloseDrawer">
+                                    @item.ActionText &rarr;
+                                </a>
+                            }
+                        </div>
+                    </li>
+                }
+            </ul>
+
+            <div class="portal-onb-drawer-footer">
+                <a href="/help/getting-started" class="portal-btn portal-btn-outline portal-btn-sm" @onclick="CloseDrawer">
+                    View full guide
+                </a>
+            </div>
+        </div>
+    }
+
+    <button class="portal-onb-fab @(_progress >= 100 ? "portal-onb-fab--complete" : "")"
+            @onclick="ToggleDrawer"
+            type="button"
+            aria-label="Open onboarding checklist, @_progress% complete"
+            aria-expanded="@_drawerOpen">
+        <svg class="portal-onb-fab-ring" viewBox="0 0 44 44" width="44" height="44" aria-hidden="true">
+            <circle class="portal-onb-fab-ring-bg" cx="22" cy="22" r="18" fill="none" stroke-width="3"/>
+            <circle class="portal-onb-fab-ring-fill" cx="22" cy="22" r="18" fill="none" stroke-width="3"
+                    style="stroke-dasharray: @_circumference.ToString("F1"); stroke-dashoffset: @_dashOffset.ToString("F1")"/>
+        </svg>
+        @if (_progress >= 100)
+        {
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="20" height="20" aria-hidden="true">
+                <path d="M20 6L9 17l-5-5"/>
+            </svg>
+        }
+        else
+        {
+            <span class="portal-onb-fab-pct" aria-hidden="true">
+                @_progress<span style="font-size:.65em">%</span>
+            </span>
+        }
+    </button>
+
+</div>
+
+@code {
+    private bool _drawerOpen;
+    private int _progress;
+    private OnboardingChecklistItems _items = new();
+
+    private const double CircumferenceConst = 2 * Math.PI * 18; // ≈ 113.1
+    private double _circumference => CircumferenceConst;
+    private double _dashOffset => CircumferenceConst * (1.0 - _progress / 100.0);
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        await RefreshAsync();
+    }
+
+    private async Task RefreshAsync()
+    {
+        _progress = await OnboardingState.GetChecklistProgressAsync();
+        _items = await OnboardingState.GetChecklistItemsAsync();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task ToggleDrawer()
+    {
+        _drawerOpen = !_drawerOpen;
+        if (_drawerOpen) await RefreshAsync();
+    }
+
+    private void CloseDrawer() => _drawerOpen = false;
+
+    private IEnumerable<ChecklistItem> GetChecklistItems() =>
+    [
+        new("Explore the welcome guide",       _items.WelcomeSeen,       "/onboarding/wizard",       "Start wizard"),
+        new("Complete your first submission",  _items.FirstSubmission,   "/submit",                  "Submit a return"),
+        new("Check the reporting calendar",    _items.CalendarVisited,   "/calendar",                "View calendar"),
+        new("Explore compliance reports",      _items.ReportsVisited,    "/reports/compliance",      "View reports"),
+        new("Discover a helpful tip",          _items.TipDismissed,      "/help",                    "Browse help"),
+    ];
+
+    private sealed record ChecklistItem(string Label, bool Done, string ActionUrl, string ActionText);
+
+    public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+}

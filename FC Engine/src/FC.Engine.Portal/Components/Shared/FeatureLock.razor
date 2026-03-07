@@ -1,0 +1,54 @@
+@inject OnboardingStateService OnboardingState
+
+@if (_loaded)
+{
+    @if (_completed >= RequiredSubmissions)
+    {
+        @ChildContent
+    }
+    else
+    {
+        <div class="portal-feature-lock" role="note">
+            <span class="portal-feature-lock-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                    <path d="M7 11V7a5 5 0 0110 0v4"/>
+                </svg>
+            </span>
+            <div class="portal-feature-lock-text">
+                <span class="portal-feature-lock-label">Coming soon for you</span>
+                <span class="portal-feature-lock-hint">
+                    Complete @RequiredSubmissions submission@(RequiredSubmissions == 1 ? "" : "s") to unlock
+                    <strong>@FeatureName</strong> — @_completed of @RequiredSubmissions done.
+                </span>
+            </div>
+            <div class="portal-feature-lock-bar">
+                <div class="portal-feature-lock-fill"
+                     style="width:@(Math.Min(100, RequiredSubmissions > 0 ? _completed * 100 / RequiredSubmissions : 0))%">
+                </div>
+            </div>
+        </div>
+    }
+}
+
+@code {
+    /// <summary>Display name of the locked feature (e.g., "Bulk Upload").</summary>
+    [Parameter, EditorRequired] public string FeatureName { get; set; } = "";
+
+    /// <summary>Number of completed submissions required to unlock this feature.</summary>
+    [Parameter] public int RequiredSubmissions { get; set; } = 3;
+
+    /// <summary>The actual feature content shown once unlocked.</summary>
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    private int _completed;
+    private bool _loaded;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        _completed = await OnboardingState.GetCompletedSubmissionsAsync();
+        _loaded = true;
+        await InvokeAsync(StateHasChanged);
+    }
+}

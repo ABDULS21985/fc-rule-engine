@@ -52,8 +52,10 @@ builder.Services.AddScoped<FC.Engine.Portal.Services.NotificationService>();
 builder.Services.AddScoped<FC.Engine.Portal.Services.CrossSheetDashboardService>();
 builder.Services.AddScoped<FC.Engine.Portal.Services.ExportService>();
 builder.Services.AddScoped<FC.Engine.Portal.Services.DryRunValidationService>();
+builder.Services.AddScoped<FC.Engine.Portal.Services.ValidationHubService>();
 builder.Services.AddScoped<FC.Engine.Portal.Services.ReportBuilderService>();
 builder.Services.AddScoped<FC.Engine.Portal.Services.PartnerPortalService>();
+builder.Services.AddScoped<FC.Engine.Portal.Services.PartnerViewAsService>();
 builder.Services.AddScoped<FC.Engine.Portal.Services.OnboardingWizardService>();
 builder.Services.AddScoped<FC.Engine.Portal.Services.SandboxService>();
 builder.Services.AddScoped<FC.Engine.Portal.Services.KnowledgeBaseService>();
@@ -61,6 +63,8 @@ builder.Services.AddScoped<FC.Engine.Portal.Services.OverdueAlertService>();
 builder.Services.AddScoped<FC.Engine.Domain.Abstractions.IFormDataService, FC.Engine.Infrastructure.Services.FormDataService>();
 builder.Services.AddScoped<FC.Engine.Portal.Services.TourService>();
 builder.Services.AddScoped<FC.Engine.Portal.Services.TourStateService>();
+builder.Services.AddScoped<FC.Engine.Portal.Services.PortalShortcutService>();
+builder.Services.AddScoped<FC.Engine.Portal.Services.OnboardingStateService>();
 
 // Caching
 builder.Services.AddMemoryCache();

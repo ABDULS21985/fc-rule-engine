@@ -66,7 +66,13 @@ public class TemplateBrowserService
             Frequency = t.Frequency.ToString(),
             StructuralCategory = t.StructuralCategory,
             FieldCount = t.CurrentVersion.Fields.Count,
-            FormulaCount = t.CurrentVersion.IntraSheetFormulas.Count
+            FormulaCount = t.CurrentVersion.IntraSheetFormulas.Count,
+            SectionCount = t.CurrentVersion.Fields
+                .Select(f => f.SectionName ?? "General")
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Count(),
+            ModuleCode = t.ModuleCode,
+            RegulatoryBody = DeriveRegulatoryBody(t.ModuleCode, t.ReturnCode)
         }).OrderBy(t => t.ReturnCode).ToList();
     }
 
@@ -292,7 +298,49 @@ public class TemplateBrowserService
             .ToList();
     }
 
+    /// <summary>
+    /// Get compliance status for each return code for a given institution.
+    /// Returns a dictionary of returnCode -> "Submitted" | "Overdue" | "Pending"
+    /// </summary>
+    public async Task<Dictionary<string, string>> GetComplianceStatuses(int institutionId, CancellationToken ct = default)
+    {
+        if (institutionId <= 0)
+            return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+        var submissions = await _submissionRepo.GetByInstitution(institutionId, ct);
+
+        return submissions
+            .GroupBy(s => s.ReturnCode, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(
+                g => g.Key,
+                g =>
+                {
+                    var latest = g.OrderByDescending(s => s.SubmittedAt).First();
+                    return latest.Status.ToString() switch
+                    {
+                        "Accepted" or "AcceptedWithWarnings" => "Submitted",
+                        "Rejected" or "ApprovalRejected" => "Overdue",
+                        "PendingApproval" or "Validating" or "Parsing" => "Pending",
+                        _ => "Submitted"
+                    };
+                },
+                StringComparer.OrdinalIgnoreCase);
+    }
+
     // ── Private Helpers ──────────────────────────────────────────
+
+    private static string DeriveRegulatoryBody(string? moduleCode, string returnCode)
+    {
+        foreach (var s in new[] { moduleCode ?? "", returnCode })
+        {
+            if (s.StartsWith("CBN", StringComparison.OrdinalIgnoreCase)) return "CBN";
+            if (s.StartsWith("SEC", StringComparison.OrdinalIgnoreCase)) return "SEC";
+            if (s.StartsWith("NAICOM", StringComparison.OrdinalIgnoreCase)) return "NAICOM";
+            if (s.StartsWith("PENCOM", StringComparison.OrdinalIgnoreCase)) return "PENCOM";
+            if (s.StartsWith("FIRS", StringComparison.OrdinalIgnoreCase)) return "FIRS";
+        }
+        return "Other";
+    }
 
     private static string GetPlaceholderValue(TemplateField field)
     {
@@ -332,6 +380,9 @@ public class TemplateBrowseItem
     public string StructuralCategory { get; set; } = "";
     public int FieldCount { get; set; }
     public int FormulaCount { get; set; }
+    public int SectionCount { get; set; }
+    public string? ModuleCode { get; set; }
+    public string RegulatoryBody { get; set; } = "Other";
 }
 
 public class TemplateDetailModel

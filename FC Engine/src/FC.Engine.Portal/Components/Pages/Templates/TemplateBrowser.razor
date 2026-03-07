@@ -1,69 +1,133 @@
 @page "/templates"
 @attribute [Authorize(Policy = "InstitutionUser")]
+@implements IAsyncDisposable
+@inject TemplateBrowserService BrowserSvc
 @inject NavigationManager Navigation
+@inject IJSRuntime JS
 
 <PageTitle>Template Browser — FC Engine Portal</PageTitle>
 
-<div class="portal-page">
-    <div class="portal-page-header">
-        <div class="portal-page-header-main">
-            <h1 class="portal-page-title">Template Browser</h1>
-            <p class="portal-page-subtitle">Browse all return templates, view field requirements, and download schemas for XML generation</p>
+<!-- ═══════════════════════════════════════════════════════════════
+     AUTOCOMPLETE DROPDOWN (portal-level overlay)
+     ═══════════════════════════════════════════════════════════════ -->
+@if (_autocompleteOpen)
+{
+    <div class="portal-tb-ac-backdrop" @onclick="CloseAutocomplete"></div>
+    <div class="portal-tb-autocomplete" role="listbox" id="tmpl-search-ac" aria-label="Search suggestions">
+        @if (_recentSearches.Count > 0 && string.IsNullOrWhiteSpace(_searchQuery))
+        {
+            <div class="portal-tb-ac-group-label">Recent searches</div>
+            @foreach (var rs in _recentSearches.Take(5))
+            {
+                var rsCopy = rs;
+                <button class="portal-tb-ac-item" role="option" @onclick="() => ApplySearch(rsCopy)">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.5"/></svg>
+                    @rs
+                </button>
+            }
+        }
+        @if (_autocompleteMatches.Count > 0)
+        {
+            <div class="portal-tb-ac-group-label">Templates</div>
+            @foreach (var t in _autocompleteMatches.Take(6))
+            {
+                var tCopy = t;
+                <button class="portal-tb-ac-item portal-tb-ac-item--template" role="option" @onclick="() => OpenDrawer(tCopy.ReturnCode)">
+                    <span class="portal-tb-ac-code">@t.ReturnCode</span>
+                    <span class="portal-tb-ac-name">@t.TemplateName</span>
+                    <span class="portal-badge @GetFrequencyBadgeClass(t.Frequency) portal-badge-sm">@FormatFrequency(t.Frequency)</span>
+                </button>
+            }
+        }
+        @if (_suggestedFilters.Count > 0)
+        {
+            <div class="portal-tb-ac-group-label">Did you mean</div>
+            @foreach (var sf in _suggestedFilters)
+            {
+                var sfCopy = sf;
+                <button class="portal-tb-ac-item portal-tb-ac-item--filter" role="option" @onclick="() => ApplySuggestedFilter(sfCopy)">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+                    @sf.Label
+                </button>
+            }
+        }
+        @if (_autocompleteMatches.Count == 0 && _suggestedFilters.Count == 0 && !string.IsNullOrWhiteSpace(_searchQuery))
+        {
+            <div class="portal-tb-ac-empty">No matches for "<strong>@_searchQuery</strong>"</div>
+        }
+    </div>
+}
+
+<!-- ═══════════════════════════════════════════════════════════════
+     PAGE
+     ═══════════════════════════════════════════════════════════════ -->
+<div class="portal-page portal-tb-page">
+
+    <!-- TOP BAR: breadcrumb + search -->
+    <div class="portal-tb-top-bar">
+        <nav class="portal-tb-breadcrumb" aria-label="Breadcrumb">
+            <a href="/dashboard" class="portal-tb-bc-link">Dashboard</a>
+            <svg class="portal-tb-bc-sep" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg>
+            <span class="portal-tb-bc-current" aria-current="page">Templates</span>
+        </nav>
+
+        <div class="portal-tb-search-wrapper" id="tmpl-search-container">
+            <div class="portal-tb-search-input-wrap">
+                <svg class="portal-tb-search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                    <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                </svg>
+                <input type="text"
+                       class="portal-tb-search-input"
+                       placeholder="Search templates, return codes..."
+                       value="@_searchQuery"
+                       @oninput="OnSearchInput"
+                       @onfocus="OnSearchFocus"
+                       @onblur="OnSearchBlur"
+                       autocomplete="off"
+                       aria-label="Search templates"
+                       aria-controls="tmpl-search-ac"
+                       aria-expanded="@_autocompleteOpen.ToString().ToLowerInvariant()" />
+                @if (!string.IsNullOrEmpty(_searchQuery))
+                {
+                    <button class="portal-tb-search-clear" @onclick="ClearSearch" aria-label="Clear search">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                    </button>
+                }
+            </div>
         </div>
     </div>
 
-    <!-- ═══════════════════════════════════════════════════════════════
-         SEARCH & FILTERS
-         ═══════════════════════════════════════════════════════════════ -->
-    <div class="portal-toolbar">
-        <div class="portal-toolbar-row">
-            <div class="portal-toolbar-search">
-                <div class="portal-input-wrapper">
-                    <span class="portal-input-icon" aria-hidden="true">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
-                        </svg>
-                    </span>
-                    <input type="text"
-                           class="portal-form-input portal-form-input-icon"
-                           placeholder="Search by code or name..."
-                           @bind="searchQuery"
-                           @bind:event="oninput"
-                           aria-label="Search templates" />
-                </div>
-            </div>
-
-            <div class="portal-toolbar-filter">
-                <label for="filterFreq" class="portal-form-label-sr">Frequency</label>
-                <select id="filterFreq" class="portal-form-select" @bind="filterFrequency">
-                    <option value="">All Frequencies</option>
-                    <option value="Monthly">Monthly</option>
-                    <option value="Quarterly">Quarterly</option>
-                    <option value="SemiAnnual">Semi-Annual</option>
-                </select>
-            </div>
-
-            <div class="portal-toolbar-filter">
-                <label for="filterCat" class="portal-form-label-sr">Category</label>
-                <select id="filterCat" class="portal-form-select" @bind="filterCategory">
-                    <option value="">All Categories</option>
-                    <option value="FixedRow">Fixed Row</option>
-                    <option value="MultiRow">Multi Row</option>
-                    <option value="ItemCoded">Item Coded</option>
-                </select>
-            </div>
-
+    <!-- PAGE HEADER -->
+    <div class="portal-tb-page-header">
+        <div>
+            <h1 class="portal-page-title">Template Browser</h1>
+            <p class="portal-page-subtitle">Discover return templates, explore field requirements, and start submissions</p>
+        </div>
+        <div class="portal-tb-header-actions">
+            <button class="portal-btn portal-btn-ghost portal-btn-sm portal-tb-sidebar-toggle"
+                    @onclick="ToggleSidebarCollapsed"
+                    aria-label="@(_sidebarCollapsed ? "Show filters" : "Hide filters")"
+                    title="@(_sidebarCollapsed ? "Show filters" : "Hide filters")">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                    <line x1="21" y1="6" x2="3" y2="6"/><line x1="17" y1="12" x2="7" y2="12"/><line x1="13" y1="18" x2="11" y2="18"/>
+                </svg>
+                Filters
+                @if (_hasActiveFilters)
+                {
+                    <span class="portal-tb-filter-dot" aria-hidden="true"></span>
+                }
+            </button>
             <div class="portal-template-view-toggle">
-                <button class="portal-calendar-view-btn @(viewMode == "card" ? "portal-calendar-view-btn-active" : "")"
-                        @onclick='() => viewMode = "card"' title="Card view" aria-label="Card view">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <button class="portal-calendar-view-btn @(_viewMode == "card" ? "portal-calendar-view-btn-active" : "")"
+                        @onclick='() => _viewMode = "card"' title="Card view" aria-label="Card view">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
                         <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
                         <rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>
                     </svg>
                 </button>
-                <button class="portal-calendar-view-btn @(viewMode == "table" ? "portal-calendar-view-btn-active" : "")"
-                        @onclick='() => viewMode = "table"' title="Table view" aria-label="Table view">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <button class="portal-calendar-view-btn @(_viewMode == "table" ? "portal-calendar-view-btn-active" : "")"
+                        @onclick='() => _viewMode = "table"' title="Table view" aria-label="Table view">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
                         <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/>
                         <line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>
                     </svg>
@@ -73,174 +137,846 @@
     </div>
 
     <!-- ═══════════════════════════════════════════════════════════════
-         TEMPLATE DISPLAY
+         FEATURED SECTIONS (visible only when no active search/filter)
          ═══════════════════════════════════════════════════════════════ -->
-    @if (isLoading)
+    @if (!_isLoading && !_hasActiveFilters && string.IsNullOrWhiteSpace(_searchQuery))
     {
-        <div class="portal-template-grid">
-            @for (int i = 0; i < 6; i++)
-            {
-                <div class="portal-skeleton portal-skeleton-block" style="height: 160px; border-radius: 12px;"></div>
-            }
-        </div>
-    }
-    else if (!FilteredTemplates.Any())
-    {
-        <div class="portal-empty-state portal-card" style="padding: 3rem;">
-            <h3 class="portal-empty-state-title">No Templates Found</h3>
-            <p class="portal-empty-state-desc">Try adjusting your search or filters.</p>
-        </div>
-    }
-    else
-    {
-        @if (viewMode == "card")
+        <!-- Due Soon Rail -->
+        @if (_dueSoonItems.Count > 0)
         {
-            <div class="portal-template-grid">
-                @foreach (var template in FilteredTemplates)
-                {
-                    <a href="/templates/@template.ReturnCode" class="portal-tmpl-card">
-                        <div class="portal-tmpl-card-accent @GetCategoryAccentClass(template.StructuralCategory)"></div>
-                        <div class="portal-tmpl-card-body">
-                            <div class="portal-tmpl-card-header">
-                                <span class="portal-tmpl-card-code">@template.ReturnCode</span>
-                                <span class="portal-badge @GetFrequencyBadgeClass(template.Frequency)">@FormatFrequency(template.Frequency)</span>
+            <section class="portal-tb-featured" aria-label="Due soon">
+                <div class="portal-tb-featured-header">
+                    <h2 class="portal-tb-featured-title">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                            <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+                        </svg>
+                        Due Soon
+                    </h2>
+                    <span class="portal-tb-featured-sub">Templates requiring attention in the current period</span>
+                </div>
+                <div class="portal-tb-rail" role="list" aria-label="Due soon templates">
+                    @foreach (var item in _dueSoonItems)
+                    {
+                        var t = item;
+                        <div class="portal-tb-rail-card portal-tb-rail-card--urgent" role="listitem" @onclick="() => OpenDrawer(t.ReturnCode)">
+                            <div class="portal-tb-rail-card-top">
+                                <span class="portal-tb-rail-code">@t.ReturnCode</span>
+                                <span class="portal-badge portal-badge-danger portal-badge-sm">
+                                    @(GetComplianceStatus(t.ReturnCode) == "Overdue" ? "Overdue" : "Due Soon")
+                                </span>
                             </div>
-                            <span class="portal-tmpl-card-name">@template.TemplateName</span>
-                            <div class="portal-tmpl-card-footer">
-                                <span class="portal-badge portal-badge-neutral portal-badge-sm">
-                                    @GetCategoryLabel(template.StructuralCategory)
-                                </span>
-                                <span class="portal-tmpl-card-stat">
-                                    @template.FieldCount fields · @template.FormulaCount rules
-                                </span>
+                            <div class="portal-tb-rail-name">@t.TemplateName</div>
+                            <div class="portal-tb-rail-meta">
+                                <span class="portal-badge @GetFrequencyBadgeClass(t.Frequency) portal-badge-sm">@FormatFrequency(t.Frequency)</span>
+                                <span class="portal-tb-rail-body">@t.RegulatoryBody</span>
                             </div>
                         </div>
-                    </a>
+                    }
+                </div>
+            </section>
+        }
+
+        <!-- Recently Used Rail -->
+        @if (_recentlyUsedItems.Count > 0)
+        {
+            <section class="portal-tb-featured" aria-label="Recently used">
+                <div class="portal-tb-featured-header">
+                    <h2 class="portal-tb-featured-title">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                            <polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.5"/>
+                        </svg>
+                        Recently Used
+                    </h2>
+                </div>
+                <div class="portal-tb-rail" role="list" aria-label="Recently used templates">
+                    @foreach (var t in _recentlyUsedItems)
+                    {
+                        var tCopy = t;
+                        <div class="portal-tb-rail-card" role="listitem" @onclick="() => OpenDrawer(tCopy.ReturnCode)">
+                            <div class="portal-tb-rail-card-top">
+                                <span class="portal-tb-rail-code">@t.ReturnCode</span>
+                                @if (!string.IsNullOrEmpty(GetComplianceStatus(t.ReturnCode)))
+                                {
+                                    <span class="portal-badge @GetComplianceBadgeClass(GetComplianceStatus(t.ReturnCode)) portal-badge-sm">@GetComplianceStatus(t.ReturnCode)</span>
+                                }
+                            </div>
+                            <div class="portal-tb-rail-name">@t.TemplateName</div>
+                            <div class="portal-tb-rail-meta">
+                                <span class="portal-badge @GetFrequencyBadgeClass(t.Frequency) portal-badge-sm">@FormatFrequency(t.Frequency)</span>
+                            </div>
+                        </div>
+                    }
+                </div>
+            </section>
+        }
+
+        <!-- My Templates (Favorites) -->
+        @if (_favoriteItems.Count > 0)
+        {
+            <section class="portal-tb-featured" aria-label="My templates">
+                <div class="portal-tb-featured-header">
+                    <h2 class="portal-tb-featured-title">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+                            <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+                        </svg>
+                        My Templates
+                    </h2>
+                    <span class="portal-tb-featured-sub">Pinned templates you work with frequently</span>
+                </div>
+                <div class="portal-tb-rail" role="list" aria-label="Favorite templates">
+                    @foreach (var t in _favoriteItems)
+                    {
+                        var tCopy = t;
+                        <div class="portal-tb-rail-card portal-tb-rail-card--star" role="listitem" @onclick="() => OpenDrawer(tCopy.ReturnCode)">
+                            <div class="portal-tb-rail-card-top">
+                                <span class="portal-tb-rail-code">@t.ReturnCode</span>
+                                <button class="portal-tb-star portal-tb-star--active" title="Unpin"
+                                        @onclick="() => ToggleFavorite(tCopy.ReturnCode)" @onclick:stopPropagation
+                                        aria-label="Remove from My Templates">
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+                                        <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+                                    </svg>
+                                </button>
+                            </div>
+                            <div class="portal-tb-rail-name">@t.TemplateName</div>
+                            <div class="portal-tb-rail-meta">
+                                <span class="portal-badge @GetFrequencyBadgeClass(t.Frequency) portal-badge-sm">@FormatFrequency(t.Frequency)</span>
+                                <span class="portal-tb-rail-body">@t.RegulatoryBody</span>
+                            </div>
+                        </div>
+                    }
+                </div>
+            </section>
+        }
+    }
+
+    <!-- ═══════════════════════════════════════════════════════════════
+         MAIN LAYOUT: SIDEBAR + RESULTS
+         ═══════════════════════════════════════════════════════════════ -->
+    <div class="portal-tb-layout @(_sidebarCollapsed ? "portal-tb-layout--collapsed" : "")">
+
+        <!-- LEFT SIDEBAR -->
+        <aside class="portal-tb-sidebar" aria-label="Template filters">
+            <div class="portal-tb-sidebar-head">
+                <span class="portal-tb-sidebar-title">Filters</span>
+                @if (_hasActiveFilters)
+                {
+                    <button class="portal-tb-sidebar-clear" @onclick="ClearAllFilters">Clear all</button>
                 }
             </div>
-        }
 
-        @if (viewMode == "table")
-        {
-            <div class="portal-card portal-card-flush">
-                <div class="portal-table-responsive">
-                    <table class="portal-table portal-table-hover" aria-label="Templates">
-                        <thead>
-                            <tr>
-                                <th>Return Code</th>
-                                <th>Template Name</th>
-                                <th>Frequency</th>
-                                <th>Category</th>
-                                <th class="portal-table-th-num">Fields</th>
-                                <th class="portal-table-th-num">Rules</th>
-                                <th class="portal-table-th-actions">Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            @foreach (var template in FilteredTemplates)
+            <!-- Favorites toggle -->
+            <label class="portal-tb-filter-toggle @(_showFavoritesOnly ? "portal-tb-filter-toggle--active" : "")">
+                <input type="checkbox" @bind="_showFavoritesOnly" class="portal-sr-only" />
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="@(_showFavoritesOnly ? "currentColor" : "none")" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                    <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+                </svg>
+                My Templates only
+            </label>
+
+            <!-- Regulatory Body -->
+            <div class="portal-tb-sidebar-section">
+                <button class="portal-tb-sidebar-section-btn" @onclick='() => ToggleSidebarGroup("body")'
+                        aria-expanded="@(_expandedGroups.Contains("body").ToString().ToLowerInvariant())">
+                    Regulatory Body
+                    <svg class="portal-tb-sidebar-chevron @(_expandedGroups.Contains("body") ? "portal-tb-sidebar-chevron--open" : "")"
+                         width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
+                        <polyline points="6 9 12 15 18 9"/>
+                    </svg>
+                </button>
+                @if (_expandedGroups.Contains("body"))
+                {
+                    <div class="portal-tb-sidebar-items">
+                        @foreach (var body in _allBodies)
+                        {
+                            var bodyCopy = body;
+                            var isChecked = _filterBodies.Contains(body);
+                            var count = _allTemplates.Count(t => t.RegulatoryBody == body);
+                            <label class="portal-tb-filter-item @(isChecked ? "portal-tb-filter-item--checked" : "")">
+                                <input type="checkbox" class="portal-sr-only"
+                                       checked="@isChecked"
+                                       @onchange="() => ToggleBodyFilter(bodyCopy)" />
+                                <span class="portal-tb-body-badge portal-tb-body-badge--@bodyCopy.ToLowerInvariant()">@body</span>
+                                <span class="portal-tb-filter-count">@count</span>
+                            </label>
+                        }
+                    </div>
+                }
+            </div>
+
+            <!-- Frequency -->
+            <div class="portal-tb-sidebar-section">
+                <button class="portal-tb-sidebar-section-btn" @onclick='() => ToggleSidebarGroup("freq")'
+                        aria-expanded="@(_expandedGroups.Contains("freq").ToString().ToLowerInvariant())">
+                    Frequency
+                    <svg class="portal-tb-sidebar-chevron @(_expandedGroups.Contains("freq") ? "portal-tb-sidebar-chevron--open" : "")"
+                         width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
+                        <polyline points="6 9 12 15 18 9"/>
+                    </svg>
+                </button>
+                @if (_expandedGroups.Contains("freq"))
+                {
+                    <div class="portal-tb-sidebar-items">
+                        @foreach (var (freq, label) in _frequencyOptions)
+                        {
+                            var freqCopy = freq;
+                            var isChecked = _filterFrequencies.Contains(freq);
+                            var count = _allTemplates.Count(t => t.Frequency == freq);
+                            <label class="portal-tb-filter-item @(isChecked ? "portal-tb-filter-item--checked" : "")">
+                                <input type="checkbox" class="portal-sr-only"
+                                       checked="@isChecked"
+                                       @onchange="() => ToggleFrequencyFilter(freqCopy)" />
+                                <span class="portal-tb-filter-label">@label</span>
+                                <span class="portal-tb-filter-count">@count</span>
+                            </label>
+                        }
+                    </div>
+                }
+            </div>
+
+            <!-- Type / Category -->
+            <div class="portal-tb-sidebar-section">
+                <button class="portal-tb-sidebar-section-btn" @onclick='() => ToggleSidebarGroup("type")'
+                        aria-expanded="@(_expandedGroups.Contains("type").ToString().ToLowerInvariant())">
+                    Structure Type
+                    <svg class="portal-tb-sidebar-chevron @(_expandedGroups.Contains("type") ? "portal-tb-sidebar-chevron--open" : "")"
+                         width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
+                        <polyline points="6 9 12 15 18 9"/>
+                    </svg>
+                </button>
+                @if (_expandedGroups.Contains("type"))
+                {
+                    <div class="portal-tb-sidebar-items">
+                        @foreach (var (cat, label) in _categoryOptions)
+                        {
+                            var catCopy = cat;
+                            var isChecked = _filterCategories.Contains(cat);
+                            var count = _allTemplates.Count(t => t.StructuralCategory == cat);
+                            <label class="portal-tb-filter-item @(isChecked ? "portal-tb-filter-item--checked" : "")">
+                                <input type="checkbox" class="portal-sr-only"
+                                       checked="@isChecked"
+                                       @onchange="() => ToggleCategoryFilter(catCopy)" />
+                                <span class="portal-tb-filter-label">@label</span>
+                                <span class="portal-tb-filter-count">@count</span>
+                            </label>
+                        }
+                    </div>
+                }
+            </div>
+        </aside>
+
+        <!-- MAIN RESULTS -->
+        <div class="portal-tb-main">
+
+            <!-- Results toolbar -->
+            <div class="portal-tb-results-bar">
+                <div class="portal-tb-results-left">
+                    @if (_isLoading)
+                    {
+                        <span class="portal-skeleton" style="width:80px;height:14px;border-radius:4px;display:inline-block;"></span>
+                    }
+                    else
+                    {
+                        <span class="portal-tb-results-count">
+                            @FilteredCount template@(FilteredCount == 1 ? "" : "s")
+                            @if (FilteredCount < _allTemplates.Count)
                             {
-                                <tr class="portal-table-row-clickable" @onclick="() => NavigateToTemplate(template.ReturnCode)">
-                                    <td><span class="portal-table-code">@template.ReturnCode</span></td>
-                                    <td class="portal-table-truncate">@template.TemplateName</td>
-                                    <td><span class="portal-badge @GetFrequencyBadgeClass(template.Frequency)">@FormatFrequency(template.Frequency)</span></td>
-                                    <td><span class="portal-badge portal-badge-neutral portal-badge-sm">@GetCategoryLabel(template.StructuralCategory)</span></td>
-                                    <td class="portal-table-th-num">@template.FieldCount</td>
-                                    <td class="portal-table-th-num">@template.FormulaCount</td>
-                                    <td class="portal-table-th-actions" @onclick:stopPropagation>
-                                        <a href="/templates/@template.ReturnCode" class="portal-btn portal-btn-ghost portal-btn-xs">
-                                            View
-                                        </a>
-                                    </td>
-                                </tr>
+                                <span class="portal-tb-results-of"> of @_allTemplates.Count</span>
                             }
-                        </tbody>
-                    </table>
+                        </span>
+                    }
+                    <!-- Active filter chips -->
+                    @foreach (var body in _filterBodies)
+                    {
+                        var bodyCopy = body;
+                        <button class="portal-tb-chip" @onclick="() => ToggleBodyFilter(bodyCopy)">
+                            @body
+                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                        </button>
+                    }
+                    @foreach (var freq in _filterFrequencies)
+                    {
+                        var freqCopy = freq;
+                        <button class="portal-tb-chip" @onclick="() => ToggleFrequencyFilter(freqCopy)">
+                            @FormatFrequency(freq)
+                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                        </button>
+                    }
+                    @foreach (var cat in _filterCategories)
+                    {
+                        var catCopy = cat;
+                        <button class="portal-tb-chip" @onclick="() => ToggleCategoryFilter(catCopy)">
+                            @GetCategoryLabel(cat)
+                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                        </button>
+                    }
+                    @if (_showFavoritesOnly)
+                    {
+                        <button class="portal-tb-chip portal-tb-chip--star" @onclick='() => _showFavoritesOnly = false'>
+                            My Templates
+                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                        </button>
+                    }
                 </div>
             </div>
-        }
 
-        <div class="portal-template-count">
-            Showing @FilteredTemplates.Count() of @allTemplates.Count templates
+            <!-- ── LOADING ── -->
+            @if (_isLoading)
+            {
+                <div class="portal-template-grid">
+                    @for (int i = 0; i < 6; i++)
+                    {
+                        <div class="portal-skeleton portal-skeleton-block portal-tb-card-skeleton"></div>
+                    }
+                </div>
+            }
+
+            <!-- ── NO RESULTS ── -->
+            else if (FilteredCount == 0)
+            {
+                <div class="portal-tb-no-results">
+                    <div class="portal-tb-no-results-icon" aria-hidden="true">
+                        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2">
+                            <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                            <line x1="8" y1="11" x2="14" y2="11"/>
+                        </svg>
+                    </div>
+                    <h3 class="portal-tb-no-results-title">No templates found</h3>
+                    <p class="portal-tb-no-results-desc">
+                        @if (!string.IsNullOrWhiteSpace(_searchQuery))
+                        {
+                            <span>No results for "<strong>@_searchQuery</strong>". Try a different search term or adjust filters.</span>
+                        }
+                        else
+                        {
+                            <span>No templates match the selected filters.</span>
+                        }
+                    </p>
+                    <!-- Suggestion chips -->
+                    <div class="portal-tb-no-results-suggestions">
+                        <span class="portal-tb-no-results-suggest-label">Try:</span>
+                        <button class="portal-tb-suggest-chip" @onclick='() => ApplySuggestedFilter(("Regulatory Body: CBN", "CBN", "body"))'>CBN Returns</button>
+                        <button class="portal-tb-suggest-chip" @onclick='() => ApplySuggestedFilter(("Frequency: Monthly", "Monthly", "freq"))'>Monthly</button>
+                        <button class="portal-tb-suggest-chip" @onclick='() => ApplySuggestedFilter(("Frequency: Quarterly", "Quarterly", "freq"))'>Quarterly</button>
+                        <button class="portal-tb-suggest-chip" @onclick="ClearAllFilters">Show all templates</button>
+                    </div>
+                    <p class="portal-tb-no-results-contact">
+                        Missing a template?
+                        <a href="/support" class="portal-link">Contact support</a>
+                    </p>
+                </div>
+            }
+
+            <!-- ── CARD VIEW ── -->
+            else if (_viewMode == "card")
+            {
+                <div class="portal-template-grid portal-tb-grid">
+                    @foreach (var t in FilteredTemplates)
+                    {
+                        var tCopy = t;
+                        var complianceStatus = GetComplianceStatus(t.ReturnCode);
+                        var isFav = _favorites.Contains(t.ReturnCode);
+                        <div class="portal-tb-card" @onclick="() => OpenDrawer(tCopy.ReturnCode)" tabindex="0"
+                             @onkeydown='(e) => { if (e.Key == "Enter") OpenDrawer(tCopy.ReturnCode); }'
+                             role="button" aria-label="Open @t.TemplateName details">
+                            <!-- Card accent bar -->
+                            <div class="portal-tmpl-card-accent @GetCategoryAccentClass(t.StructuralCategory)"></div>
+
+                            <div class="portal-tb-card-body">
+                                <!-- Row 1: code + regulatory body + star + compliance -->
+                                <div class="portal-tb-card-top">
+                                    <div class="portal-tb-card-top-left">
+                                        <span class="portal-tb-card-code">@t.ReturnCode</span>
+                                        <span class="portal-tb-body-badge portal-tb-body-badge--@t.RegulatoryBody.ToLowerInvariant()">@t.RegulatoryBody</span>
+                                    </div>
+                                    <div class="portal-tb-card-top-right">
+                                        @if (!string.IsNullOrEmpty(complianceStatus))
+                                        {
+                                            <span class="portal-badge portal-badge-sm @GetComplianceBadgeClass(complianceStatus)">@complianceStatus</span>
+                                        }
+                                        <button class="portal-tb-star @(isFav ? "portal-tb-star--active" : "")"
+                                                title="@(isFav ? "Remove from My Templates" : "Add to My Templates")"
+                                                @onclick="() => ToggleFavorite(tCopy.ReturnCode)" @onclick:stopPropagation
+                                                aria-label="@(isFav ? "Remove from My Templates" : "Add to My Templates")">
+                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="@(isFav ? "currentColor" : "none")" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                                                <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+                                            </svg>
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <!-- Row 2: template name -->
+                                <div class="portal-tb-card-name" title="@t.TemplateName">@t.TemplateName</div>
+
+                                <!-- Row 3: frequency badge + category -->
+                                <div class="portal-tb-card-badges">
+                                    <span class="portal-badge @GetFrequencyBadgeClass(t.Frequency)">@FormatFrequency(t.Frequency)</span>
+                                    <span class="portal-badge portal-badge-neutral portal-badge-sm">@GetCategoryLabel(t.StructuralCategory)</span>
+                                </div>
+
+                                <!-- Row 4: stats -->
+                                <div class="portal-tb-card-stats">
+                                    <span class="portal-tb-card-stat">
+                                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+                                        @t.FieldCount fields
+                                    </span>
+                                    <span class="portal-tb-card-stat-sep">·</span>
+                                    <span class="portal-tb-card-stat">
+                                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+                                        @t.SectionCount @(t.SectionCount == 1 ? "section" : "sections")
+                                    </span>
+                                    @if (t.FormulaCount > 0)
+                                    {
+                                        <span class="portal-tb-card-stat-sep">·</span>
+                                        <span class="portal-tb-card-stat">@t.FormulaCount rules</span>
+                                    }
+                                </div>
+
+                                <!-- Row 5: action buttons -->
+                                <div class="portal-tb-card-actions">
+                                    <button class="portal-btn portal-btn-primary portal-btn-xs"
+                                            @onclick="() => StartSubmission(tCopy.ReturnCode)" @onclick:stopPropagation>
+                                        Start Submission
+                                    </button>
+                                    <a href="/templates/@t.ReturnCode" class="portal-btn portal-btn-ghost portal-btn-xs"
+                                       @onclick:stopPropagation>
+                                        View Schema
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+
+                <div class="portal-template-count">
+                    Showing @FilteredCount of @_allTemplates.Count templates
+                </div>
+            }
+
+            <!-- ── TABLE VIEW ── -->
+            else
+            {
+                <div class="portal-card portal-card-flush">
+                    <div class="portal-table-responsive">
+                        <table class="portal-table portal-table-hover" aria-label="Templates">
+                            <thead>
+                                <tr>
+                                    <th>Return Code</th>
+                                    <th>Template Name</th>
+                                    <th>Body</th>
+                                    <th>Frequency</th>
+                                    <th>Type</th>
+                                    <th class="portal-table-th-num">Fields</th>
+                                    <th class="portal-table-th-num">Sections</th>
+                                    <th>Status</th>
+                                    <th class="portal-table-th-actions">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var t in FilteredTemplates)
+                                {
+                                    var tCopy = t;
+                                    var complianceStatus = GetComplianceStatus(t.ReturnCode);
+                                    var isFav = _favorites.Contains(t.ReturnCode);
+                                    <tr class="portal-table-row-clickable" @onclick="() => OpenDrawer(tCopy.ReturnCode)">
+                                        <td>
+                                            <div class="portal-tb-table-code-cell">
+                                                <button class="portal-tb-star portal-tb-star--sm @(isFav ? "portal-tb-star--active" : "")"
+                                                        @onclick="() => ToggleFavorite(tCopy.ReturnCode)" @onclick:stopPropagation
+                                                        aria-label="@(isFav ? "Remove from My Templates" : "Add to My Templates")">
+                                                    <svg width="11" height="11" viewBox="0 0 24 24" fill="@(isFav ? "currentColor" : "none")" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
+                                                        <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+                                                    </svg>
+                                                </button>
+                                                <span class="portal-table-code">@t.ReturnCode</span>
+                                            </div>
+                                        </td>
+                                        <td class="portal-table-truncate">@t.TemplateName</td>
+                                        <td><span class="portal-tb-body-badge portal-tb-body-badge--@t.RegulatoryBody.ToLowerInvariant()">@t.RegulatoryBody</span></td>
+                                        <td><span class="portal-badge @GetFrequencyBadgeClass(t.Frequency)">@FormatFrequency(t.Frequency)</span></td>
+                                        <td><span class="portal-badge portal-badge-neutral portal-badge-sm">@GetCategoryLabel(t.StructuralCategory)</span></td>
+                                        <td class="portal-table-th-num">@t.FieldCount</td>
+                                        <td class="portal-table-th-num">@t.SectionCount</td>
+                                        <td>
+                                            @if (!string.IsNullOrEmpty(complianceStatus))
+                                            {
+                                                <span class="portal-badge portal-badge-sm @GetComplianceBadgeClass(complianceStatus)">@complianceStatus</span>
+                                            }
+                                            else
+                                            {
+                                                <span class="portal-tb-table-nodot">—</span>
+                                            }
+                                        </td>
+                                        <td class="portal-table-th-actions" @onclick:stopPropagation>
+                                            <button class="portal-btn portal-btn-primary portal-btn-xs"
+                                                    @onclick="() => StartSubmission(tCopy.ReturnCode)">
+                                                Submit
+                                            </button>
+                                            <a href="/templates/@t.ReturnCode" class="portal-btn portal-btn-ghost portal-btn-xs">Details</a>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="portal-template-count">
+                    Showing @FilteredCount of @_allTemplates.Count templates
+                </div>
+            }
         </div>
-    }
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════════════
+         TEMPLATE DETAIL DRAWER
+         ═══════════════════════════════════════════════════════════════ -->
+    <TemplateDetailDrawer ReturnCode="@_drawerCode"
+                          OnClose="CloseDrawer"
+                          ComplianceStatus="@(_drawerCode is not null ? GetComplianceStatus(_drawerCode) : "")"
+                          IsFavorite="@(_drawerCode is not null && _favorites.Contains(_drawerCode))"
+                          OnFavoriteChanged="@((v) => { if (_drawerCode is not null) { if (v) _favorites.Add(_drawerCode); else _favorites.Remove(_drawerCode); } })"
+                          InstitutionId="@_institutionId" />
+
 </div>
 
 @code {
-    private bool isLoading = true;
-    private List<TemplateBrowseItem> allTemplates = new();
-    private string searchQuery = "";
-    private string filterFrequency = "";
-    private string filterCategory = "";
-    private string viewMode = "card";
+    // ── Auth ──────────────────────────────────────────────────────
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+    private int _institutionId;
 
-    [Inject] private TemplateBrowserService BrowserSvc { get; set; } = default!;
+    // ── Data ──────────────────────────────────────────────────────
+    private List<TemplateBrowseItem> _allTemplates = new();
+    private Dictionary<string, string> _complianceMap = new(StringComparer.OrdinalIgnoreCase);
+    private bool _isLoading = true;
 
-    private IEnumerable<TemplateBrowseItem> FilteredTemplates =>
-        allTemplates.Where(t =>
+    // ── Filter state ──────────────────────────────────────────────
+    private HashSet<string> _filterBodies = new(StringComparer.OrdinalIgnoreCase);
+    private HashSet<string> _filterFrequencies = new(StringComparer.OrdinalIgnoreCase);
+    private HashSet<string> _filterCategories = new(StringComparer.OrdinalIgnoreCase);
+    private bool _showFavoritesOnly;
+    private string _viewMode = "card";
+    private bool _sidebarCollapsed;
+    private HashSet<string> _expandedGroups = new() { "body", "freq", "type" };
+
+    // ── Search & autocomplete ──────────────────────────────────────
+    private string _searchQuery = "";
+    private bool _autocompleteOpen;
+    private List<TemplateBrowseItem> _autocompleteMatches = new();
+    private List<(string Label, string Value, string Field)> _suggestedFilters = new();
+    private List<string> _recentSearches = new();
+
+    // ── Personalization (localStorage) ────────────────────────────
+    private HashSet<string> _favorites = new(StringComparer.OrdinalIgnoreCase);
+    private List<string> _recentlyUsed = new();
+
+    // ── Drawer ────────────────────────────────────────────────────
+    private string? _drawerCode;
+
+    // ── Filter metadata ───────────────────────────────────────────
+    private List<string> _allBodies = new();
+    private static readonly (string, string)[] _frequencyOptions =
+    {
+        ("Monthly",   "Monthly"),
+        ("Quarterly", "Quarterly"),
+        ("SemiAnnual","Semi-Annual"),
+        ("Annual",    "Annual")
+    };
+    private static readonly (string, string)[] _categoryOptions =
+    {
+        ("FixedRow",   "Fixed Row"),
+        ("MultiRow",   "Multi Row"),
+        ("ItemCoded",  "Item Coded")
+    };
+
+    // ── Computed ──────────────────────────────────────────────────
+    private bool _hasActiveFilters =>
+        _filterBodies.Count > 0 || _filterFrequencies.Count > 0 ||
+        _filterCategories.Count > 0 || _showFavoritesOnly;
+
+    private IEnumerable<TemplateBrowseItem> FilteredTemplates
+    {
+        get
         {
-            if (!string.IsNullOrWhiteSpace(searchQuery))
-            {
-                var q = searchQuery.Trim();
-                if (!t.ReturnCode.Contains(q, StringComparison.OrdinalIgnoreCase) &&
-                    !t.TemplateName.Contains(q, StringComparison.OrdinalIgnoreCase))
-                    return false;
-            }
-            if (!string.IsNullOrEmpty(filterFrequency) &&
-                !t.Frequency.Equals(filterFrequency, StringComparison.OrdinalIgnoreCase))
-                return false;
-            if (!string.IsNullOrEmpty(filterCategory) &&
-                !t.StructuralCategory.Equals(filterCategory, StringComparison.OrdinalIgnoreCase))
-                return false;
-            return true;
-        });
+            var source = _allTemplates.AsEnumerable();
 
-    private void NavigateToTemplate(string returnCode) => Navigation.NavigateTo($"/templates/{returnCode}");
+            if (!string.IsNullOrWhiteSpace(_searchQuery))
+            {
+                var q = _searchQuery.Trim();
+                source = source.Where(t =>
+                    t.ReturnCode.Contains(q, StringComparison.OrdinalIgnoreCase) ||
+                    t.TemplateName.Contains(q, StringComparison.OrdinalIgnoreCase) ||
+                    t.RegulatoryBody.Contains(q, StringComparison.OrdinalIgnoreCase));
+            }
+            if (_filterBodies.Count > 0)
+                source = source.Where(t => _filterBodies.Contains(t.RegulatoryBody));
+            if (_filterFrequencies.Count > 0)
+                source = source.Where(t => _filterFrequencies.Contains(t.Frequency));
+            if (_filterCategories.Count > 0)
+                source = source.Where(t => _filterCategories.Contains(t.StructuralCategory));
+            if (_showFavoritesOnly)
+                source = source.Where(t => _favorites.Contains(t.ReturnCode));
+
+            return source;
+        }
+    }
+
+    private int FilteredCount => FilteredTemplates.Count();
+
+    private List<TemplateBrowseItem> _dueSoonItems =>
+        _allTemplates.Where(t =>
+        {
+            var status = GetComplianceStatus(t.ReturnCode);
+            return status is "Overdue" or "Pending";
+        }).Take(8).ToList();
+
+    private List<TemplateBrowseItem> _recentlyUsedItems =>
+        _recentlyUsed
+            .Select(code => _allTemplates.FirstOrDefault(t => t.ReturnCode.Equals(code, StringComparison.OrdinalIgnoreCase)))
+            .Where(t => t is not null)
+            .Cast<TemplateBrowseItem>()
+            .Take(8)
+            .ToList();
+
+    private List<TemplateBrowseItem> _favoriteItems =>
+        _favorites
+            .Select(code => _allTemplates.FirstOrDefault(t => t.ReturnCode.Equals(code, StringComparison.OrdinalIgnoreCase)))
+            .Where(t => t is not null)
+            .Cast<TemplateBrowseItem>()
+            .Take(8)
+            .ToList();
+
+    // ── Lifecycle ─────────────────────────────────────────────────
 
     protected override async Task OnInitializedAsync()
     {
+        var authState = await AuthStateTask;
+        var user = authState.User;
+        _institutionId = int.TryParse(
+            user.FindFirst("institution_id")?.Value, out var id) ? id : 0;
+
         try
         {
-            allTemplates = await BrowserSvc.GetAllTemplates();
+            _allTemplates = await BrowserSvc.GetAllTemplates();
+            _allBodies = _allTemplates
+                .Select(t => t.RegulatoryBody)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(b => b)
+                .ToList();
         }
-        catch
+        catch { }
+
+        // Load compliance status in parallel with localStorage reads
+        if (_institutionId > 0)
         {
-            // Template loading failed — empty grid will show
+            try
+            {
+                _complianceMap = await BrowserSvc.GetComplianceStatuses(_institutionId);
+            }
+            catch { }
         }
-        finally
+
+        _isLoading = false;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
         {
-            isLoading = false;
+            try
+            {
+                var favArr = await JS.InvokeAsync<string[]>("portalTmpl.getFavorites");
+                var recentArr = await JS.InvokeAsync<string[]>("portalTmpl.getRecentlyUsed");
+                var searchArr = await JS.InvokeAsync<string[]>("portalTmpl.getRecentSearches");
+
+                _favorites = new HashSet<string>(favArr ?? Array.Empty<string>(), StringComparer.OrdinalIgnoreCase);
+                _recentlyUsed = new List<string>(recentArr ?? Array.Empty<string>());
+                _recentSearches = new List<string>(searchArr ?? Array.Empty<string>());
+                StateHasChanged();
+            }
+            catch { }
         }
     }
 
-    // ── Display Helpers ──────────────────────────────────────────
+    public ValueTask DisposeAsync() => ValueTask.CompletedTask;
 
-    private static string GetFrequencyBadgeClass(string freq)
+    // ── Search & Autocomplete ────────────────────────────────────
+
+    private void OnSearchInput(ChangeEventArgs e)
     {
-        if (freq.Equals("Monthly", StringComparison.OrdinalIgnoreCase)) return "portal-badge-info";
-        if (freq.Equals("Quarterly", StringComparison.OrdinalIgnoreCase)) return "portal-badge-warning";
-        if (freq.Equals("SemiAnnual", StringComparison.OrdinalIgnoreCase)) return "portal-badge-accent";
-        return "portal-badge-neutral";
+        _searchQuery = e.Value?.ToString() ?? "";
+        _autocompleteOpen = true;
+        UpdateAutocomplete();
     }
 
-    private static string GetCategoryAccentClass(string cat)
+    private void OnSearchFocus()
     {
-        if (cat.Equals("FixedRow", StringComparison.OrdinalIgnoreCase)) return "portal-tmpl-accent-fixed";
-        if (cat.Equals("MultiRow", StringComparison.OrdinalIgnoreCase)) return "portal-tmpl-accent-multi";
-        if (cat.Equals("ItemCoded", StringComparison.OrdinalIgnoreCase)) return "portal-tmpl-accent-item";
-        return "portal-tmpl-accent-fixed";
+        _autocompleteOpen = true;
+        UpdateAutocomplete();
     }
 
-    private static string GetCategoryLabel(string cat)
+    private async void OnSearchBlur()
     {
-        if (cat == "FixedRow") return "Fixed Row";
-        if (cat == "MultiRow") return "Multi Row";
-        if (cat == "ItemCoded") return "Item Coded";
-        return cat;
+        // Delay closing so clicks on autocomplete items register
+        await Task.Delay(180);
+        _autocompleteOpen = false;
+        StateHasChanged();
     }
 
-    private static string FormatFrequency(string freq)
+    private void UpdateAutocomplete()
     {
-        if (freq == "SemiAnnual") return "Semi-Annual";
-        return freq;
+        var q = _searchQuery.Trim();
+
+        _autocompleteMatches = string.IsNullOrEmpty(q)
+            ? new List<TemplateBrowseItem>()
+            : _allTemplates
+                .Where(t =>
+                    t.ReturnCode.Contains(q, StringComparison.OrdinalIgnoreCase) ||
+                    t.TemplateName.Contains(q, StringComparison.OrdinalIgnoreCase))
+                .Take(6)
+                .ToList();
+
+        _suggestedFilters = new();
+        if (!string.IsNullOrEmpty(q))
+        {
+            if ("monthly".Contains(q, StringComparison.OrdinalIgnoreCase))
+                _suggestedFilters.Add(("Frequency: Monthly", "Monthly", "freq"));
+            if ("quarterly".Contains(q, StringComparison.OrdinalIgnoreCase))
+                _suggestedFilters.Add(("Frequency: Quarterly", "Quarterly", "freq"));
+            if ("semi-annual".Contains(q, StringComparison.OrdinalIgnoreCase))
+                _suggestedFilters.Add(("Frequency: Semi-Annual", "SemiAnnual", "freq"));
+            if ("cbn".Contains(q, StringComparison.OrdinalIgnoreCase))
+                _suggestedFilters.Add(("Regulatory Body: CBN", "CBN", "body"));
+            if ("sec".Contains(q, StringComparison.OrdinalIgnoreCase))
+                _suggestedFilters.Add(("Regulatory Body: SEC", "SEC", "body"));
+            if ("naicom".Contains(q, StringComparison.OrdinalIgnoreCase))
+                _suggestedFilters.Add(("Regulatory Body: NAICOM", "NAICOM", "body"));
+        }
     }
+
+    private void CloseAutocomplete() => _autocompleteOpen = false;
+
+    private async Task ApplySearch(string query)
+    {
+        _searchQuery = query;
+        _autocompleteOpen = false;
+        UpdateAutocomplete();
+        try { await JS.InvokeVoidAsync("portalTmpl.addRecentSearch", query); } catch { }
+    }
+
+    private void ApplySuggestedFilter((string Label, string Value, string Field) sf)
+    {
+        _searchQuery = "";
+        _autocompleteOpen = false;
+        if (sf.Field == "freq") _filterFrequencies.Add(sf.Value);
+        else if (sf.Field == "body") _filterBodies.Add(sf.Value);
+        else if (sf.Field == "cat") _filterCategories.Add(sf.Value);
+    }
+
+    private void ClearSearch()
+    {
+        _searchQuery = "";
+        _autocompleteOpen = false;
+    }
+
+    // ── Filters ───────────────────────────────────────────────────
+
+    private void ToggleBodyFilter(string body)
+    {
+        if (!_filterBodies.Remove(body)) _filterBodies.Add(body);
+    }
+
+    private void ToggleFrequencyFilter(string freq)
+    {
+        if (!_filterFrequencies.Remove(freq)) _filterFrequencies.Add(freq);
+    }
+
+    private void ToggleCategoryFilter(string cat)
+    {
+        if (!_filterCategories.Remove(cat)) _filterCategories.Add(cat);
+    }
+
+    private void ClearAllFilters()
+    {
+        _filterBodies.Clear();
+        _filterFrequencies.Clear();
+        _filterCategories.Clear();
+        _showFavoritesOnly = false;
+        _searchQuery = "";
+    }
+
+    private void ToggleSidebarGroup(string key)
+    {
+        if (!_expandedGroups.Remove(key)) _expandedGroups.Add(key);
+    }
+
+    private void ToggleSidebarCollapsed() => _sidebarCollapsed = !_sidebarCollapsed;
+
+    // ── Favorites ─────────────────────────────────────────────────
+
+    private async Task ToggleFavorite(string code)
+    {
+        if (_favorites.Contains(code)) _favorites.Remove(code);
+        else _favorites.Add(code);
+        try { await JS.InvokeAsync<string[]>("portalTmpl.toggleFavorite", code); } catch { }
+    }
+
+    // ── Drawer ────────────────────────────────────────────────────
+
+    private async Task OpenDrawer(string code)
+    {
+        _drawerCode = code;
+        try { await JS.InvokeVoidAsync("portalTmpl.markRecentlyUsed", code); } catch { }
+        if (!_recentlyUsed.Contains(code))
+        {
+            _recentlyUsed.Insert(0, code);
+            if (_recentlyUsed.Count > 10) _recentlyUsed.RemoveAt(10);
+        }
+    }
+
+    private void CloseDrawer() => _drawerCode = null;
+
+    private void StartSubmission(string code)
+    {
+        Navigation.NavigateTo($"/submissions/new?returnCode={Uri.EscapeDataString(code)}");
+    }
+
+    // ── Helpers ───────────────────────────────────────────────────
+
+    private string GetComplianceStatus(string code) =>
+        _complianceMap.TryGetValue(code, out var s) ? s : "";
+
+    private static string GetComplianceBadgeClass(string status) => status switch
+    {
+        "Submitted" => "portal-badge-success",
+        "Overdue"   => "portal-badge-danger",
+        "Pending"   => "portal-badge-warning",
+        _           => "portal-badge-neutral"
+    };
+
+    private static string GetFrequencyBadgeClass(string freq) => freq switch
+    {
+        "Monthly"   => "portal-badge-info",
+        "Quarterly" => "portal-badge-warning",
+        "SemiAnnual"=> "portal-badge-accent",
+        _           => "portal-badge-neutral"
+    };
+
+    private static string GetCategoryAccentClass(string cat) => cat switch
+    {
+        "FixedRow"   => "portal-tmpl-accent-fixed",
+        "MultiRow"   => "portal-tmpl-accent-multi",
+        "ItemCoded"  => "portal-tmpl-accent-item",
+        _            => "portal-tmpl-accent-fixed"
+    };
+
+    private static string GetCategoryLabel(string cat) => cat switch
+    {
+        "FixedRow"   => "Fixed Row",
+        "MultiRow"   => "Multi Row",
+        "ItemCoded"  => "Item Coded",
+        _            => cat
+    };
+
+    private static string FormatFrequency(string freq) =>
+        freq == "SemiAnnual" ? "Semi-Annual" : freq;
 }
