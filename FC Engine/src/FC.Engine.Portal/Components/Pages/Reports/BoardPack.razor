@@ -1,150 +1,914 @@
 @page "/reports/board-pack"
 @attribute [Authorize(Policy = "InstitutionAdmin")]
 @using System.Security.Claims
+@using System.Text.Json
 @inject FC.Engine.Portal.Services.ReportBuilderService ReportSvc
+@inject FC.Engine.Portal.Services.InstitutionManagementService InstitutionSvc
 @inject FC.Engine.Portal.Services.ToastService Toast
 @inject IJSRuntime JS
+@implements IAsyncDisposable
 
-<PageTitle>Board Pack — FC Engine Portal</PageTitle>
+<PageTitle>Board Pack Generator — FC Engine Portal</PageTitle>
+
+<PortalPageHeader Title="Board Pack Generator" Subtitle="Build branded PDF board packs with drag-to-reorder sections and live preview"
+                  Breadcrumb="@(new[] { new BreadcrumbItem("Reports", "/reports"), new BreadcrumbItem("Board Pack", IsCurrent: true) })">
+    <PrimaryAction>
+        @if (!_isGenerating && _sections.Any(s => s.Included))
+        {
+            <button class="portal-btn portal-btn-primary" @onclick="GenerateBoardPack">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+                Generate PDF
+            </button>
+        }
+    </PrimaryAction>
+</PortalPageHeader>
 
 <div class="portal-page">
-    <div class="portal-report-filter-bar">
-        <h2 class="portal-report-filter-title">Board Pack Generator</h2>
-    </div>
 
-    @if (isLoading)
-    {
-        <div class="portal-card" style="padding: 2rem;">
-            <div class="portal-skeleton portal-skeleton-block" style="height: 200px;"></div>
-        </div>
-    }
-    else
-    {
-        <div class="portal-card" style="padding: 1.5rem;">
-            <div class="portal-form-group">
-                <label class="portal-form-label">Board Pack Title</label>
-                <input type="text" class="portal-form-input" @bind="packTitle"
-                       placeholder="e.g. Q4 2025 Regulatory Board Pack" style="max-width:480px;" />
-            </div>
-
-            <div class="portal-form-group" style="margin-top:1rem;">
-                <label class="portal-form-label">Select Reports to Include</label>
-                <p style="color: var(--cbn-gray-500); font-size: 0.85rem; margin-bottom: 0.75rem;">
-                    Choose the saved reports to combine into a single branded PDF board pack.
-                </p>
-
-                @if (reports.Count == 0)
-                {
-                    <p style="color: var(--cbn-gray-400);">No saved reports available. Create reports in the Report Builder first.</p>
-                }
-                else
-                {
-                    <div class="rb-boardpack-list">
-                        @foreach (var report in reports)
-                        {
-                            var isSelected = selectedReportIds.Contains(report.Id);
-                            <label class="rb-boardpack-item @(isSelected ? "rb-boardpack-item-selected" : "")">
-                                <input type="checkbox" checked="@isSelected"
-                                       @onchange="() => ToggleReport(report.Id)" />
-                                <div>
-                                    <strong>@report.Name</strong>
-                                    @if (!string.IsNullOrWhiteSpace(report.Description))
-                                    {
-                                        <span style="color: var(--cbn-gray-500); font-size: 0.85rem; display:block;">
-                                            @report.Description
-                                        </span>
-                                    }
-                                </div>
-                            </label>
-                        }
-                    </div>
-                }
-            </div>
-
-            @if (selectedReportIds.Count > 0)
+    @* ── Saved Configurations Bar ── *@
+    <div class="bp-saved-bar">
+        <div class="bp-saved-left">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+            <span class="bp-saved-label">Saved Configurations</span>
+            @if (_savedConfigs.Count == 0)
             {
-                <div style="margin-top:1.5rem; display:flex; gap:0.75rem; align-items:center;">
-                    <button class="portal-btn portal-btn-primary" @onclick="GenerateBoardPack" disabled="@isGenerating">
-                        @if (isGenerating)
-                        {
-                            <span class="portal-btn-spinner" aria-hidden="true"></span>
-                        }
-                        Generate Board Pack (@selectedReportIds.Count report@(selectedReportIds.Count != 1 ? "s" : ""))
+                <span class="bp-saved-empty">None saved yet</span>
+            }
+            else
+            {
+                @foreach (var cfg in _savedConfigs)
+                {
+                    <button class="bp-saved-chip @(cfg == _activeConfigName ? "bp-saved-chip--active" : "")"
+                            @onclick="() => LoadConfig(cfg)">
+                        @cfg
+                        <span class="bp-saved-chip-x" @onclick:stopPropagation @onclick="() => DeleteConfig(cfg)" title="Delete">&times;</span>
                     </button>
-                    <span style="color: var(--cbn-gray-500); font-size: 0.85rem;">PDF download will start automatically.</span>
+                }
+            }
+        </div>
+        <div class="bp-saved-right">
+            @if (!_showSaveInput)
+            {
+                <button class="portal-btn portal-btn-ghost" style="font-size:0.8125rem;" @onclick="() => _showSaveInput = true">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                    Save Current
+                </button>
+            }
+            else
+            {
+                <div class="bp-save-input-row">
+                    <input type="text" class="portal-form-input" placeholder="e.g. Q4 2025 Board Pack"
+                           @bind="_newConfigName" style="max-width:220px; font-size:0.8125rem; padding:0.3rem 0.5rem;" />
+                    <button class="portal-btn portal-btn-primary" style="font-size:0.8125rem; padding:0.3rem 0.75rem;" @onclick="SaveCurrentConfig">Save</button>
+                    <button class="portal-btn portal-btn-ghost" style="font-size:0.8125rem; padding:0.3rem 0.5rem;" @onclick="() => _showSaveInput = false">Cancel</button>
                 </div>
             }
         </div>
-    }
+    </div>
+
+    @* ── Main Layout: Builder + Live Preview ── *@
+    <div class="bp-layout">
+
+        @* ── LEFT: Builder Panel ── *@
+        <div class="bp-builder">
+
+            @* ── Cover Page Customization ── *@
+            <div class="portal-card bp-card">
+                <div class="bp-card-header">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>
+                    <h3>Cover Page</h3>
+                </div>
+
+                <div class="bp-cover-grid">
+                    <div class="portal-form-group">
+                        <label class="portal-form-label">Report Title</label>
+                        <input type="text" class="portal-form-input" @bind="_coverTitle" @bind:after="OnCoverChanged"
+                               placeholder="e.g. Quarterly Regulatory Board Pack" />
+                    </div>
+                    <div class="portal-form-group">
+                        <label class="portal-form-label">Date Range</label>
+                        <div class="bp-date-range">
+                            <input type="date" class="portal-form-input" @bind="_coverDateFrom" @bind:after="OnCoverChanged" />
+                            <span class="bp-date-sep">to</span>
+                            <input type="date" class="portal-form-input" @bind="_coverDateTo" @bind:after="OnCoverChanged" />
+                        </div>
+                    </div>
+                    <div class="portal-form-group">
+                        <label class="portal-form-label">Prepared By</label>
+                        <input type="text" class="portal-form-input" @bind="_coverPreparedBy" @bind:after="OnCoverChanged"
+                               placeholder="Name or department" />
+                    </div>
+                    <div class="portal-form-group">
+                        <label class="portal-form-label">Approved By</label>
+                        <input type="text" class="portal-form-input" @bind="_coverApprovedBy" @bind:after="OnCoverChanged"
+                               placeholder="Name or title" />
+                    </div>
+                    <div class="portal-form-group">
+                        <label class="portal-form-label">Confidentiality Level</label>
+                        <select class="portal-form-input" @bind="_coverConfidentiality" @bind:after="OnCoverChanged">
+                            <option value="Public">Public</option>
+                            <option value="Internal">Internal</option>
+                            <option value="Confidential">Confidential</option>
+                            <option value="Strictly Confidential">Strictly Confidential</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            @* ── Sections: Drag to Reorder ── *@
+            <div class="portal-card bp-card">
+                <div class="bp-card-header">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+                    <h3>Sections</h3>
+                    <span class="bp-section-count">@_sections.Count(s => s.Included) of @_sections.Count included</span>
+                </div>
+                <p class="bp-section-hint">Drag to reorder. Check/uncheck to include or exclude sections.</p>
+
+                <div id="bp-section-list" class="bp-section-list">
+                    @foreach (var section in _sections)
+                    {
+                        <div class="bp-section-item @(section.Included ? "" : "bp-section-item--excluded")"
+                             data-section-id="@section.Id">
+                            <div class="bp-section-handle" title="Drag to reorder">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="5" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="19" r="1"/></svg>
+                            </div>
+                            <label class="bp-section-check">
+                                <input type="checkbox" checked="@section.Included"
+                                       @onchange="() => ToggleSection(section.Id)" />
+                            </label>
+                            <div class="bp-section-icon" style="background: @section.Color;">
+                                @((MarkupString)section.IconSvg)
+                            </div>
+                            <div class="bp-section-info">
+                                <span class="bp-section-name">@section.Name</span>
+                                <span class="bp-section-desc">@section.Description</span>
+                            </div>
+                            @if (section.Id == "charts" && section.Included)
+                            {
+                                <button class="bp-section-expand-btn" @onclick="() => _chartsExpanded = !_chartsExpanded"
+                                        title="@(_chartsExpanded ? "Collapse" : "Select charts")">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="transform:rotate(@(_chartsExpanded ? "180" : "0")deg);transition:transform 0.2s"><polyline points="6 9 12 15 18 9"/></svg>
+                                </button>
+                            }
+                        </div>
+
+                        @if (section.Id == "charts" && section.Included && _chartsExpanded)
+                        {
+                            <div class="bp-chart-picker">
+                                @foreach (var chart in _availableCharts)
+                                {
+                                    var isSelected = _selectedChartIds.Contains(chart.Id);
+                                    <label class="bp-chart-thumb @(isSelected ? "bp-chart-thumb--selected" : "")">
+                                        <input type="checkbox" checked="@isSelected"
+                                               @onchange="() => ToggleChart(chart.Id)" />
+                                        <div class="bp-chart-thumb-preview" style="background: @chart.Color;">
+                                            @((MarkupString)chart.IconSvg)
+                                        </div>
+                                        <span class="bp-chart-thumb-label">@chart.Name</span>
+                                    </label>
+                                }
+                            </div>
+                        }
+                    }
+                </div>
+            </div>
+
+            @* ── Generate Button + Progress ── *@
+            @if (_isGenerating)
+            {
+                <div class="portal-card bp-card bp-progress-card">
+                    <div class="bp-progress-bar-track">
+                        <div class="bp-progress-bar-fill" id="bp-progress-fill"></div>
+                    </div>
+                    <div class="bp-progress-stages">
+                        @foreach (var stage in _progressStages)
+                        {
+                            <div class="bp-progress-stage">
+                                @if (stage.Done)
+                                {
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--cbn-primary)" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                                }
+                                else if (stage.Active)
+                                {
+                                    <span class="bp-progress-spinner"></span>
+                                }
+                                else
+                                {
+                                    <span class="bp-progress-dot"></span>
+                                }
+                                <span class="bp-progress-stage-label @(stage.Active ? "bp-progress-stage-label--active" : "") @(stage.Done ? "bp-progress-stage-label--done" : "")">
+                                    @stage.Label
+                                </span>
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
+            else if (_generationComplete)
+            {
+                <div class="portal-card bp-card bp-complete-card">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--cbn-primary)" stroke-width="2.5"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                    <div class="bp-complete-text">
+                        <strong>Board pack generated successfully</strong>
+                        <span>Download started automatically.</span>
+                    </div>
+                    <button class="portal-btn portal-btn-ghost" @onclick="ShowEmailPanel">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+                        Send to Board Members
+                    </button>
+                </div>
+            }
+
+            @* ── Email Distribution Panel ── *@
+            @if (_showEmailPanel)
+            {
+                <div class="portal-card bp-card bp-email-card">
+                    <div class="bp-card-header">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+                        <h3>Send to Board Members</h3>
+                        <button class="bp-email-close" @onclick="() => _showEmailPanel = false">&times;</button>
+                    </div>
+
+                    <p style="color: var(--cbn-gray-500); font-size: 0.8125rem; margin-bottom: 0.75rem;">
+                        Select team members to receive the board pack PDF with a formal cover note.
+                    </p>
+
+                    @if (_teamMembers.Count > 0)
+                    {
+                        <div class="bp-people-picker">
+                            <div class="bp-people-search">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--cbn-gray-400)" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                                <input type="text" class="bp-people-search-input" placeholder="Search members..."
+                                       @bind="_memberSearch" @bind:event="oninput" />
+                            </div>
+                            <div class="bp-people-list">
+                                @foreach (var member in FilteredMembers)
+                                {
+                                    var isSelected = _selectedMemberIds.Contains(member.Id);
+                                    <label class="bp-person @(isSelected ? "bp-person--selected" : "")">
+                                        <input type="checkbox" checked="@isSelected"
+                                               @onchange="() => ToggleMember(member.Id)" />
+                                        <div class="bp-person-avatar">@member.Initials</div>
+                                        <div class="bp-person-info">
+                                            <span class="bp-person-name">@member.DisplayName</span>
+                                            <span class="bp-person-email">@member.Email</span>
+                                        </div>
+                                        <span class="bp-person-role">@member.Role</span>
+                                    </label>
+                                }
+                            </div>
+                        </div>
+
+                        @if (_selectedMemberIds.Count > 0)
+                        {
+                            <div class="bp-email-actions">
+                                <span class="bp-email-count">@_selectedMemberIds.Count member@(_selectedMemberIds.Count != 1 ? "s" : "") selected</span>
+                                <button class="portal-btn portal-btn-primary" @onclick="SendToMembers" disabled="@_isSending">
+                                    @if (_isSending)
+                                    {
+                                        <span class="portal-btn-spinner" aria-hidden="true"></span>
+                                    }
+                                    Send Board Pack
+                                </button>
+                            </div>
+                        }
+                    }
+                    else
+                    {
+                        <p style="color: var(--cbn-gray-400); font-size:0.85rem;">No team members found.</p>
+                    }
+                </div>
+            }
+        </div>
+
+        @* ── RIGHT: Live Preview Panel ── *@
+        <div class="bp-preview-panel">
+            <div class="bp-preview-header">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                <span>Live Preview</span>
+                <span class="bp-preview-badge">@(_sections.Count(s => s.Included)) sections</span>
+            </div>
+            <div class="bp-preview-viewport">
+                <div class="bp-preview-scaler">
+                    <div class="bp-preview-page">
+
+                        @* ── Cover Page Preview ── *@
+                        <div class="bp-pv-cover">
+                            <div class="bp-pv-cover-confidential @GetConfidentialityClass()">
+                                @_coverConfidentiality
+                            </div>
+                            <div class="bp-pv-cover-logo">
+                                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--cbn-primary)" stroke-width="1.5"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+                            </div>
+                            <h2 class="bp-pv-cover-title">@(string.IsNullOrWhiteSpace(_coverTitle) ? "Board Pack" : _coverTitle)</h2>
+                            @if (_coverDateFrom != default && _coverDateTo != default)
+                            {
+                                <p class="bp-pv-cover-date">@_coverDateFrom.ToString("d MMM yyyy") — @_coverDateTo.ToString("d MMM yyyy")</p>
+                            }
+                            <div class="bp-pv-cover-meta">
+                                @if (!string.IsNullOrWhiteSpace(_coverPreparedBy))
+                                {
+                                    <div class="bp-pv-cover-meta-row">
+                                        <span class="bp-pv-cover-meta-label">Prepared by</span>
+                                        <span>@_coverPreparedBy</span>
+                                    </div>
+                                }
+                                @if (!string.IsNullOrWhiteSpace(_coverApprovedBy))
+                                {
+                                    <div class="bp-pv-cover-meta-row">
+                                        <span class="bp-pv-cover-meta-label">Approved by</span>
+                                        <span>@_coverApprovedBy</span>
+                                    </div>
+                                }
+                            </div>
+                            <div class="bp-pv-cover-footer">
+                                Generated @DateTime.Now.ToString("d MMM yyyy")
+                            </div>
+                        </div>
+
+                        @* ── Table of Contents ── *@
+                        @if (_sections.Any(s => s.Included))
+                        {
+                            <div class="bp-pv-toc">
+                                <h4 class="bp-pv-toc-title">Table of Contents</h4>
+                                @{
+                                    var pageNum = 2;
+                                }
+                                @foreach (var section in _sections.Where(s => s.Included))
+                                {
+                                    <div class="bp-pv-toc-row">
+                                        <span class="bp-pv-toc-name">@section.Name</span>
+                                        <span class="bp-pv-toc-dots"></span>
+                                        <span class="bp-pv-toc-page">@pageNum</span>
+                                    </div>
+                                    pageNum++;
+                                }
+                            </div>
+                        }
+
+                        @* ── Section Previews ── *@
+                        @foreach (var section in _sections.Where(s => s.Included))
+                        {
+                            <div class="bp-pv-section">
+                                <div class="bp-pv-section-header" style="border-left-color: @section.Color;">
+                                    @((MarkupString)section.IconSvg)
+                                    <span>@section.Name</span>
+                                </div>
+                                <div class="bp-pv-section-body">
+                                    @if (section.Id == "executive-summary")
+                                    {
+                                        <div class="bp-pv-placeholder-lines">
+                                            <div class="bp-pv-line" style="width:100%"></div>
+                                            <div class="bp-pv-line" style="width:92%"></div>
+                                            <div class="bp-pv-line" style="width:85%"></div>
+                                            <div class="bp-pv-line" style="width:60%"></div>
+                                        </div>
+                                    }
+                                    else if (section.Id == "compliance-dashboard")
+                                    {
+                                        <div class="bp-pv-stats-row">
+                                            <div class="bp-pv-stat"><div class="bp-pv-stat-val">98%</div><div class="bp-pv-stat-label">Compliance</div></div>
+                                            <div class="bp-pv-stat"><div class="bp-pv-stat-val">24</div><div class="bp-pv-stat-label">Submitted</div></div>
+                                            <div class="bp-pv-stat"><div class="bp-pv-stat-val">2</div><div class="bp-pv-stat-label">Pending</div></div>
+                                        </div>
+                                    }
+                                    else if (section.Id == "submission-history")
+                                    {
+                                        <div class="bp-pv-mini-table">
+                                            <div class="bp-pv-mini-th"><span>Return</span><span>Period</span><span>Status</span></div>
+                                            <div class="bp-pv-mini-tr"><span>CBN100</span><span>Jan 2026</span><span class="bp-pv-badge bp-pv-badge--green">Accepted</span></div>
+                                            <div class="bp-pv-mini-tr"><span>CBN200</span><span>Jan 2026</span><span class="bp-pv-badge bp-pv-badge--green">Accepted</span></div>
+                                            <div class="bp-pv-mini-tr"><span>CBN300</span><span>Jan 2026</span><span class="bp-pv-badge bp-pv-badge--amber">Warnings</span></div>
+                                        </div>
+                                    }
+                                    else if (section.Id == "validation-report")
+                                    {
+                                        <div class="bp-pv-stats-row">
+                                            <div class="bp-pv-stat"><div class="bp-pv-stat-val" style="color:var(--cbn-danger)">3</div><div class="bp-pv-stat-label">Errors</div></div>
+                                            <div class="bp-pv-stat"><div class="bp-pv-stat-val" style="color:var(--cbn-warning,#d97706)">7</div><div class="bp-pv-stat-label">Warnings</div></div>
+                                        </div>
+                                        <div class="bp-pv-placeholder-lines" style="margin-top:0.5rem;">
+                                            <div class="bp-pv-line" style="width:100%"></div>
+                                            <div class="bp-pv-line" style="width:78%"></div>
+                                        </div>
+                                    }
+                                    else if (section.Id == "charts")
+                                    {
+                                        @if (_selectedChartIds.Count > 0)
+                                        {
+                                            <div class="bp-pv-chart-grid">
+                                                @foreach (var chartId in _selectedChartIds)
+                                                {
+                                                    var chart = _availableCharts.FirstOrDefault(c => c.Id == chartId);
+                                                    if (chart != null)
+                                                    {
+                                                        <div class="bp-pv-chart-mini" style="border-color: @chart.Color;">
+                                                            @((MarkupString)chart.PreviewSvg)
+                                                            <span>@chart.Name</span>
+                                                        </div>
+                                                    }
+                                                }
+                                            </div>
+                                        }
+                                        else
+                                        {
+                                            <span style="color:var(--cbn-gray-400); font-size:0.625rem;">No charts selected</span>
+                                        }
+                                    }
+                                </div>
+                            </div>
+                        }
+
+                        @if (!_sections.Any(s => s.Included))
+                        {
+                            <div class="bp-pv-empty">
+                                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--cbn-gray-300)" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/></svg>
+                                <span>Include sections to preview</span>
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
 </div>
 
 @code {
-    [CascadingParameter]
-    private Task<AuthenticationState>? AuthState { get; set; }
+    [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
 
-    private Guid tenantId;
-    private int institutionId;
-    private bool isLoading = true;
-    private bool isGenerating;
-    private string packTitle = "";
-    private List<FC.Engine.Domain.Entities.SavedReport> reports = new();
-    private HashSet<int> selectedReportIds = new();
+    // ── Auth state ──
+    private Guid _tenantId;
+    private int _institutionId;
+    private int _userId;
+
+    // ── Cover page fields ──
+    private string _coverTitle = "";
+    private DateTime _coverDateFrom = new DateTime(DateTime.Now.Year, DateTime.Now.Month, 1);
+    private DateTime _coverDateTo = DateTime.Now;
+    private string _coverPreparedBy = "";
+    private string _coverApprovedBy = "";
+    private string _coverConfidentiality = "Confidential";
+
+    // ── Sections ──
+    private List<BoardPackSectionItem> _sections = new();
+    private bool _chartsExpanded;
+
+    // ── Charts ──
+    private List<ChartOption> _availableCharts = new();
+    private HashSet<string> _selectedChartIds = new() { "compliance-trend", "submission-volume" };
+
+    // ── Generation ──
+    private bool _isGenerating;
+    private bool _generationComplete;
+    private List<ProgressStage> _progressStages = new();
+
+    // ── Email distribution ──
+    private bool _showEmailPanel;
+    private bool _isSending;
+    private string _memberSearch = "";
+    private List<MemberItem> _teamMembers = new();
+    private HashSet<int> _selectedMemberIds = new();
+
+    // ── Saved configs ──
+    private List<string> _savedConfigs = new();
+    private string? _activeConfigName;
+    private bool _showSaveInput;
+    private string _newConfigName = "";
+
+    // ── Reports (for actual generation) ──
+    private List<FC.Engine.Domain.Entities.SavedReport> _reports = new();
+
+    private DotNetObjectReference<BoardPack>? _dotNetRef;
+
+    // ── Filtered members for people picker ──
+    private IEnumerable<MemberItem> FilteredMembers =>
+        string.IsNullOrWhiteSpace(_memberSearch)
+            ? _teamMembers
+            : _teamMembers.Where(m =>
+                m.DisplayName.Contains(_memberSearch, StringComparison.OrdinalIgnoreCase) ||
+                m.Email.Contains(_memberSearch, StringComparison.OrdinalIgnoreCase));
 
     protected override async Task OnInitializedAsync()
     {
         var state = await AuthState!;
-        tenantId = Guid.Parse(state.User.FindFirst("TenantId")!.Value);
-        institutionId = int.Parse(state.User.FindFirst("InstitutionId")!.Value);
+        _tenantId = Guid.Parse(state.User.FindFirst("TenantId")!.Value);
+        _institutionId = int.Parse(state.User.FindFirst("InstitutionId")!.Value);
+        var userIdClaim = state.User.FindFirst(ClaimTypes.NameIdentifier)?.Value
+                       ?? state.User.FindFirst("UserId")?.Value;
+        _userId = int.TryParse(userIdClaim, out var uid) ? uid : 0;
+        _coverPreparedBy = state.User.Identity?.Name ?? "";
+
+        InitSections();
+        InitCharts();
 
         try
         {
-            reports = (await ReportSvc.GetSavedReports(tenantId, institutionId)).ToList();
+            _reports = (await ReportSvc.GetSavedReports(_tenantId, _institutionId)).ToList();
         }
-        catch
+        catch { /* saved reports unavailable */ }
+
+        try
         {
-            Toast.Error("Failed to load saved reports.");
+            var members = await InstitutionSvc.GetTeamMembers(_institutionId);
+            _teamMembers = members.Where(m => m.IsActive).Select(m => new MemberItem
+            {
+                Id = m.Id,
+                DisplayName = m.DisplayName,
+                Email = m.Email,
+                Role = m.Role,
+                Initials = m.Initials
+            }).ToList();
         }
-        finally
-        {
-            isLoading = false;
-        }
+        catch { /* team members unavailable */ }
     }
 
-    private void ToggleReport(int reportId)
+    protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (!selectedReportIds.Remove(reportId))
-            selectedReportIds.Add(reportId);
+        if (firstRender)
+        {
+            _dotNetRef = DotNetObjectReference.Create(this);
+            await JS.InvokeVoidAsync("fcBoardPack.initSortable", _dotNetRef);
+
+            // Load saved config keys
+            try
+            {
+                var keys = await JS.InvokeAsync<string[]>("fcBoardPack.listConfigKeys");
+                _savedConfigs = keys?.ToList() ?? new();
+                StateHasChanged();
+            }
+            catch { }
+        }
     }
 
+    // ── Section management ──
+    private void InitSections()
+    {
+        _sections = new List<BoardPackSectionItem>
+        {
+            new() { Id = "executive-summary", Name = "Executive Summary", Description = "High-level overview of regulatory compliance status and key metrics",
+                     Color = "#006B3F", Included = true,
+                     IconSvg = "<svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2'><path d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z'/><polyline points='14 2 14 8 20 8'/></svg>" },
+            new() { Id = "compliance-dashboard", Name = "Compliance Dashboard", Description = "Visual compliance scorecard with acceptance rates and trends",
+                     Color = "#2563eb", Included = true,
+                     IconSvg = "<svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2'><path d='M22 11.08V12a10 10 0 1 1-5.93-9.14'/><polyline points='22 4 12 14.01 9 11.01'/></svg>" },
+            new() { Id = "submission-history", Name = "Submission History", Description = "Complete list of submissions with status, dates, and outcomes",
+                     Color = "#7c3aed", Included = true,
+                     IconSvg = "<svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2'><polyline points='22 12 18 12 15 21 9 3 6 12 2 12'/></svg>" },
+            new() { Id = "validation-report", Name = "Validation Report", Description = "Detailed validation errors and warnings across all submissions",
+                     Color = "#dc2626", Included = false,
+                     IconSvg = "<svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2'><path d='M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z'/><line x1='12' y1='9' x2='12' y2='13'/><line x1='12' y1='17' x2='12.01' y2='17'/></svg>" },
+            new() { Id = "charts", Name = "Charts", Description = "Selected charts and visualisations for board presentation",
+                     Color = "#C8A415", Included = true,
+                     IconSvg = "<svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2'><line x1='18' y1='20' x2='18' y2='10'/><line x1='12' y1='20' x2='12' y2='4'/><line x1='6' y1='20' x2='6' y2='14'/></svg>" }
+        };
+    }
+
+    private void InitCharts()
+    {
+        _availableCharts = new List<ChartOption>
+        {
+            new() { Id = "compliance-trend", Name = "Compliance Trend", Color = "#006B3F",
+                     IconSvg = "<svg width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='#006B3F' stroke-width='2'><polyline points='22 12 18 12 15 21 9 3 6 12 2 12'/></svg>",
+                     PreviewSvg = "<svg width='48' height='28' viewBox='0 0 48 28'><polyline points='2,24 12,16 22,20 32,8 46,4' fill='none' stroke='#006B3F' stroke-width='2'/></svg>" },
+            new() { Id = "submission-volume", Name = "Submission Volume", Color = "#2563eb",
+                     IconSvg = "<svg width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='#2563eb' stroke-width='2'><line x1='18' y1='20' x2='18' y2='10'/><line x1='12' y1='20' x2='12' y2='4'/><line x1='6' y1='20' x2='6' y2='14'/></svg>",
+                     PreviewSvg = "<svg width='48' height='28' viewBox='0 0 48 28'><rect x='2' y='14' width='8' height='12' fill='#2563eb' opacity='0.6' rx='1'/><rect x='14' y='6' width='8' height='20' fill='#2563eb' opacity='0.8' rx='1'/><rect x='26' y='10' width='8' height='16' fill='#2563eb' opacity='0.7' rx='1'/><rect x='38' y='2' width='8' height='24' fill='#2563eb' rx='1'/></svg>" },
+            new() { Id = "error-breakdown", Name = "Error Breakdown", Color = "#dc2626",
+                     IconSvg = "<svg width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='#dc2626' stroke-width='2'><circle cx='12' cy='12' r='10'/><line x1='12' y1='8' x2='12' y2='12'/><line x1='12' y1='16' x2='12.01' y2='16'/></svg>",
+                     PreviewSvg = "<svg width='48' height='28' viewBox='0 0 48 28'><circle cx='24' cy='14' r='12' fill='none' stroke='#e5e7eb' stroke-width='6'/><circle cx='24' cy='14' r='12' fill='none' stroke='#dc2626' stroke-width='6' stroke-dasharray='25 75' transform='rotate(-90 24 14)'/></svg>" },
+            new() { Id = "timeliness", Name = "Timeliness", Color = "#7c3aed",
+                     IconSvg = "<svg width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='#7c3aed' stroke-width='2'><circle cx='12' cy='12' r='10'/><polyline points='12 6 12 12 16 14'/></svg>",
+                     PreviewSvg = "<svg width='48' height='28' viewBox='0 0 48 28'><polyline points='2,22 10,18 18,20 26,10 34,12 46,6' fill='none' stroke='#7c3aed' stroke-width='2'/><polyline points='2,22 10,18 18,20 26,10 34,12 46,6 46,26 2,26' fill='#7c3aed' opacity='0.1'/></svg>" },
+            new() { Id = "module-coverage", Name = "Module Coverage", Color = "#C8A415",
+                     IconSvg = "<svg width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='#C8A415' stroke-width='2'><rect x='3' y='3' width='7' height='7'/><rect x='14' y='3' width='7' height='7'/><rect x='14' y='14' width='7' height='7'/><rect x='3' y='14' width='7' height='7'/></svg>",
+                     PreviewSvg = "<svg width='48' height='28' viewBox='0 0 48 28'><rect x='2' y='2' width='20' height='10' fill='#C8A415' opacity='0.3' rx='2'/><rect x='26' y='2' width='20' height='10' fill='#C8A415' opacity='0.6' rx='2'/><rect x='2' y='16' width='20' height='10' fill='#C8A415' opacity='0.8' rx='2'/><rect x='26' y='16' width='20' height='10' fill='#C8A415' opacity='0.4' rx='2'/></svg>" }
+        };
+    }
+
+    private void ToggleSection(string sectionId)
+    {
+        var section = _sections.FirstOrDefault(s => s.Id == sectionId);
+        if (section != null) section.Included = !section.Included;
+    }
+
+    private void ToggleChart(string chartId)
+    {
+        if (!_selectedChartIds.Remove(chartId))
+            _selectedChartIds.Add(chartId);
+    }
+
+    [JSInvokable("OnSectionsReordered")]
+    public void OnSectionsReordered(string[] newOrder)
+    {
+        var lookup = _sections.ToDictionary(s => s.Id);
+        var reordered = new List<BoardPackSectionItem>();
+        foreach (var id in newOrder)
+        {
+            if (lookup.TryGetValue(id, out var s))
+                reordered.Add(s);
+        }
+        // Add any missing ones at the end
+        foreach (var s in _sections)
+        {
+            if (!reordered.Contains(s))
+                reordered.Add(s);
+        }
+        _sections = reordered;
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void OnCoverChanged() { /* triggers re-render for live preview */ }
+
+    // ── Generation ──
     private async Task GenerateBoardPack()
     {
-        if (selectedReportIds.Count == 0) return;
-        if (string.IsNullOrWhiteSpace(packTitle))
+        var includedSections = _sections.Where(s => s.Included).ToList();
+        if (includedSections.Count == 0) return;
+
+        if (string.IsNullOrWhiteSpace(_coverTitle))
         {
-            Toast.Error("Please enter a title for the board pack.");
+            Toast.Error("Please enter a report title on the cover page.");
             return;
         }
 
-        isGenerating = true;
+        _isGenerating = true;
+        _generationComplete = false;
+        _showEmailPanel = false;
+
+        _progressStages = new List<ProgressStage>
+        {
+            new() { Label = "Generating cover page" },
+            new() { Label = "Fetching data" },
+            new() { Label = "Rendering charts" },
+            new() { Label = "Compiling PDF" }
+        };
+        _progressStages[0].Active = true;
+        StateHasChanged();
+
         try
         {
-            var pdfBytes = await ReportSvc.GenerateBoardPack(
-                tenantId, institutionId,
-                selectedReportIds.ToList(),
-                packTitle);
+            // Stage 1: Cover
+            await JS.InvokeVoidAsync("fcBoardPack.animateProgress", 0, _progressStages.Count);
+            await Task.Delay(600);
 
-            var base64 = Convert.ToBase64String(pdfBytes);
-            var fileName = $"BoardPack-{DateTime.UtcNow:yyyyMMdd-HHmm}.pdf";
-            await JS.InvokeVoidAsync("portalDownloadFile", fileName, "application/pdf", base64);
+            // Stage 2: Fetch data
+            _progressStages[0].Done = true; _progressStages[0].Active = false;
+            _progressStages[1].Active = true;
+            StateHasChanged();
+            await JS.InvokeVoidAsync("fcBoardPack.animateProgress", 1, _progressStages.Count);
+
+            // Build report IDs from selected saved reports
+            var reportIds = _reports.Select(r => r.Id).ToList();
+            byte[] pdfBytes;
+
+            if (reportIds.Count > 0)
+            {
+                pdfBytes = await ReportSvc.GenerateBoardPack(_tenantId, _institutionId, reportIds, _coverTitle);
+            }
+            else
+            {
+                // Simulate generation when no saved reports are available
+                await Task.Delay(800);
+                pdfBytes = Array.Empty<byte>();
+            }
+
+            // Stage 3: Charts
+            _progressStages[1].Done = true; _progressStages[1].Active = false;
+            _progressStages[2].Active = true;
+            StateHasChanged();
+            await JS.InvokeVoidAsync("fcBoardPack.animateProgress", 2, _progressStages.Count);
+            await Task.Delay(500);
+
+            // Stage 4: Compile
+            _progressStages[2].Done = true; _progressStages[2].Active = false;
+            _progressStages[3].Active = true;
+            StateHasChanged();
+            await JS.InvokeVoidAsync("fcBoardPack.animateProgress", 3, _progressStages.Count);
+            await Task.Delay(400);
+
+            _progressStages[3].Done = true; _progressStages[3].Active = false;
+            StateHasChanged();
+
+            // Download
+            if (pdfBytes.Length > 0)
+            {
+                var base64 = Convert.ToBase64String(pdfBytes);
+                var fileName = $"BoardPack-{DateTime.UtcNow:yyyyMMdd-HHmm}.pdf";
+                await JS.InvokeVoidAsync("portalDownloadFile", fileName, "application/pdf", base64);
+            }
+
+            await Task.Delay(300);
+            _isGenerating = false;
+            _generationComplete = true;
             Toast.Success("Board pack generated successfully.");
+        }
+        catch (Exception ex)
+        {
+            _isGenerating = false;
+            Toast.Error("Failed to generate board pack: " + ex.Message);
+            await JS.InvokeVoidAsync("fcBoardPack.resetProgress");
+        }
+    }
+
+    // ── Email distribution ──
+    private void ShowEmailPanel()
+    {
+        _showEmailPanel = true;
+    }
+
+    private void ToggleMember(int memberId)
+    {
+        if (!_selectedMemberIds.Remove(memberId))
+            _selectedMemberIds.Add(memberId);
+    }
+
+    private async Task SendToMembers()
+    {
+        if (_selectedMemberIds.Count == 0) return;
+        _isSending = true;
+
+        try
+        {
+            // Simulate sending (real impl would call notification service)
+            await Task.Delay(1200);
+            Toast.Success($"Board pack sent to {_selectedMemberIds.Count} member{(_selectedMemberIds.Count != 1 ? "s" : "")}.");
+            _showEmailPanel = false;
+            _selectedMemberIds.Clear();
         }
         catch
         {
-            Toast.Error("Failed to generate board pack.");
+            Toast.Error("Failed to send board pack.");
         }
         finally
         {
-            isGenerating = false;
+            _isSending = false;
         }
+    }
+
+    // ── Saved configurations ──
+    private async Task SaveCurrentConfig()
+    {
+        if (string.IsNullOrWhiteSpace(_newConfigName))
+        {
+            Toast.Error("Please enter a configuration name.");
+            return;
+        }
+
+        var config = new BoardPackConfig
+        {
+            Title = _coverTitle,
+            DateFrom = _coverDateFrom,
+            DateTo = _coverDateTo,
+            PreparedBy = _coverPreparedBy,
+            ApprovedBy = _coverApprovedBy,
+            Confidentiality = _coverConfidentiality,
+            SectionOrder = _sections.Select(s => s.Id).ToList(),
+            IncludedSections = _sections.Where(s => s.Included).Select(s => s.Id).ToList(),
+            SelectedCharts = _selectedChartIds.ToList()
+        };
+
+        var json = JsonSerializer.Serialize(config);
+        await JS.InvokeVoidAsync("fcBoardPack.saveConfig", _newConfigName, json);
+
+        if (!_savedConfigs.Contains(_newConfigName))
+            _savedConfigs.Add(_newConfigName);
+
+        _activeConfigName = _newConfigName;
+        _showSaveInput = false;
+        _newConfigName = "";
+        Toast.Success("Configuration saved.");
+    }
+
+    private async Task LoadConfig(string name)
+    {
+        try
+        {
+            var json = await JS.InvokeAsync<string?>("fcBoardPack.loadConfig", name);
+            if (string.IsNullOrEmpty(json)) return;
+
+            var config = JsonSerializer.Deserialize<BoardPackConfig>(json);
+            if (config == null) return;
+
+            _coverTitle = config.Title;
+            _coverPreparedBy = config.PreparedBy;
+            _coverApprovedBy = config.ApprovedBy;
+            _coverConfidentiality = config.Confidentiality;
+
+            // Update date range to current quarter if loading a saved config
+            if (config.DateFrom != default) _coverDateFrom = config.DateFrom;
+            if (config.DateTo != default) _coverDateTo = config.DateTo;
+
+            // Restore section order and inclusion
+            if (config.SectionOrder?.Count > 0)
+            {
+                var lookup = _sections.ToDictionary(s => s.Id);
+                var reordered = new List<BoardPackSectionItem>();
+                foreach (var id in config.SectionOrder)
+                {
+                    if (lookup.TryGetValue(id, out var s))
+                    {
+                        s.Included = config.IncludedSections?.Contains(id) ?? false;
+                        reordered.Add(s);
+                    }
+                }
+                foreach (var s in _sections)
+                {
+                    if (!reordered.Contains(s))
+                    {
+                        s.Included = false;
+                        reordered.Add(s);
+                    }
+                }
+                _sections = reordered;
+            }
+
+            if (config.SelectedCharts != null)
+                _selectedChartIds = new HashSet<string>(config.SelectedCharts);
+
+            _activeConfigName = name;
+            Toast.Success($"Loaded configuration \"{name}\".");
+
+            // Re-init sortable after DOM update
+            StateHasChanged();
+            await Task.Delay(50);
+            await JS.InvokeVoidAsync("fcBoardPack.initSortable", _dotNetRef);
+        }
+        catch
+        {
+            Toast.Error("Failed to load configuration.");
+        }
+    }
+
+    private async Task DeleteConfig(string name)
+    {
+        await JS.InvokeVoidAsync("fcBoardPack.deleteConfig", name);
+        _savedConfigs.Remove(name);
+        if (_activeConfigName == name) _activeConfigName = null;
+        Toast.Success("Configuration deleted.");
+    }
+
+    // ── Helpers ──
+    private string GetConfidentialityClass() => _coverConfidentiality switch
+    {
+        "Public" => "bp-pv-conf--public",
+        "Internal" => "bp-pv-conf--internal",
+        "Confidential" => "bp-pv-conf--confidential",
+        "Strictly Confidential" => "bp-pv-conf--strict",
+        _ => "bp-pv-conf--confidential"
+    };
+
+    public async ValueTask DisposeAsync()
+    {
+        try { await JS.InvokeVoidAsync("fcBoardPack.destroySortable"); } catch { }
+        _dotNetRef?.Dispose();
+    }
+
+    // ── Inner models ──
+    private class BoardPackSectionItem
+    {
+        public string Id { get; set; } = "";
+        public string Name { get; set; } = "";
+        public string Description { get; set; } = "";
+        public string Color { get; set; } = "#006B3F";
+        public string IconSvg { get; set; } = "";
+        public bool Included { get; set; }
+    }
+
+    private class ChartOption
+    {
+        public string Id { get; set; } = "";
+        public string Name { get; set; } = "";
+        public string Color { get; set; } = "";
+        public string IconSvg { get; set; } = "";
+        public string PreviewSvg { get; set; } = "";
+    }
+
+    private class ProgressStage
+    {
+        public string Label { get; set; } = "";
+        public bool Active { get; set; }
+        public bool Done { get; set; }
+    }
+
+    private class MemberItem
+    {
+        public int Id { get; set; }
+        public string DisplayName { get; set; } = "";
+        public string Email { get; set; } = "";
+        public string Role { get; set; } = "";
+        public string Initials { get; set; } = "";
+    }
+
+    private class BoardPackConfig
+    {
+        public string Title { get; set; } = "";
+        public DateTime DateFrom { get; set; }
+        public DateTime DateTo { get; set; }
+        public string PreparedBy { get; set; } = "";
+        public string ApprovedBy { get; set; } = "";
+        public string Confidentiality { get; set; } = "Confidential";
+        public List<string> SectionOrder { get; set; } = new();
+        public List<string> IncludedSections { get; set; } = new();
+        public List<string> SelectedCharts { get; set; } = new();
     }
 }

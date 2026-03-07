@@ -1671,3 +1671,26 @@ window.portalLogin = (function () {
 window.portalCertPrint = function () {
     window.print();
 };
+
+// ── Cross-Sheet Comparator ────────────────────────────────────────────────────
+window.xsComparator = (function () {
+    var _handler = null;
+    return {
+        init: function () {
+            if (_handler) return;
+            _handler = function (e) {
+                if (e.key !== 'f' && e.key !== 'F') return;
+                var active = document.activeElement;
+                if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' ||
+                    active.tagName === 'SELECT' || active.isContentEditable)) return;
+                var el = document.getElementById('xs-search');
+                if (el) { e.preventDefault(); el.focus(); el.select(); }
+            };
+            document.addEventListener('keydown', _handler);
+        },
+        dispose: function () {
+            if (_handler) { document.removeEventListener('keydown', _handler); _handler = null; }
+        },
+        exportPdf: function () { window.print(); }
+    };
+})();
