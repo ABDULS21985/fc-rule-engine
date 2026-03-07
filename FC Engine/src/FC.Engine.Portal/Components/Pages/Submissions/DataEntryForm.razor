@@ -848,6 +848,10 @@
     }
 </div>
 
+
+@* ── Feature-discovery beacons (shown once to new users) ── *@
+<TourBeaconSet TourKey="data-entry-v1" Beacons="@_dataEntryBeacons" Steps="@_dataEntryTourSteps" />
+
 @code {
     [Parameter] public string ReturnCode { get; set; } = "";
 
@@ -2839,4 +2843,27 @@
         if (freq == "SemiAnnual") return "Semi-Annual";
         return freq;
     }
+
+    // ── Tour definitions ─────────────────────────────────────────────────────
+
+    private static readonly IReadOnlyList<TourBeaconDefinition> _dataEntryBeacons =
+    [
+        new(".portal-form-progress-header", "Progress Tracker",
+            "This bar shows how many sections you have completed. Fill in each section to advance.", "bottom"),
+        new(".portal-form-navigator",       "Section Navigator",
+            "Jump to any section directly. Completed sections show a green tick.", "right"),
+        new(".portal-form-sticky-submit",   "Submit When Ready",
+            "Once you reach 50% completion the submit button appears here, locked until validation passes.", "top"),
+    ];
+
+    private static readonly IReadOnlyList<GuidedTourStepDefinition> _dataEntryTourSteps =
+    [
+        new() { TargetSelector = ".portal-form-progress-header", Title = "Progress Tracker",
+                Description = "Track how much of the form you have completed. Each section must be filled and validated before you can submit.", Position = "bottom" },
+        new() { TargetSelector = ".portal-form-navigator",       Title = "Section Navigator",
+                Description = "Click any section in this panel to jump to it. Sections turn green as you complete them.", Position = "right" },
+        new() { TargetSelector = ".portal-form-sticky-submit",   Title = "Submit When Ready",
+                Description = "This button becomes active once you are at least 50% done and all required fields are valid.", Position = "top" },
+    ];
+
 }

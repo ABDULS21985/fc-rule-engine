@@ -29,24 +29,29 @@ public class DashboardService
 
     /// <summary>
     /// Gets the full dashboard data for an institution, with 5-minute caching.
+    /// Pass customFrom/customTo for a specific date window; otherwise dateRangeDays back from now is used.
     /// </summary>
-    public async Task<DashboardData> GetDashboardDataAsync(int institutionId, string institutionName, string institutionCode, int dateRangeDays = 30, bool forceRefresh = false)
+    public async Task<DashboardData> GetDashboardDataAsync(
+        int institutionId, string institutionName, string institutionCode,
+        int dateRangeDays = 30, DateTime? customFrom = null, DateTime? customTo = null)
     {
-        var cacheKey = $"dashboard:{institutionId}:{dateRangeDays}";
-
-        if (forceRefresh) _cache.Remove(cacheKey);
+        var cacheKey = customFrom.HasValue
+            ? $"dashboard:{institutionId}:custom:{customFrom:yyyyMMdd}:{customTo:yyyyMMdd}"
+            : $"dashboard:{institutionId}:{dateRangeDays}";
 
         if (_cache.TryGetValue(cacheKey, out DashboardData? cached) && cached is not null)
             return cached;
 
-        var data = await BuildDashboardDataAsync(institutionId, institutionName, institutionCode, dateRangeDays);
+        var data = await BuildDashboardDataAsync(institutionId, institutionName, institutionCode, dateRangeDays, customFrom, customTo);
 
         _cache.Set(cacheKey, data, CacheDuration);
 
         return data;
     }
 
-    private async Task<DashboardData> BuildDashboardDataAsync(int institutionId, string institutionName, string institutionCode, int dateRangeDays = 30)
+    private async Task<DashboardData> BuildDashboardDataAsync(
+        int institutionId, string institutionName, string institutionCode,
+        int dateRangeDays = 30, DateTime? customFrom = null, DateTime? customTo = null)
     {
         var dashboard = new DashboardData
         {
@@ -215,17 +220,21 @@ public class DashboardService
 
         dashboard.DateRangeDays = dateRangeDays;
 
+        // Compute effective date range (custom window overrides rolling days)
+        var rangeStart = customFrom?.ToUniversalTime() ?? now.AddDays(-dateRangeDays);
+        var rangeEnd   = customTo?.ToUniversalTime()   ?? now;
+
         // ── Hero Metrics ──────────────────────────────────────────
-        dashboard.HeroMetrics = BuildHeroMetrics(submissions, allTemplates.Count, now, dateRangeDays);
+        dashboard.HeroMetrics = BuildHeroMetrics(submissions, allTemplates.Count, now, dateRangeDays, rangeStart, rangeEnd);
 
         // ── Submission Volume (last 6 months, for area chart) ────
         dashboard.SubmissionVolume = BuildSubmissionVolume(submissions, now);
 
         // ── Template Health (donut chart) ─────────────────────────
-        dashboard.TemplateHealth = BuildTemplateHealth(submissions, allTemplates, now, dateRangeDays);
+        dashboard.TemplateHealth = BuildTemplateHealth(submissions, allTemplates, rangeStart, rangeEnd);
 
         // ── Top Modules (horizontal bar chart) ───────────────────
-        dashboard.TopModules = BuildTopModules(submissions, allTemplates, now, dateRangeDays);
+        dashboard.TopModules = BuildTopModules(submissions, allTemplates, rangeStart, rangeEnd);
 
         // ── Heatmap (last 90 days) ────────────────────────────────
         dashboard.HeatmapData = BuildHeatmap(submissions, now);
@@ -233,16 +242,20 @@ public class DashboardService
         // ── Activity Feed (last 20 actions) ───────────────────────
         dashboard.ActivityFeed = BuildActivityFeed(submissions);
 
+        // ── Drill-down data (submissions grouped by return code) ──
+        dashboard.DrilldownByReturnCode = BuildDrilldownData(submissions, allTemplates, rangeStart, rangeEnd);
+
         return dashboard;
     }
 
     private static List<HeroMetric> BuildHeroMetrics(
-        IReadOnlyList<Submission> submissions, int totalTemplates, DateTime now, int days)
+        IReadOnlyList<Submission> submissions, int totalTemplates, DateTime now, int days,
+        DateTime rangeStart, DateTime rangeEnd)
     {
-        var rangeStart = now.AddDays(-days);
-        var prevStart = now.AddDays(-days * 2);
+        var rangeSpan = rangeEnd - rangeStart;
+        var prevStart = rangeStart - rangeSpan;
 
-        var periodSubs = submissions.Where(s => s.SubmittedAt >= rangeStart).ToList();
+        var periodSubs = submissions.Where(s => s.SubmittedAt >= rangeStart && s.SubmittedAt <= rangeEnd).ToList();
         var prevSubs   = submissions.Where(s => s.SubmittedAt >= prevStart && s.SubmittedAt < rangeStart).ToList();
 
         // Sparkline helpers — daily counts for last 7 days
@@ -388,10 +401,9 @@ public class DashboardService
     private static List<TemplateHealthItem> BuildTemplateHealth(
         IReadOnlyList<Submission> submissions,
         IReadOnlyList<CachedTemplate> templates,
-        DateTime now, int days)
+        DateTime rangeStart, DateTime rangeEnd)
     {
-        var rangeStart = now.AddDays(-days);
-        var periodSubs = submissions.Where(s => s.SubmittedAt >= rangeStart).ToList();
+        var periodSubs = submissions.Where(s => s.SubmittedAt >= rangeStart && s.SubmittedAt <= rangeEnd).ToList();
 
         return templates.Select(t =>
         {
@@ -417,10 +429,9 @@ public class DashboardService
     private static List<ModuleRankItem> BuildTopModules(
         IReadOnlyList<Submission> submissions,
         IReadOnlyList<CachedTemplate> templates,
-        DateTime now, int days)
+        DateTime rangeStart, DateTime rangeEnd)
     {
-        var rangeStart = now.AddDays(-days);
-        var periodSubs = submissions.Where(s => s.SubmittedAt >= rangeStart).ToList();
+        var periodSubs = submissions.Where(s => s.SubmittedAt >= rangeStart && s.SubmittedAt <= rangeEnd).ToList();
         var lookup = templates.ToDictionary(t => t.ReturnCode, t => t.Name, StringComparer.OrdinalIgnoreCase);
 
         return periodSubs
@@ -496,6 +507,39 @@ public class DashboardService
                 };
             })
             .ToList();
+    }
+
+    private static Dictionary<string, List<DrilldownSubmissionItem>> BuildDrilldownData(
+        IReadOnlyList<Submission> submissions,
+        IReadOnlyList<CachedTemplate> templates,
+        DateTime rangeStart, DateTime rangeEnd)
+    {
+        var periodSubs = submissions
+            .Where(s => s.SubmittedAt >= rangeStart && s.SubmittedAt <= rangeEnd)
+            .ToList();
+
+        // Collect all relevant return codes (from both templates and period submissions)
+        var codes = templates.Select(t => t.ReturnCode)
+            .Union(periodSubs.Select(s => s.ReturnCode), StringComparer.OrdinalIgnoreCase)
+            .Distinct(StringComparer.OrdinalIgnoreCase);
+
+        return codes.ToDictionary(
+            code => code,
+            code => periodSubs
+                .Where(s => s.ReturnCode.Equals(code, StringComparison.OrdinalIgnoreCase))
+                .OrderByDescending(s => s.SubmittedAt)
+                .Take(50)
+                .Select(s => new DrilldownSubmissionItem
+                {
+                    SubmissionId = s.Id,
+                    Period = FormatPeriod(s),
+                    SubmittedDate = s.SubmittedAt,
+                    Status = s.Status,
+                    ErrorCount = s.ValidationReport?.ErrorCount ?? 0,
+                    WarningCount = s.ValidationReport?.WarningCount ?? 0
+                })
+                .ToList(),
+            StringComparer.OrdinalIgnoreCase);
     }
 
     private static string FormatPeriod(Submission submission)

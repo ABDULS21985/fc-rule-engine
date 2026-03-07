@@ -43,6 +43,9 @@ public class DashboardData
     public List<HeatmapDay> HeatmapData { get; set; } = new();
     public List<ActivityFeedItem> ActivityFeed { get; set; } = new();
     public int DateRangeDays { get; set; } = 30;
+
+    // Drill-down data: submissions grouped by ReturnCode for the chart click-through modal
+    public Dictionary<string, List<DrilldownSubmissionItem>> DrilldownByReturnCode { get; set; } = new();
 }
 
 /// <summary>
@@ -168,6 +171,19 @@ public class ActivityFeedItem
     public DateTime Timestamp { get; set; }
     public string? LinkUrl { get; set; }
     public string BadgeClass { get; set; } = "portal-badge-neutral";
+}
+
+/// <summary>
+/// A single submission row shown in the chart drill-down modal.
+/// </summary>
+public class DrilldownSubmissionItem
+{
+    public int SubmissionId { get; set; }
+    public string Period { get; set; } = "";
+    public DateTime SubmittedDate { get; set; }
+    public SubmissionStatus Status { get; set; }
+    public int ErrorCount { get; set; }
+    public int WarningCount { get; set; }
 }
 
 // ── Compliance Performance Dashboard (/dashboard/compliance) ──────────

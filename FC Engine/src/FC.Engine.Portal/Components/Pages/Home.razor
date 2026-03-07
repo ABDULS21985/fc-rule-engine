@@ -45,14 +45,32 @@ else if (data is not null)
                 <p class="portal-dash-date">@DateTime.Now.ToString("dddd, d MMMM yyyy")</p>
             </div>
             <div class="portal-dash-welcome-actions">
-                <div class="portal-date-range-picker" role="group" aria-label="Date range">
-                    @foreach (var range in dateRanges)
+                <div class="portal-dash-date-range-group">
+                    <div class="portal-date-range-picker" role="group" aria-label="Date range">
+                        @foreach (var range in dateRanges)
+                        {
+                            <button class="portal-date-range-btn @(selectedDays == range.Days ? "portal-date-range-btn-active" : "")"
+                                    @onclick="() => ChangeDateRange(range.Days)"
+                                    aria-pressed="@(selectedDays == range.Days)">
+                                @range.Label
+                            </button>
+                        }
+                    </div>
+                    @if (_showCustomPicker)
                     {
-                        <button class="portal-date-range-btn @(selectedDays == range.Days ? "portal-date-range-btn-active" : "")"
-                                @onclick="() => ChangeDateRange(range.Days)"
-                                aria-pressed="@(selectedDays == range.Days)">
-                            @range.Label
-                        </button>
+                        <div class="portal-custom-date-picker" role="group" aria-label="Custom date range">
+                            <input type="date" class="portal-date-input" aria-label="From date"
+                                   @bind="_customFrom" @bind:format="yyyy-MM-dd"
+                                   max="@(_customTo?.ToString("yyyy-MM-dd") ?? DateTime.Today.ToString("yyyy-MM-dd"))" />
+                            <span class="portal-date-range-sep" aria-hidden="true">to</span>
+                            <input type="date" class="portal-date-input" aria-label="To date"
+                                   @bind="_customTo" @bind:format="yyyy-MM-dd"
+                                   min="@(_customFrom?.ToString("yyyy-MM-dd"))"
+                                   max="@DateTime.Today.ToString("yyyy-MM-dd")" />
+                            <button class="portal-btn portal-btn-xs portal-btn-primary"
+                                    @onclick="ApplyCustomRange"
+                                    disabled="@(_customFrom is null || _customTo is null)">Apply</button>
+                        </div>
                     }
                 </div>
                 <a href="/submit" class="portal-btn portal-btn-primary">
@@ -386,9 +404,36 @@ else if (data is not null)
                     <h2 class="portal-dash-section-title">Submission Volume</h2>
                     <span class="portal-dash-section-meta">Last 6 months</span>
                 </div>
-                <div class="portal-chart-container" style="height:220px;">
-                    <canvas id="chart-volume" aria-label="Submission volume area chart"></canvas>
-                </div>
+                @if (data.SubmissionVolume.Any() && data.SubmissionVolume.Sum(v => v.Accepted + v.Rejected + v.Pending) > 0)
+                {
+                    <div class="portal-chart-container" style="height:220px;">
+                        <figure role="img" aria-label="Submission volume area chart" style="height:100%;margin:0;">
+                            <canvas id="chart-volume"></canvas>
+                            <figcaption class="portal-sr-only">
+                                <table>
+                                    <caption>Submission Volume — Last 6 months</caption>
+                                    <thead><tr><th scope="col">Month</th><th scope="col">Accepted</th><th scope="col">Rejected</th><th scope="col">Pending</th></tr></thead>
+                                    <tbody>
+                                        @foreach (var v in data.SubmissionVolume)
+                                        {
+                                            <tr><td>@v.Label</td><td>@v.Accepted</td><td>@v.Rejected</td><td>@v.Pending</td></tr>
+                                        }
+                                    </tbody>
+                                </table>
+                            </figcaption>
+                        </figure>
+                    </div>
+                }
+                else
+                {
+                    <div class="portal-chart-empty" role="img" aria-label="No submissions in this period">
+                        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+                            <rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/>
+                            <path d="M15 3v6"/><path d="M3 15h6"/>
+                        </svg>
+                        <p>No submissions in this period</p>
+                    </div>
+                }
             </div>
 
             <!-- Donut Chart: Template Health -->
@@ -402,7 +447,33 @@ else if (data is not null)
                 </div>
                 <div class="portal-donut-layout">
                     <div class="portal-chart-container" style="height:200px; width:200px; flex-shrink:0;">
-                        <canvas id="chart-health" aria-label="Template health donut chart"></canvas>
+                        @if (data.TemplateHealth.Any())
+                        {
+                            <figure role="img" aria-label="Template health donut chart" style="height:100%;margin:0;">
+                                <canvas id="chart-health"></canvas>
+                                <figcaption class="portal-sr-only">
+                                    <table>
+                                        <caption>Template Health — Pass Rate by Return</caption>
+                                        <thead><tr><th scope="col">Return</th><th scope="col">Pass Rate</th><th scope="col">Submissions</th><th scope="col">Errors</th></tr></thead>
+                                        <tbody>
+                                            @foreach (var t in data.TemplateHealth)
+                                            {
+                                                <tr><td>@t.ReturnCode</td><td>@t.PassRate%</td><td>@t.TotalSubmissions</td><td>@t.ErrorCount</td></tr>
+                                            }
+                                        </tbody>
+                                    </table>
+                                </figcaption>
+                            </figure>
+                        }
+                        else
+                        {
+                            <div class="portal-chart-empty" role="img" aria-label="No template data in this period">
+                                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+                                    <circle cx="12" cy="12" r="10"/><path d="M12 8v4m0 4h.01"/>
+                                </svg>
+                                <p>No data</p>
+                            </div>
+                        }
                     </div>
                     <div class="portal-donut-detail" id="donut-detail">
                         @if (selectedTemplate is not null)
@@ -449,12 +520,32 @@ else if (data is not null)
                 @if (data.TopModules.Any())
                 {
                     <div class="portal-chart-container" style="height:@(Math.Max(160, data.TopModules.Count * 42))px;">
-                        <canvas id="chart-modules" aria-label="Top returns horizontal bar chart"></canvas>
+                        <figure role="img" aria-label="Top returns horizontal bar chart" style="height:100%;margin:0;">
+                            <canvas id="chart-modules"></canvas>
+                            <figcaption class="portal-sr-only">
+                                <table>
+                                    <caption>Top Returns — By Submission Volume</caption>
+                                    <thead><tr><th scope="col">Return</th><th scope="col">Submissions</th><th scope="col">Compliance %</th></tr></thead>
+                                    <tbody>
+                                        @foreach (var m in data.TopModules)
+                                        {
+                                            <tr><td>@m.ReturnCode</td><td>@m.SubmissionCount</td><td>@m.ComplianceRate%</td></tr>
+                                        }
+                                    </tbody>
+                                </table>
+                            </figcaption>
+                        </figure>
                     </div>
                 }
                 else
                 {
-                    <div class="portal-empty-state"><p>No submissions in this period.</p></div>
+                    <div class="portal-chart-empty" role="img" aria-label="No submissions in this period">
+                        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+                            <line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/>
+                            <line x1="6" y1="20" x2="6" y2="14"/>
+                        </svg>
+                        <p>No submissions in this period</p>
+                    </div>
                 }
             </div>
 
@@ -758,14 +849,25 @@ else
     private bool _metricsRefreshing;
     private HeroMetric? _activeMetric;
 
+    // Drill-down modal state
+    private bool _drilldownOpen;
+    private string _drilldownTitle = "";
+    private string _drilldownReturnName = "";
+    private List<DrilldownSubmissionItem> _drilldownItems = new();
+
+    // Custom date range state
+    private DateTime? _customFrom;
+    private DateTime? _customTo;
+    private bool _showCustomPicker;
+
     private DotNetObjectReference<Home>? _dotNetRef;
 
     private static readonly (string Label, int Days)[] dateRanges =
     [
-        ("Today", 1),
-        ("7D", 7),
+        ("7D",  7),
         ("30D", 30),
-        ("90D", 90)
+        ("90D", 90),
+        ("Custom", -1)
     ];
 
     private int institutionId;
@@ -830,7 +932,10 @@ else
         try
         {
             if (institutionId > 0)
-                data = await DashboardService.GetDashboardDataAsync(institutionId, institutionName, institutionCode, selectedDays);
+                data = await DashboardService.GetDashboardDataAsync(
+                    institutionId, institutionName, institutionCode,
+                    selectedDays == -1 ? 90 : selectedDays,
+                    _customFrom, _customTo);
             else
                 data = null;
         }
@@ -848,7 +953,23 @@ else
 
     private async Task ChangeDateRange(int days)
     {
+        if (days == -1)
+        {
+            _showCustomPicker = true;
+            selectedDays = -1;
+            return; // wait for user to pick dates and click Apply
+        }
+        _showCustomPicker = false;
+        _customFrom = null;
+        _customTo = null;
         selectedDays = days;
+        selectedTemplate = null;
+        await LoadDashboard();
+    }
+
+    private async Task ApplyCustomRange()
+    {
+        if (_customFrom is null || _customTo is null) return;
         selectedTemplate = null;
         await LoadDashboard();
     }
@@ -862,7 +983,10 @@ else
         try
         {
             if (institutionId > 0)
-                data = await DashboardService.GetDashboardDataAsync(institutionId, institutionName, institutionCode, selectedDays, forceRefresh: true);
+                data = await DashboardService.GetDashboardDataAsync(
+                    institutionId, institutionName, institutionCode,
+                    selectedDays == -1 ? 90 : selectedDays,
+                    _customFrom, _customTo);
         }
         catch { }
         finally
@@ -916,22 +1040,22 @@ else
             await Charts.RenderAreaChart("chart-volume", labels, accepted, rejected, pending);
         }
 
-        // Donut chart (template health) — color-coded by pass rate
+        // Donut chart (template health) — color-coded by pass rate; drill-down via _dotNetRef
         if (data.TemplateHealth.Any())
         {
             var labels  = data.TemplateHealth.Select(t => t.ReturnCode).ToArray();
             var values  = data.TemplateHealth.Select(t => t.PassRate).ToArray();
             var colors  = data.TemplateHealth.Select(t => GetHealthColorHex(t.PassRate)).ToArray();
-            await Charts.RenderDonutWithColors("chart-health", labels, values, colors);
+            await Charts.RenderDonutWithColors("chart-health", labels, values, colors, _dotNetRef);
         }
 
-        // Horizontal bar chart (top modules)
+        // Horizontal bar chart (top modules); drill-down via _dotNetRef
         if (data.TopModules.Any())
         {
             var labels     = data.TopModules.Select(m => m.ReturnCode).ToArray();
             var values     = data.TopModules.Select(m => m.SubmissionCount).ToArray();
             var compliance = data.TopModules.Select(m => m.ComplianceRate).ToArray();
-            await Charts.RenderHorizontalBarChart("chart-modules", labels, values, compliance);
+            await Charts.RenderHorizontalBarChart("chart-modules", labels, values, compliance, _dotNetRef);
         }
 
         // Heatmap
@@ -1091,9 +1215,22 @@ else
     public void OnWidgetReordered(int fromIdx, int toIdx)
     {
         // Widget DOM order is handled by the JS module; Blazor re-render not required.
-        // If server-side persistence is needed, save here.
         _ = fromIdx;
         _ = toIdx;
+    }
+
+    [JSInvokable]
+    public async Task OnChartSegmentClick(string canvasId, int index, string label)
+    {
+        if (data is null) return;
+        _drilldownTitle = label;
+        _drilldownReturnName = data.TemplateHealth.FirstOrDefault(t => t.ReturnCode == label)?.ReturnName
+                            ?? data.TopModules.FirstOrDefault(m => m.ReturnCode == label)?.ReturnName
+                            ?? label;
+        data.DrilldownByReturnCode.TryGetValue(label, out var items);
+        _drilldownItems = items ?? new();
+        _drilldownOpen = true;
+        await InvokeAsync(StateHasChanged);
     }
 
     public void Dispose()

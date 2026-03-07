@@ -1,6 +1,22 @@
 (function () {
     const chartRegistry = window.__fcCharts || (window.__fcCharts = {});
 
+    // ── Global Tooltip Defaults (portal design system) ─────────────────
+    // Applied once when Chart.js is available; all subsequent charts inherit these.
+    if (typeof Chart !== 'undefined') {
+        Chart.defaults.plugins.tooltip.backgroundColor = '#0f172a';
+        Chart.defaults.plugins.tooltip.titleColor = '#f1f5f9';
+        Chart.defaults.plugins.tooltip.bodyColor = '#e2e8f0';
+        Chart.defaults.plugins.tooltip.borderColor = 'rgba(255,255,255,0.08)';
+        Chart.defaults.plugins.tooltip.borderWidth = 1;
+        Chart.defaults.plugins.tooltip.cornerRadius = 8;
+        Chart.defaults.plugins.tooltip.padding = { x: 10, y: 8 };
+        Chart.defaults.plugins.tooltip.titleFont = { size: 12, weight: '600' };
+        Chart.defaults.plugins.tooltip.bodyFont = { size: 12 };
+    }
+
+    var animDuration = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 600;
+
     window.renderChart = function (canvasId, type, data) {
         const canvas = document.getElementById(canvasId);
         if (!canvas || typeof Chart === "undefined") {
@@ -47,6 +63,7 @@
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
+                animation: { duration: animDuration },
                 plugins: {
                     legend: {
                         position: "bottom"
@@ -99,7 +116,7 @@
             options: {
                 responsive: true, maintainAspectRatio: false,
                 interaction: { mode: "index", intersect: false },
-                animation: { duration: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 800 },
+                animation: { duration: animDuration },
                 plugins: { legend: { position: "bottom", labels: { usePointStyle: true, padding: 16 } } },
                 scales: {
                     y: { beginAtZero: true, stacked: false, grid: { color: "#E2E8F0" }, ticks: { precision: 0 } },
@@ -110,7 +127,7 @@
     };
 
     // ── Horizontal Bar Chart (top modules) ────────────────────────────
-    window.renderHorizontalBarChart = function (canvasId, labels, values, compliance) {
+    window.renderHorizontalBarChart = function (canvasId, labels, values, compliance, dotNetRef) {
         const canvas = document.getElementById(canvasId);
         if (!canvas || typeof Chart === "undefined") return;
         const ctx = canvas.getContext("2d");
@@ -130,12 +147,19 @@
             options: {
                 indexAxis: "y",
                 responsive: true, maintainAspectRatio: false,
-                animation: { duration: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 700 },
-                plugins: { legend: { display: false },
+                animation: { duration: animDuration },
+                plugins: {
+                    legend: { display: false },
                     tooltip: { callbacks: { afterLabel: function (ctx) {
                         return compliance && compliance[ctx.dataIndex] !== undefined
                             ? "Compliance: " + compliance[ctx.dataIndex] + "%" : "";
                     }}}
+                },
+                onClick: function (evt, elements) {
+                    if (elements.length && dotNetRef) {
+                        var idx = elements[0].index;
+                        dotNetRef.invokeMethodAsync('OnChartSegmentClick', canvasId, idx, labels[idx]);
+                    }
                 },
                 scales: {
                     x: { beginAtZero: true, grid: { color: "#E2E8F0" }, ticks: { precision: 0 } },
@@ -211,7 +235,7 @@
     };
 
     // ── Donut Chart with per-segment colors ──────────────────────────
-    window.renderDonutWithColors = function (canvasId, labels, values, colors) {
+    window.renderDonutWithColors = function (canvasId, labels, values, colors, dotNetRef) {
         const canvas = document.getElementById(canvasId);
         if (!canvas || typeof Chart === "undefined") return;
         const ctx = canvas.getContext("2d");
@@ -226,10 +250,16 @@
             },
             options: {
                 responsive: true, maintainAspectRatio: false,
-                animation: { duration: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 700 },
+                animation: { duration: animDuration },
                 plugins: {
                     legend: { position: "bottom", labels: { usePointStyle: true, padding: 12, font: { size: 11 } } },
                     tooltip: { callbacks: { label: function (ctx) { return " " + ctx.label + ": " + ctx.formattedValue + "%"; } } }
+                },
+                onClick: function (evt, elements) {
+                    if (elements.length && dotNetRef) {
+                        var idx = elements[0].index;
+                        dotNetRef.invokeMethodAsync('OnChartSegmentClick', canvasId, idx, labels[idx]);
+                    }
                 },
                 cutout: "62%"
             }

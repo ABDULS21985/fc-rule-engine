@@ -24,11 +24,11 @@ public class ChartJsInterop
     public Task RenderAreaChart(string canvasId, string[] labels, int[] accepted, int[] rejected, int[] pending)
         => _js.InvokeVoidAsync("renderAreaChart", canvasId, labels, accepted, rejected, pending).AsTask();
 
-    public Task RenderHorizontalBarChart(string canvasId, string[] labels, int[] values, decimal[] compliance)
-        => _js.InvokeVoidAsync("renderHorizontalBarChart", canvasId, labels, values, compliance).AsTask();
+    public Task RenderHorizontalBarChart(string canvasId, string[] labels, int[] values, decimal[] compliance, object? dotNetRef = null)
+        => _js.InvokeVoidAsync("renderHorizontalBarChart", canvasId, labels, values, compliance, dotNetRef).AsTask();
 
-    public Task RenderDonutWithColors(string canvasId, string[] labels, decimal[] values, string[] colors)
-        => _js.InvokeVoidAsync("renderDonutWithColors", canvasId, labels, values, colors).AsTask();
+    public Task RenderDonutWithColors(string canvasId, string[] labels, decimal[] values, string[] colors, object? dotNetRef = null)
+        => _js.InvokeVoidAsync("renderDonutWithColors", canvasId, labels, values, colors, dotNetRef).AsTask();
 
     public Task RenderHeatmap(string canvasId, object days)
         => _js.InvokeVoidAsync("renderHeatmap", canvasId, days).AsTask();
