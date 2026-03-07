@@ -141,7 +141,7 @@
         {
             <PortalEmptyState Variant="reports" HasFilter="true"
                               ActionText="Clear filters"
-                              OnAction="EventCallback.Factory.Create(this, () => { searchTerm = string.Empty; _typeFilter = null; Nav.NavigateTo("/reports/saved", replace: true); })" />
+                              OnAction="@EventCallback.Factory.Create(this, ClearFilters)" />
         }
         else
         {
@@ -467,6 +467,13 @@
     private bool isLoading = true;
     private string? _error;
     private string searchTerm = "";
+
+    private void ClearFilters()
+    {
+        searchTerm = string.Empty;
+        _typeFilter = null;
+        Nav.NavigateTo("/reports/saved", replace: true);
+    }
     private string? _typeFilter;
     private string _viewMode = "grid";
     private int? _openOverflowId;
@@ -488,9 +495,9 @@
 
     private static readonly IReadOnlyList<BreadcrumbItem> _breadcrumb = new List<BreadcrumbItem>
     {
-        new BreadcrumbItem { Label = "Home", Url = "/" },
-        new BreadcrumbItem { Label = "Reports", Url = "/reports" },
-        new BreadcrumbItem { Label = "Saved Reports", IsCurrent = true }
+        new("Home", "/"),
+        new("Reports", "/reports"),
+        new("Saved Reports", IsCurrent: true)
     };
 
     private List<FC.Engine.Domain.Entities.SavedReport> filteredReports =>

@@ -16,6 +16,9 @@ public class TenantIsolationTests : IAsyncLifetime
     private string _connectionString = null!;
     private Guid _tenantAId;
     private Guid _tenantBId;
+    private int _jurisdictionId;
+    private string _tenantASlug = null!;
+    private string _tenantBSlug = null!;
 
     public async Task InitializeAsync()
     {
@@ -23,20 +26,29 @@ public class TenantIsolationTests : IAsyncLifetime
 
         _tenantAId = Guid.NewGuid();
         _tenantBId = Guid.NewGuid();
+        _tenantASlug = $"test-tenant-a-{_tenantAId:N}"[..24];
+        _tenantBSlug = $"test-tenant-b-{_tenantBId:N}"[..24];
 
         // Create test tenants
         await using var conn = new SqlConnection(_connectionString);
         await conn.OpenAsync();
 
+        _jurisdictionId = await conn.ExecuteScalarAsync<int>(
+            """
+            SELECT TOP (1) Id
+            FROM dbo.jurisdictions
+            ORDER BY IsActive DESC, Id ASC;
+            """);
+
         await conn.ExecuteAsync(@"
             IF NOT EXISTS (SELECT 1 FROM dbo.tenants WHERE TenantId = @TenantAId)
                 INSERT INTO dbo.tenants (TenantId, TenantName, TenantSlug, TenantStatus, CreatedAt, UpdatedAt)
-                VALUES (@TenantAId, 'Test Tenant A', 'test-tenant-a', 'Active', SYSUTCDATETIME(), SYSUTCDATETIME());
+                VALUES (@TenantAId, 'Test Tenant A', @TenantASlug, 'Active', SYSUTCDATETIME(), SYSUTCDATETIME());
 
             IF NOT EXISTS (SELECT 1 FROM dbo.tenants WHERE TenantId = @TenantBId)
                 INSERT INTO dbo.tenants (TenantId, TenantName, TenantSlug, TenantStatus, CreatedAt, UpdatedAt)
-                VALUES (@TenantBId, 'Test Tenant B', 'test-tenant-b', 'Active', SYSUTCDATETIME(), SYSUTCDATETIME());
-        ", new { TenantAId = _tenantAId, TenantBId = _tenantBId });
+                VALUES (@TenantBId, 'Test Tenant B', @TenantBSlug, 'Active', SYSUTCDATETIME(), SYSUTCDATETIME());
+        ", new { TenantAId = _tenantAId, TenantASlug = _tenantASlug, TenantBId = _tenantBId, TenantBSlug = _tenantBSlug });
     }
 
     public async Task DisposeAsync()
@@ -63,17 +75,17 @@ public class TenantIsolationTests : IAsyncLifetime
 
         // Insert institution for Tenant A
         var institutionAId = await setupConn.ExecuteScalarAsync<int>(@"
-            INSERT INTO dbo.institutions (TenantId, InstitutionCode, InstitutionName, IsActive, CreatedAt)
-            VALUES (@TenantId, 'INST-A', 'Institution A', 1, SYSUTCDATETIME());
+            INSERT INTO dbo.institutions (TenantId, JurisdictionId, InstitutionCode, InstitutionName, IsActive, CreatedAt)
+            VALUES (@TenantId, @JurisdictionId, 'INST-A', 'Institution A', 1, SYSUTCDATETIME());
             SELECT SCOPE_IDENTITY();
-        ", new { TenantId = _tenantAId });
+        ", new { TenantId = _tenantAId, JurisdictionId = _jurisdictionId });
 
         // Insert institution for Tenant B
         var institutionBId = await setupConn.ExecuteScalarAsync<int>(@"
-            INSERT INTO dbo.institutions (TenantId, InstitutionCode, InstitutionName, IsActive, CreatedAt)
-            VALUES (@TenantId, 'INST-B', 'Institution B', 1, SYSUTCDATETIME());
+            INSERT INTO dbo.institutions (TenantId, JurisdictionId, InstitutionCode, InstitutionName, IsActive, CreatedAt)
+            VALUES (@TenantId, @JurisdictionId, 'INST-B', 'Institution B', 1, SYSUTCDATETIME());
             SELECT SCOPE_IDENTITY();
-        ", new { TenantId = _tenantBId });
+        ", new { TenantId = _tenantBId, JurisdictionId = _jurisdictionId });
 
         // ═══════════════════════════════════════════════════════════
         // Act: Query with Tenant A context
@@ -124,10 +136,10 @@ public class TenantIsolationTests : IAsyncLifetime
         await setupConn.OpenAsync();
 
         var institutionBId = await setupConn.ExecuteScalarAsync<int>(@"
-            INSERT INTO dbo.institutions (TenantId, InstitutionCode, InstitutionName, IsActive, CreatedAt)
-            VALUES (@TenantId, 'INST-B-UPD', 'Institution B Update Test', 1, SYSUTCDATETIME());
+            INSERT INTO dbo.institutions (TenantId, JurisdictionId, InstitutionCode, InstitutionName, IsActive, CreatedAt)
+            VALUES (@TenantId, @JurisdictionId, 'INST-B-UPD', 'Institution B Update Test', 1, SYSUTCDATETIME());
             SELECT SCOPE_IDENTITY();
-        ", new { TenantId = _tenantBId });
+        ", new { TenantId = _tenantBId, JurisdictionId = _jurisdictionId });
 
         // Act: Try to UPDATE Tenant B's institution from Tenant A's context
         await using var tenantAConn = await CreateTenantConnectionAsync(_tenantAId);
@@ -155,10 +167,10 @@ public class TenantIsolationTests : IAsyncLifetime
         await setupConn.OpenAsync();
 
         var institutionBId = await setupConn.ExecuteScalarAsync<int>(@"
-            INSERT INTO dbo.institutions (TenantId, InstitutionCode, InstitutionName, IsActive, CreatedAt)
-            VALUES (@TenantId, 'INST-B-DEL', 'Institution B Delete Test', 1, SYSUTCDATETIME());
+            INSERT INTO dbo.institutions (TenantId, JurisdictionId, InstitutionCode, InstitutionName, IsActive, CreatedAt)
+            VALUES (@TenantId, @JurisdictionId, 'INST-B-DEL', 'Institution B Delete Test', 1, SYSUTCDATETIME());
             SELECT SCOPE_IDENTITY();
-        ", new { TenantId = _tenantBId });
+        ", new { TenantId = _tenantBId, JurisdictionId = _jurisdictionId });
 
         // Act: Try to DELETE Tenant B's institution from Tenant A's context
         await using var tenantAConn = await CreateTenantConnectionAsync(_tenantAId);
