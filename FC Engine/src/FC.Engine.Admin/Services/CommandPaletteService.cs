@@ -120,7 +120,7 @@ public sealed class CommandPaletteService
             if (_recentSearches.Count > 0)
             {
                 groups.Add(new CommandGroup("Recent", _recentSearches.Select(r =>
-                    new CommandItem(r.ItemId, r.Label, CommandCategory.Recent, r.Description, r.Url, r.Icon, [])
+                    new CommandItem(r.ItemId, r.Label, CommandCategory.Recent, r.Description, r.Url, r.Icon ?? string.Empty, [])
                 ).ToList()));
             }
 
