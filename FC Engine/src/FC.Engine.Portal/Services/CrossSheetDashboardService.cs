@@ -298,7 +298,7 @@ public class CrossSheetDashboardService
     {
         if (string.IsNullOrEmpty(message)) return null;
         // Match patterns: "A: 12450", "A = 12450", "A (12,450)", "[A] 12450", "A=12450"
-        var pattern = $@"\b{Regex.Escape(alias)}\s*(?:[:=({\[])\s*([-]?\d[\d,]*\.?\d*)";
+        var pattern = $@"\b{Regex.Escape(alias)}\s*(?:[:=({{\[])\s*([-]?\d[\d,]*\.?\d*)";
         var m = Regex.Match(message, pattern, RegexOptions.IgnoreCase);
         if (m.Success &&
             decimal.TryParse(m.Groups[1].Value.Replace(",", ""),
