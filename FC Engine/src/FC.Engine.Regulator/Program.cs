@@ -23,6 +23,7 @@ builder.Host.UseSerilog((ctx, lc) => lc
 builder.Services.AddInfrastructure(builder.Configuration);
 
 builder.Services.AddScoped<AuthService>();
+builder.Services.AddScoped<FC.Engine.Infrastructure.Charts.ChartJsInterop>();
 
 builder.Services.AddAuthentication(RegulatorAuthScheme)
     .AddCookie(RegulatorAuthScheme, options =>

@@ -208,7 +208,6 @@ public static class DependencyInjection
         // ── Dashboard & Analytics (RG-17) ──
         services.AddScoped<IDashboardService, DashboardService>();
         services.AddScoped<IBenchmarkingService, BenchmarkingService>();
-        services.AddScoped<ChartJsInterop>();
         services.AddScoped<IRegulatorInboxService, RegulatorInboxService>();
         services.AddScoped<ISectorAnalyticsService, SectorAnalyticsService>();
         services.AddScoped<IEntityBenchmarkingService, EntityBenchmarkingService>();

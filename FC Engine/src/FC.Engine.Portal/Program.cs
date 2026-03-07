@@ -34,6 +34,7 @@ builder.Services.AddScoped<InstitutionAuthService>();
 
 // Infrastructure interop services
 builder.Services.AddScoped<DragDropInterop>();
+builder.Services.AddScoped<FC.Engine.Infrastructure.Charts.ChartJsInterop>();
 
 // UI services
 builder.Services.AddScoped<FC.Engine.Portal.Services.ToastService>();

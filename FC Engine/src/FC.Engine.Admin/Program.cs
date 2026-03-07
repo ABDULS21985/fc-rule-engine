@@ -49,6 +49,7 @@ builder.Services.AddScoped<FC.Engine.Admin.Services.DataCacheService>();
 builder.Services.AddScoped<FC.Engine.Admin.Services.GlobalErrorService>();
 builder.Services.AddScoped<FC.Engine.Admin.Services.SessionService>();
 builder.Services.AddScoped<FC.Engine.Admin.Services.KeyboardShortcutService>();
+builder.Services.AddScoped<FC.Engine.Infrastructure.Charts.ChartJsInterop>();
 
 // Platform Admin services
 builder.Services.AddScoped<FC.Engine.Admin.Services.TenantManagementService>();
