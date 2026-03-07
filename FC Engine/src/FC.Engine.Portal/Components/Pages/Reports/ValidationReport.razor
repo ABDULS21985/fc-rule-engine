@@ -1,21 +1,66 @@
 @page "/submissions/{SubmissionId:int}/report"
 @attribute [Authorize(Policy = "InstitutionUser")]
+@using FC.Engine.Infrastructure.Charts
+@using System.Security.Claims
 @inject ExportService ExportSvc
+@inject ChartJsInterop Charts
 @inject IJSRuntime JS
 
 <PageTitle>Validation Report — FC Engine Portal</PageTitle>
 
+<PortalPageHeader Breadcrumb="_breadcrumb"
+                  Title="Validation Report"
+                  BackUrl="@($"/submissions/{SubmissionId}")">
+    <SecondaryActions>
+        <a href="/validation/hub/@SubmissionId" class="portal-btn portal-btn-outline portal-btn-sm">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <circle cx="12" cy="12" r="10"/><path d="M9 12l2 2 4-4"/>
+            </svg>
+            Validation Hub
+        </a>
+        <button class="portal-btn portal-btn-ghost portal-btn-sm" @onclick="ExportErrorsCsv">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+                <polyline points="7 10 12 15 17 10"/>
+                <line x1="12" y1="15" x2="12" y2="3"/>
+            </svg>
+            Export CSV
+        </button>
+        <button class="portal-btn portal-btn-ghost portal-btn-sm" @onclick="PrintReport">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <polyline points="6 9 6 2 18 2 18 9"/>
+                <path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/>
+                <rect x="6" y="14" width="12" height="8"/>
+            </svg>
+            Print
+        </button>
+    </SecondaryActions>
+</PortalPageHeader>
+
 <div class="portal-page">
+
+    @if (!string.IsNullOrEmpty(_error))
+    {
+        <div class="portal-alert portal-alert-error no-print" role="alert">@_error</div>
+    }
+
     @if (isLoading)
     {
-        <div class="portal-card" style="padding: 2rem;">
-            <div class="portal-skeleton portal-skeleton-block" style="height: 40px; margin-bottom: 1rem;"></div>
-            <div class="portal-skeleton portal-skeleton-block" style="height: 200px;"></div>
-        </div>
+        <SkeletonGuard OnRetry="LoadAsync">
+            <div class="fc-skel-stats-row" style="margin-bottom: 1.5rem;">
+                <SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Stat" Index="0" />
+                <SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Stat" Index="1" />
+                <SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Stat" Index="2" />
+            </div>
+            <SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.TableRows" RowCount="8" Index="3" />
+        </SkeletonGuard>
     }
     else if (report is null)
     {
-        <div class="portal-alert portal-alert-error">Submission not found or access denied.</div>
+        <div class="portal-alert portal-alert-error" role="alert">
+            Submission not found or access denied.
+            <a href="/submissions" class="portal-link" style="margin-left: 0.5rem;">Back to Submissions</a>
+        </div>
     }
     else
     {
@@ -32,19 +77,28 @@
                     </svg>
                     Validation Hub
                 </a>
-                <button class="portal-btn portal-btn-ghost portal-btn-sm" @onclick="PrintReport">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
-                    Print
-                </button>
                 <button class="portal-btn portal-btn-ghost portal-btn-sm" @onclick="ExportErrorsCsv">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                        <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+                        <polyline points="7 10 12 15 17 10"/>
+                        <line x1="12" y1="15" x2="12" y2="3"/>
+                    </svg>
                     Export CSV
+                </button>
+                <button class="portal-btn portal-btn-ghost portal-btn-sm" @onclick="PrintReport">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                        <polyline points="6 9 6 2 18 2 18 9"/>
+                        <path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/>
+                        <rect x="6" y="14" width="12" height="8"/>
+                    </svg>
+                    Print
                 </button>
             </div>
         </div>
 
         <!-- Printable Report -->
         <div id="printable-report" class="portal-print-report">
+
             <!-- CBN Header -->
             <header class="portal-report-header">
                 <div class="portal-report-header-brand">
@@ -78,9 +132,30 @@
                         <div class="portal-report-info-row"><span>Period</span><strong>@report.Period</strong></div>
                         <div class="portal-report-info-row"><span>Submitted By</span><strong>@report.SubmittedBy</strong></div>
                         <div class="portal-report-info-row"><span>Submitted At</span><strong>@report.SubmittedAt.ToString("dd MMM yyyy HH:mm")</strong></div>
+                        @if (report.ProcessedAt != default)
+                        {
+                            <div class="portal-report-info-row"><span>Processed At</span><strong>@report.ProcessedAt.ToString("dd MMM yyyy HH:mm")</strong></div>
+                        }
                     </div>
                 </div>
             </section>
+
+            <!-- Comparison Banner (screen only) -->
+            @if (_prevSummary.HasValue)
+            {
+                var prev = _prevSummary.Value;
+                <div class="portal-vr-compare-banner no-print">
+                    <span class="portal-vr-compare-label">Previous submission:</span>
+                    <span class="portal-vr-compare-delta @GetCompareClass(report.ErrorCount, prev.ErrorCount)">
+                        @GetCompareArrow(report.ErrorCount, prev.ErrorCount)
+                        Errors @prev.ErrorCount → @report.ErrorCount
+                    </span>
+                    <span class="portal-vr-compare-delta @GetCompareClass(report.WarningCount, prev.WarningCount)">
+                        @GetCompareArrow(report.WarningCount, prev.WarningCount)
+                        Warnings @prev.WarningCount → @report.WarningCount
+                    </span>
+                </div>
+            }
 
             <!-- Validation Summary -->
             <section class="portal-report-section">
@@ -101,39 +176,383 @@
                 </div>
             </section>
 
+            <!-- Error Analysis Panel (screen only) -->
+            @if (report.Errors.Count > 0)
+            {
+                <section class="portal-report-section no-print">
+                    <div class="portal-vr-analysis">
+
+                        <!-- Col 1: Donut chart -->
+                        <div class="portal-vr-donut-wrap">
+                            <p class="portal-vr-donut-title">Error Breakdown</p>
+                            <canvas id="vr-donut" width="140" height="140" aria-label="Donut chart showing errors vs warnings" role="img"></canvas>
+                            <div class="portal-vr-donut-legend">
+                                <div class="portal-vr-donut-legend-item">
+                                    <span class="portal-vr-donut-dot" style="background:#dc2626;"></span>
+                                    Errors @report.ErrorCount
+                                </div>
+                                <div class="portal-vr-donut-legend-item">
+                                    <span class="portal-vr-donut-dot" style="background:#d97706;"></span>
+                                    Warnings @report.WarningCount
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Col 2: Top error categories -->
+                        @if (_topCategories.Count > 0)
+                        {
+                            var catMax = _topCategories.Max(x => x.Count);
+                            <div class="portal-vr-mini-list">
+                                <p class="portal-vr-mini-list-title">Top Error Categories</p>
+                                @foreach (var cat in _topCategories)
+                                {
+                                    var catPct = catMax > 0 ? (int)((double)cat.Count / catMax * 100) : 0;
+                                    <div class="portal-vr-mini-bar-row">
+                                        <span class="portal-vr-mini-bar-label" title="@FormatCategory(cat.Category)">@FormatCategory(cat.Category)</span>
+                                        <div class="portal-vr-mini-bar-track">
+                                            <div class="portal-vr-mini-bar-fill" style="width: @catPct%;"></div>
+                                        </div>
+                                        <span class="portal-vr-mini-bar-count">@cat.Count</span>
+                                    </div>
+                                }
+                            </div>
+                        }
+
+                        <!-- Col 3: Most affected fields -->
+                        @if (_topFields.Count > 0)
+                        {
+                            var fieldMax = _topFields.Max(x => x.Count);
+                            <div class="portal-vr-mini-list">
+                                <p class="portal-vr-mini-list-title">Most Affected Fields</p>
+                                @foreach (var field in _topFields)
+                                {
+                                    var fieldPct = fieldMax > 0 ? (int)((double)field.Count / fieldMax * 100) : 0;
+                                    <div class="portal-vr-mini-bar-row">
+                                        <span class="portal-vr-mini-bar-label" title="@field.Field">@field.Field</span>
+                                        <div class="portal-vr-mini-bar-track">
+                                            <div class="portal-vr-mini-bar-fill" style="width: @fieldPct%;"></div>
+                                        </div>
+                                        <span class="portal-vr-mini-bar-count">@field.Count</span>
+                                    </div>
+                                }
+                            </div>
+                        }
+
+                    </div>
+                </section>
+            }
+
+            <!-- Group By Toggle (screen only) -->
+            @if (report.Errors.Count > 0)
+            {
+                <div class="portal-groupby-bar no-print">
+                    <span class="portal-groupby-label">Group by:</span>
+                    <button class="portal-btn portal-btn-sm @(_groupBy == "flat" ? "portal-btn-primary" : "portal-btn-ghost")"
+                            @onclick='() => SetGroupBy("flat")'>
+                        Flat
+                    </button>
+                    <button class="portal-btn portal-btn-sm @(_groupBy == "category" ? "portal-btn-primary" : "portal-btn-ghost")"
+                            @onclick='() => SetGroupBy("category")'>
+                        By Category
+                    </button>
+                    <button class="portal-btn portal-btn-sm @(_groupBy == "severity" ? "portal-btn-primary" : "portal-btn-ghost")"
+                            @onclick='() => SetGroupBy("severity")'>
+                        By Severity
+                    </button>
+                </div>
+            }
+
             <!-- Error Listing -->
-            @if (report.Errors.Any())
+            @if (report.Errors.Count > 0)
             {
                 <section class="portal-report-section">
                     <h2 class="portal-report-section-title">Validation Issues (@report.Errors.Count)</h2>
-                    <div class="portal-report-table-scroll">
-                        <table class="portal-report-table">
-                            <thead>
-                                <tr>
-                                    <th style="width:90px;">Rule ID</th>
-                                    <th style="width:70px;">Severity</th>
-                                    <th style="width:90px;">Category</th>
-                                    <th>Message</th>
-                                    <th style="width:100px;">Field</th>
-                                    <th style="width:80px;">Expected</th>
-                                    <th style="width:80px;">Actual</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                @foreach (var err in report.Errors)
-                                {
-                                    <tr class="@(err.Severity == "Error" ? "portal-report-row-error" : err.Severity == "Warning" ? "portal-report-row-warning" : "")">
-                                        <td><code class="portal-report-code">@err.Code</code></td>
-                                        <td><span class="portal-badge portal-badge-sm @GetSeverityBadge(err.Severity)">@err.Severity</span></td>
-                                        <td style="font-size: 0.6875rem; color: #6b7280;">@FormatCategory(err.Category)</td>
-                                        <td><span style="font-size: 0.75rem;">@err.Message</span></td>
-                                        <td class="portal-td-mono" style="font-size: 0.6875rem;">@err.FieldName</td>
-                                        <td class="portal-td-mono" style="font-size: 0.6875rem;">@(err.ExpectedValue ?? "—")</td>
-                                        <td class="portal-td-mono" style="font-size: 0.6875rem;">@(err.ActualValue ?? "—")</td>
+
+                    @if (_groupBy == "flat")
+                    {
+                        <div class="portal-report-table-scroll">
+                            <table class="portal-report-table">
+                                <thead>
+                                    <tr>
+                                        <th style="width:90px;">Rule ID</th>
+                                        <th style="width:80px;">Severity</th>
+                                        <th style="width:110px;">Category</th>
+                                        <th>Message</th>
+                                        <th style="width:100px;">Field</th>
+                                        <th style="width:90px;">Expected</th>
+                                        <th style="width:90px;">Actual</th>
+                                        <th style="width:60px;" class="no-print">Fix</th>
                                     </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var err in report.Errors)
+                                    {
+                                        <tr class="@(err.Severity == "Error" ? "portal-report-row-error" : err.Severity == "Warning" ? "portal-report-row-warning" : "")">
+                                            <td><code class="portal-report-code">@err.Code</code></td>
+                                            <td><span class="portal-badge portal-badge-sm @GetSeverityBadge(err.Severity)">@err.Severity</span></td>
+                                            <td style="font-size: 0.6875rem; color: #6b7280;">@FormatCategory(err.Category)</td>
+                                            <td><span style="font-size: 0.75rem;">@err.Message</span></td>
+                                            <td class="portal-td-mono" style="font-size: 0.6875rem;">@(string.IsNullOrEmpty(err.FieldName) ? "—" : err.FieldName)</td>
+                                            <td class="portal-td-mono" style="font-size: 0.6875rem;">@(err.ExpectedValue ?? "—")</td>
+                                            <td class="portal-td-mono" style="font-size: 0.6875rem;">@(err.ActualValue ?? "—")</td>
+                                            <td class="no-print">
+                                                @if (!string.IsNullOrEmpty(err.FieldName))
+                                                {
+                                                    <a href="/submissions/@SubmissionId/edit?field=@Uri.EscapeDataString(err.FieldName)" class="portal-btn portal-btn-ghost portal-btn-xs">Fix →</a>
+                                                }
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    }
+                    else if (_groupBy == "category")
+                    {
+                        var byCategory = report.Errors.GroupBy(e => e.Category).OrderBy(g => g.Key);
+                        @foreach (var group in byCategory)
+                        {
+                            var catKey = group.Key;
+                            var catExpanded = _expandedCategories.Contains(catKey);
+                            var catCount = group.Count();
+                            <div style="margin-bottom: 0.75rem;">
+                                <button class="portal-vr-accordion-header @(catExpanded ? "portal-vr-accordion-header--expanded" : "")"
+                                        @onclick="() => ToggleCategory(catKey)"
+                                        aria-expanded="@catExpanded">
+                                    <span>@FormatCategory(catKey)</span>
+                                    <span class="portal-badge portal-badge-sm portal-badge-neutral" style="margin-left: 0.5rem;">@catCount</span>
+                                    <svg class="portal-vr-accordion-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
+                                        <polyline points="6 9 12 15 18 9"/>
+                                    </svg>
+                                </button>
+                                @if (catExpanded)
+                                {
+                                    <div class="portal-vr-accordion-body">
+                                        <div class="portal-report-table-scroll">
+                                            <table class="portal-report-table">
+                                                <thead>
+                                                    <tr>
+                                                        <th style="width:90px;">Rule ID</th>
+                                                        <th style="width:80px;">Severity</th>
+                                                        <th>Message</th>
+                                                        <th style="width:100px;">Field</th>
+                                                        <th style="width:90px;">Expected</th>
+                                                        <th style="width:90px;">Actual</th>
+                                                        <th style="width:60px;" class="no-print">Fix</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    @foreach (var err in group)
+                                                    {
+                                                        <tr class="@(err.Severity == "Error" ? "portal-report-row-error" : err.Severity == "Warning" ? "portal-report-row-warning" : "")">
+                                                            <td><code class="portal-report-code">@err.Code</code></td>
+                                                            <td><span class="portal-badge portal-badge-sm @GetSeverityBadge(err.Severity)">@err.Severity</span></td>
+                                                            <td><span style="font-size: 0.75rem;">@err.Message</span></td>
+                                                            <td class="portal-td-mono" style="font-size: 0.6875rem;">@(string.IsNullOrEmpty(err.FieldName) ? "—" : err.FieldName)</td>
+                                                            <td class="portal-td-mono" style="font-size: 0.6875rem;">@(err.ExpectedValue ?? "—")</td>
+                                                            <td class="portal-td-mono" style="font-size: 0.6875rem;">@(err.ActualValue ?? "—")</td>
+                                                            <td class="no-print">
+                                                                @if (!string.IsNullOrEmpty(err.FieldName))
+                                                                {
+                                                                    <a href="/submissions/@SubmissionId/edit?field=@Uri.EscapeDataString(err.FieldName)" class="portal-btn portal-btn-ghost portal-btn-xs">Fix →</a>
+                                                                }
+                                                            </td>
+                                                        </tr>
+                                                    }
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
                                 }
-                            </tbody>
-                        </table>
+                            </div>
+                        }
+                    }
+                    else if (_groupBy == "severity")
+                    {
+                        var errors = report.Errors.Where(e => e.Severity == "Error").ToList();
+                        var warnings = report.Errors.Where(e => e.Severity == "Warning").ToList();
+                        var others = report.Errors.Where(e => e.Severity != "Error" && e.Severity != "Warning").ToList();
+
+                        @if (errors.Count > 0)
+                        {
+                            var errSevKey = "sev-errors";
+                            var errExpanded = _expandedCategories.Contains(errSevKey);
+                            <div style="margin-bottom: 0.75rem;">
+                                <button class="portal-vr-accordion-header @(errExpanded ? "portal-vr-accordion-header--expanded" : "")"
+                                        @onclick="() => ToggleCategory(errSevKey)"
+                                        aria-expanded="@errExpanded">
+                                    <span>Errors</span>
+                                    <span class="portal-badge portal-badge-sm portal-badge-danger" style="margin-left: 0.5rem;">@errors.Count</span>
+                                    <svg class="portal-vr-accordion-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
+                                        <polyline points="6 9 12 15 18 9"/>
+                                    </svg>
+                                </button>
+                                @if (errExpanded)
+                                {
+                                    <div class="portal-vr-accordion-body">
+                                        <div class="portal-report-table-scroll">
+                                            <table class="portal-report-table">
+                                                <thead>
+                                                    <tr>
+                                                        <th style="width:90px;">Rule ID</th>
+                                                        <th style="width:110px;">Category</th>
+                                                        <th>Message</th>
+                                                        <th style="width:100px;">Field</th>
+                                                        <th style="width:90px;">Expected</th>
+                                                        <th style="width:90px;">Actual</th>
+                                                        <th style="width:60px;" class="no-print">Fix</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    @foreach (var err in errors)
+                                                    {
+                                                        <tr class="portal-report-row-error">
+                                                            <td><code class="portal-report-code">@err.Code</code></td>
+                                                            <td style="font-size: 0.6875rem; color: #6b7280;">@FormatCategory(err.Category)</td>
+                                                            <td><span style="font-size: 0.75rem;">@err.Message</span></td>
+                                                            <td class="portal-td-mono" style="font-size: 0.6875rem;">@(string.IsNullOrEmpty(err.FieldName) ? "—" : err.FieldName)</td>
+                                                            <td class="portal-td-mono" style="font-size: 0.6875rem;">@(err.ExpectedValue ?? "—")</td>
+                                                            <td class="portal-td-mono" style="font-size: 0.6875rem;">@(err.ActualValue ?? "—")</td>
+                                                            <td class="no-print">
+                                                                @if (!string.IsNullOrEmpty(err.FieldName))
+                                                                {
+                                                                    <a href="/submissions/@SubmissionId/edit?field=@Uri.EscapeDataString(err.FieldName)" class="portal-btn portal-btn-ghost portal-btn-xs">Fix →</a>
+                                                                }
+                                                            </td>
+                                                        </tr>
+                                                    }
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                }
+                            </div>
+                        }
+
+                        @if (warnings.Count > 0)
+                        {
+                            var warnSevKey = "sev-warnings";
+                            var warnExpanded = _expandedCategories.Contains(warnSevKey);
+                            <div style="margin-bottom: 0.75rem;">
+                                <button class="portal-vr-accordion-header @(warnExpanded ? "portal-vr-accordion-header--expanded" : "")"
+                                        @onclick="() => ToggleCategory(warnSevKey)"
+                                        aria-expanded="@warnExpanded">
+                                    <span>Warnings</span>
+                                    <span class="portal-badge portal-badge-sm portal-badge-warning" style="margin-left: 0.5rem;">@warnings.Count</span>
+                                    <svg class="portal-vr-accordion-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
+                                        <polyline points="6 9 12 15 18 9"/>
+                                    </svg>
+                                </button>
+                                @if (warnExpanded)
+                                {
+                                    <div class="portal-vr-accordion-body">
+                                        <div class="portal-report-table-scroll">
+                                            <table class="portal-report-table">
+                                                <thead>
+                                                    <tr>
+                                                        <th style="width:90px;">Rule ID</th>
+                                                        <th style="width:110px;">Category</th>
+                                                        <th>Message</th>
+                                                        <th style="width:100px;">Field</th>
+                                                        <th style="width:90px;">Expected</th>
+                                                        <th style="width:90px;">Actual</th>
+                                                        <th style="width:60px;" class="no-print">Fix</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    @foreach (var err in warnings)
+                                                    {
+                                                        <tr class="portal-report-row-warning">
+                                                            <td><code class="portal-report-code">@err.Code</code></td>
+                                                            <td style="font-size: 0.6875rem; color: #6b7280;">@FormatCategory(err.Category)</td>
+                                                            <td><span style="font-size: 0.75rem;">@err.Message</span></td>
+                                                            <td class="portal-td-mono" style="font-size: 0.6875rem;">@(string.IsNullOrEmpty(err.FieldName) ? "—" : err.FieldName)</td>
+                                                            <td class="portal-td-mono" style="font-size: 0.6875rem;">@(err.ExpectedValue ?? "—")</td>
+                                                            <td class="portal-td-mono" style="font-size: 0.6875rem;">@(err.ActualValue ?? "—")</td>
+                                                            <td class="no-print">
+                                                                @if (!string.IsNullOrEmpty(err.FieldName))
+                                                                {
+                                                                    <a href="/submissions/@SubmissionId/edit?field=@Uri.EscapeDataString(err.FieldName)" class="portal-btn portal-btn-ghost portal-btn-xs">Fix →</a>
+                                                                }
+                                                            </td>
+                                                        </tr>
+                                                    }
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                }
+                            </div>
+                        }
+
+                        @if (others.Count > 0)
+                        {
+                            var otherSevKey = "sev-info";
+                            var otherExpanded = _expandedCategories.Contains(otherSevKey);
+                            <div style="margin-bottom: 0.75rem;">
+                                <button class="portal-vr-accordion-header @(otherExpanded ? "portal-vr-accordion-header--expanded" : "")"
+                                        @onclick="() => ToggleCategory(otherSevKey)"
+                                        aria-expanded="@otherExpanded">
+                                    <span>Informational</span>
+                                    <span class="portal-badge portal-badge-sm portal-badge-info" style="margin-left: 0.5rem;">@others.Count</span>
+                                    <svg class="portal-vr-accordion-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
+                                        <polyline points="6 9 12 15 18 9"/>
+                                    </svg>
+                                </button>
+                                @if (otherExpanded)
+                                {
+                                    <div class="portal-vr-accordion-body">
+                                        <div class="portal-report-table-scroll">
+                                            <table class="portal-report-table">
+                                                <thead>
+                                                    <tr>
+                                                        <th style="width:90px;">Rule ID</th>
+                                                        <th style="width:110px;">Category</th>
+                                                        <th>Message</th>
+                                                        <th style="width:100px;">Field</th>
+                                                        <th style="width:90px;">Expected</th>
+                                                        <th style="width:90px;">Actual</th>
+                                                        <th style="width:60px;" class="no-print">Fix</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    @foreach (var err in others)
+                                                    {
+                                                        <tr>
+                                                            <td><code class="portal-report-code">@err.Code</code></td>
+                                                            <td style="font-size: 0.6875rem; color: #6b7280;">@FormatCategory(err.Category)</td>
+                                                            <td><span style="font-size: 0.75rem;">@err.Message</span></td>
+                                                            <td class="portal-td-mono" style="font-size: 0.6875rem;">@(string.IsNullOrEmpty(err.FieldName) ? "—" : err.FieldName)</td>
+                                                            <td class="portal-td-mono" style="font-size: 0.6875rem;">@(err.ExpectedValue ?? "—")</td>
+                                                            <td class="portal-td-mono" style="font-size: 0.6875rem;">@(err.ActualValue ?? "—")</td>
+                                                            <td class="no-print">
+                                                                @if (!string.IsNullOrEmpty(err.FieldName))
+                                                                {
+                                                                    <a href="/submissions/@SubmissionId/edit?field=@Uri.EscapeDataString(err.FieldName)" class="portal-btn portal-btn-ghost portal-btn-xs">Fix →</a>
+                                                                }
+                                                            </td>
+                                                        </tr>
+                                                    }
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                }
+                            </div>
+                        }
+                    }
+                </section>
+            }
+            else
+            {
+                <section class="portal-report-section">
+                    <div class="portal-empty-state">
+                        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+                            <path d="M22 11.08V12a10 10 0 11-5.93-9.14"/>
+                            <polyline points="22 4 12 14.01 9 11.01"/>
+                        </svg>
+                        <p>No validation issues found.</p>
+                        <p style="font-size: 0.8125rem; color: #6b7280;">This submission passed all validation checks.</p>
                     </div>
                 </section>
             }
@@ -142,69 +561,181 @@
             <footer class="portal-report-footer">
                 <div class="portal-report-footer-line"></div>
                 <p>Generated by <strong>FC Engine</strong> — Central Bank of Nigeria</p>
+                <p>Generated at @report.GeneratedAt.ToString("dd MMM yyyy HH:mm") UTC by @report.GeneratedBy</p>
                 <p>This is a system-generated report. For official records, contact CBN's Financial Conditions Division.</p>
             </footer>
+
         </div>
     }
+
 </div>
 
 @code {
     [Parameter] public int SubmissionId { get; set; }
     [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
+
     private bool isLoading = true;
     private int institutionId;
     private int currentUserId;
     private ValidationReportModel? report;
+    private (int ErrorCount, int WarningCount)? _prevSummary;
+    private string? _error;
+    private bool _chartDirty;
+
+    // Error grouping/analysis
+    private string _groupBy = "flat"; // "flat" | "category" | "severity"
+    private HashSet<string> _expandedCategories = new();
+
+    // Derived analysis
+    private List<(string Category, int Count)> _topCategories = new();
+    private List<(string Field, int Count)> _topFields = new();
+
+    private IReadOnlyList<BreadcrumbItem> _breadcrumb = new List<BreadcrumbItem>
+    {
+        new() { Label = "Home",        Url = "/" },
+        new() { Label = "Submissions", Url = "/submissions", IsCurrent = false },
+        new() { Label = "Validation Report", IsCurrent = true }
+    };
 
     protected override async Task OnInitializedAsync()
     {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        isLoading = true;
+        _error = null;
         try
         {
             var state = await AuthState!;
             int.TryParse(state.User.FindFirst("InstitutionId")?.Value, out institutionId);
             int.TryParse(state.User.FindFirst(ClaimTypes.NameIdentifier)?.Value, out currentUserId);
+
             report = await ExportSvc.BuildValidationReportAsync(SubmissionId, institutionId);
+
+            if (report is not null)
+            {
+                // Build breadcrumb with real submission ID
+                _breadcrumb = new List<BreadcrumbItem>
+                {
+                    new() { Label = "Home",        Url = "/" },
+                    new() { Label = "Submissions", Url = "/submissions" },
+                    new() { Label = $"#{SubmissionId}", Url = $"/submissions/{SubmissionId}" },
+                    new() { Label = "Validation Report", IsCurrent = true }
+                };
+
+                // Build analysis data
+                _topCategories = report.Errors
+                    .GroupBy(e => e.Category)
+                    .Select(g => (g.Key, g.Count()))
+                    .OrderByDescending(x => x.Item2)
+                    .Take(5).ToList();
+
+                _topFields = report.Errors
+                    .Where(e => !string.IsNullOrEmpty(e.FieldName))
+                    .GroupBy(e => e.FieldName)
+                    .Select(g => (g.Key, g.Count()))
+                    .OrderByDescending(x => x.Item2)
+                    .Take(5).ToList();
+
+                // Default all categories expanded
+                _expandedCategories = report.Errors.Select(e => e.Category).ToHashSet();
+                // Also pre-expand severity accordion keys
+                _expandedCategories.Add("sev-errors");
+                _expandedCategories.Add("sev-warnings");
+                _expandedCategories.Add("sev-info");
+
+                // Previous submission comparison
+                _prevSummary = await ExportSvc.BuildPreviousValidationSummaryAsync(SubmissionId, institutionId);
+
+                _chartDirty = report.Errors.Count > 0;
+            }
         }
-        catch { }
-        finally { isLoading = false; }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            isLoading = false;
+        }
     }
 
-    private async Task PrintReport() => await JS.InvokeVoidAsync("portalPrintElement", "printable-report");
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_chartDirty && report is not null && report.ErrorCount + report.WarningCount > 0)
+        {
+            _chartDirty = false;
+            await Charts.InitChart("vr-donut", new
+            {
+                type     = "doughnut",
+                labels   = new[] { "Errors", "Warnings" },
+                datasets = new object[]
+                {
+                    new { label = "Issues", data = new[] { report.ErrorCount, report.WarningCount },
+                          color = "#dc2626" }
+                },
+                colors = new[] { "#dc2626", "#d97706" },
+            });
+        }
+    }
+
+    private void SetGroupBy(string mode) => _groupBy = mode;
+
+    private void ToggleCategory(string cat)
+    {
+        if (!_expandedCategories.Add(cat))
+            _expandedCategories.Remove(cat);
+    }
+
+    private async Task PrintReport() =>
+        await JS.InvokeVoidAsync("portalPrintElement", "printable-report");
 
     private async Task ExportErrorsCsv()
     {
         var csv = await ExportSvc.ExportValidationErrorsCsvAsync(SubmissionId, institutionId);
         if (!string.IsNullOrEmpty(csv))
         {
-            await JS.InvokeVoidAsync("portalDownloadFile", csv, $"validation-errors-{SubmissionId}.csv", "text/csv");
+            await JS.InvokeVoidAsync("portalDownloadFile", csv,
+                $"validation-errors-{SubmissionId}.csv", "text/csv");
             if (currentUserId > 0)
-            {
-                await ExportSvc.NotifyExportReady(institutionId, currentUserId, "Validation errors CSV", $"/reports/validation/{SubmissionId}");
-            }
+                await ExportSvc.NotifyExportReady(institutionId, currentUserId,
+                    "Validation errors CSV", $"/submissions/{SubmissionId}/report");
         }
     }
 
     private static string FormatStatus(SubmissionStatus s) => s switch
     {
-        SubmissionStatus.Accepted => "Accepted",
+        SubmissionStatus.Accepted             => "Accepted",
         SubmissionStatus.AcceptedWithWarnings => "Accepted with Warnings",
-        SubmissionStatus.Rejected => "Rejected",
-        SubmissionStatus.PendingApproval => "Pending Approval",
-        _ => s.ToString()
+        SubmissionStatus.Rejected             => "Rejected",
+        SubmissionStatus.PendingApproval      => "Pending Approval",
+        _                                     => s.ToString()
     };
 
     private static string GetSeverityBadge(string s) => s switch
     {
-        "Error" => "portal-badge-danger",
+        "Error"   => "portal-badge-danger",
         "Warning" => "portal-badge-warning",
-        _ => "portal-badge-info"
+        _         => "portal-badge-info"
     };
 
     private static string FormatCategory(string c) => c switch
     {
-        "TypeRange" => "Type & Range",
+        "TypeRange"  => "Type & Range",
         "IntraSheet" => "Intra-Sheet",
         "CrossSheet" => "Cross-Sheet",
-        _ => c
+        _            => c
     };
+
+    private string GetCompareClass(int current, int prev)
+    {
+        if (current < prev) return "portal-vr-compare-delta--better";
+        if (current > prev) return "portal-vr-compare-delta--worse";
+        return "portal-vr-compare-delta--same";
+    }
+
+    private string GetCompareArrow(int current, int prev) =>
+        current < prev ? "↓" : current > prev ? "↑" : "→";
 }

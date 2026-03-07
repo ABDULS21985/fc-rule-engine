@@ -1,115 +1,232 @@
 @page "/reports/compliance"
 @attribute [Authorize(Policy = "InstitutionUser")]
+@using FC.Engine.Infrastructure.Charts
+@using System.Security.Claims
+@using System.Globalization
 @inject ExportService ExportSvc
+@inject ChartJsInterop Charts
 @inject IJSRuntime JS
 
 <PageTitle>Compliance Report — FC Engine Portal</PageTitle>
 
-<div class="portal-page">
-    <!-- Filter Bar -->
-    <div class="portal-report-filter-bar no-print">
-        <h2 class="portal-report-filter-title">Compliance Report</h2>
-        <div class="portal-report-filter-row">
-            <div class="portal-report-filter-field">
-                <label class="portal-form-label">From</label>
-                <input type="date" class="portal-form-input" @bind="filterStart" />
-            </div>
-            <div class="portal-report-filter-field">
-                <label class="portal-form-label">To</label>
-                <input type="date" class="portal-form-input" @bind="filterEnd" />
-            </div>
-            <button class="portal-btn portal-btn-primary portal-btn-sm" @onclick="GenerateReport" disabled="@isLoading">
-                @if (isLoading)
-                {
-                    <span class="portal-btn-spinner" aria-hidden="true"></span>
-                }
-                Generate
+<PortalPageHeader Breadcrumb="_breadcrumb"
+                  Title="Compliance Report"
+                  Subtitle="Submission compliance for the selected period.">
+    <SecondaryActions>
+        @if (report is not null && !isLoading)
+        {
+            <button class="portal-btn portal-btn-ghost portal-btn-sm no-print" @onclick="ExportCsv" aria-label="Export compliance report as CSV">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                    <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+                    <polyline points="7 10 12 15 17 10"/>
+                    <line x1="12" y1="15" x2="12" y2="3"/>
+                </svg>
+                Export CSV
             </button>
-            @if (report is not null)
+            <button class="portal-btn portal-btn-ghost portal-btn-sm no-print" @onclick="PrintReport" aria-label="Print or save compliance report as PDF">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                    <polyline points="6 9 6 2 18 2 18 9"/>
+                    <path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/>
+                    <rect x="6" y="14" width="12" height="8"/>
+                </svg>
+                Print / PDF
+            </button>
+        }
+    </SecondaryActions>
+    <PrimaryAction>
+        <button class="portal-btn portal-btn-primary portal-btn-sm no-print"
+                @onclick="GenerateReport"
+                disabled="@isLoading"
+                aria-busy="@isLoading.ToString().ToLower()">
+            @if (isLoading)
             {
-                <button class="portal-btn portal-btn-ghost portal-btn-sm" @onclick="ExportCsv">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                    CSV
-                </button>
-                <button class="portal-btn portal-btn-ghost portal-btn-sm" @onclick="PrintReport">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
-                    Print
-                </button>
+                <span class="portal-btn-spinner" aria-hidden="true"></span>
             }
+            Generate
+        </button>
+    </PrimaryAction>
+</PortalPageHeader>
+
+<div class="portal-page">
+
+    @* ── Error banner ── *@
+    @if (_error is not null)
+    {
+        <div class="portal-alert portal-alert-error no-print" role="alert">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <circle cx="12" cy="12" r="10"/>
+                <line x1="12" y1="8" x2="12" y2="12"/>
+                <line x1="12" y1="16" x2="12.01" y2="16"/>
+            </svg>
+            <span>@_error</span>
+            <button class="portal-btn portal-btn-ghost portal-btn-xs" @onclick="GenerateReport">Retry</button>
         </div>
+    }
+
+    @* ── Date preset bar ── *@
+    <div class="portal-date-preset-bar no-print" role="group" aria-label="Date range presets">
+        @foreach (var preset in _presets)
+        {
+            var key = preset.Key;
+            var isActive = _activePreset == key;
+            <button class="portal-date-preset-pill @(isActive ? "portal-date-preset-pill--active" : "")"
+                    @onclick="() => ApplyPreset(key)"
+                    aria-pressed="@isActive.ToString().ToLower()">
+                @preset.Label
+            </button>
+        }
     </div>
 
+    @* ── Custom date inputs ── *@
+    @if (_activePreset == "custom")
+    {
+        <div class="portal-report-filter-row no-print" style="display: flex; align-items: flex-end; gap: 0.75rem; margin-bottom: 1rem; flex-wrap: wrap;">
+            <div>
+                <label class="portal-form-label" for="cr-filter-start">From</label>
+                <input id="cr-filter-start"
+                       type="date"
+                       class="portal-form-input"
+                       value="@filterStart.ToString("yyyy-MM-dd")"
+                       @onchange="e => { if (DateTime.TryParse(e.Value?.ToString(), out var d)) filterStart = d; }" />
+            </div>
+            <div>
+                <label class="portal-form-label" for="cr-filter-end">To</label>
+                <input id="cr-filter-end"
+                       type="date"
+                       class="portal-form-input"
+                       value="@filterEnd.ToString("yyyy-MM-dd")"
+                       @onchange="e => { if (DateTime.TryParse(e.Value?.ToString(), out var d)) filterEnd = d; }" />
+            </div>
+            <button class="portal-btn portal-btn-primary portal-btn-sm" @onclick="GenerateReport" disabled="@isLoading">
+                Apply
+            </button>
+        </div>
+    }
+
+    @* ── Loading state ── *@
     @if (isLoading)
     {
-        <div class="portal-card" style="padding: 2rem;">
-            <div class="portal-skeleton portal-skeleton-block" style="height: 80px; margin-bottom: 1rem;"></div>
-            <div class="portal-skeleton portal-skeleton-block" style="height: 300px;"></div>
-        </div>
+        <SkeletonGuard OnRetry="GenerateReport">
+            <div style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 1rem; margin-bottom: 1.5rem;">
+                <SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Stat" Index="0" />
+                <SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Stat" Index="1" />
+                <SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Stat" Index="2" />
+                <SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Stat" Index="3" />
+                <SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Stat" Index="4" />
+            </div>
+            <SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.TableRows" RowCount="8" Index="5" />
+        </SkeletonGuard>
     }
     else if (report is not null)
     {
         <div id="printable-compliance-report">
-            <!-- Print-only header -->
-            <div class="portal-report-print-header print-only">
-                <strong>Compliance Report</strong> — @report.InstitutionName (@report.InstitutionCode)
-                <br/>@report.StartDate.ToString("dd MMM yyyy") to @report.EndDate.ToString("dd MMM yyyy")
-                <br/>Generated: @report.GeneratedAt.ToString("dd MMM yyyy HH:mm") UTC
+
+            @* ── Print letterhead ── *@
+            <div class="portal-print-letterhead print-only" aria-hidden="true">
+                <h1>@report.InstitutionName</h1>
+                <p>@report.InstitutionCode &mdash; Central Bank of Nigeria Regulatory Returns</p>
+                <p>Period: @report.StartDate.ToString("dd MMM yyyy") &ndash; @report.EndDate.ToString("dd MMM yyyy")</p>
+                <p>Generated: @report.GeneratedAt.ToString("dd MMM yyyy HH:mm") UTC</p>
+                <p class="portal-print-confidential">CONFIDENTIAL &mdash; FOR INTERNAL USE</p>
             </div>
 
-            <!-- Summary Cards -->
-            <div class="portal-report-summary-cards" style="margin-bottom: 1.5rem;">
-                <div class="portal-report-summary-card @GetComplianceClass(report.CompliancePercent)">
-                    <span class="portal-report-summary-label">Compliance Rate</span>
-                    <strong class="portal-report-summary-value">@report.CompliancePercent%</strong>
+            @* ── Print watermark ── *@
+            <div class="portal-print-watermark print-only" aria-hidden="true">CONFIDENTIAL</div>
+
+            @* ── KPI Strip ── *@
+            <div class="portal-compliance-kpi-strip" role="list" aria-label="Compliance key metrics">
+
+                @* Compliance Rate gauge card *@
+                <div class="portal-compliance-kpi portal-compliance-kpi--rate" role="listitem">
+                    <div class="portal-compliance-gauge" aria-hidden="true">
+                        <svg viewBox="0 0 80 80" width="80" height="80" role="presentation">
+                            <circle cx="40" cy="40" r="34"
+                                    fill="none"
+                                    stroke="#e5e7eb"
+                                    stroke-width="7" />
+                            <circle cx="40" cy="40" r="34"
+                                    fill="none"
+                                    stroke="@GetGaugeColor(report.CompliancePercent)"
+                                    stroke-width="7"
+                                    stroke-linecap="round"
+                                    stroke-dasharray="213.63"
+                                    stroke-dashoffset="@((213.63 * (1.0 - report.CompliancePercent / 100.0)).ToString("F2", CultureInfo.InvariantCulture))"
+                                    class="portal-gauge-circle"
+                                    transform="rotate(-90 40 40)" />
+                        </svg>
+                        <div class="portal-gauge-label" style="color: @GetGaugeColor(report.CompliancePercent);">
+                            @report.CompliancePercent.ToString("F1")%
+                        </div>
+                    </div>
+                    <div class="portal-compliance-kpi__meta">
+                        <span class="portal-compliance-kpi__title">Compliance Rate</span>
+                        <span class="portal-compliance-kpi__sub">@_daysInPeriod day period</span>
+                    </div>
                 </div>
-                <div class="portal-report-summary-card portal-report-summary-neutral">
-                    <span class="portal-report-summary-label">Total</span>
-                    <strong class="portal-report-summary-value">@report.TotalSubmissions</strong>
+
+                @* Total *@
+                <div class="portal-compliance-kpi" role="listitem">
+                    <span class="portal-compliance-kpi__value">@report.TotalSubmissions</span>
+                    <span class="portal-compliance-kpi__title">Total</span>
                 </div>
-                <div class="portal-report-summary-card portal-report-summary-clear">
-                    <span class="portal-report-summary-label">Accepted</span>
-                    <strong class="portal-report-summary-value">@report.AcceptedCount</strong>
+
+                @* Accepted *@
+                <div class="portal-compliance-kpi" role="listitem">
+                    <a href="/reports/compliance?status=accepted" class="portal-compliance-kpi__link" aria-label="View @report.AcceptedCount accepted submissions">
+                        <span class="portal-compliance-kpi__value portal-compliance-kpi__value--success">@report.AcceptedCount</span>
+                        <span class="portal-compliance-kpi__title">Accepted</span>
+                    </a>
                 </div>
-                <div class="portal-report-summary-card portal-report-summary-error">
-                    <span class="portal-report-summary-label">Rejected</span>
-                    <strong class="portal-report-summary-value">@report.RejectedCount</strong>
+
+                @* Rejected *@
+                <div class="portal-compliance-kpi" role="listitem">
+                    <span class="portal-compliance-kpi__value portal-compliance-kpi__value--danger">@report.RejectedCount</span>
+                    <span class="portal-compliance-kpi__title">Rejected</span>
                 </div>
-                <div class="portal-report-summary-card portal-report-summary-warn">
-                    <span class="portal-report-summary-label">Pending</span>
-                    <strong class="portal-report-summary-value">@report.PendingCount</strong>
+
+                @* Pending *@
+                <div class="portal-compliance-kpi" role="listitem">
+                    <span class="portal-compliance-kpi__value portal-compliance-kpi__value--warning">@report.PendingCount</span>
+                    <span class="portal-compliance-kpi__title">Pending</span>
                 </div>
+
             </div>
 
-            <!-- Submissions Table -->
-            @if (report.Submissions.Any())
+            @* ── Breakdown by Return Code ── *@
+            @if (_breakdown.Count > 0)
             {
-                <div class="portal-card portal-card-flush">
+                <div class="portal-card portal-compliance-breakdown">
+                    <h2 style="font-size: 0.875rem; font-weight: 600; margin: 0 0 0.75rem 0; color: var(--color-text-secondary, #6b7280);">
+                        Breakdown by Return Code
+                    </h2>
                     <div class="portal-report-table-scroll">
-                        <table class="portal-report-table">
+                        <table class="portal-report-table portal-compliance-breakdown-table" aria-label="Compliance breakdown by return code">
                             <thead>
                                 <tr>
-                                    <th>ID</th>
-                                    <th>Return Code</th>
-                                    <th>Period</th>
-                                    <th>Status</th>
-                                    <th>Submitted</th>
-                                    <th>By</th>
-                                    <th>Errors</th>
-                                    <th>Warnings</th>
+                                    <th scope="col">Return Code</th>
+                                    <th scope="col" style="text-align: right;">Submissions</th>
+                                    <th scope="col" style="text-align: right;">Accepted</th>
+                                    <th scope="col" style="text-align: right;">Compliance %</th>
+                                    <th scope="col" style="width: 180px;">Rate</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                @foreach (var item in report.Submissions)
+                                @foreach (var row in _breakdown)
                                 {
+                                    var barColor = GetGaugeColor(row.Pct);
+                                    var barWidth = row.Pct.ToString("F1", CultureInfo.InvariantCulture);
                                     <tr>
-                                        <td><a href="/submissions/@item.SubmissionId" class="portal-link">#@item.SubmissionId</a></td>
-                                        <td class="portal-td-mono">@item.ReturnCode</td>
-                                        <td>@item.Period</td>
-                                        <td><span class="portal-badge portal-badge-sm @GetStatusBadge(item.Status)">@FormatStatus(item.Status)</span></td>
-                                        <td style="font-size: 0.75rem;">@item.SubmittedAt.ToString("dd MMM yyyy HH:mm")</td>
-                                        <td style="font-size: 0.75rem;">@item.SubmittedBy</td>
-                                        <td class="portal-td-mono">@item.ErrorCount</td>
-                                        <td class="portal-td-mono">@item.WarningCount</td>
+                                        <td class="portal-td-mono">@row.Code</td>
+                                        <td style="text-align: right;">@row.Total</td>
+                                        <td style="text-align: right;">@row.Accepted</td>
+                                        <td style="text-align: right; font-weight: 600; color: @barColor;">@row.Pct.ToString("F1")%</td>
+                                        <td>
+                                            <div class="portal-compliance-breakdown-bar-bg" aria-hidden="true">
+                                                <div class="portal-compliance-breakdown-bar"
+                                                     style="width: @barWidth%; background: @barColor;">
+                                                </div>
+                                            </div>
+                                        </td>
                                     </tr>
                                 }
                             </tbody>
@@ -117,84 +234,464 @@
                     </div>
                 </div>
             }
+
+            @* ── Trend chart ── *@
+            @if (_showTrendChart)
+            {
+                <div class="portal-card" style="margin-bottom: 1.5rem;">
+                    <h2 style="font-size: 0.875rem; font-weight: 600; margin: 0 0 0.75rem 0; color: var(--color-text-secondary, #6b7280);">
+                        Monthly Compliance Trend
+                    </h2>
+                    <canvas id="compliance-trend-chart" style="max-height: 220px;" aria-label="Monthly compliance trend chart" role="img"></canvas>
+                </div>
+            }
             else
             {
-                <div class="portal-card portal-empty-state" style="padding: 3rem;">
-                    <h3 class="portal-empty-state-title">No Submissions Found</h3>
-                    <p class="portal-empty-state-desc">No submissions were found in the selected date range.</p>
+                <div class="portal-info-note no-print" role="note">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                        <circle cx="12" cy="12" r="10"/>
+                        <line x1="12" y1="16" x2="12" y2="12"/>
+                        <line x1="12" y1="8" x2="12.01" y2="8"/>
+                    </svg>
+                    Select a date range of 60+ days to see the monthly compliance trend chart.
                 </div>
             }
 
-            <!-- Print-only footer -->
-            <div class="portal-report-print-footer print-only">
-                Generated by FC Engine — Central Bank of Nigeria
+            @* ── Table toolbar ── *@
+            <div class="portal-compliance-table-toolbar no-print" role="toolbar" aria-label="Submission table controls">
+                <label class="portal-form-label" for="cr-status-filter" style="margin: 0;">Status</label>
+                <select id="cr-status-filter"
+                        class="portal-form-select"
+                        style="width: auto; min-width: 160px;"
+                        value="@_statusFilter"
+                        @onchange="e => { _statusFilter = e.Value?.ToString() ?? ""; ResetPage(); }">
+                    <option value="">All Statuses</option>
+                    <option value="accepted">Accepted</option>
+                    <option value="rejected">Rejected</option>
+                    <option value="pending">Pending</option>
+                </select>
+                <span class="portal-table-count" aria-live="polite" aria-atomic="true">
+                    @FilteredItems.Count submission@(FilteredItems.Count == 1 ? "" : "s")
+                </span>
             </div>
+
+            @* ── Submissions table ── *@
+            @if (FilteredItems.Count > 0)
+            {
+                <div class="portal-card portal-card-flush">
+                    <div class="portal-report-table-scroll">
+                        <table class="portal-report-table" aria-label="Compliance submissions">
+                            <thead>
+                                <tr>
+                                    <th scope="col" class="portal-th-sortable" @onclick='() => Sort("id")' aria-sort="@GetAriaSortAttr("id")">
+                                        ID
+                                        <span class="portal-sort-icon @(_sortCol == "id" ? "portal-sort-icon--active" : "")" aria-hidden="true">@SortArrow("id")</span>
+                                    </th>
+                                    <th scope="col" class="portal-th-sortable" @onclick='() => Sort("code")' aria-sort="@GetAriaSortAttr("code")">
+                                        Return Code
+                                        <span class="portal-sort-icon @(_sortCol == "code" ? "portal-sort-icon--active" : "")" aria-hidden="true">@SortArrow("code")</span>
+                                    </th>
+                                    <th scope="col" class="portal-th-sortable" @onclick='() => Sort("period")' aria-sort="@GetAriaSortAttr("period")">
+                                        Period
+                                        <span class="portal-sort-icon @(_sortCol == "period" ? "portal-sort-icon--active" : "")" aria-hidden="true">@SortArrow("period")</span>
+                                    </th>
+                                    <th scope="col" class="portal-th-sortable" @onclick='() => Sort("status")' aria-sort="@GetAriaSortAttr("status")">
+                                        Status
+                                        <span class="portal-sort-icon @(_sortCol == "status" ? "portal-sort-icon--active" : "")" aria-hidden="true">@SortArrow("status")</span>
+                                    </th>
+                                    <th scope="col" class="portal-th-sortable" @onclick='() => Sort("submitted")' aria-sort="@GetAriaSortAttr("submitted")">
+                                        Submitted
+                                        <span class="portal-sort-icon @(_sortCol == "submitted" ? "portal-sort-icon--active" : "")" aria-hidden="true">@SortArrow("submitted")</span>
+                                    </th>
+                                    <th scope="col">By</th>
+                                    <th scope="col" class="portal-th-sortable" @onclick='() => Sort("errors")' aria-sort="@GetAriaSortAttr("errors")">
+                                        Errors
+                                        <span class="portal-sort-icon @(_sortCol == "errors" ? "portal-sort-icon--active" : "")" aria-hidden="true">@SortArrow("errors")</span>
+                                    </th>
+                                    <th scope="col">Warnings</th>
+                                    <th scope="col">Certificate</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var item in PagedItems)
+                                {
+                                    var hasErrors = item.ErrorCount > 0;
+                                    var hasCert = item.Status is SubmissionStatus.Accepted or SubmissionStatus.AcceptedWithWarnings;
+                                    <tr>
+                                        <td>
+                                            <a href="/submissions/@item.SubmissionId" class="portal-link">#@item.SubmissionId</a>
+                                        </td>
+                                        <td class="portal-td-mono">@item.ReturnCode</td>
+                                        <td>@item.Period</td>
+                                        <td>
+                                            <span class="portal-badge portal-badge-sm @GetStatusBadge(item.Status)">
+                                                @FormatStatus(item.Status)
+                                            </span>
+                                        </td>
+                                        <td style="font-size: 0.75rem; white-space: nowrap;">
+                                            @item.SubmittedAt.ToString("dd MMM yyyy HH:mm")
+                                        </td>
+                                        <td style="font-size: 0.75rem;">@item.SubmittedBy</td>
+                                        <td class="portal-td-mono">
+                                            @if (hasErrors)
+                                            {
+                                                <a href="/submissions/@item.SubmissionId/report"
+                                                   class="portal-badge portal-badge-sm portal-badge-danger"
+                                                   aria-label="@item.ErrorCount error@(item.ErrorCount == 1 ? "" : "s") — view report">
+                                                    @item.ErrorCount
+                                                </a>
+                                            }
+                                            else
+                                            {
+                                                <span class="portal-badge portal-badge-sm portal-badge-neutral">0</span>
+                                            }
+                                        </td>
+                                        <td class="portal-td-mono">
+                                            @if (item.WarningCount > 0)
+                                            {
+                                                <span class="portal-badge portal-badge-sm portal-badge-warning">@item.WarningCount</span>
+                                            }
+                                            else
+                                            {
+                                                <span style="color: var(--color-text-muted, #9ca3af);">0</span>
+                                            }
+                                        </td>
+                                        <td>
+                                            @if (hasCert)
+                                            {
+                                                <a href="/reports/compliance-certificate/@item.SubmissionId"
+                                                   class="portal-link-cert"
+                                                   aria-label="View compliance certificate for submission #@item.SubmissionId">
+                                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                                                        <circle cx="12" cy="8" r="6"/>
+                                                        <path d="M15.477 12.89L17 22l-5-3-5 3 1.523-9.11"/>
+                                                    </svg>
+                                                    Certificate
+                                                </a>
+                                            }
+                                            else
+                                            {
+                                                <span aria-label="No certificate available">&mdash;</span>
+                                            }
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+
+                    @* ── Pagination ── *@
+                    @if (TotalPages > 1)
+                    {
+                        <div class="portal-pagination no-print" role="navigation" aria-label="Table pagination">
+                            <button class="portal-btn portal-btn-ghost portal-btn-sm"
+                                    @onclick="PrevPage"
+                                    disabled="@(_page <= 1)"
+                                    aria-label="Previous page">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                                    <polyline points="15 18 9 12 15 6"/>
+                                </svg>
+                                Prev
+                            </button>
+                            <span class="portal-pagination-label" aria-current="page" aria-label="Page @_page of @TotalPages">
+                                Page @_page of @TotalPages
+                            </span>
+                            <button class="portal-btn portal-btn-ghost portal-btn-sm"
+                                    @onclick="NextPage"
+                                    disabled="@(_page >= TotalPages)"
+                                    aria-label="Next page">
+                                Next
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                                    <polyline points="9 18 15 12 9 6"/>
+                                </svg>
+                            </button>
+                        </div>
+                    }
+                </div>
+            }
+            else
+            {
+                <div class="portal-card portal-empty-state" style="padding: 3rem; text-align: center;">
+                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" style="color: #d1d5db; margin-bottom: 0.75rem;" aria-hidden="true">
+                        <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
+                        <polyline points="14 2 14 8 20 8"/>
+                        <line x1="16" y1="13" x2="8" y2="13"/>
+                        <line x1="16" y1="17" x2="8" y2="17"/>
+                        <polyline points="10 9 9 9 8 9"/>
+                    </svg>
+                    <h3 class="portal-empty-state-title">No Submissions Found</h3>
+                    <p class="portal-empty-state-desc">
+                        No submissions match the selected date range@(string.IsNullOrEmpty(_statusFilter) ? "" : " and status filter").
+                    </p>
+                </div>
+            }
+
+            @* ── Print footer ── *@
+            <div class="portal-report-print-footer print-only" aria-hidden="true">
+                Generated by FC Engine &mdash; Central Bank of Nigeria
+            </div>
+
         </div>
     }
+
 </div>
 
 @code {
     [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
+    [SupplyParameterFromQuery(Name = "status")] public string? StatusParam { get; set; }
+
+    private static readonly IReadOnlyList<BreadcrumbItem> _breadcrumb = new List<BreadcrumbItem>
+    {
+        new() { Label = "Home",              Url = "/" },
+        new() { Label = "Reports",           Url = "/reports/saved" },
+        new() { Label = "Compliance Report", IsCurrent = true }
+    };
+
+    private record PresetOption(string Key, string Label);
+    private static readonly PresetOption[] _presets =
+    {
+        new("this-month",   "This Month"),
+        new("last-month",   "Last Month"),
+        new("this-quarter", "This Quarter"),
+        new("last-quarter", "Last Quarter"),
+        new("ytd",          "YTD"),
+        new("custom",       "Custom"),
+    };
+
     private bool isLoading = true;
     private int institutionId;
     private int currentUserId;
     private DateTime filterStart = DateTime.UtcNow.AddMonths(-3).Date;
-    private DateTime filterEnd = DateTime.UtcNow.Date;
+    private DateTime filterEnd   = DateTime.UtcNow.Date;
+    private string _activePreset = "this-quarter";
     private ComplianceReportModel? report;
+    private string? _error;
+    private int _daysInPeriod;
+    private List<(string Code, int Total, int Accepted, double Pct)> _breakdown = new();
+    private List<string>  _trendLabels = new();
+    private List<decimal> _trendValues = new();
+    private bool _showTrendChart;
+    private bool _chartDirty;
+
+    // Table state
+    private string _statusFilter = "";
+    private string _sortCol = "submitted";
+    private bool   _sortDesc  = true;
+    private int    _page      = 1;
+    private const int PageSize = 20;
+
+    private List<ComplianceReportItem> FilteredItems
+    {
+        get
+        {
+            if (report is null) return new();
+            IEnumerable<ComplianceReportItem> items = report.Submissions
+                .Where(s => string.IsNullOrEmpty(_statusFilter) || MatchesStatusFilter(s.Status, _statusFilter));
+            items = (_sortCol, _sortDesc) switch
+            {
+                ("id",        true)  => items.OrderByDescending(s => s.SubmissionId),
+                ("id",        false) => items.OrderBy(s => s.SubmissionId),
+                ("code",      true)  => items.OrderByDescending(s => s.ReturnCode),
+                ("code",      false) => items.OrderBy(s => s.ReturnCode),
+                ("period",    true)  => items.OrderByDescending(s => s.Period),
+                ("period",    false) => items.OrderBy(s => s.Period),
+                ("status",    true)  => items.OrderByDescending(s => s.Status),
+                ("status",    false) => items.OrderBy(s => s.Status),
+                ("errors",    true)  => items.OrderByDescending(s => s.ErrorCount),
+                ("errors",    false) => items.OrderBy(s => s.ErrorCount),
+                (_,           true)  => items.OrderByDescending(s => s.SubmittedAt),
+                _                   => items.OrderBy(s => s.SubmittedAt),
+            };
+            return items.ToList();
+        }
+    }
+
+    private IEnumerable<ComplianceReportItem> PagedItems =>
+        FilteredItems.Skip((_page - 1) * PageSize).Take(PageSize);
+
+    private int TotalPages => Math.Max(1, (int)Math.Ceiling(FilteredItems.Count / (double)PageSize));
 
     protected override async Task OnInitializedAsync()
     {
         var state = await AuthState!;
         int.TryParse(state.User.FindFirst("InstitutionId")?.Value, out institutionId);
         int.TryParse(state.User.FindFirst(ClaimTypes.NameIdentifier)?.Value, out currentUserId);
+        if (!string.IsNullOrEmpty(StatusParam)) _statusFilter = StatusParam;
+        ApplyPreset("this-quarter", autoGenerate: false);
         await GenerateReport();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_chartDirty && _showTrendChart && _trendLabels.Count > 0)
+        {
+            _chartDirty = false;
+            await Charts.InitChart("compliance-trend-chart", new
+            {
+                type = "line",
+                labels = _trendLabels,
+                datasets = new object[]
+                {
+                    new { label = "Compliance %", data = _trendValues, color = "#006B3F" }
+                },
+                yLabel = "%",
+                legend = false,
+            });
+        }
+    }
+
+    private void ApplyPreset(string key, bool autoGenerate = true)
+    {
+        _activePreset = key;
+        var now = DateTime.UtcNow;
+        switch (key)
+        {
+            case "this-month":
+                filterStart = new DateTime(now.Year, now.Month, 1);
+                filterEnd   = now.Date;
+                break;
+            case "last-month":
+                var lm = now.AddMonths(-1);
+                filterStart = new DateTime(lm.Year, lm.Month, 1);
+                filterEnd   = new DateTime(lm.Year, lm.Month, DateTime.DaysInMonth(lm.Year, lm.Month));
+                break;
+            case "this-quarter":
+                int q = (now.Month - 1) / 3;
+                filterStart = new DateTime(now.Year, q * 3 + 1, 1);
+                filterEnd   = now.Date;
+                break;
+            case "last-quarter":
+                int lq = (now.Month - 1) / 3 - 1;
+                int lqY = now.Year;
+                if (lq < 0) { lq = 3; lqY--; }
+                filterStart = new DateTime(lqY, lq * 3 + 1, 1);
+                filterEnd   = new DateTime(lqY, lq * 3 + 3, DateTime.DaysInMonth(lqY, lq * 3 + 3));
+                break;
+            case "ytd":
+                filterStart = new DateTime(now.Year, 1, 1);
+                filterEnd   = now.Date;
+                break;
+        }
+        if (autoGenerate) _ = GenerateReport();
     }
 
     private async Task GenerateReport()
     {
         isLoading = true;
+        _error = null;
         try
         {
             report = await ExportSvc.BuildComplianceReportAsync(institutionId, filterStart, filterEnd.AddDays(1));
+            _daysInPeriod   = (filterEnd - filterStart).Days + 1;
+            _showTrendChart = _daysInPeriod >= 60;
+            BuildBreakdown();
+            BuildTrendData();
+            _chartDirty = _showTrendChart;
         }
-        catch { }
-        finally { isLoading = false; }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            isLoading = false;
+        }
     }
+
+    private void BuildBreakdown()
+    {
+        _breakdown = report?.Submissions
+            .GroupBy(s => s.ReturnCode)
+            .Select(g =>
+            {
+                int total    = g.Count();
+                int accepted = g.Count(s => s.Status is SubmissionStatus.Accepted or SubmissionStatus.AcceptedWithWarnings);
+                double pct   = total > 0 ? Math.Round((double)accepted / total * 100, 1) : 0;
+                return (g.Key, total, accepted, pct);
+            })
+            .OrderByDescending(r => r.total)
+            .ToList() ?? new();
+    }
+
+    private void BuildTrendData()
+    {
+        if (report is null) return;
+        var monthly = report.Submissions
+            .GroupBy(s => new { s.SubmittedAt.Year, s.SubmittedAt.Month })
+            .OrderBy(g => g.Key.Year).ThenBy(g => g.Key.Month)
+            .Select(g =>
+            {
+                int total    = g.Count();
+                int accepted = g.Count(s => s.Status is SubmissionStatus.Accepted or SubmissionStatus.AcceptedWithWarnings);
+                double pct   = total > 0 ? Math.Round((double)accepted / total * 100, 1) : 0;
+                return (Label: $"{g.Key.Year}/{g.Key.Month:D2}", Pct: (decimal)pct);
+            }).ToList();
+        _trendLabels = monthly.Select(m => m.Label).ToList();
+        _trendValues = monthly.Select(m => m.Pct).ToList();
+    }
+
+    private void Sort(string col)
+    {
+        if (_sortCol == col) _sortDesc = !_sortDesc;
+        else { _sortCol = col; _sortDesc = false; }
+        _page = 1;
+    }
+
+    private string SortArrow(string col) =>
+        _sortCol == col ? (_sortDesc ? "↓" : "↑") : "↕";
+
+    private string GetAriaSortAttr(string col)
+    {
+        if (_sortCol != col) return "none";
+        return _sortDesc ? "descending" : "ascending";
+    }
+
+    private void ResetPage() => _page = 1;
+    private void PrevPage()  { if (_page > 1)          _page--; }
+    private void NextPage()  { if (_page < TotalPages) _page++; }
+
+    private static bool MatchesStatusFilter(SubmissionStatus s, string filter) => filter switch
+    {
+        "accepted" => s is SubmissionStatus.Accepted or SubmissionStatus.AcceptedWithWarnings,
+        "rejected" => s is SubmissionStatus.Rejected or SubmissionStatus.ApprovalRejected,
+        "pending"  => s is SubmissionStatus.PendingApproval or SubmissionStatus.Validating or SubmissionStatus.Parsing,
+        _          => true
+    };
+
+    private static string GetGaugeColor(double pct) => pct switch
+    {
+        >= 80 => "#059669",
+        >= 50 => "#d97706",
+        _     => "#dc2626"
+    };
 
     private async Task ExportCsv()
     {
         if (report is null) return;
         var csv = ExportSvc.ExportComplianceReportCsv(report);
-        await JS.InvokeVoidAsync("portalDownloadFile", csv, $"compliance-report-{filterStart:yyyyMMdd}-{filterEnd:yyyyMMdd}.csv", "text/csv");
+        await JS.InvokeVoidAsync("portalDownloadFile", csv,
+            $"compliance-report-{filterStart:yyyyMMdd}-{filterEnd:yyyyMMdd}.csv", "text/csv");
         if (currentUserId > 0)
-        {
             await ExportSvc.NotifyExportReady(institutionId, currentUserId, "Compliance report CSV", "/reports/compliance");
-        }
     }
 
-    private async Task PrintReport() => await JS.InvokeVoidAsync("portalPrintElement", "printable-compliance-report");
-
-    private static string GetComplianceClass(double pct) => pct switch
-    {
-        >= 80 => "portal-report-summary-clear",
-        >= 50 => "portal-report-summary-warn",
-        _ => "portal-report-summary-error"
-    };
+    private async Task PrintReport() =>
+        await JS.InvokeVoidAsync("portalPrintElement", "printable-compliance-report");
 
     private static string GetStatusBadge(SubmissionStatus s) => s switch
     {
-        SubmissionStatus.Accepted => "portal-badge-success",
-        SubmissionStatus.AcceptedWithWarnings => "portal-badge-warning",
+        SubmissionStatus.Accepted                                    => "portal-badge-success",
+        SubmissionStatus.AcceptedWithWarnings                        => "portal-badge-warning",
         SubmissionStatus.Rejected or SubmissionStatus.ApprovalRejected => "portal-badge-danger",
-        SubmissionStatus.PendingApproval => "portal-badge-info",
-        _ => "portal-badge-neutral"
+        SubmissionStatus.PendingApproval                             => "portal-badge-info",
+        _                                                            => "portal-badge-neutral"
     };
 
     private static string FormatStatus(SubmissionStatus s) => s switch
     {
         SubmissionStatus.AcceptedWithWarnings => "Warnings",
-        SubmissionStatus.PendingApproval => "Pending",
-        SubmissionStatus.ApprovalRejected => "Rejected",
-        _ => s.ToString()
+        SubmissionStatus.PendingApproval      => "Pending",
+        SubmissionStatus.ApprovalRejected     => "Rejected",
+        _                                     => s.ToString()
     };
 }

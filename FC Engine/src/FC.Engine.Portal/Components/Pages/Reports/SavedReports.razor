@@ -10,30 +10,103 @@
 
 <PageTitle>Saved Reports — FC Engine Portal</PageTitle>
 
-<div class="portal-page">
-    <div class="portal-report-filter-bar">
-        <h2 class="portal-report-filter-title">Saved Reports</h2>
-        <div class="portal-report-filter-row">
-            <div class="portal-input-wrapper" style="flex:1; max-width:320px;">
-                <span class="portal-input-icon" aria-hidden="true">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
-                    </svg>
-                </span>
-                <input type="text" class="portal-form-input portal-form-input-icon"
-                       placeholder="Search reports…"
-                       @bind="searchTerm" @bind:event="oninput"
-                       @bind:after="OnSearchChanged"
-                       aria-label="Search saved reports" />
-            </div>
-            <button class="portal-btn portal-btn-primary portal-btn-sm" @onclick='() => Nav.NavigateTo("/reports/builder")'>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                New Report
+<PortalPageHeader
+    Breadcrumb="_breadcrumb"
+    Title="Saved Reports"
+    Subtitle="Your custom and saved report configurations.">
+    <SecondaryActions>
+        <div class="portal-view-toggle" role="group" aria-label="View mode">
+            <button class="portal-view-toggle-btn @(_viewMode == "grid" ? "portal-view-toggle-btn--active" : "")"
+                    @onclick='() => _viewMode = "grid"'
+                    aria-pressed="@(_viewMode == "grid")"
+                    title="Grid view">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                    <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
+                    <rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/>
+                </svg>
+                Grid
+            </button>
+            <button class="portal-view-toggle-btn @(_viewMode == "table" ? "portal-view-toggle-btn--active" : "")"
+                    @onclick='() => _viewMode = "table"'
+                    aria-pressed="@(_viewMode == "table")"
+                    title="Table view">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                    <line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>
+                </svg>
+                Table
             </button>
         </div>
+    </SecondaryActions>
+    <PrimaryAction>
+        <button class="portal-btn portal-btn-primary portal-btn-sm" @onclick='() => Nav.NavigateTo("/reports/builder")'>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+            </svg>
+            New Report
+        </button>
+    </PrimaryAction>
+</PortalPageHeader>
+
+<div class="portal-page">
+
+    @* Error alert *@
+    @if (!string.IsNullOrEmpty(_error))
+    {
+        <div class="portal-alert portal-alert-error" role="alert">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+            </svg>
+            @_error
+        </div>
+    }
+
+    @* Filter / search toolbar *@
+    <div class="no-print" style="display:flex; flex-direction:column; gap:0.75rem; margin-bottom:1.25rem;">
+
+        @* Type filter pills *@
+        <div class="portal-type-filter-bar" role="group" aria-label="Filter by report type">
+            <button class="portal-date-preset-pill @(_typeFilter == null ? "portal-date-preset-pill--active" : "")"
+                    @onclick='() => SetTypeFilter(null)'>
+                All
+            </button>
+            <button class="portal-date-preset-pill @(_typeFilter == "compliance" ? "portal-date-preset-pill--active" : "")"
+                    @onclick='() => SetTypeFilter("compliance")'>
+                Compliance
+            </button>
+            <button class="portal-date-preset-pill @(_typeFilter == "audit" ? "portal-date-preset-pill--active" : "")"
+                    @onclick='() => SetTypeFilter("audit")'>
+                Audit
+            </button>
+            <button class="portal-date-preset-pill @(_typeFilter == "validation" ? "portal-date-preset-pill--active" : "")"
+                    @onclick='() => SetTypeFilter("validation")'>
+                Validation
+            </button>
+            <button class="portal-date-preset-pill @(_typeFilter == "custom" ? "portal-date-preset-pill--active" : "")"
+                    @onclick='() => SetTypeFilter("custom")'>
+                Custom
+            </button>
+        </div>
+
+        @* Search input *@
+        <div class="portal-input-wrapper" style="max-width:340px;">
+            <span class="portal-input-icon" aria-hidden="true">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                </svg>
+            </span>
+            <input type="text"
+                   class="portal-form-input portal-form-input-icon"
+                   placeholder="Search reports…"
+                   @bind="searchTerm"
+                   @bind:event="oninput"
+                   @bind:after="OnSearchChanged"
+                   aria-label="Search saved reports" />
+        </div>
+
+        @* Active filters row *@
         @if (!string.IsNullOrEmpty(searchTerm))
         {
-            <div class="portal-toolbar-active-filters" style="margin-top:10px; padding-top:10px; border-top:1px solid var(--cbn-border-subtle,#f3f4f6);">
+            <div class="portal-toolbar-active-filters">
                 <span class="portal-toolbar-active-label">
                     Filters <span class="portal-filter-count-badge">1</span>:
                 </span>
@@ -48,19 +121,27 @@
         }
     </div>
 
+    @* Loading skeleton *@
     @if (isLoading)
     {
-        <div class="portal-card" style="padding: 2rem;">
-            <div class="portal-skeleton portal-skeleton-block" style="height: 300px;"></div>
-        </div>
+        <SkeletonGuard OnRetry="LoadReports">
+            <div class="portal-saved-reports-grid" aria-busy="true" aria-label="Loading reports">
+                <SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Card" Index="0" />
+                <SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Card" Index="4" />
+                <SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Card" Index="8" />
+                <SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Card" Index="12" />
+                <SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Card" Index="16" />
+                <SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Card" Index="20" />
+            </div>
+        </SkeletonGuard>
     }
     else if (filteredReports.Count == 0)
     {
-        @if (!string.IsNullOrWhiteSpace(searchTerm))
+        @if (!string.IsNullOrWhiteSpace(searchTerm) || _typeFilter != null)
         {
             <PortalEmptyState Variant="reports" HasFilter="true"
-                              ActionText="Clear search"
-                              OnAction="EventCallback.Factory.Create(this, () => { searchTerm = string.Empty; })" />
+                              ActionText="Clear filters"
+                              OnAction="EventCallback.Factory.Create(this, () => { searchTerm = string.Empty; _typeFilter = null; Nav.NavigateTo("/reports/saved", replace: true); })" />
         }
         else
         {
@@ -69,8 +150,132 @@
                               ActionUrl="/reports/builder" />
         }
     }
+    else if (_viewMode == "grid")
+    {
+        @* ── Grid view ── *@
+        <div class="portal-saved-reports-grid">
+            @foreach (var report in filteredReports)
+            {
+                var reportType = GetReportType(report);
+                <div class="portal-saved-report-card">
+                    <div class="portal-saved-report-card__header">
+                        <div class="portal-saved-report-card__icon portal-saved-report-card__icon--@reportType" aria-hidden="true">
+                            @if (reportType == "compliance")
+                            {
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>
+                                </svg>
+                            }
+                            else if (reportType == "audit")
+                            {
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+                                </svg>
+                            }
+                            else if (reportType == "validation")
+                            {
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="9 12 11 14 15 10"/>
+                                </svg>
+                            }
+                            else
+                            {
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <circle cx="12" cy="12" r="3"/>
+                                    <path d="M19.07 4.93a10 10 0 0 1 0 14.14"/>
+                                    <path d="M4.93 4.93a10 10 0 0 0 0 14.14"/>
+                                </svg>
+                            }
+                        </div>
+                        <div class="portal-saved-report-card__info">
+                            <div class="portal-saved-report-card__name">@report.Name</div>
+                            <div class="portal-saved-report-card__desc">@(report.Description ?? "No description")</div>
+                        </div>
+                    </div>
+
+                    <div class="portal-saved-report-card__badges">
+                        @if (report.IsShared)
+                        {
+                            <span class="portal-badge portal-badge-info">Shared</span>
+                        }
+                        @if (report.IsScheduleActive)
+                        {
+                            <span class="portal-badge portal-badge-success">Scheduled</span>
+                        }
+                    </div>
+
+                    <div class="portal-saved-report-card__meta">
+                        @(report.LastRunAt.HasValue ? $"Last run {FormatAge(report.LastRunAt.Value)}" : "Never run")
+                    </div>
+
+                    @* Inline run preview *@
+                    @if (_runPreviewId == report.Id)
+                    {
+                        <div class="portal-saved-reports-run-preview" role="status">
+                            @if (_runPreviewLoading)
+                            {
+                                <span class="portal-btn-spinner" aria-hidden="true"></span>
+                                <span>Running…</span>
+                            }
+                            else
+                            {
+                                <span>@_runPreviewText</span>
+                                <button class="portal-btn portal-btn-ghost portal-btn-xs" @onclick='() => _runPreviewId = null'>
+                                    Close
+                                </button>
+                            }
+                        </div>
+                    }
+
+                    <div class="portal-saved-report-card__footer">
+                        <button class="portal-btn portal-btn-primary portal-btn-xs"
+                                @onclick="() => RunReport(report)">
+                            Run
+                        </button>
+                        <button class="portal-btn portal-btn-ghost portal-btn-xs"
+                                @onclick="() => EditReport(report)">
+                            Edit
+                        </button>
+                        <div class="portal-saved-report-card__overflow">
+                            <button class="portal-btn portal-btn-ghost portal-btn-xs"
+                                    @onclick="() => ToggleOverflow(report.Id)"
+                                    aria-label="More actions for @report.Name"
+                                    aria-expanded="@(_openOverflowId == report.Id)">
+                                ···
+                            </button>
+                            @if (_openOverflowId == report.Id)
+                            {
+                                <div class="portal-overflow-menu" role="menu">
+                                    <button class="portal-overflow-menu-item" role="menuitem"
+                                            @onclick="() => OpenScheduleDialog(report)">
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                                            <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+                                            <line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/>
+                                            <line x1="3" y1="10" x2="21" y2="10"/>
+                                        </svg>
+                                        Schedule
+                                    </button>
+                                    <button class="portal-overflow-menu-item portal-overflow-menu-item--danger" role="menuitem"
+                                            @onclick="() => DeleteReport(report)">
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                                            <polyline points="3 6 5 6 21 6"/>
+                                            <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+                                            <path d="M10 11v6"/><path d="M14 11v6"/>
+                                            <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
+                                        </svg>
+                                        Delete
+                                    </button>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+    }
     else
     {
+        @* ── Table view ── *@
         <div class="portal-card">
             <table class="portal-table">
                 <thead>
@@ -81,7 +286,7 @@
                         <th>Scheduled</th>
                         <th>Last Run</th>
                         <th>Created</th>
-                        <th style="width:180px;">Actions</th>
+                        <th style="width:200px;">Actions</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -89,7 +294,7 @@
                     {
                         <tr>
                             <td><strong>@report.Name</strong></td>
-                            <td style="color: var(--cbn-gray-500); max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                            <td style="color:var(--cbn-gray-500); max-width:200px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
                                 @(report.Description ?? "—")
                             </td>
                             <td>
@@ -99,7 +304,7 @@
                                 }
                                 else
                                 {
-                                    <span style="color: var(--cbn-gray-400);">Private</span>
+                                    <span style="color:var(--cbn-gray-400);">Private</span>
                                 }
                             </td>
                             <td>
@@ -109,13 +314,13 @@
                                 }
                                 else
                                 {
-                                    <span style="color: var(--cbn-gray-400);">—</span>
+                                    <span style="color:var(--cbn-gray-400);">—</span>
                                 }
                             </td>
-                            <td style="color: var(--cbn-gray-500); font-size: 0.85rem;">
+                            <td style="color:var(--cbn-gray-500); font-size:0.85rem;">
                                 @(report.LastRunAt?.ToString("dd MMM yyyy HH:mm") ?? "Never")
                             </td>
-                            <td style="color: var(--cbn-gray-500); font-size: 0.85rem;">
+                            <td style="color:var(--cbn-gray-500); font-size:0.85rem;">
                                 @report.CreatedAt.ToString("dd MMM yyyy")
                             </td>
                             <td>
@@ -145,35 +350,101 @@
         </div>
     }
 
-    @* Schedule Dialog *@
+    @* Schedule dialog *@
     @if (showScheduleDialog)
     {
         <div class="portal-modal-backdrop" @onclick="CloseScheduleDialog">
-            <div class="portal-modal" @onclick:stopPropagation="true" style="max-width:480px;">
+            <div class="portal-modal" @onclick:stopPropagation="true" style="max-width:520px;" role="dialog" aria-modal="true" aria-labelledby="schedule-dialog-title">
                 <div class="portal-modal-header">
-                    <h3 class="portal-modal-title">Schedule Report: @scheduleReport?.Name</h3>
-                    <button class="portal-modal-close" @onclick="CloseScheduleDialog">&times;</button>
+                    <h3 class="portal-modal-title" id="schedule-dialog-title">Schedule Report: @scheduleReport?.Name</h3>
+                    <button class="portal-modal-close" @onclick="CloseScheduleDialog" aria-label="Close schedule dialog">&times;</button>
                 </div>
-                <div class="portal-modal-body">
-                    <div class="portal-form-group">
-                        <label class="portal-form-label">Frequency</label>
-                        <select class="portal-form-select" @bind="scheduleFrequency">
-                            <option value="daily">Daily (8:00 AM UTC)</option>
-                            <option value="weekly">Weekly (Monday 8:00 AM UTC)</option>
-                            <option value="monthly">Monthly (1st, 8:00 AM UTC)</option>
+                <div class="portal-modal-body" style="display:flex; flex-direction:column; gap:1rem;">
+
+                    @* Frequency *@
+                    <div>
+                        <label class="portal-form-label" for="sched-frequency">Frequency</label>
+                        <select id="sched-frequency" class="portal-form-select" @bind="scheduleFrequency">
+                            <option value="daily">Daily</option>
+                            <option value="weekly">Weekly (Monday)</option>
+                            <option value="monthly">Monthly (1st of month)</option>
                         </select>
                     </div>
-                    <div class="portal-form-group">
-                        <label class="portal-form-label">Export Format</label>
-                        <select class="portal-form-select" @bind="scheduleFormat">
+
+                    @* Time *@
+                    <div>
+                        <label class="portal-form-label">Time (UTC)</label>
+                        <div style="display:flex; align-items:center; gap:0.5rem;">
+                            <select class="portal-form-select" style="width:90px;" @bind="scheduleHour" aria-label="Hour">
+                                @for (int h = 0; h < 24; h++)
+                                {
+                                    var hVal = h;
+                                    <option value="@hVal">@hVal.ToString("D2")</option>
+                                }
+                            </select>
+                            <span style="font-weight:600; color:var(--cbn-gray-500);">:</span>
+                            <select class="portal-form-select" style="width:90px;" @bind="scheduleMinute" aria-label="Minute">
+                                <option value="00">00</option>
+                                <option value="30">30</option>
+                            </select>
+                            <span style="color:var(--cbn-gray-500); font-size:0.85rem;">UTC</span>
+                        </div>
+                    </div>
+
+                    @* Export format *@
+                    <div>
+                        <label class="portal-form-label" for="sched-format">Export Format</label>
+                        <select id="sched-format" class="portal-form-select" @bind="scheduleFormat">
                             <option value="Excel">Excel</option>
                             <option value="PDF">PDF</option>
                         </select>
                     </div>
+
+                    @* Recipients email chips *@
+                    <div>
+                        <label class="portal-form-label">Recipients</label>
+                        <div class="portal-email-chips" role="group" aria-label="Email recipients">
+                            @foreach (var email in scheduleEmails)
+                            {
+                                var chipEmail = email;
+                                <span class="portal-email-chip">
+                                    @chipEmail
+                                    <button class="portal-email-chip-remove"
+                                            type="button"
+                                            @onclick="() => RemoveEmailChip(chipEmail)"
+                                            aria-label="Remove @chipEmail">
+                                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true">
+                                            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                                        </svg>
+                                    </button>
+                                </span>
+                            }
+                            <input type="email"
+                                   class="portal-email-chips-input"
+                                   placeholder="Add email and press Enter…"
+                                   @bind="_emailInput"
+                                   @bind:event="oninput"
+                                   @onkeydown="OnEmailKeyDown"
+                                   aria-label="Add recipient email" />
+                        </div>
+                        <p style="margin:0.4rem 0 0; font-size:0.8rem; color:var(--cbn-gray-500);">
+                            Press Enter or comma to add each address.
+                        </p>
+                    </div>
+
+                    @* Schedule preview *@
+                    <div class="portal-schedule-preview" aria-live="polite">
+                        @SchedulePreview
+                    </div>
+
                 </div>
                 <div class="portal-modal-footer">
-                    <button class="portal-btn portal-btn-ghost portal-btn-sm" @onclick="CloseScheduleDialog">Cancel</button>
-                    <button class="portal-btn portal-btn-primary portal-btn-sm" @onclick="SaveSchedule" disabled="@isSavingSchedule">
+                    <button class="portal-btn portal-btn-ghost portal-btn-sm" @onclick="CloseScheduleDialog">
+                        Cancel
+                    </button>
+                    <button class="portal-btn portal-btn-primary portal-btn-sm"
+                            @onclick="SaveSchedule"
+                            disabled="@isSavingSchedule">
                         @if (isSavingSchedule)
                         {
                             <span class="portal-btn-spinner" aria-hidden="true"></span>
@@ -184,19 +455,24 @@
             </div>
         </div>
     }
+
 </div>
 
 @code {
-    [CascadingParameter]
-    private Task<AuthenticationState>? AuthState { get; set; }
-
-    // URL param — makes search bookmarkable
+    [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
     [SupplyParameterFromQuery(Name = "q")] public string? Q { get; set; }
 
     private Guid tenantId;
     private int institutionId;
     private bool isLoading = true;
+    private string? _error;
     private string searchTerm = "";
+    private string? _typeFilter;
+    private string _viewMode = "grid";
+    private int? _openOverflowId;
+    private int? _runPreviewId;
+    private bool _runPreviewLoading;
+    private string _runPreviewText = "";
     private List<FC.Engine.Domain.Entities.SavedReport> reports = new();
 
     // Schedule dialog
@@ -205,25 +481,227 @@
     private FC.Engine.Domain.Entities.SavedReport? scheduleReport;
     private string scheduleFrequency = "daily";
     private string scheduleFormat = "Excel";
+    private int scheduleHour = 8;
+    private string scheduleMinute = "00";
+    private List<string> scheduleEmails = new();
+    private string _emailInput = "";
+
+    private static readonly IReadOnlyList<BreadcrumbItem> _breadcrumb = new List<BreadcrumbItem>
+    {
+        new BreadcrumbItem { Label = "Home", Url = "/" },
+        new BreadcrumbItem { Label = "Reports", Url = "/reports" },
+        new BreadcrumbItem { Label = "Saved Reports", IsCurrent = true }
+    };
 
     private List<FC.Engine.Domain.Entities.SavedReport> filteredReports =>
-        string.IsNullOrWhiteSpace(searchTerm)
-            ? reports
-            : reports.Where(r =>
-                r.Name.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ||
-                (r.Description?.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ?? false))
-              .ToList();
+        reports.Where(r =>
+            (_typeFilter == null || GetReportType(r) == _typeFilter) &&
+            (string.IsNullOrWhiteSpace(searchTerm) ||
+             r.Name.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ||
+             (r.Description?.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ?? false)))
+        .ToList();
+
+    private string SchedulePreview
+    {
+        get
+        {
+            var freq = scheduleFrequency switch
+            {
+                "weekly"  => "every Monday",
+                "monthly" => "on the 1st of every month",
+                _         => "every day"
+            };
+            var recipCount = scheduleEmails.Count;
+            var recip = recipCount == 0 ? "no recipients" : $"{recipCount} recipient{(recipCount == 1 ? "" : "s")}";
+            return $"Will run {freq} at {scheduleHour:D2}:{scheduleMinute} UTC · Delivered to {recip}";
+        }
+    }
 
     protected override async Task OnInitializedAsync()
     {
         var state = await AuthState!;
-        tenantId = Guid.Parse(state.User.FindFirst("TenantId")!.Value);
+        tenantId      = Guid.Parse(state.User.FindFirst("TenantId")!.Value);
         institutionId = int.Parse(state.User.FindFirst("InstitutionId")!.Value);
-
-        // Restore search from URL (makes search bookmarkable / shareable)
         if (!string.IsNullOrEmpty(Q)) searchTerm = Q;
-
         await LoadReports();
+    }
+
+    private async Task LoadReports()
+    {
+        isLoading = true;
+        _error = null;
+        try
+        {
+            reports = (await ReportSvc.GetSavedReports(tenantId, institutionId)).ToList();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+            Toast.Error("Failed to load saved reports.");
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private static string GetReportType(FC.Engine.Domain.Entities.SavedReport r)
+    {
+        if (r.Name.Contains("Compliance", StringComparison.OrdinalIgnoreCase)) return "compliance";
+        if (r.Name.Contains("Audit",      StringComparison.OrdinalIgnoreCase)) return "audit";
+        if (r.Name.Contains("Validation", StringComparison.OrdinalIgnoreCase)) return "validation";
+        return "custom";
+    }
+
+    private void SetTypeFilter(string? type)
+    {
+        _typeFilter = type;
+    }
+
+    private async Task RunReport(FC.Engine.Domain.Entities.SavedReport report)
+    {
+        _openOverflowId = null;
+        _runPreviewId = report.Id;
+        _runPreviewLoading = true;
+        _runPreviewText = "";
+        await Task.Delay(1);
+        StateHasChanged();
+
+        try
+        {
+            var def = JsonSerializer.Deserialize<ReportDefinition>(report.Definition,
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            if (def is not null)
+            {
+                var result = await ReportSvc.RunReport(def, tenantId);
+                _runPreviewText = $"{result.Rows.Count} rows · Generated {DateTime.UtcNow:HH:mm:ss} UTC";
+                _runPreviewLoading = false;
+                return;
+            }
+        }
+        catch { }
+
+        _runPreviewId = null;
+        _runPreviewLoading = false;
+        Nav.NavigateTo($"/reports/builder/{report.Id}");
+    }
+
+    private void EditReport(FC.Engine.Domain.Entities.SavedReport report)
+    {
+        _openOverflowId = null;
+        Nav.NavigateTo($"/reports/builder/{report.Id}");
+    }
+
+    private async Task DeleteReport(FC.Engine.Domain.Entities.SavedReport report)
+    {
+        _openOverflowId = null;
+        try
+        {
+            await ReportSvc.DeleteReport(report.Id);
+            reports.Remove(report);
+            if (_runPreviewId == report.Id) _runPreviewId = null;
+            Toast.Success("Report deleted.");
+        }
+        catch
+        {
+            Toast.Error("Failed to delete report.");
+        }
+    }
+
+    private void ToggleOverflow(int reportId)
+    {
+        _openOverflowId = _openOverflowId == reportId ? null : reportId;
+    }
+
+    private void OpenScheduleDialog(FC.Engine.Domain.Entities.SavedReport report)
+    {
+        _openOverflowId    = null;
+        scheduleReport     = report;
+        scheduleFrequency  = "daily";
+        scheduleFormat     = report.ScheduleFormat ?? "Excel";
+        scheduleHour       = 8;
+        scheduleMinute     = "00";
+        scheduleEmails     = string.IsNullOrEmpty(report.ScheduleRecipients)
+            ? new()
+            : report.ScheduleRecipients.Split(',', StringSplitOptions.RemoveEmptyEntries)
+                    .Select(e => e.Trim())
+                    .ToList();
+        showScheduleDialog = true;
+    }
+
+    private void CloseScheduleDialog()
+    {
+        showScheduleDialog = false;
+        scheduleReport     = null;
+        scheduleEmails     = new();
+        _emailInput        = "";
+    }
+
+    private void AddEmailChip(string raw)
+    {
+        var emails = raw.Split(new[] { ',', ';', ' ' }, StringSplitOptions.RemoveEmptyEntries);
+        foreach (var e in emails)
+        {
+            var trimmed = e.Trim();
+            if (!string.IsNullOrEmpty(trimmed) && !scheduleEmails.Contains(trimmed))
+                scheduleEmails.Add(trimmed);
+        }
+        _emailInput = "";
+    }
+
+    private void RemoveEmailChip(string email) => scheduleEmails.Remove(email);
+
+    private void OnEmailKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" || e.Key == ",")
+        {
+            if (!string.IsNullOrWhiteSpace(_emailInput))
+                AddEmailChip(_emailInput);
+        }
+    }
+
+    private async Task SaveSchedule()
+    {
+        if (scheduleReport is null) return;
+        isSavingSchedule = true;
+        try
+        {
+            if (!string.IsNullOrWhiteSpace(_emailInput)) AddEmailChip(_emailInput);
+
+            var cron = scheduleFrequency switch
+            {
+                "weekly"  => $"0 {scheduleHour} * * 1",
+                "monthly" => $"0 {scheduleHour} 1 * *",
+                _         => $"0 {scheduleHour} * * *"
+            };
+
+            await ReportSvc.SetSchedule(scheduleReport.Id, cron, scheduleFormat, new List<int>());
+
+            scheduleReport.ScheduleRecipients = string.Join(",", scheduleEmails);
+            scheduleReport.IsScheduleActive   = true;
+            scheduleReport.ScheduleCron       = cron;
+            scheduleReport.ScheduleFormat     = scheduleFormat;
+            await ReportSvc.UpdateReport(scheduleReport);
+
+            Toast.Success("Schedule saved.");
+            CloseScheduleDialog();
+        }
+        catch
+        {
+            Toast.Error("Failed to save schedule.");
+        }
+        finally
+        {
+            isSavingSchedule = false;
+        }
+    }
+
+    private static string FormatAge(DateTime dt)
+    {
+        var elapsed = DateTime.UtcNow - dt;
+        if (elapsed.TotalMinutes < 60) return $"{(int)elapsed.TotalMinutes}m ago";
+        if (elapsed.TotalHours   < 24) return $"{(int)elapsed.TotalHours}h ago";
+        return $"{(int)elapsed.TotalDays}d ago";
     }
 
     private void OnSearchChanged()
@@ -238,90 +716,5 @@
     {
         searchTerm = "";
         Nav.NavigateTo("/reports/saved", replace: true);
-    }
-
-    private async Task LoadReports()
-    {
-        isLoading = true;
-        try
-        {
-            reports = (await ReportSvc.GetSavedReports(tenantId, institutionId)).ToList();
-        }
-        catch
-        {
-            Toast.Error("Failed to load saved reports.");
-        }
-        finally
-        {
-            isLoading = false;
-        }
-    }
-
-    private void RunReport(FC.Engine.Domain.Entities.SavedReport report)
-    {
-        Nav.NavigateTo($"/reports/builder/{report.Id}");
-    }
-
-    private void EditReport(FC.Engine.Domain.Entities.SavedReport report)
-    {
-        Nav.NavigateTo($"/reports/builder/{report.Id}");
-    }
-
-    private async Task DeleteReport(FC.Engine.Domain.Entities.SavedReport report)
-    {
-        try
-        {
-            await ReportSvc.DeleteReport(report.Id);
-            reports.Remove(report);
-            Toast.Success("Report deleted.");
-        }
-        catch
-        {
-            Toast.Error("Failed to delete report.");
-        }
-    }
-
-    private void OpenScheduleDialog(FC.Engine.Domain.Entities.SavedReport report)
-    {
-        scheduleReport = report;
-        scheduleFrequency = "daily";
-        scheduleFormat = report.ScheduleFormat ?? "Excel";
-        showScheduleDialog = true;
-    }
-
-    private void CloseScheduleDialog()
-    {
-        showScheduleDialog = false;
-        scheduleReport = null;
-    }
-
-    private async Task SaveSchedule()
-    {
-        if (scheduleReport is null) return;
-        isSavingSchedule = true;
-        try
-        {
-            var cron = scheduleFrequency switch
-            {
-                "weekly" => "0 8 * * 1",
-                "monthly" => "0 8 1 * *",
-                _ => "0 8 * * *"
-            };
-
-            await ReportSvc.SetSchedule(scheduleReport.Id, cron, scheduleFormat, new List<int>());
-            scheduleReport.IsScheduleActive = true;
-            scheduleReport.ScheduleCron = cron;
-            scheduleReport.ScheduleFormat = scheduleFormat;
-            Toast.Success("Schedule saved.");
-            CloseScheduleDialog();
-        }
-        catch
-        {
-            Toast.Error("Failed to save schedule.");
-        }
-        finally
-        {
-            isSavingSchedule = false;
-        }
     }
 }

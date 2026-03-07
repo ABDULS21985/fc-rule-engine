@@ -92,6 +92,25 @@ public class ExportService
         };
     }
 
+    public async Task<(int ErrorCount, int WarningCount)?> BuildPreviousValidationSummaryAsync(
+        int submissionId, int institutionId)
+    {
+        var current = await _submissionRepo.GetByIdWithReport(submissionId);
+        if (current is null) return null;
+
+        var submissions = await _submissionRepo.GetByInstitution(institutionId);
+        var prev = submissions
+            .Where(s => s.ReturnCode == current.ReturnCode
+                     && s.Id != submissionId
+                     && s.SubmittedAt < current.SubmittedAt
+                     && s.ValidationReport != null)
+            .OrderByDescending(s => s.SubmittedAt)
+            .FirstOrDefault();
+
+        if (prev?.ValidationReport is null) return null;
+        return (prev.ValidationReport.ErrorCount, prev.ValidationReport.WarningCount);
+    }
+
     // === COMPLIANCE CERTIFICATE DATA ===
 
     public async Task<ComplianceCertificateModel?> BuildComplianceCertificateAsync(int submissionId, int institutionId)

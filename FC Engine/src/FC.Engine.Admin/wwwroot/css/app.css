@@ -18781,3 +18781,233 @@ img.fc-img-lazyload.fc-img-loaded {
     border-color: var(--cbn-primary-dark, #005530);
     color: #fff;
 }
+
+/* ══════════════════════════════════════════════════════════════════
+   §53  Audit Log – Enhanced UI (action chips, entity pills, icons)
+   ══════════════════════════════════════════════════════════════════ */
+
+/* ── Stats strip – icon + content layout ─────────────────────── */
+.fc-audit-stat-item {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+}
+
+.fc-audit-stat-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border-radius: var(--radius-md, 6px);
+    flex-shrink: 0;
+    transition: background var(--motion-fast) var(--ease-out);
+}
+
+.fc-audit-stat-content {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+}
+
+/* Stat icon colour themes */
+.fc-audit-stat-item--today .fc-audit-stat-icon {
+    background: color-mix(in srgb, var(--cbn-primary) 12%, transparent);
+    color: var(--cbn-primary);
+}
+.fc-audit-stat-item--created .fc-audit-stat-icon {
+    background: color-mix(in srgb, var(--cbn-success, #16a34a) 12%, transparent);
+    color: var(--cbn-success, #16a34a);
+}
+.fc-audit-stat-item--updated .fc-audit-stat-icon {
+    background: color-mix(in srgb, #3b82f6 12%, transparent);
+    color: #3b82f6;
+}
+.fc-audit-stat-item--deleted .fc-audit-stat-icon {
+    background: color-mix(in srgb, var(--cbn-danger, #dc2626) 12%, transparent);
+    color: var(--cbn-danger, #dc2626);
+}
+.fc-audit-stat-item--login .fc-audit-stat-icon {
+    background: color-mix(in srgb, #8b5cf6 12%, transparent);
+    color: #8b5cf6;
+}
+.fc-audit-stat-item--flagged .fc-audit-stat-icon {
+    background: color-mix(in srgb, var(--cbn-warning, #d97706) 12%, transparent);
+    color: var(--cbn-warning, #d97706);
+}
+
+/* ── Action chips ─────────────────────────────────────────────── */
+.fc-audit-action-chip {
+    display: inline-flex;
+    align-items: center;
+    font-size: 0.67rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    padding: 2px 8px;
+    border-radius: var(--radius-full, 9999px);
+    border: 1px solid currentColor;
+    line-height: 1.5;
+    white-space: nowrap;
+    /* neutral fallback */
+    color: var(--cbn-text-muted);
+    background: var(--cbn-surface-2, #f1f5f9);
+    border-color: var(--cbn-border);
+}
+
+.fc-audit-action-chip--created {
+    color: var(--cbn-success, #16a34a);
+    background: color-mix(in srgb, var(--cbn-success, #16a34a) 10%, transparent);
+    border-color: color-mix(in srgb, var(--cbn-success, #16a34a) 35%, transparent);
+}
+.fc-audit-action-chip--updated {
+    color: #3b82f6;
+    background: color-mix(in srgb, #3b82f6 10%, transparent);
+    border-color: color-mix(in srgb, #3b82f6 35%, transparent);
+}
+.fc-audit-action-chip--deleted,
+.fc-audit-action-chip--archived {
+    color: var(--cbn-danger, #dc2626);
+    background: color-mix(in srgb, var(--cbn-danger, #dc2626) 10%, transparent);
+    border-color: color-mix(in srgb, var(--cbn-danger, #dc2626) 35%, transparent);
+}
+.fc-audit-action-chip--login,
+.fc-audit-action-chip--loggedin,
+.fc-audit-action-chip--loggedout,
+.fc-audit-action-chip--logout {
+    color: #8b5cf6;
+    background: color-mix(in srgb, #8b5cf6 10%, transparent);
+    border-color: color-mix(in srgb, #8b5cf6 35%, transparent);
+}
+.fc-audit-action-chip--approved,
+.fc-audit-action-chip--verified,
+.fc-audit-action-chip--published {
+    color: var(--cbn-success, #16a34a);
+    background: color-mix(in srgb, var(--cbn-success, #16a34a) 10%, transparent);
+    border-color: color-mix(in srgb, var(--cbn-success, #16a34a) 35%, transparent);
+}
+.fc-audit-action-chip--rejected,
+.fc-audit-action-chip--revoked,
+.fc-audit-action-chip--suspended {
+    color: var(--cbn-danger, #dc2626);
+    background: color-mix(in srgb, var(--cbn-danger, #dc2626) 10%, transparent);
+    border-color: color-mix(in srgb, var(--cbn-danger, #dc2626) 35%, transparent);
+}
+.fc-audit-action-chip--exported,
+.fc-audit-action-chip--downloaded,
+.fc-audit-action-chip--viewed {
+    color: #0ea5e9;
+    background: color-mix(in srgb, #0ea5e9 10%, transparent);
+    border-color: color-mix(in srgb, #0ea5e9 35%, transparent);
+}
+.fc-audit-action-chip--submitted,
+.fc-audit-action-chip--sent {
+    color: var(--cbn-accent, #C8A415);
+    background: color-mix(in srgb, var(--cbn-accent, #C8A415) 10%, transparent);
+    border-color: color-mix(in srgb, var(--cbn-accent, #C8A415) 35%, transparent);
+}
+
+/* ── Entity chip ──────────────────────────────────────────────── */
+.fc-audit-entity-chip {
+    display: inline-block;
+    font-size: 0.72rem;
+    font-weight: 500;
+    padding: 1px 7px;
+    border-radius: var(--radius-sm, 4px);
+    background: var(--cbn-surface-2, #f1f5f9);
+    color: var(--cbn-text-2, #64748b);
+    border: 1px solid var(--cbn-border, #e2e8f0);
+    white-space: nowrap;
+}
+
+/* ── Event card left-border accents ───────────────────────────── */
+.fc-audit-event-card--created {
+    border-left: 3px solid color-mix(in srgb, var(--cbn-success, #16a34a) 45%, transparent);
+}
+.fc-audit-event-card--updated {
+    border-left: 3px solid color-mix(in srgb, #3b82f6 45%, transparent);
+}
+.fc-audit-event-card--deleted,
+.fc-audit-event-card--archived {
+    border-left: 3px solid color-mix(in srgb, var(--cbn-danger, #dc2626) 45%, transparent);
+}
+.fc-audit-event-card--login,
+.fc-audit-event-card--loggedin,
+.fc-audit-event-card--loggedout,
+.fc-audit-event-card--logout {
+    border-left: 3px solid color-mix(in srgb, #8b5cf6 45%, transparent);
+}
+.fc-audit-event-card--approved,
+.fc-audit-event-card--verified,
+.fc-audit-event-card--published {
+    border-left: 3px solid color-mix(in srgb, var(--cbn-success, #16a34a) 45%, transparent);
+}
+.fc-audit-event-card--rejected,
+.fc-audit-event-card--revoked,
+.fc-audit-event-card--suspended {
+    border-left: 3px solid color-mix(in srgb, var(--cbn-danger, #dc2626) 45%, transparent);
+}
+.fc-audit-event-card--exported,
+.fc-audit-event-card--downloaded,
+.fc-audit-event-card--viewed {
+    border-left: 3px solid color-mix(in srgb, #0ea5e9 45%, transparent);
+}
+.fc-audit-event-card--submitted,
+.fc-audit-event-card--sent {
+    border-left: 3px solid color-mix(in srgb, var(--cbn-accent, #C8A415) 45%, transparent);
+}
+
+/* ── Event icon base (ensure consistent sizing) ───────────────── */
+.fc-audit-event-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border-radius: var(--radius-md, 6px);
+    flex-shrink: 0;
+}
+
+/* ── Filter bar – styled selects & date inputs ────────────────── */
+.fc-audit-filters {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    flex-wrap: wrap;
+    padding: var(--space-3) var(--space-4);
+}
+.fc-audit-filters select {
+    height: 36px;
+    padding: 0 var(--space-3);
+    border: 1px solid var(--cbn-border);
+    border-radius: var(--radius-md, 6px);
+    background: var(--cbn-surface-1);
+    color: var(--cbn-text-1);
+    font-size: 0.8125rem;
+    cursor: pointer;
+    outline: none;
+    transition: border-color var(--motion-fast) var(--ease-out),
+                box-shadow var(--motion-fast) var(--ease-out);
+}
+.fc-audit-filters select:focus {
+    border-color: var(--cbn-primary);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--cbn-primary) 15%, transparent);
+}
+.fc-audit-date-range input[type="date"] {
+    height: 36px;
+    padding: 0 var(--space-2);
+    border: 1px solid var(--cbn-border);
+    border-radius: var(--radius-md, 6px);
+    background: var(--cbn-surface-1);
+    color: var(--cbn-text-1);
+    font-size: 0.8125rem;
+    outline: none;
+    transition: border-color var(--motion-fast) var(--ease-out),
+                box-shadow var(--motion-fast) var(--ease-out);
+}
+.fc-audit-date-range input[type="date"]:focus {
+    border-color: var(--cbn-primary);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--cbn-primary) 15%, transparent);
+}
+
+/* ── end §53 ──────────────────────────────────────────────────── */
