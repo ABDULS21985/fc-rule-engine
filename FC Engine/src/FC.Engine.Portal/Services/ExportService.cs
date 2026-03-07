@@ -393,73 +393,47 @@ public class ExportService
         var period          = FormatPeriod(submission.ReturnPeriod);
 
         var sb = new StringBuilder();
-        sb.Append($"""
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8"/>
-<title>Audit Trail — {submission.ReturnCode} {period}</title>
-<style>
-  body {{ font-family: 'Segoe UI', Arial, sans-serif; margin: 0; padding: 0; color: #1f2937; font-size: 12px; }}
-  .header {{ background: {primaryColor}; color: #fff; padding: 24px 32px; }}
-  .header h1 {{ margin: 0 0 4px; font-size: 20px; }}
-  .header p  {{ margin: 0; opacity: .85; font-size: 11px; }}
-  .meta-strip {{ display: flex; gap: 32px; padding: 12px 32px; background: #f9fafb; border-bottom: 1px solid #e5e7eb; }}
-  .meta-strip span {{ font-size: 11px; color: #6b7280; }}
-  .meta-strip strong {{ color: #111827; }}
-  table {{ width: 100%; border-collapse: collapse; margin: 0; }}
-  th {{ background: #f3f4f6; text-align: left; padding: 8px 16px; font-size: 10px; text-transform: uppercase; letter-spacing: .05em; color: #6b7280; border-bottom: 1px solid #e5e7eb; }}
-  td {{ padding: 10px 16px; border-bottom: 1px solid #f3f4f6; vertical-align: top; }}
-  tr:last-child td {{ border-bottom: none; }}
-  .actor {{ font-weight: 600; }}
-  .action {{ display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: 600; text-transform: uppercase; }}
-  .action-Submitted  {{ background: #dbeafe; color: #1d4ed8; }}
-  .action-Approved   {{ background: #dcfce7; color: #15803d; }}
-  .action-Rejected   {{ background: #fee2e2; color: #b91c1c; }}
-  .action-Validated  {{ background: #d1fae5; color: #065f46; }}
-  .comment {{ margin-top: 4px; font-style: italic; color: #6b7280; font-size: 11px; }}
-  .footer {{ padding: 16px 32px; font-size: 10px; color: #9ca3af; border-top: 1px solid #e5e7eb; }}
-  @media print {{ @page {{ margin: 1cm; }} body {{ print-color-adjust: exact; -webkit-print-color-adjust: exact; }} }}
-</style>
-</head>
-<body onload="window.print()">
-<div class="header">
-  <h1>Audit Trail Report</h1>
-  <p>{institutionName} &mdash; {submission.ReturnCode} ({period})</p>
-</div>
-<div class="meta-strip">
-  <span>Submission ID: <strong>#{submission.Id}</strong></span>
-  <span>Status: <strong>{submission.Status}</strong></span>
-  <span>Generated: <strong>{generatedAt}</strong></span>
-</div>
-<table>
-<thead><tr><th>Timestamp</th><th>Actor</th><th>Action</th><th>Detail</th></tr></thead>
-<tbody>
-""");
+        sb.AppendLine("<!DOCTYPE html>");
+        sb.AppendLine("<html lang=\"en\">");
+        sb.AppendLine("<head><meta charset=\"UTF-8\"/>");
+        sb.AppendLine($"<title>Audit Trail \u2014 {submission.ReturnCode} {period}</title>");
+        sb.AppendLine("<style>");
+        sb.AppendLine("body { font-family: 'Segoe UI', Arial, sans-serif; margin: 0; padding: 0; color: #1f2937; font-size: 12px; }");
+        sb.AppendLine($".header {{ background: {primaryColor}; color: #fff; padding: 24px 32px; }}");
+        sb.AppendLine(".header h1 { margin: 0 0 4px; font-size: 20px; }");
+        sb.AppendLine(".header p  { margin: 0; opacity: .85; font-size: 11px; }");
+        sb.AppendLine(".meta-strip { display: flex; gap: 32px; padding: 12px 32px; background: #f9fafb; border-bottom: 1px solid #e5e7eb; }");
+        sb.AppendLine(".meta-strip span { font-size: 11px; color: #6b7280; }");
+        sb.AppendLine(".meta-strip strong { color: #111827; }");
+        sb.AppendLine("table { width: 100%; border-collapse: collapse; margin: 0; }");
+        sb.AppendLine("th { background: #f3f4f6; text-align: left; padding: 8px 16px; font-size: 10px; text-transform: uppercase; letter-spacing: .05em; color: #6b7280; border-bottom: 1px solid #e5e7eb; }");
+        sb.AppendLine("td { padding: 10px 16px; border-bottom: 1px solid #f3f4f6; vertical-align: top; }");
+        sb.AppendLine("tr:last-child td { border-bottom: none; }");
+        sb.AppendLine(".actor { font-weight: 600; }");
+        sb.AppendLine(".action { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: 600; text-transform: uppercase; }");
+        sb.AppendLine(".action-Submitted  { background: #dbeafe; color: #1d4ed8; }");
+        sb.AppendLine(".action-Approved   { background: #dcfce7; color: #15803d; }");
+        sb.AppendLine(".action-Rejected   { background: #fee2e2; color: #b91c1c; }");
+        sb.AppendLine(".action-Validated  { background: #d1fae5; color: #065f46; }");
+        sb.AppendLine(".comment { margin-top: 4px; font-style: italic; color: #6b7280; font-size: 11px; }");
+        sb.AppendLine(".footer  { padding: 16px 32px; font-size: 10px; color: #9ca3af; border-top: 1px solid #e5e7eb; }");
+        sb.AppendLine("@media print { @page { margin: 1cm; } body { print-color-adjust: exact; -webkit-print-color-adjust: exact; } }");
+        sb.AppendLine("</style></head>");
+        sb.AppendLine("<body onload=\"window.print()\">");
+        sb.AppendLine($"<div class=\"header\"><h1>Audit Trail Report</h1><p>{Esc(institutionName)} &mdash; {submission.ReturnCode} ({period})</p></div>");
+        sb.AppendLine($"<div class=\"meta-strip\"><span>Submission ID: <strong>#{submission.Id}</strong></span><span>Status: <strong>{submission.Status}</strong></span><span>Generated: <strong>{generatedAt}</strong></span></div>");
+        sb.AppendLine("<table><thead><tr><th>Timestamp</th><th>Actor</th><th>Action</th><th>Detail</th></tr></thead><tbody>");
 
         foreach (var (at, actor, action, detail, comment) in entries)
         {
             var actionClass = action.Replace(" ", "-");
-            sb.Append($"""
-<tr>
-  <td>{at.ToLocalTime():dd MMM yyyy HH:mm:ss}</td>
-  <td class="actor">{Esc(actor)}</td>
-  <td><span class="action action-{actionClass}">{action}</span></td>
-  <td>{Esc(detail)}{(string.IsNullOrEmpty(comment) ? "" : $"<div class=\"comment\">&ldquo;{Esc(comment)}&rdquo;</div>")}</td>
-</tr>
-""");
+            var commentHtml = string.IsNullOrEmpty(comment) ? "" : $"<div class=\"comment\">&ldquo;{Esc(comment)}&rdquo;</div>";
+            sb.AppendLine($"<tr><td>{at.ToLocalTime():dd MMM yyyy HH:mm:ss}</td><td class=\"actor\">{Esc(actor)}</td><td><span class=\"action action-{actionClass}\">{action}</span></td><td>{Esc(detail)}{commentHtml}</td></tr>");
         }
 
-        sb.Append($"""
-</tbody>
-</table>
-<div class="footer">
-  This document was generated automatically by FC Engine on {generatedAt}. It is intended for compliance and audit purposes.
-  Submission #{submission.Id} &bull; {submission.ReturnCode} &bull; {institutionName}
-</div>
-</body>
-</html>
-""");
+        sb.AppendLine("</tbody></table>");
+        sb.AppendLine($"<div class=\"footer\">This document was generated automatically by FC Engine on {generatedAt}. Submission #{submission.Id} &bull; {submission.ReturnCode} &bull; {Esc(institutionName)}</div>");
+        sb.AppendLine("</body></html>");
 
         return Encoding.UTF8.GetBytes(sb.ToString());
     }

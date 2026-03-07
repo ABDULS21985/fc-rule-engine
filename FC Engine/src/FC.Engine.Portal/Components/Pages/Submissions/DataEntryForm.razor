@@ -473,11 +473,28 @@
                         <div class="portal-form-section-header-left">
                             <span class="portal-fps-dot @GetStatusDotClass(_secStatus)" aria-hidden="true"></span>
                             <h3 class="portal-form-section-title">@secName</h3>
+                            @{ var _secUnitLabel = GetSectionUnitLabel(secName, secFields); }
+                            @if (_secUnitLabel is not null)
+                            {
+                                <span class="portal-fih-unit-badge"
+                                      title="@GetUnitTooltip(_secUnitLabel)"
+                                      aria-label="Unit: @_secUnitLabel">@_secUnitLabel</span>
+                            }
                         </div>
                         <div class="portal-form-section-header-right">
                             <span class="portal-form-section-status-icon @GetStatusIconClass(secName)" aria-label="Section status">@GetStatusIcon(secName)</span>
                             @if (_secTotal > 0) { <span class="portal-fps-count-badge">@_secFilled/@_secTotal</span> }
                             @if (_secErrCount > 0) { <span class="portal-fps-err-badge">@_secErrCount</span> }
+                            @if (!isReadOnlyLocked && SectionHasEmptyNumericFields(secName))
+                            {
+                                <button class="portal-fih-zero-fill-btn" type="button"
+                                        @onclick:stopPropagation="true"
+                                        @onclick="() => ZeroFillSection(secName)"
+                                        title="Set all empty numeric fields in this section to zero">
+                                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><circle cx="12" cy="12" r="9"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+                                    Zero fill
+                                </button>
+                            }
                             <svg class="portal-form-section-chevron @(_expandedSections.Contains(secName) ? "open" : "")" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
                         </div>
                     </div>
@@ -1213,6 +1230,7 @@
     [Inject] private IGenericDataRepository DataRepo { get; set; } = default!;
     [Inject] private IFormDataService FormDataSvc { get; set; } = default!;
     [Inject] private IPresenceService PresenceService { get; set; } = default!;
+    [Inject] private ToastService Toast { get; set; } = default!;
 
     // ── State ─────────────────────────────────────────────────────
     private bool isLoadingTemplate = true;
@@ -1272,6 +1290,7 @@
     private int _carryReviewCursor = -1;
     private string? _openPopoverKey;
     private bool _highlightAllCarried;
+    private Dictionary<string, bool> _magnitudeWarnings = new(StringComparer.OrdinalIgnoreCase);
     private int CarryForwardTotal => carryForwardOriginalValues.Count;
     private int CarryForwardReviewedCount => carryForwardReviewedKeys.Count + carryForwardModifiedKeys.Count;
     private string saveStatus = "Saved";
@@ -1414,6 +1433,7 @@
         {
             _dotNetRef = DotNetObjectReference.Create(this);
             await JS.InvokeVoidAsync("portalDataEntryForm.init", _dotNetRef);
+            await JS.InvokeVoidAsync("portalFIH.init", "portal-form-main", _dotNetRef);
             _locationChangingRegistration = Navigation.RegisterLocationChangingHandler(OnLocationChanging);
 
             // If navigated from Validation Hub with a field highlight request, scroll to it
@@ -2245,6 +2265,11 @@
         if (userId.HasValue && selectedPeriodId > 0)
             PresenceService.SetActiveField(PresenceKey, userId.Value, $"{fieldName}-{rowIdx}");
 
+        // Strip thousand separators and currency symbols from numeric fields before storing
+        var inputField = allFields.FirstOrDefault(f => f.FieldName == fieldName);
+        if (inputField is not null && IsNumericField(inputField))
+            value = StripNumericFormatting(value);
+
         if (rowIdx >= 0 && rowIdx < formRows.Count)
         {
             formRows[rowIdx][fieldName] = value;
@@ -2263,6 +2288,10 @@
             {
                 carryForwardKeys.Remove(cfKey);
             }
+
+            // Magnitude check: warn if new value is 10× larger than previous period
+            if (inputField is not null && IsNumericField(inputField))
+                CheckMagnitude(rowIdx, fieldName, value);
 
             RecalculateSumFormulas(rowIdx);
             ComputeProgress();
@@ -2822,6 +2851,127 @@
         };
     }
 
+    // ── Financial Input Helper Methods ────────────────────────────
+
+    private static string StripNumericFormatting(string value) =>
+        value.Replace(",", "").Replace("₦", "").Replace(" ", "").Trim();
+
+    private static string FormatDisplayValue(string raw, string dataType)
+    {
+        if (string.IsNullOrEmpty(raw)) return raw;
+        var stripped = raw.Replace(",", "").Replace("₦", "").Trim();
+        return dataType switch
+        {
+            "Money" or "Decimal" or "Percentage"
+                when decimal.TryParse(stripped, NumberStyles.Any, CultureInfo.InvariantCulture, out var d)
+                => d.ToString("N2", CultureInfo.InvariantCulture),
+            "Integer"
+                when long.TryParse(stripped, NumberStyles.Any, CultureInfo.InvariantCulture, out var l)
+                => l.ToString("N0", CultureInfo.InvariantCulture),
+            _ => raw
+        };
+    }
+
+    private static string? GetSectionUnitLabel(string sectionName, List<FieldDisplayItem> fields)
+    {
+        var sn = sectionName.ToUpperInvariant();
+        if (sn.Contains("₦'000") || sn.Contains("N'000") || sn.Contains("THOUSAND")) return "₦'000";
+        if (sn.Contains("₦'M") || sn.Contains("MILLION")) return "₦'M";
+        if (sn.Contains("%") || sn.Contains("PERCENT")) return "%";
+
+        var ht = fields.FirstOrDefault()?.HelpText?.ToUpperInvariant() ?? "";
+        if (ht.Contains("₦'000") || ht.Contains("THOUSANDS")) return "₦'000";
+        if (ht.Contains("MILLION") || ht.Contains("₦'M")) return "₦'M";
+        if (ht.Contains("PERCENT")) return "%";
+
+        if (fields.Any(f => f.DataType == "Money")) return "₦";
+        return null;
+    }
+
+    private static string GetUnitTooltip(string? unitLabel) => unitLabel switch
+    {
+        "₦'000" => "Enter amounts in thousands. E.g., enter 1,500 to represent ₦1,500,000.",
+        "₦'M"   => "Enter amounts in millions. E.g., enter 1.5 to represent ₦1,500,000.",
+        "₦"     => "Enter amounts in Naira.",
+        "%"     => "Enter as a percentage value (0–100).",
+        _       => "Unit label for this section."
+    };
+
+    private void CheckMagnitude(int rowIdx, string fieldName, string rawValue)
+    {
+        var key = GetFieldErrorKey(rowIdx, fieldName);
+        if (!carryForwardOriginalValues.TryGetValue(key, out var prevRaw) ||
+            string.IsNullOrEmpty(prevRaw) || string.IsNullOrEmpty(rawValue))
+        {
+            _magnitudeWarnings.Remove(key);
+            return;
+        }
+        if (!decimal.TryParse(rawValue, NumberStyles.Any, CultureInfo.InvariantCulture, out var newVal) ||
+            !decimal.TryParse(prevRaw, NumberStyles.Any, CultureInfo.InvariantCulture, out var prevVal) ||
+            prevVal == 0)
+        {
+            _magnitudeWarnings.Remove(key);
+            return;
+        }
+        if (Math.Abs(newVal) >= Math.Abs(prevVal) * 10)
+            _magnitudeWarnings[key] = true;
+        else
+            _magnitudeWarnings.Remove(key);
+    }
+
+    private string GetMagnitudeWarningText(int rowIdx, string fieldName, string dataType)
+    {
+        var key = GetFieldErrorKey(rowIdx, fieldName);
+        if (!carryForwardOriginalValues.TryGetValue(key, out var prevRaw)) return "";
+        var prevFormatted = FormatCarryValue(prevRaw, dataType);
+        return $"10× higher than {carryForwardSourcePeriod} ({prevFormatted}) — is this correct?";
+    }
+
+    private void ZeroFillSection(string sectionName)
+    {
+        if (!fieldGroups.TryGetValue(sectionName, out var secFields)) return;
+        var computedTargets = sumFormulas.Select(f => f.TargetField).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        bool anyFilled = false;
+        foreach (var field in secFields)
+        {
+            if (!IsNumericField(field) || computedTargets.Contains(field.FieldName)) continue;
+            if (string.IsNullOrWhiteSpace(GetFieldValue(0, field.FieldName)))
+            {
+                OnFieldInput(0, field.FieldName, field.DataType == "Integer" ? "0" : "0.00");
+                anyFilled = true;
+            }
+        }
+        if (anyFilled) Toast.Success("Empty fields set to zero");
+    }
+
+    private bool SectionHasEmptyNumericFields(string sectionName)
+    {
+        if (!fieldGroups.TryGetValue(sectionName, out var secFields)) return false;
+        var computedTargets = sumFormulas.Select(f => f.TargetField).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        return secFields.Any(f =>
+            IsNumericField(f) && !computedTargets.Contains(f.FieldName) &&
+            string.IsNullOrWhiteSpace(GetFieldValue(0, f.FieldName)));
+    }
+
+    private string GetFormulaExpression(string fieldName)
+    {
+        var formula = sumFormulas.FirstOrDefault(f =>
+            f.TargetField.Equals(fieldName, StringComparison.OrdinalIgnoreCase));
+        if (formula is null) return "";
+        var expr = string.IsNullOrEmpty(formula.Expression) ? formula.RuleName : formula.Expression;
+        // Replace field codes with display names where possible
+        foreach (var f in allFields)
+            expr = expr.Replace(f.FieldName, f.DisplayName, StringComparison.OrdinalIgnoreCase);
+        return expr;
+    }
+
+    [JSInvokable]
+    public void OnPasteConverted(string convertedLabel)
+    {
+        Toast.Info($"Converted pasted value to {convertedLabel}");
+        StateHasChanged();
+    }
+
     // ── Render Helpers ────────────────────────────────────────────
 
     private RenderFragment RenderInput(FieldDisplayItem field, int rowIdx) => __builder =>
@@ -2847,9 +2997,9 @@
         string placeholder = "";
 
         if (dt == "Money" || dt == "Decimal" || dt == "Percentage")
-        { inputType = "number"; step = "0.01"; placeholder = "0.00"; }
+        { inputType = "text"; placeholder = "0.00"; }
         else if (dt == "Integer")
-        { inputType = "number"; step = "1"; placeholder = "0"; }
+        { inputType = "text"; placeholder = "0"; }
         else if (dt == "Date")
         { inputType = "date"; }
         else if (dt == "Boolean")
@@ -2901,16 +3051,26 @@
                         <input type="@inputType"
                                id="@fieldId"
                                class="@inputCss"
-                               value="@val"
-                               step="@step"
+                               value="@(IsNumericField(field) ? FormatDisplayValue(val, dt) : val)"
                                placeholder="@placeholder"
                                readonly="@(isComputedTarget || isReadOnlyLocked)"
                                inputmode="@inputMode"
                                aria-label="@field.DisplayName"
                                aria-describedby="@(hasError ? errorId : null)"
                                aria-invalid="@(hasError ? "true" : null)"
+                               data-fih-numeric="@(IsNumericField(field) ? "true" : null)"
+                               data-fih-type="@(dt == "Integer" ? "integer" : "decimal")"
                                @oninput="@(e => OnFieldInput(rowIdx, field.FieldName, e.Value?.ToString() ?? ""))"
                                @onblur="@(async e => await OnFieldBlurAsync(rowIdx, field.FieldName))" />
+                        @* Formula badge for computed fields *@
+                        @if (isComputedTarget)
+                        {
+                            var fExpr = GetFormulaExpression(field.FieldName);
+                            <span class="portal-fih-formula-badge" tabindex="0" aria-label="@($"Formula: {fExpr}")">
+                                <span class="portal-fih-formula-eq" aria-hidden="true">=</span>
+                                <span class="portal-fih-formula-tooltip" role="tooltip">= @fExpr</span>
+                            </span>
+                        }
                         @* Carry-forward badge — trailing position *@
                         <div class="portal-field-cf-badge-wrap">
                             <button class="portal-field-cf-badge @(isModified ? "portal-field-cf-badge--modified" : "")"
@@ -2995,6 +3155,13 @@
                     </div>
                 }
             </div>
+            @* Magnitude warning for carry-forward fields *@
+            @if (_magnitudeWarnings.ContainsKey(errorKey))
+            {
+                <span class="portal-fih-magnitude-warn" role="alert" aria-live="polite">
+                    ⚠ @GetMagnitudeWarningText(rowIdx, field.FieldName, dt)
+                </span>
+            }
         }
         else
         {
@@ -3015,16 +3182,26 @@
                     <input type="@inputType"
                            id="@fieldId"
                            class="@inputCss"
-                           value="@val"
-                           step="@step"
+                           value="@(IsNumericField(field) ? FormatDisplayValue(val, dt) : val)"
                            placeholder="@placeholder"
                            readonly="@(isComputedTarget || isReadOnlyLocked)"
                            inputmode="@inputMode"
                            aria-label="@field.DisplayName"
                            aria-describedby="@(hasError ? errorId : null)"
                            aria-invalid="@(hasError ? "true" : null)"
+                           data-fih-numeric="@(IsNumericField(field) ? "true" : null)"
+                           data-fih-type="@(dt == "Integer" ? "integer" : "decimal")"
                            @oninput="@(e => OnFieldInput(rowIdx, field.FieldName, e.Value?.ToString() ?? ""))"
                            @onblur="@(async e => await OnFieldBlurAsync(rowIdx, field.FieldName))" />
+                    @* Formula badge for computed fields *@
+                    @if (isComputedTarget)
+                    {
+                        var fExpr = GetFormulaExpression(field.FieldName);
+                        <span class="portal-fih-formula-badge" tabindex="0" aria-label="@($"Formula: {fExpr}")">
+                            <span class="portal-fih-formula-eq" aria-hidden="true">=</span>
+                            <span class="portal-fih-formula-tooltip" role="tooltip">= @fExpr</span>
+                        </span>
+                    }
                     @if (isValid)
                     {
                         <svg class="portal-field-valid-icon" width="14" height="14" viewBox="0 0 24 24"
@@ -3034,6 +3211,13 @@
                         </svg>
                     }
                 </div>
+                @* Magnitude warning for non-carry-forward fields *@
+                @if (_magnitudeWarnings.ContainsKey(errorKey))
+                {
+                    <span class="portal-fih-magnitude-warn" role="alert" aria-live="polite">
+                        ⚠ @GetMagnitudeWarningText(rowIdx, field.FieldName, dt)
+                    </span>
+                }
             }
         }
     };
@@ -3169,6 +3353,7 @@
         _redirectCts?.Dispose();
         _dotNetRef?.Dispose();
         try { await JS.InvokeVoidAsync("portalDataEntryForm.dispose"); } catch { }
+        try { await JS.InvokeVoidAsync("portalFIH.dispose"); } catch { }
         await ReleaseLock();
     }
 

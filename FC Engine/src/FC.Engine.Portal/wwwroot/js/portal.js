@@ -1694,3 +1694,66 @@ window.xsComparator = (function () {
         exportPdf: function () { window.print(); }
     };
 })();
+
+// ── Financial Input Helper (FIH) ─────────────────────────────────────────
+window.portalFIH = (function () {
+    'use strict';
+    var _handlers = [];
+
+    function init(containerId, dotNetRef) {
+        dispose();
+        var container = document.getElementById(containerId) || document.body;
+        var inputs = container.querySelectorAll('[data-fih-numeric="true"]');
+        inputs.forEach(function (input) {
+            var handler = function (e) { handlePaste(e, input, dotNetRef); };
+            input.addEventListener('paste', handler);
+            _handlers.push({ input: input, handler: handler });
+        });
+    }
+
+    function handlePaste(e, input, dotNetRef) {
+        var text = (e.clipboardData || window.clipboardData).getData('text');
+        var result = parsePastedValue(text);
+        if (result === null) return; // no special handling — let default paste proceed
+        e.preventDefault();
+        var displayVal = result.toLocaleString('en-NG', { maximumFractionDigits: 2 });
+        input.value = displayVal;
+        // Fire synthetic input event so Blazor picks up the new value
+        input.dispatchEvent(new InputEvent('input', { bubbles: true, cancelable: true }));
+        if (dotNetRef) {
+            dotNetRef.invokeMethodAsync('OnPasteConverted', displayVal).catch(function () { });
+        }
+    }
+
+    function parsePastedValue(text) {
+        if (!text) return null;
+        var t = text.trim();
+        // Shorthand: 1.2M, 1.5B, 500K, 2.1T (with optional ₦ prefix)
+        var shorthand = t.match(/^[₦#\$£€]?\s*([\d,]+\.?\d*)\s*([KMBT])\b/i);
+        if (shorthand) {
+            var n = parseFloat(shorthand[1].replace(/,/g, ''));
+            var mult = { K: 1e3, M: 1e6, B: 1e9, T: 1e12 }[shorthand[2].toUpperCase()];
+            if (!isNaN(n) && mult) return n * mult;
+        }
+        // Detect formatted values: strip ₦, commas, trailing unit text, spaces
+        var hadFormatting = /[₦#\$£€,]/.test(t) || /thousands?|'000/i.test(t);
+        if (!hadFormatting) return null;
+        var stripped = t
+            .replace(/[₦#\$£€]/g, '')
+            .replace(/'?000s?|thousands?/gi, '')
+            .replace(/,/g, '')
+            .replace(/\s/g, '');
+        var parsed = parseFloat(stripped);
+        if (isNaN(parsed)) return null;
+        return parsed;
+    }
+
+    function dispose() {
+        _handlers.forEach(function (h) {
+            h.input.removeEventListener('paste', h.handler);
+        });
+        _handlers = [];
+    }
+
+    return { init: init, dispose: dispose };
+})();

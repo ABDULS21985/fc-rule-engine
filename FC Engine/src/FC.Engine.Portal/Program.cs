@@ -66,6 +66,7 @@ builder.Services.AddScoped<FC.Engine.Portal.Services.TourStateService>();
 builder.Services.AddScoped<FC.Engine.Portal.Services.PortalShortcutService>();
 builder.Services.AddScoped<FC.Engine.Portal.Services.OnboardingStateService>();
 builder.Services.AddSingleton<FC.Engine.Portal.Services.IPresenceService, FC.Engine.Portal.Services.InMemoryPresenceService>();
+builder.Services.AddSingleton<FC.Engine.Portal.Services.IAuditCommentService, FC.Engine.Portal.Services.InMemoryAuditCommentService>();
 
 // Caching
 builder.Services.AddMemoryCache();
