@@ -111,9 +111,9 @@ public sealed class InMemoryPresenceService : IPresenceService, IDisposable
             foreach (var (userId, user) in users)
             {
                 if ((DateTime.UtcNow - user.LastSeen).TotalSeconds > StaleThresholdSeconds)
-                    users.TryRemove(userId, out _);
+                    users.TryRemove(userId, out PresenceUser? _);
             }
-            if (users.IsEmpty) _store.TryRemove(key, out _);
+            if (users.IsEmpty) _store.TryRemove(key, out ConcurrentDictionary<int, PresenceUser>? _);
         }
     }
 

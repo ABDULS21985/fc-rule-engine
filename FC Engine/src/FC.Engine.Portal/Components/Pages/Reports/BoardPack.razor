@@ -125,25 +125,25 @@
                 <p class="bp-section-hint">Drag to reorder. Check/uncheck to include or exclude sections.</p>
 
                 <div id="bp-section-list" class="bp-section-list">
-                    @foreach (var section in _sections)
+                    @foreach (var sec in _sections)
                     {
-                        <div class="bp-section-item @(section.Included ? "" : "bp-section-item--excluded")"
-                             data-section-id="@section.Id">
+                        <div class="bp-section-item @(sec.Included ? "" : "bp-section-item--excluded")"
+                             data-section-id="@sec.Id">
                             <div class="bp-section-handle" title="Drag to reorder">
                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="5" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="19" r="1"/></svg>
                             </div>
                             <label class="bp-section-check">
-                                <input type="checkbox" checked="@section.Included"
-                                       @onchange="() => ToggleSection(section.Id)" />
+                                <input type="checkbox" checked="@sec.Included"
+                                       @onchange="() => ToggleSection(sec.Id)" />
                             </label>
-                            <div class="bp-section-icon" style="background: @section.Color;">
-                                @((MarkupString)section.IconSvg)
+                            <div class="bp-section-icon" style="background: @sec.Color;">
+                                @((MarkupString)sec.IconSvg)
                             </div>
                             <div class="bp-section-info">
-                                <span class="bp-section-name">@section.Name</span>
-                                <span class="bp-section-desc">@section.Description</span>
+                                <span class="bp-section-name">@sec.Name</span>
+                                <span class="bp-section-desc">@sec.Description</span>
                             </div>
-                            @if (section.Id == "charts" && section.Included)
+                            @if (sec.Id == "charts" && sec.Included)
                             {
                                 <button class="bp-section-expand-btn" @onclick="() => _chartsExpanded = !_chartsExpanded"
                                         title="@(_chartsExpanded ? "Collapse" : "Select charts")">
@@ -152,7 +152,7 @@
                             }
                         </div>
 
-                        @if (section.Id == "charts" && section.Included && _chartsExpanded)
+                        @if (sec.Id == "charts" && sec.Included && _chartsExpanded)
                         {
                             <div class="bp-chart-picker">
                                 @foreach (var chart in _availableCharts)
@@ -334,10 +334,10 @@
                                 @{
                                     var pageNum = 2;
                                 }
-                                @foreach (var section in _sections.Where(s => s.Included))
+                                @foreach (var sec in _sections.Where(s => s.Included))
                                 {
                                     <div class="bp-pv-toc-row">
-                                        <span class="bp-pv-toc-name">@section.Name</span>
+                                        <span class="bp-pv-toc-name">@sec.Name</span>
                                         <span class="bp-pv-toc-dots"></span>
                                         <span class="bp-pv-toc-page">@pageNum</span>
                                     </div>
@@ -347,15 +347,15 @@
                         }
 
                         @* ── Section Previews ── *@
-                        @foreach (var section in _sections.Where(s => s.Included))
+                        @foreach (var sec in _sections.Where(s => s.Included))
                         {
                             <div class="bp-pv-section">
-                                <div class="bp-pv-section-header" style="border-left-color: @section.Color;">
-                                    @((MarkupString)section.IconSvg)
-                                    <span>@section.Name</span>
+                                <div class="bp-pv-section-header" style="border-left-color: @sec.Color;">
+                                    @((MarkupString)sec.IconSvg)
+                                    <span>@sec.Name</span>
                                 </div>
                                 <div class="bp-pv-section-body">
-                                    @if (section.Id == "executive-summary")
+                                    @if (sec.Id == "executive-summary")
                                     {
                                         <div class="bp-pv-placeholder-lines">
                                             <div class="bp-pv-line" style="width:100%"></div>
@@ -364,7 +364,7 @@
                                             <div class="bp-pv-line" style="width:60%"></div>
                                         </div>
                                     }
-                                    else if (section.Id == "compliance-dashboard")
+                                    else if (sec.Id == "compliance-dashboard")
                                     {
                                         <div class="bp-pv-stats-row">
                                             <div class="bp-pv-stat"><div class="bp-pv-stat-val">98%</div><div class="bp-pv-stat-label">Compliance</div></div>
@@ -372,7 +372,7 @@
                                             <div class="bp-pv-stat"><div class="bp-pv-stat-val">2</div><div class="bp-pv-stat-label">Pending</div></div>
                                         </div>
                                     }
-                                    else if (section.Id == "submission-history")
+                                    else if (sec.Id == "submission-history")
                                     {
                                         <div class="bp-pv-mini-table">
                                             <div class="bp-pv-mini-th"><span>Return</span><span>Period</span><span>Status</span></div>
@@ -381,7 +381,7 @@
                                             <div class="bp-pv-mini-tr"><span>CBN300</span><span>Jan 2026</span><span class="bp-pv-badge bp-pv-badge--amber">Warnings</span></div>
                                         </div>
                                     }
-                                    else if (section.Id == "validation-report")
+                                    else if (sec.Id == "validation-report")
                                     {
                                         <div class="bp-pv-stats-row">
                                             <div class="bp-pv-stat"><div class="bp-pv-stat-val" style="color:var(--cbn-danger)">3</div><div class="bp-pv-stat-label">Errors</div></div>
@@ -392,7 +392,7 @@
                                             <div class="bp-pv-line" style="width:78%"></div>
                                         </div>
                                     }
-                                    else if (section.Id == "charts")
+                                    else if (sec.Id == "charts")
                                     {
                                         @if (_selectedChartIds.Count > 0)
                                         {

@@ -228,7 +228,7 @@
                                         <input type="text"
                                                class="rb3-col-rename"
                                                value="@_editingColumnValue"
-                                               @oninput="(e) => _editingColumnValue = e.Value?.ToString() ?? """
+                                               @oninput="(e) => _editingColumnValue = e.Value?.ToString() ?? string.Empty"
                                                @onblur="() => CommitRename(idx)"
                                                @onkeydown="(e) => OnRenameKey(e, idx)"
                                                @onclick:stopPropagation="true" />
@@ -313,7 +313,7 @@
                                 </select>
                                 <input type="text" class="rb3-input" placeholder="Value"
                                        @bind="filter.Value" @bind:event="oninput"
-                                       @oninput="SchedulePreview" />
+                                       @bind:after="SchedulePreview" />
                                 <button class="rb3-icon-btn rb3-icon-btn--danger" @onclick="() => RemoveFilter(filter)" aria-label="Remove filter">
                                     <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
                                         <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
@@ -1180,10 +1180,7 @@
                         };
                         if (!string.IsNullOrWhiteSpace(cron))
                         {
-                            var recipients = string.IsNullOrWhiteSpace(_scheduleEmail)
-                                ? Array.Empty<string>()
-                                : new[] { _scheduleEmail };
-                            await ReportSvc.SetSchedule(existing.Id, cron, _scheduleFormat, recipients);
+                            await ReportSvc.SetSchedule(existing.Id, cron, _scheduleFormat, new List<int>());
                         }
                     }
                 }

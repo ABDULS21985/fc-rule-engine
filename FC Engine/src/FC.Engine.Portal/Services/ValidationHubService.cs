@@ -235,12 +235,13 @@ public class ValidationHubService
     private static string FormatPeriod(ReturnPeriod? period)
     {
         if (period is null) return "—";
-        return period.FrequencyCode switch
+        var start = new DateTime(period.Year, period.Month, 1);
+        return period.Frequency switch
         {
-            "Monthly"   => $"{period.StartDate:MMM yyyy}",
-            "Quarterly" => $"Q{(period.StartDate.Month - 1) / 3 + 1} {period.StartDate.Year}",
-            "Annual"    => $"{period.StartDate.Year}",
-            _           => $"{period.StartDate:dd MMM yyyy} – {period.EndDate:dd MMM yyyy}",
+            "Monthly"   => $"{start:MMM yyyy}",
+            "Quarterly" => $"Q{period.Quarter ?? (period.Month - 1) / 3 + 1} {period.Year}",
+            "Annual"    => $"{period.Year}",
+            _           => $"{start:dd MMM yyyy} – {start.AddMonths(1).AddDays(-1):dd MMM yyyy}",
         };
     }
 }

@@ -52,16 +52,7 @@ else
     <!-- ══════════════════════════════════════════════════════════════════
          BREADCRUMB HEADER
          ══════════════════════════════════════════════════════════════════ -->
-    @{
-        var _bcItems = new List<BreadcrumbItem>
-        {
-            new("Home", "/"),
-            new("Submissions", "/submissions"),
-            new($"#{_data.SubmissionId}", $"/submissions/{_data.SubmissionId}"),
-            new("Validation Report", IsCurrent: true),
-        };
-    }
-    <PortalPageHeader Breadcrumb="@_bcItems" BackUrl="/submissions/@_data.SubmissionId">
+    <PortalPageHeader Breadcrumb="@BreadcrumbItems" BackUrl="@($"/submissions/{_data!.SubmissionId}")">
         <PrimaryAction>
             <button class="portal-btn portal-btn-outline portal-btn-sm portal-vh-print-btn"
                     @onclick="PrintHub" title="Export PDF validation report">
@@ -503,6 +494,14 @@ else
     private ValidationHubData? _data;
     private HashSet<string> _expandedGroups = new();
     private HashSet<string> _expandedFixes  = new();
+
+    private List<BreadcrumbItem> BreadcrumbItems => _data is null ? [] :
+    [
+        new("Home", "/"),
+        new("Submissions", "/submissions"),
+        new($"#{_data.SubmissionId}", $"/submissions/{_data.SubmissionId}"),
+        new("Validation Report", IsCurrent: true),
+    ];
 
     protected override async Task OnInitializedAsync()
     {
