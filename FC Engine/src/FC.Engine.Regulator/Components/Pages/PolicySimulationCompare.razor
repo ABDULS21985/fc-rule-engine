@@ -1,0 +1,195 @@
+@page "/policies/compare"
+@attribute [Authorize(Policy = "RegulatorOnly")]
+@inject IImpactAssessmentEngine ImpactEngine
+@inject IPolicyScenarioService ScenarioService
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+
+<PageTitle>Compare Scenarios — Policy Simulation</PageTitle>
+
+<div class="rg-ps-page">
+    <div class="rg-ps-flex-between">
+        <div>
+            <h1 class="rg-page-title">Scenario Comparison</h1>
+            <p class="rg-muted">Compare impact assessment results across multiple simulation runs side by side.</p>
+        </div>
+        <button class="rg-btn" @onclick="GoBack">Back to Scenarios</button>
+    </div>
+
+    <!-- Run Selector -->
+    <div class="rg-card">
+        <h3 class="rg-section-title">Select Runs to Compare (2-4)</h3>
+        <div class="rg-controls">
+            <input class="rg-ps-input" placeholder="Run IDs, comma separated (e.g. 1,2,3)" @bind="_runIdsInput"
+                   style="max-width:400px;" />
+            <button class="rg-btn primary" @onclick="LoadComparison" disabled="@_comparing">
+                @(_comparing ? "Comparing..." : "Compare")
+            </button>
+        </div>
+        @if (!string.IsNullOrWhiteSpace(_error))
+        {
+            <p class="rg-danger-text rg-ps-mt">@_error</p>
+        }
+    </div>
+
+    @if (_comparison is not null)
+    {
+        <!-- Summary Cards -->
+        <div class="rg-ps-kpis" style="grid-template-columns:repeat(@_comparison.Scenarios.Count, 1fr);">
+            @foreach (var col in _comparison.Scenarios)
+            {
+                <div class="rg-ps-kpi">
+                    <span class="rg-ps-kpi-label">@col.ScenarioTitle</span>
+                    <span class="rg-ps-kpi-value rg-ps-text-warning">@col.EntitiesWouldBreach breaches</span>
+                    <span class="rg-ps-text-xs rg-ps-text-muted">Shortfall: @FormatCurrency(col.AggregateShortfall)</span>
+                </div>
+            }
+        </div>
+
+        <!-- Comparison Chart -->
+        <div class="rg-card">
+            <h3 class="rg-section-title">Breach Count Comparison</h3>
+            <div class="rg-chart"><canvas id="compareBreachChart"></canvas></div>
+        </div>
+
+        <!-- Comparison Matrix -->
+        <div class="rg-card">
+            <h3 class="rg-section-title">Entity Comparison Matrix</h3>
+            @if (_comparison.EntityRows.Count == 0)
+            {
+                <p class="rg-muted">No entity data to compare.</p>
+            }
+            else
+            {
+                <div class="rg-table-wrap">
+                    <table class="rg-table rg-ps-compare-matrix">
+                        <thead>
+                            <tr>
+                                <th>Institution</th>
+                                <th>Type</th>
+                                @foreach (var col in _comparison.Scenarios)
+                                {
+                                    <th>@col.ScenarioTitle</th>
+                                }
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var row in _comparison.EntityRows.Take(100))
+                            {
+                                <tr>
+                                    <td><strong>@row.InstitutionCode</strong></td>
+                                    <td>@row.EntityType</td>
+                                    @foreach (var col in _comparison.Scenarios)
+                                    {
+                                        <td>
+                                            @if (row.CategoryByRunId.TryGetValue(col.RunId, out var cat))
+                                            {
+                                                <ImpactCategoryBadge Category="@cat" />
+                                            }
+                                            else
+                                            {
+                                                <span class="rg-muted">-</span>
+                                            }
+                                        </td>
+                                    }
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+
+                @if (_comparison.EntityRows.Count > 100)
+                {
+                    <p class="rg-ps-text-sm rg-ps-text-muted rg-ps-mt">
+                        Showing 100 of @_comparison.EntityRows.Count entities.
+                    </p>
+                }
+            }
+        </div>
+    }
+</div>
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
+    [SupplyParameterFromQuery(Name = "runs")] public string? InitialRunIds { get; set; }
+
+    private int _regulatorId;
+    private string _runIdsInput = string.Empty;
+    private string? _error;
+    private bool _comparing;
+    private ScenarioComparisonResult? _comparison;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var state = await AuthState!;
+        _regulatorId = int.Parse(state.User.FindFirst("RegulatorId")?.Value
+            ?? state.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? "1");
+
+        if (!string.IsNullOrWhiteSpace(InitialRunIds))
+        {
+            _runIdsInput = InitialRunIds;
+            await LoadComparison();
+        }
+    }
+
+    private async Task LoadComparison()
+    {
+        _error = null;
+        var ids = _runIdsInput.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        var runIds = new List<long>();
+        foreach (var id in ids)
+        {
+            if (long.TryParse(id, out var val))
+                runIds.Add(val);
+        }
+
+        if (runIds.Count < 2)
+        {
+            _error = "Please enter at least 2 run IDs.";
+            return;
+        }
+
+        _comparing = true;
+        StateHasChanged();
+        try
+        {
+            _comparison = await ImpactEngine.CompareRunsAsync(runIds, _regulatorId);
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _comparing = false;
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_comparison is null) return;
+
+        try
+        {
+            await JS.InvokeVoidAsync("renderChart", "compareBreachChart", "bar", new
+            {
+                labels = _comparison.Scenarios.Select(s => s.ScenarioTitle).ToArray(),
+                datasets = new[]
+                {
+                    new
+                    {
+                        label = "Would Breach",
+                        data = _comparison.Scenarios.Select(s => s.EntitiesWouldBreach).ToArray(),
+                        backgroundColor = "#E69F00"
+                    }
+                }
+            });
+        }
+        catch { }
+    }
+
+    private void GoBack() => Nav.NavigateTo("/policies");
+
+    private static string FormatCurrency(decimal? value)
+        => value.HasValue ? $"NGN {value.Value:N0}M" : "-";
+}

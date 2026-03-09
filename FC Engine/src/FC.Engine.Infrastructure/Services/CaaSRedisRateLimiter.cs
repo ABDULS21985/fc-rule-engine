@@ -11,7 +11,7 @@ namespace FC.Engine.Infrastructure.Services;
 /// </summary>
 public sealed class CaaSRedisRateLimiter : ICaaSRateLimiter
 {
-    private readonly IConnectionMultiplexer _redis;
+    private readonly IConnectionMultiplexer? _redis;
     private readonly ILogger<CaaSRedisRateLimiter> _log;
 
     // Lua script: KEYS[1]=counter key, ARGV[1]=limit, ARGV[2]=window_ms, ARGV[3]=now_ms
@@ -39,7 +39,7 @@ public sealed class CaaSRedisRateLimiter : ICaaSRateLimiter
         end
         """;
 
-    public CaaSRedisRateLimiter(IConnectionMultiplexer redis, ILogger<CaaSRedisRateLimiter> log)
+    public CaaSRedisRateLimiter(ILogger<CaaSRedisRateLimiter> log, IConnectionMultiplexer? redis = null)
     {
         _redis = redis;
         _log   = log;
@@ -51,6 +51,9 @@ public sealed class CaaSRedisRateLimiter : ICaaSRateLimiter
         var limit = RateLimitThresholds.GetRequestsPerMinute(tier);
         const int windowSeconds = 60;
         const long windowMs = windowSeconds * 1000L;
+
+        if (_redis is null)
+            return new RateLimitResult(true, limit, limit, 0);
 
         var nowMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
         // Bucket key: one per minute window

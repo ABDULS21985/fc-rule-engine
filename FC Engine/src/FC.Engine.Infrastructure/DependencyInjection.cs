@@ -21,6 +21,7 @@ using FC.Engine.Infrastructure.Persistence;
 using FC.Engine.Infrastructure.Persistence.Interceptors;
 using FC.Engine.Infrastructure.Persistence.Repositories;
 using FC.Engine.Infrastructure.Notifications;
+using FC.Engine.Infrastructure.Services.DataProtection;
 using FC.Engine.Infrastructure.Storage;
 using FC.Engine.Infrastructure.Validation;
 using FC.Engine.Infrastructure.Webhooks;
@@ -43,6 +44,7 @@ public static class DependencyInjection
         services.AddHttpContextAccessor();
         services.Configure<FileStorageOptions>(configuration.GetSection(FileStorageOptions.SectionName));
         services.Configure<PrivacyComplianceOptions>(configuration.GetSection(PrivacyComplianceOptions.SectionName));
+        services.Configure<ContinuousDspmOptions>(configuration.GetSection(ContinuousDspmOptions.SectionName));
 
         // ── Multi-Tenancy ──
         services.AddScoped<ITenantContext, HttpTenantContext>();
@@ -108,6 +110,17 @@ public static class DependencyInjection
         services.AddScoped<IDsarService, DsarService>();
         services.AddScoped<IDataBreachService, DataBreachService>();
         services.AddScoped<IPrivacyDashboardService, PrivacyDashboardService>();
+        services.AddSingleton<PiiClassifier>();
+        services.AddSingleton<ComplianceTagger>();
+        services.AddSingleton<SchemaFingerprintService>();
+        services.AddSingleton<ShadowCopyDetector>();
+        services.AddScoped<IDataProtectionService, DataProtectionService>();
+        services.AddScoped<IRootCauseAnalysisService, RootCauseAnalysisService>();
+
+        // Policy Simulation & What-If Modelling (RG-40)
+        services.AddPolicySimulation(configuration);
+        services.AddScoped<IContinuousDspmWatcher, AtRestDspmWatcher>();
+        services.AddScoped<IContinuousDspmWatcher, ShadowDspmWatcher>();
         services.AddScoped<IHistoricalMigrationService, HistoricalMigrationService>();
         services.AddScoped<IFileParser, ExcelFileParser>();
         services.AddScoped<IFileParser, CsvFileParser>();
@@ -253,6 +266,8 @@ public static class DependencyInjection
         services.AddMassTransit(x =>
         {
             x.AddConsumer<WebhookDeliveryConsumer>();
+            x.AddConsumer<PipelineWatcherConsumer>();
+            x.AddConsumer<TransitWatcherConsumer>();
 
             if (rabbitMqEnabled)
             {
@@ -289,6 +304,7 @@ public static class DependencyInjection
         services.AddHostedService<DataBreachEscalationJob>();
         services.AddHostedService<RetentionEnforcementJob>();
         services.AddHostedService<ScheduledReportJob>();
+        services.AddHostedService<ContinuousDspmScheduler>();
 
         // ── Regulatory Direct Submission (RG-34) ──
         services.Configure<RegulatoryApiSettings>(configuration.GetSection(RegulatoryApiSettings.SectionName));

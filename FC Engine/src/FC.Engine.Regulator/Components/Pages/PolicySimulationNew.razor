@@ -1,0 +1,311 @@
+@page "/policies/new"
+@attribute [Authorize(Policy = "RegulatorOnly")]
+@inject IPolicyScenarioService ScenarioService
+@inject NavigationManager Nav
+@using FC.Engine.Domain.Entities
+
+<PageTitle>New Policy Scenario — RegOS™</PageTitle>
+
+<div class="rg-ps-page">
+    <div class="rg-ps-flex-between">
+        <h1 class="rg-page-title">Create Policy Scenario</h1>
+        <button class="rg-btn" @onclick="GoBack">Cancel</button>
+    </div>
+
+    <!-- Steps -->
+    <div class="rg-ps-steps">
+        <div class="rg-ps-step @(_step == 1 ? "active" : _step > 1 ? "done" : "")">
+            <span class="rg-ps-step-num">@(_step > 1 ? "✓" : "1")</span> Basic Information
+        </div>
+        <div class="rg-ps-step @(_step == 2 ? "active" : _step > 2 ? "done" : "")">
+            <span class="rg-ps-step-num">@(_step > 2 ? "✓" : "2")</span> Parameters
+        </div>
+        <div class="rg-ps-step @(_step == 3 ? "active" : "")">
+            <span class="rg-ps-step-num">3</span> Review & Create
+        </div>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(_error))
+    {
+        <div class="rg-alert rg-alert-danger">@_error</div>
+    }
+
+    <!-- Step 1: Basic Info -->
+    @if (_step == 1)
+    {
+        <div class="rg-card">
+            <div class="rg-ps-form-section">
+                <div class="rg-ps-form-group">
+                    <label class="rg-ps-form-label">Scenario Title *</label>
+                    <input class="rg-ps-input" placeholder="e.g. Proposed CAR Increase to 15%" @bind="_title" />
+                </div>
+
+                <div class="rg-ps-form-group">
+                    <label class="rg-ps-form-label">Description</label>
+                    <textarea class="rg-ps-textarea" placeholder="Describe the regulatory rationale and objectives..."
+                              @bind="_description"></textarea>
+                </div>
+
+                <div class="rg-ps-form-row">
+                    <div class="rg-ps-form-group">
+                        <label class="rg-ps-form-label">Policy Domain *</label>
+                        <select class="rg-ps-select" @bind="_domain">
+                            @foreach (var d in Enum.GetValues<PolicyDomain>())
+                            {
+                                <option value="@d">@FormatDomain(d)</option>
+                            }
+                        </select>
+                    </div>
+
+                    <div class="rg-ps-form-group">
+                        <label class="rg-ps-form-label">Baseline Date *</label>
+                        <input type="date" class="rg-ps-input" @bind="_baselineDate" />
+                    </div>
+                </div>
+
+                <div class="rg-ps-form-group">
+                    <label class="rg-ps-form-label">Target Entity Types</label>
+                    <span class="rg-ps-form-hint">Comma-separated (e.g. DMB,MFB) or ALL for all supervised entities</span>
+                    <input class="rg-ps-input" placeholder="ALL" @bind="_targetEntityTypes" />
+                </div>
+
+                <div class="rg-ps-flex-end rg-ps-mt">
+                    <button class="rg-btn primary" @onclick="GoToStep2" disabled="@(string.IsNullOrWhiteSpace(_title))">
+                        Next: Parameters
+                    </button>
+                </div>
+            </div>
+        </div>
+    }
+
+    <!-- Step 2: Parameters -->
+    @if (_step == 2)
+    {
+        <div class="rg-card">
+            <h3>Add Parameter Adjustments</h3>
+            <p class="rg-muted rg-ps-text-sm">
+                Define the regulatory parameters you want to adjust. Select from presets or enter custom values.
+            </p>
+
+            <div class="rg-ps-form-section rg-ps-mt">
+                <div class="rg-ps-form-row">
+                    <div class="rg-ps-form-group">
+                        <label class="rg-ps-form-label">Parameter Code *</label>
+                        <input class="rg-ps-input" placeholder="e.g. CAR_MIN" @bind="_newParamCode" />
+                    </div>
+                    <div class="rg-ps-form-group">
+                        <label class="rg-ps-form-label">Proposed Value *</label>
+                        <input type="number" step="0.01" class="rg-ps-input" @bind="_newParamValue" />
+                    </div>
+                </div>
+                <div class="rg-ps-form-group">
+                    <label class="rg-ps-form-label">Applicable Entity Types</label>
+                    <span class="rg-ps-form-hint">Leave blank for same as scenario target</span>
+                    <input class="rg-ps-input" placeholder="ALL" @bind="_newParamEntityTypes" />
+                </div>
+                <div class="rg-ps-flex-end">
+                    <button class="rg-btn primary" @onclick="AddParameter"
+                            disabled="@(string.IsNullOrWhiteSpace(_newParamCode))">
+                        + Add Parameter
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        @if (_parameters.Count > 0)
+        {
+            <div class="rg-card">
+                <h3>Parameters (@_parameters.Count)</h3>
+                @foreach (var p in _parameters)
+                {
+                    <div class="rg-ps-param-row rg-ps-mb">
+                        <div>
+                            <div class="rg-ps-param-name">@p.Code</div>
+                            <div class="rg-ps-param-code">@(string.IsNullOrEmpty(p.EntityTypes) ? "ALL" : p.EntityTypes)</div>
+                        </div>
+                        <span class="rg-ps-param-arrow">→</span>
+                        <div class="rg-ps-param-current">@p.Value</div>
+                        <div></div>
+                        <button class="rg-btn sm danger" @onclick="() => _parameters.Remove(p)">Remove</button>
+                    </div>
+                }
+            </div>
+        }
+
+        <div class="rg-ps-flex-between rg-ps-mt">
+            <button class="rg-btn" @onclick="() => _step = 1">Back</button>
+            <button class="rg-btn primary" @onclick="() => _step = 3"
+                    disabled="@(_parameters.Count == 0)">
+                Next: Review
+            </button>
+        </div>
+    }
+
+    <!-- Step 3: Review -->
+    @if (_step == 3)
+    {
+        <div class="rg-card">
+            <h3>Review Scenario</h3>
+
+            <div class="rg-ps-decision-summary">
+                <div class="rg-ps-decision-summary-item">
+                    <span class="rg-ps-decision-summary-label">Title</span>
+                    <span class="rg-ps-decision-summary-value">@_title</span>
+                </div>
+                <div class="rg-ps-decision-summary-item">
+                    <span class="rg-ps-decision-summary-label">Domain</span>
+                    <span class="rg-ps-decision-summary-value">@FormatDomain(_domain)</span>
+                </div>
+                <div class="rg-ps-decision-summary-item">
+                    <span class="rg-ps-decision-summary-label">Baseline Date</span>
+                    <span class="rg-ps-decision-summary-value">@_baselineDate.ToString("dd MMM yyyy")</span>
+                </div>
+                <div class="rg-ps-decision-summary-item">
+                    <span class="rg-ps-decision-summary-label">Target Entities</span>
+                    <span class="rg-ps-decision-summary-value">@(string.IsNullOrWhiteSpace(_targetEntityTypes) ? "ALL" : _targetEntityTypes)</span>
+                </div>
+                <div class="rg-ps-decision-summary-item">
+                    <span class="rg-ps-decision-summary-label">Parameters</span>
+                    <span class="rg-ps-decision-summary-value">@_parameters.Count adjustment(s)</span>
+                </div>
+            </div>
+
+            @if (!string.IsNullOrWhiteSpace(_description))
+            {
+                <div class="rg-ps-mt">
+                    <strong>Description:</strong>
+                    <p class="rg-ps-text-sm">@_description</p>
+                </div>
+            }
+
+            <h4 class="rg-ps-mt">Parameter Adjustments</h4>
+            <div class="rg-table-wrap">
+                <table class="rg-table">
+                    <thead>
+                        <tr>
+                            <th>Code</th>
+                            <th>Proposed Value</th>
+                            <th>Applicable Types</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var p in _parameters)
+                        {
+                            <tr>
+                                <td class="rg-ps-font-mono">@p.Code</td>
+                                <td>@p.Value</td>
+                                <td>@(string.IsNullOrEmpty(p.EntityTypes) ? "ALL" : p.EntityTypes)</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="rg-ps-flex-between rg-ps-mt">
+                <button class="rg-btn" @onclick="() => _step = 2">Back</button>
+                <button class="rg-btn primary" @onclick="CreateScenario" disabled="@_creating">
+                    @(_creating ? "Creating..." : "Create Scenario")
+                </button>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
+
+    private int _regulatorId;
+    private int _userId;
+    private int _step = 1;
+    private string? _error;
+    private bool _creating;
+
+    // Step 1
+    private string _title = string.Empty;
+    private string? _description;
+    private PolicyDomain _domain = PolicyDomain.CapitalAdequacy;
+    private DateOnly _baselineDate = DateOnly.FromDateTime(DateTime.UtcNow);
+    private string _targetEntityTypes = "ALL";
+
+    // Step 2
+    private readonly List<ParamEntry> _parameters = new();
+    private string _newParamCode = string.Empty;
+    private decimal _newParamValue;
+    private string _newParamEntityTypes = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var state = await AuthState!;
+        _regulatorId = int.Parse(state.User.FindFirst("RegulatorId")?.Value
+            ?? state.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? "1");
+        _userId = int.Parse(state.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? "1");
+    }
+
+    private void GoToStep2()
+    {
+        if (string.IsNullOrWhiteSpace(_title))
+        {
+            _error = "Title is required.";
+            return;
+        }
+        _error = null;
+        _step = 2;
+    }
+
+    private void AddParameter()
+    {
+        if (string.IsNullOrWhiteSpace(_newParamCode)) return;
+        if (_parameters.Any(p => p.Code == _newParamCode))
+        {
+            _error = $"Parameter {_newParamCode} already added.";
+            return;
+        }
+        _error = null;
+        _parameters.Add(new ParamEntry(_newParamCode, _newParamValue, _newParamEntityTypes));
+        _newParamCode = string.Empty;
+        _newParamValue = 0;
+        _newParamEntityTypes = string.Empty;
+    }
+
+    private async Task CreateScenario()
+    {
+        _creating = true;
+        _error = null;
+        try
+        {
+            var entityTypes = string.IsNullOrWhiteSpace(_targetEntityTypes) ? "ALL" : _targetEntityTypes.Trim();
+            var scenarioId = await ScenarioService.CreateScenarioAsync(
+                _regulatorId, _title, _description, _domain, entityTypes, _baselineDate, _userId);
+
+            foreach (var p in _parameters)
+            {
+                var applicableTypes = string.IsNullOrWhiteSpace(p.EntityTypes) ? null : p.EntityTypes;
+                await ScenarioService.AddParameterAsync(scenarioId, _regulatorId, p.Code, p.Value, applicableTypes, _userId);
+            }
+
+            Nav.NavigateTo($"/policies/{scenarioId}");
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _creating = false;
+        }
+    }
+
+    private static string FormatDomain(PolicyDomain d) => d switch
+    {
+        PolicyDomain.CapitalAdequacy => "Capital Adequacy",
+        PolicyDomain.Liquidity => "Liquidity",
+        PolicyDomain.Leverage => "Leverage",
+        PolicyDomain.FX => "FX",
+        PolicyDomain.RiskManagement => "Risk Management",
+        _ => d.ToString()
+    };
+
+    private void GoBack() => Nav.NavigateTo("/policies");
+
+    private sealed record ParamEntry(string Code, decimal Value, string EntityTypes);
+}

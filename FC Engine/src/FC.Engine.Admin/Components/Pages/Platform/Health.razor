@@ -270,7 +270,7 @@
             @foreach (var alert in AlertService.Alerts)
             {
                 var rowClass = alert.IsNew ? "fc-alert-feed__row fc-alert-new" : "fc-alert-feed__row";
-                var severityClass = alert.Severity == AlertSeverity.Critical
+                var severityClass = alert.Severity == HealthAlertSeverity.Critical
                     ? "fc-alert-feed__severity fc-alert-feed__severity--critical"
                     : "fc-alert-feed__severity fc-alert-feed__severity--warning";
                 <div class="@rowClass">
@@ -567,19 +567,19 @@
     private void CheckThresholds(PlatformHealthData data)
     {
         if (data.ApiLatencyP99Ms > 1000)
-            AlertService.Raise("API Latency p99", $"API latency critical — p99 {data.ApiLatencyP99Ms:0} ms exceeds 1000 ms threshold", AlertSeverity.Critical);
+            AlertService.Raise("API Latency p99", $"API latency critical — p99 {data.ApiLatencyP99Ms:0} ms exceeds 1000 ms threshold", HealthAlertSeverity.Critical);
         else if (data.ApiLatencyP99Ms > 500)
-            AlertService.Raise("API Latency p99", $"API latency elevated — p99 {data.ApiLatencyP99Ms:0} ms exceeds 500 ms threshold", AlertSeverity.Warning);
+            AlertService.Raise("API Latency p99", $"API latency elevated — p99 {data.ApiLatencyP99Ms:0} ms exceeds 500 ms threshold", HealthAlertSeverity.Warning);
 
         if (data.ErrorRatePercent > 5)
-            AlertService.Raise("Error Rate", $"Error rate critical — {data.ErrorRatePercent:0.##}% exceeds 5% threshold", AlertSeverity.Critical);
+            AlertService.Raise("Error Rate", $"Error rate critical — {data.ErrorRatePercent:0.##}% exceeds 5% threshold", HealthAlertSeverity.Critical);
         else if (data.ErrorRatePercent > 1)
-            AlertService.Raise("Error Rate", $"Error rate elevated — {data.ErrorRatePercent:0.##}% exceeds 1% threshold", AlertSeverity.Warning);
+            AlertService.Raise("Error Rate", $"Error rate elevated — {data.ErrorRatePercent:0.##}% exceeds 1% threshold", HealthAlertSeverity.Warning);
 
         if (data.QueueDepth > 500)
-            AlertService.Raise("Queue Depth", $"Queue depth critical — {data.QueueDepth} messages exceeds 500 threshold", AlertSeverity.Critical);
+            AlertService.Raise("Queue Depth", $"Queue depth critical — {data.QueueDepth} messages exceeds 500 threshold", HealthAlertSeverity.Critical);
         else if (data.QueueDepth > 100)
-            AlertService.Raise("Queue Depth", $"Queue depth elevated — {data.QueueDepth} messages exceeds 100 threshold", AlertSeverity.Warning);
+            AlertService.Raise("Queue Depth", $"Queue depth elevated — {data.QueueDepth} messages exceeds 100 threshold", HealthAlertSeverity.Warning);
     }
 
     private void ToggleAlertFeed()

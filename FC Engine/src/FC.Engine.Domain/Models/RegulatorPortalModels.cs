@@ -140,6 +140,8 @@ public class ExaminationProjectCreateRequest
     public List<string> ModuleCodes { get; set; } = new();
     public DateTime? PeriodFrom { get; set; }
     public DateTime? PeriodTo { get; set; }
+    public List<ExaminationTeamAssignment> TeamAssignments { get; set; } = new();
+    public List<ExaminationMilestone> Milestones { get; set; } = new();
 }
 
 public class ExaminationWorkspaceData
@@ -148,6 +150,12 @@ public class ExaminationWorkspaceData
     public List<RegulatorSubmissionInboxItem> Submissions { get; set; } = new();
     public List<ExaminationAnnotation> Annotations { get; set; } = new();
     public Dictionary<int, EntityBenchmarkResult> BenchmarksByInstitution { get; set; } = new();
+    public List<ExaminationTeamAssignment> TeamAssignments { get; set; } = new();
+    public List<ExaminationMilestone> Milestones { get; set; } = new();
+    public List<ExaminationFinding> Findings { get; set; } = new();
+    public List<ExaminationEvidenceRequest> EvidenceRequests { get; set; } = new();
+    public List<ExaminationEvidenceFile> EvidenceFiles { get; set; } = new();
+    public ExaminationIntelligencePack? IntelligencePack { get; set; }
 }
 
 // ── RG-36: Systemic Risk Engine ──────────────────────────────────────

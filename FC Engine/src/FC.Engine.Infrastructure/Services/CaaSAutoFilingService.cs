@@ -19,7 +19,7 @@ public sealed class CaaSAutoFilingService : ICaaSAutoFilingService
     private readonly ICaaSService _caas;
     private readonly ISubmissionOrchestrator _submission;
     private readonly ICaaSWebhookDispatcher _webhook;
-    private readonly SecretClient _secretClient;
+    private readonly SecretClient? _secretClient;
     private readonly ILogger<CaaSAutoFilingService> _log;
 
     public CaaSAutoFilingService(
@@ -28,8 +28,8 @@ public sealed class CaaSAutoFilingService : ICaaSAutoFilingService
         ICaaSService caas,
         ISubmissionOrchestrator submission,
         ICaaSWebhookDispatcher webhook,
-        SecretClient secretClient,
-        ILogger<CaaSAutoFilingService> log)
+        ILogger<CaaSAutoFilingService> log,
+        SecretClient? secretClient = null)
     {
         _db           = db;
         _cbFactory    = cbFactory;
@@ -85,6 +85,9 @@ public sealed class CaaSAutoFilingService : ICaaSAutoFilingService
         CoreBankingExtractionResult extraction;
         try
         {
+            if (_secretClient is null)
+                throw new InvalidOperationException("KeyVault is not configured. Set KeyVault:Uri to enable auto-filing.");
+
             var credential = await _secretClient.GetSecretAsync(
                 schedule.CredentialSecretName, cancellationToken: ct);
 

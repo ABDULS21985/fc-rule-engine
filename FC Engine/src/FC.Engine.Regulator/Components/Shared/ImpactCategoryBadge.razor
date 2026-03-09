@@ -1,0 +1,23 @@
+@code {
+    [Parameter, EditorRequired] public ImpactCategory Category { get; set; }
+
+    private string CssClass => Category switch
+    {
+        ImpactCategory.CurrentlyCompliant => "rg-ps-impact rg-ps-impact-compliant",
+        ImpactCategory.WouldBreach        => "rg-ps-impact rg-ps-impact-breach",
+        ImpactCategory.AlreadyBreaching   => "rg-ps-impact rg-ps-impact-already",
+        ImpactCategory.NotAffected        => "rg-ps-impact rg-ps-impact-na",
+        _                                 => "rg-ps-impact"
+    };
+
+    private string Label => Category switch
+    {
+        ImpactCategory.CurrentlyCompliant => "Compliant",
+        ImpactCategory.WouldBreach        => "Would Breach",
+        ImpactCategory.AlreadyBreaching   => "Already Breaching",
+        ImpactCategory.NotAffected        => "Not Affected",
+        _                                 => Category.ToString()
+    };
+}
+
+<span class="@CssClass">@Label</span>

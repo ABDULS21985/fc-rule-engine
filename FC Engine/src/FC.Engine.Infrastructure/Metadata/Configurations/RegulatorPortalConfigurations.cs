@@ -82,6 +82,8 @@ public class ExaminationProjectConfiguration : IEntityTypeConfiguration<Examinat
         builder.Property(x => x.Scope).HasMaxLength(1000).IsRequired();
         builder.Property(x => x.EntityIdsJson).HasColumnType("nvarchar(max)").IsRequired();
         builder.Property(x => x.ModuleCodesJson).HasColumnType("nvarchar(max)").IsRequired();
+        builder.Property(x => x.TeamAssignmentsJson).HasColumnType("nvarchar(max)").IsRequired();
+        builder.Property(x => x.TimelineJson).HasColumnType("nvarchar(max)").IsRequired();
         builder.Property(x => x.Status)
             .HasMaxLength(20)
             .HasConversion<string>()
@@ -90,8 +92,24 @@ public class ExaminationProjectConfiguration : IEntityTypeConfiguration<Examinat
         builder.Property(x => x.CreatedAt).HasDefaultValueSql("SYSUTCDATETIME()");
         builder.Property(x => x.UpdatedAt).HasDefaultValueSql("SYSUTCDATETIME()");
         builder.Property(x => x.ReportFilePath).HasMaxLength(500);
+        builder.Property(x => x.IntelligencePackFilePath).HasMaxLength(500);
 
         builder.HasMany(x => x.Annotations)
+            .WithOne(x => x.Project)
+            .HasForeignKey(x => x.ProjectId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        builder.HasMany(x => x.Findings)
+            .WithOne(x => x.Project)
+            .HasForeignKey(x => x.ProjectId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        builder.HasMany(x => x.EvidenceRequests)
+            .WithOne(x => x.Project)
+            .HasForeignKey(x => x.ProjectId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        builder.HasMany(x => x.EvidenceFiles)
             .WithOne(x => x.Project)
             .HasForeignKey(x => x.ProjectId)
             .OnDelete(DeleteBehavior.Cascade);

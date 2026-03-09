@@ -181,6 +181,56 @@ app.MapGet("/workspace/{projectId:int}/report", async (
     return Results.File(pdf, "application/pdf", fileName);
 }).RequireAuthorization("RegulatorOnly");
 
+app.MapGet("/workspace/{projectId:int}/intelligence-pack", async (
+    int projectId,
+    HttpContext context,
+    ITenantContext tenantContext,
+    IExaminationWorkspaceService workspaceService) =>
+{
+    if (!tenantContext.CurrentTenantId.HasValue)
+    {
+        return Results.Unauthorized();
+    }
+
+    var regulatorCode = context.User.FindFirst("RegulatorCode")?.Value;
+    if (string.IsNullOrWhiteSpace(regulatorCode))
+    {
+        return Results.BadRequest(new { error = "Missing regulator context." });
+    }
+
+    var pdf = await workspaceService.GenerateIntelligencePackPdf(
+        tenantContext.CurrentTenantId.Value,
+        regulatorCode,
+        projectId,
+        context.RequestAborted);
+
+    var fileName = $"intelligence-pack-{projectId}-{DateTime.UtcNow:yyyyMMddHHmmss}.pdf";
+    return Results.File(pdf, "application/pdf", fileName);
+}).RequireAuthorization("RegulatorOnly");
+
+app.MapGet("/workspace/{projectId:int}/evidence/{evidenceId:int}", async (
+    int projectId,
+    int evidenceId,
+    ITenantContext tenantContext,
+    IExaminationWorkspaceService workspaceService,
+    HttpContext context) =>
+{
+    if (!tenantContext.CurrentTenantId.HasValue)
+    {
+        return Results.Unauthorized();
+    }
+
+    var file = await workspaceService.DownloadEvidence(
+        tenantContext.CurrentTenantId.Value,
+        projectId,
+        evidenceId,
+        context.RequestAborted);
+
+    return file is null
+        ? Results.NotFound()
+        : Results.File(file.Content, file.ContentType, file.FileName);
+}).RequireAuthorization("RegulatorOnly");
+
 app.MapGet("/stress-test/report/pdf", async (
     HttpContext context,
     IStressTestService stressTestService) =>

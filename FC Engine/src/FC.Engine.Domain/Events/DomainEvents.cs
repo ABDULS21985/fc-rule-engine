@@ -220,3 +220,139 @@ public record ComplianceScoreChangedEvent(
 {
     public string EventType => "compliance.score_changed";
 }
+
+// ── Data protection / DSPM ──
+
+public record DataPipelineLifecycleEvent(
+    Guid TenantId,
+    Guid PipelineId,
+    Guid ExecutionId,
+    string PipelineName,
+    string Status,
+    Guid SourceDataSourceId,
+    Guid TargetDataSourceId,
+    bool SourceTlsEnabled,
+    bool TargetTlsEnabled,
+    bool IsApproved,
+    IReadOnlyList<string> SourceTables,
+    IReadOnlyList<string> TargetTables,
+    long ProcessedRows,
+    string? ErrorMessage,
+    DateTime OccurredAt,
+    Guid CorrelationId) : IDomainEvent
+{
+    public string EventType => "data.pipeline.events";
+}
+
+public record DspmScanCompletedEvent(
+    Guid TenantId,
+    Guid ScanId,
+    Guid SourceDataSourceId,
+    Guid? PipelineId,
+    string Trigger,
+    int FindingsCount,
+    int NewPiiCount,
+    decimal PostureScore,
+    DateTime OccurredAt,
+    Guid CorrelationId) : IDomainEvent
+{
+    public string EventType => "cyber.dspm.scan_completed";
+}
+
+// ── Policy Simulation lifecycle ──
+
+public record PolicyScenarioCreatedEvent(
+    Guid TenantId,
+    long ScenarioId,
+    int RegulatorId,
+    string PolicyDomain,
+    string Title,
+    DateTime OccurredAt,
+    Guid CorrelationId) : IDomainEvent
+{
+    public string EventType => "policy.scenario.created";
+}
+
+public record PolicyParameterChangedEvent(
+    Guid TenantId,
+    long ScenarioId,
+    string ParameterCode,
+    decimal OldValue,
+    decimal NewValue,
+    DateTime OccurredAt,
+    Guid CorrelationId) : IDomainEvent
+{
+    public string EventType => "policy.parameter.changed";
+}
+
+public record SimulationRunStartedEvent(
+    Guid TenantId,
+    long RunId,
+    long ScenarioId,
+    int RegulatorId,
+    DateTime OccurredAt,
+    Guid CorrelationId) : IDomainEvent
+{
+    public string EventType => "simulation.run.started";
+}
+
+public record SimulationRunCompletedEvent(
+    Guid TenantId,
+    long RunId,
+    long ScenarioId,
+    int TotalEntities,
+    int WouldBreach,
+    int AlreadyBreaching,
+    DateTime OccurredAt,
+    Guid CorrelationId) : IDomainEvent
+{
+    public string EventType => "simulation.run.completed";
+}
+
+public record ConsultationPublishedEvent(
+    Guid TenantId,
+    long ConsultationId,
+    int RegulatorId,
+    DateOnly Deadline,
+    DateTime OccurredAt,
+    Guid CorrelationId) : IDomainEvent
+{
+    public string EventType => "consultation.published";
+}
+
+public record ConsultationFeedbackReceivedEvent(
+    Guid TenantId,
+    long ConsultationId,
+    int InstitutionId,
+    long FeedbackId,
+    string OverallPosition,
+    DateTime OccurredAt,
+    Guid CorrelationId) : IDomainEvent
+{
+    public string EventType => "consultation.feedback.received";
+}
+
+public record PolicyDecisionMadeEvent(
+    Guid TenantId,
+    long DecisionId,
+    long ScenarioId,
+    string DecisionType,
+    DateOnly? EffectiveDate,
+    DateTime OccurredAt,
+    Guid CorrelationId) : IDomainEvent
+{
+    public string EventType => "policy.decision.made";
+}
+
+public record PolicyImpactTrackedEvent(
+    Guid TenantId,
+    long DecisionId,
+    DateOnly TrackingDate,
+    int PredictedBreach,
+    int ActualBreach,
+    decimal AccuracyScore,
+    DateTime OccurredAt,
+    Guid CorrelationId) : IDomainEvent
+{
+    public string EventType => "policy.impact.tracked";
+}

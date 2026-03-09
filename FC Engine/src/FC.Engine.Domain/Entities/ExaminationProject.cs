@@ -19,10 +19,17 @@ public class ExaminationProject
     public int CreatedBy { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+    public string TeamAssignmentsJson { get; set; } = "[]";
+    public string TimelineJson { get; set; } = "[]";
     public string? ReportFilePath { get; set; }
     public DateTime? LastReportGeneratedAt { get; set; }
+    public string? IntelligencePackFilePath { get; set; }
+    public DateTime? IntelligencePackGeneratedAt { get; set; }
 
     public List<ExaminationAnnotation> Annotations { get; set; } = new();
+    public List<ExaminationFinding> Findings { get; set; } = new();
+    public List<ExaminationEvidenceRequest> EvidenceRequests { get; set; } = new();
+    public List<ExaminationEvidenceFile> EvidenceFiles { get; set; } = new();
 }
 
 public class ExaminationAnnotation

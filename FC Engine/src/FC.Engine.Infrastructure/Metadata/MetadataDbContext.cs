@@ -78,6 +78,17 @@ public class MetadataDbContext : DbContext
     public DbSet<DataSubjectRequest> DataSubjectRequests => Set<DataSubjectRequest>();
     public DbSet<DataProcessingActivity> DataProcessingActivities => Set<DataProcessingActivity>();
     public DbSet<DataBreachIncident> DataBreachIncidents => Set<DataBreachIncident>();
+    public DbSet<DataSourceRegistration> DataSourceRegistrations => Set<DataSourceRegistration>();
+    public DbSet<DataPipelineDefinition> DataPipelineDefinitions => Set<DataPipelineDefinition>();
+    public DbSet<DataPipelineExecution> DataPipelineExecutions => Set<DataPipelineExecution>();
+    public DbSet<DspmScanRecord> DspmScanRecords => Set<DspmScanRecord>();
+    public DbSet<DspmColumnFinding> DspmColumnFindings => Set<DspmColumnFinding>();
+    public DbSet<ShadowCopyRecord> ShadowCopyRecords => Set<ShadowCopyRecord>();
+    public DbSet<CyberAsset> CyberAssets => Set<CyberAsset>();
+    public DbSet<CyberAssetDependency> CyberAssetDependencies => Set<CyberAssetDependency>();
+    public DbSet<SecurityAlert> SecurityAlerts => Set<SecurityAlert>();
+    public DbSet<SecurityEvent> SecurityEvents => Set<SecurityEvent>();
+    public DbSet<RootCauseAnalysisRecord> RootCauseAnalysisRecords => Set<RootCauseAnalysisRecord>();
     public DbSet<ImportJob> ImportJobs => Set<ImportJob>();
     public DbSet<ImportMapping> ImportMappings => Set<ImportMapping>();
     public DbSet<MigrationModuleSignOff> MigrationModuleSignOffs => Set<MigrationModuleSignOff>();
@@ -102,6 +113,9 @@ public class MetadataDbContext : DbContext
     public DbSet<ExaminerQuery> ExaminerQueries => Set<ExaminerQuery>();
     public DbSet<ExaminationProject> ExaminationProjects => Set<ExaminationProject>();
     public DbSet<ExaminationAnnotation> ExaminationAnnotations => Set<ExaminationAnnotation>();
+    public DbSet<ExaminationFinding> ExaminationFindings => Set<ExaminationFinding>();
+    public DbSet<ExaminationEvidenceRequest> ExaminationEvidenceRequests => Set<ExaminationEvidenceRequest>();
+    public DbSet<ExaminationEvidenceFile> ExaminationEvidenceFiles => Set<ExaminationEvidenceFile>();
 
     // Security
     public DbSet<LoginAttempt> LoginAttempts => Set<LoginAttempt>();
@@ -136,6 +150,22 @@ public class MetadataDbContext : DbContext
 
     // Compliance Health Scoring (RG-32)
     public DbSet<ChsScoreSnapshot> ChsScoreSnapshots => Set<ChsScoreSnapshot>();
+
+    // Policy Simulation & What-If Modelling (RG-40)
+    public DbSet<PolicyScenario> PolicyScenarios => Set<PolicyScenario>();
+    public DbSet<PolicyParameter> PolicyParameters => Set<PolicyParameter>();
+    public DbSet<PolicyParameterPreset> PolicyParameterPresets => Set<PolicyParameterPreset>();
+    public DbSet<ImpactAssessmentRun> ImpactAssessmentRuns => Set<ImpactAssessmentRun>();
+    public DbSet<EntityImpactResult> EntityImpactResults => Set<EntityImpactResult>();
+    public DbSet<CostBenefitAnalysis> CostBenefitAnalyses => Set<CostBenefitAnalysis>();
+    public DbSet<ConsultationRound> ConsultationRounds => Set<ConsultationRound>();
+    public DbSet<ConsultationProvision> ConsultationProvisions => Set<ConsultationProvision>();
+    public DbSet<ConsultationFeedback> ConsultationFeedback => Set<ConsultationFeedback>();
+    public DbSet<ProvisionFeedbackEntry> ProvisionFeedback => Set<ProvisionFeedbackEntry>();
+    public DbSet<FeedbackAggregation> FeedbackAggregations => Set<FeedbackAggregation>();
+    public DbSet<PolicyDecision> PolicyDecisions => Set<PolicyDecision>();
+    public DbSet<HistoricalImpactTracking> HistoricalImpactTracking => Set<HistoricalImpactTracking>();
+    public DbSet<PolicyAuditLog> PolicyAuditLog => Set<PolicyAuditLog>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

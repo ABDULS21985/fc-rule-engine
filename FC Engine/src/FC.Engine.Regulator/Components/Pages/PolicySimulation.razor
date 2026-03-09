@@ -1,0 +1,225 @@
+@page "/policies"
+@attribute [Authorize(Policy = "RegulatorOnly")]
+@inject IPolicyScenarioService ScenarioService
+@inject NavigationManager Nav
+
+<PageTitle>Policy Simulation — RegOS™</PageTitle>
+
+<div class="rg-ps-page">
+    <section class="rg-ps-hero">
+        <div>
+            <div class="rg-surveillance-kicker">RG-40 Engine</div>
+            <h1 class="rg-page-title rg-ps-hero-title">Policy Simulation & What-If Modelling</h1>
+            <p class="rg-ps-hero-summary">
+                Model the impact of proposed regulatory changes on supervised entities before issuance.
+                Run sector-wide impact assessments, cost-benefit analyses, and stakeholder consultations.
+            </p>
+        </div>
+        <div class="rg-ps-hero-actions">
+            <span class="rg-ps-hero-meta">Regulator @_regulatorCode</span>
+            <button class="rg-btn primary" @onclick="GoToNew">
+                + New Scenario
+            </button>
+        </div>
+    </section>
+
+    <!-- KPI Strip -->
+    @if (!_loading && _scenarios is not null)
+    {
+        var total = _scenarios.TotalCount;
+        var draft = _scenarios.Items.Count(s => s.Status == PolicyStatus.Draft);
+        var simulated = _scenarios.Items.Count(s => s.Status == PolicyStatus.Simulated);
+        var consultation = _scenarios.Items.Count(s => s.Status == PolicyStatus.Consultation || s.Status == PolicyStatus.FeedbackClosed);
+        var enacted = _scenarios.Items.Count(s => s.Status == PolicyStatus.Enacted);
+
+        <div class="rg-ps-kpis">
+            <div class="rg-ps-kpi">
+                <span class="rg-ps-kpi-value">@total</span>
+                <span class="rg-ps-kpi-label">Total Scenarios</span>
+            </div>
+            <div class="rg-ps-kpi">
+                <span class="rg-ps-kpi-value">@draft</span>
+                <span class="rg-ps-kpi-label">Draft</span>
+            </div>
+            <div class="rg-ps-kpi">
+                <span class="rg-ps-kpi-value">@simulated</span>
+                <span class="rg-ps-kpi-label">Simulated</span>
+            </div>
+            <div class="rg-ps-kpi">
+                <span class="rg-ps-kpi-value">@consultation</span>
+                <span class="rg-ps-kpi-label">In Consultation</span>
+            </div>
+            <div class="rg-ps-kpi">
+                <span class="rg-ps-kpi-value">@enacted</span>
+                <span class="rg-ps-kpi-label">Enacted</span>
+            </div>
+        </div>
+    }
+
+    <!-- Filters -->
+    <div class="rg-card">
+        <div class="rg-controls">
+            <select @bind="_domainFilter" @bind:after="LoadAsync">
+                <option value="">All Domains</option>
+                @foreach (var d in Enum.GetValues<PolicyDomain>())
+                {
+                    <option value="@d">@FormatDomain(d)</option>
+                }
+            </select>
+            <select @bind="_statusFilter" @bind:after="LoadAsync">
+                <option value="">All Statuses</option>
+                @foreach (var s in Enum.GetValues<PolicyStatus>())
+                {
+                    <option value="@s">@s</option>
+                }
+            </select>
+            <button class="rg-btn" @onclick="GoToPresets">
+                Parameter Library
+            </button>
+        </div>
+    </div>
+
+    <!-- Table -->
+    @if (_loading)
+    {
+        <div class="rg-spinner-center"><div class="rg-spinner"></div></div>
+    }
+    else if (!string.IsNullOrWhiteSpace(_error))
+    {
+        <div class="rg-card">
+            <p class="rg-danger-text">@_error</p>
+            <button class="rg-btn" @onclick="LoadAsync">Retry</button>
+        </div>
+    }
+    else if (_scenarios is not null && _scenarios.Items.Count > 0)
+    {
+        <div class="rg-card">
+            <div class="rg-table-wrap">
+                <table class="rg-table">
+                    <thead>
+                        <tr>
+                            <th>Title</th>
+                            <th>Domain</th>
+                            <th>Status</th>
+                            <th>Target Entities</th>
+                            <th>Baseline</th>
+                            <th>Params</th>
+                            <th>Runs</th>
+                            <th>Created</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var s in _scenarios.Items)
+                        {
+                            <tr>
+                                <td><strong>@s.Title</strong></td>
+                                <td><DomainBadge Domain="@s.Domain" /></td>
+                                <td><PolicyStatusBadge Status="@s.Status" /></td>
+                                <td><span class="rg-ps-text-sm">@s.TargetEntityTypes</span></td>
+                                <td>@s.BaselineDate.ToString("dd MMM yyyy")</td>
+                                <td>@s.ParameterCount</td>
+                                <td>@s.RunCount</td>
+                                <td>@s.CreatedAt.ToString("dd MMM yyyy")</td>
+                                <td>
+                                    <button class="rg-btn sm" @onclick="() => OpenScenario(s.Id)">
+                                        Open
+                                    </button>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+
+            @if (_scenarios.TotalCount > _pageSize)
+            {
+                <div class="rg-ps-flex-between rg-ps-mt">
+                    <span class="rg-ps-text-sm rg-ps-text-muted">
+                        Page @_page of @_scenarios.TotalPages (@_scenarios.TotalCount scenarios)
+                    </span>
+                    <div class="rg-ps-flex">
+                        <button class="rg-btn sm" disabled="@(_page <= 1)" @onclick="PrevPage">Prev</button>
+                        <button class="rg-btn sm" disabled="@(!_scenarios.HasNextPage)" @onclick="NextPage">Next</button>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+    else
+    {
+        <div class="rg-card" style="text-align:center;padding:2rem;">
+            <p class="rg-muted">No policy scenarios found. Create your first scenario to begin modelling.</p>
+            <button class="rg-btn primary rg-ps-mt" @onclick="GoToNew">
+                + Create Scenario
+            </button>
+        </div>
+    }
+</div>
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
+
+    private int _regulatorId;
+    private string _regulatorCode = string.Empty;
+    private bool _loading = true;
+    private string? _error;
+
+    private PagedResult<PolicyScenarioSummary>? _scenarios;
+    private string _domainFilter = string.Empty;
+    private string _statusFilter = string.Empty;
+    private int _page = 1;
+    private const int _pageSize = 20;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await ResolveContext();
+        await LoadAsync();
+    }
+
+    private async Task ResolveContext()
+    {
+        var state = await AuthState!;
+        _regulatorId = int.Parse(state.User.FindFirst("RegulatorId")?.Value
+            ?? state.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? "1");
+        _regulatorCode = state.User.FindFirst("RegulatorCode")?.Value ?? "CBN";
+    }
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _error = null;
+        StateHasChanged();
+        try
+        {
+            PolicyDomain? domain = string.IsNullOrEmpty(_domainFilter) ? null : Enum.Parse<PolicyDomain>(_domainFilter);
+            PolicyStatus? status = string.IsNullOrEmpty(_statusFilter) ? null : Enum.Parse<PolicyStatus>(_statusFilter);
+            _scenarios = await ScenarioService.ListScenariosAsync(_regulatorId, domain, status, _page, _pageSize);
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task PrevPage() { _page = Math.Max(1, _page - 1); await LoadAsync(); }
+    private async Task NextPage() { _page++; await LoadAsync(); }
+
+    private void GoToNew() => Nav.NavigateTo("/policies/new");
+    private void GoToPresets() => Nav.NavigateTo("/policies/presets");
+    private void OpenScenario(long id) => Nav.NavigateTo($"/policies/{id}");
+
+    private static string FormatDomain(PolicyDomain d) => d switch
+    {
+        PolicyDomain.CapitalAdequacy => "Capital Adequacy",
+        PolicyDomain.Liquidity => "Liquidity",
+        PolicyDomain.Leverage => "Leverage",
+        PolicyDomain.FX => "FX",
+        PolicyDomain.RiskManagement => "Risk Management",
+        _ => d.ToString()
+    };
+}

@@ -1,6 +1,6 @@
 namespace FC.Engine.Admin.Services;
 
-public enum AlertSeverity { Warning, Critical }
+public enum HealthAlertSeverity { Warning, Critical }
 
 public sealed class HealthAlert
 {
@@ -8,7 +8,7 @@ public sealed class HealthAlert
     public DateTime Timestamp { get; init; } = DateTime.UtcNow;
     public string Metric { get; init; } = "";
     public string Message { get; init; } = "";
-    public AlertSeverity Severity { get; init; }
+    public HealthAlertSeverity Severity { get; init; }
     public bool IsNew { get; set; } = true;
 }
 
@@ -22,7 +22,7 @@ public sealed class HealthAlertService
 
     public event Action? OnChange;
 
-    public void Raise(string metric, string message, AlertSeverity severity)
+    public void Raise(string metric, string message, HealthAlertSeverity severity)
     {
         var now = DateTime.UtcNow;
         if (_suppressUntil.TryGetValue(metric, out var until) && now < until)

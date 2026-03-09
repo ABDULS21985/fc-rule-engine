@@ -7,6 +7,7 @@ using FC.Engine.Infrastructure.Services.CoreBanking;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Http.Resilience;
+using Microsoft.Extensions.Logging;
 using Polly;
 using StackExchange.Redis;
 
@@ -18,16 +19,22 @@ public static class CaaSServiceExtensions
         this IServiceCollection services,
         IConfiguration configuration)
     {
+        var kvUri = configuration["KeyVault:Uri"];
+        var redisConn = configuration["Redis:ConnectionString"];
+        var caasEnabled = !string.IsNullOrEmpty(kvUri) && !string.IsNullOrEmpty(redisConn);
+
         // ── Azure Key Vault ──────────────────────────────────────────────
-        var kvUri = configuration["KeyVault:Uri"]
-            ?? throw new InvalidOperationException("KeyVault:Uri is required.");
-        services.AddSingleton(new SecretClient(new Uri(kvUri), new DefaultAzureCredential()));
+        if (!string.IsNullOrEmpty(kvUri))
+        {
+            services.AddSingleton(new SecretClient(new Uri(kvUri), new DefaultAzureCredential()));
+        }
 
         // ── Redis (rate limiter) ─────────────────────────────────────────
-        var redisConn = configuration["Redis:ConnectionString"]
-            ?? throw new InvalidOperationException("Redis:ConnectionString is required.");
-        services.AddSingleton<IConnectionMultiplexer>(
-            ConnectionMultiplexer.Connect(redisConn));
+        if (!string.IsNullOrEmpty(redisConn))
+        {
+            services.AddSingleton<IConnectionMultiplexer>(
+                ConnectionMultiplexer.Connect(redisConn));
+        }
 
         // ── Core CaaS services ───────────────────────────────────────────
         services.AddScoped<ICaaSService, CaaSService>();
@@ -65,9 +72,12 @@ public static class CaaSServiceExtensions
                 });
             });
 
-        // ── Background services ──────────────────────────────────────────
-        services.AddHostedService<WebhookDispatcherBackgroundService>();
-        services.AddHostedService<AutoFilingSchedulerBackgroundService>();
+        // ── Background services (only when fully configured) ─────────────
+        if (caasEnabled)
+        {
+            services.AddHostedService<WebhookDispatcherBackgroundService>();
+            services.AddHostedService<AutoFilingSchedulerBackgroundService>();
+        }
 
         return services;
     }
