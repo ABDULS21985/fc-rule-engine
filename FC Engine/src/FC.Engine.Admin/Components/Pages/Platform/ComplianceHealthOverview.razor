@@ -1,0 +1,459 @@
+@page "/platform/compliance-health"
+@attribute [Authorize(Policy = "PlatformAdmin")]
+@using FC.Engine.Domain.Abstractions
+@using FC.Engine.Domain.Models
+@using FC.Engine.Infrastructure.Charts
+@using FC.Engine.Infrastructure.Services
+@using FC.Engine.Admin.Services
+@inject IComplianceHealthService ChsService
+@inject ChartJsInterop Charts
+@inject ToastService Toast
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
+
+<PageTitle>Compliance Health Overview</PageTitle>
+
+<PageHeader Title="Compliance Health Overview"
+            Subtitle="Sector-wide CHS monitoring — pillar scores, rating distribution, and watch list.">
+    <SecondaryActions>
+        @if (!_loading && _summary is not null)
+        {
+            <button class="fc-btn fc-btn--outline fc-btn--sm" @onclick="ExportDashboard">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                Export
+            </button>
+            <button class="fc-btn fc-btn--outline fc-btn--sm" @onclick="ReloadAsync">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
+                Refresh
+            </button>
+        }
+    </SecondaryActions>
+</PageHeader>
+
+<div class="fc-page">
+
+    @if (_loading)
+    {
+        <!-- Skeleton KPI -->
+        <div class="fc-grid fc-grid-4 fc-mb-4">
+            @for (var i = 0; i < 4; i++)
+            {
+                <div class="fc-card"><div class="fc-card__body">
+                    <div class="fc-skel fc-skel-text" style="--skel-w:80px;--skel-mb:0.5rem"></div>
+                    <div class="fc-skel fc-skel-text" style="--skel-w:60px;--skel-h:1.5rem"></div>
+                </div></div>
+            }
+        </div>
+        <div class="fc-grid fc-grid-2 fc-mb-4">
+            @for (var i = 0; i < 2; i++)
+            {
+                <div class="fc-card"><div class="fc-card__body fc-chart-height">
+                    <div class="fc-skel fc-skel-block" style="--skel-w:100%;--skel-h:100%"></div>
+                </div></div>
+            }
+        </div>
+        <div class="fc-card fc-mb-4"><div class="fc-card__body">
+            @for (var i = 0; i < 5; i++)
+            {
+                <div class="fc-skel fc-skel-text" style="--skel-w:100%;--skel-mb:0.75rem"></div>
+            }
+        </div></div>
+    }
+    else if (_error is not null)
+    {
+        <SectionErrorBoundary Title="Failed to load compliance health data" ExternalError="@_error" OnRetry="ReloadAsync" />
+    }
+    else if (_summary is not null)
+    {
+        <!-- Sector CHS Banner -->
+        <div class="fc-chs-banner fc-chs-banner--@GetScoreLevel(_summary.SectorAverage)">
+            <div class="fc-chs-banner__orb"></div>
+            <div class="fc-chs-banner__body">
+                <span class="fc-chs-banner__headline">
+                    Sector Average CHS: @_summary.SectorAverage.ToString("0.#") / 100
+                </span>
+                <span class="fc-chs-banner__sub">
+                    @_summary.TotalInstitutions institutions monitored &middot;
+                    @(_watchlist?.Count ?? 0) on watch list &middot;
+                    Last computed @DateTime.UtcNow.ToString("HH:mm") UTC
+                </span>
+            </div>
+        </div>
+
+        <!-- KPI Cards -->
+        <div class="fc-grid fc-grid-4 fc-mb-4">
+            <div class="fc-card fc-kpi-card">
+                <div class="fc-card__body">
+                    <div class="fc-stat-label">Sector Average</div>
+                    <div class="fc-stat-value" style="color:@GetScoreColor(_summary.SectorAverage)">@_summary.SectorAverage.ToString("0.#")</div>
+                    <div class="fc-kpi-delta">out of 100</div>
+                </div>
+            </div>
+            <div class="fc-card fc-kpi-card">
+                <div class="fc-card__body">
+                    <div class="fc-stat-label">Sector Median</div>
+                    <div class="fc-stat-value" style="color:@GetScoreColor(_summary.SectorMedian)">@_summary.SectorMedian.ToString("0.#")</div>
+                    <div class="fc-kpi-delta">50th percentile</div>
+                </div>
+            </div>
+            <div class="fc-card fc-kpi-card fc-kpi-card--success">
+                <div class="fc-card__body">
+                    <div class="fc-stat-label">A / A+ Rated</div>
+                    <div class="fc-stat-value fc-chs-stat--green">@GetHighRatedCount()</div>
+                    <div class="fc-kpi-delta">of @_summary.TotalInstitutions institutions</div>
+                </div>
+            </div>
+            <div class="fc-card fc-kpi-card fc-kpi-card--critical">
+                <div class="fc-card__body">
+                    <div class="fc-stat-label">Watch List</div>
+                    <div class="fc-stat-value fc-chs-stat--red">@(_watchlist?.Count ?? 0)</div>
+                    <div class="fc-kpi-delta">require attention</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Charts Row: Rating Distribution & Sector Trend -->
+        <div class="fc-grid fc-grid-2 fc-mb-4">
+            <div class="fc-card">
+                <div class="fc-card__header">
+                    <h2 class="fc-card__title">Rating Distribution</h2>
+                    <span class="fc-chart-chip">@_summary.TotalInstitutions institutions</span>
+                </div>
+                <div class="fc-card__body fc-chart-height">
+                    <canvas id="chs-rating-dist"></canvas>
+                </div>
+            </div>
+            <div class="fc-card">
+                <div class="fc-card__header">
+                    <h2 class="fc-card__title">Sector CHS Trend</h2>
+                    <span class="fc-chart-chip">12-week average</span>
+                </div>
+                <div class="fc-card__body fc-chart-height">
+                    <canvas id="chs-sector-trend"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Institution CHS Heatmap -->
+        @if (_heatmap is not null && _heatmap.Count > 0)
+        {
+            <div class="fc-card fc-mb-4">
+                <div class="fc-card__header">
+                    <h2 class="fc-card__title">Institution CHS Heatmap</h2>
+                    <span class="fc-chart-chip">@_heatmap.Count entities ranked by CHS</span>
+                </div>
+                <div class="fc-card__body fc-chs-table-wrap">
+                    <table class="fc-chs-table">
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>Institution</th>
+                                <th>Type</th>
+                                <th class="fc-chs-th-num">CHS</th>
+                                <th>Rating</th>
+                                <th class="fc-chs-th-num">Filing</th>
+                                <th class="fc-chs-th-num">Quality</th>
+                                <th class="fc-chs-th-num">Capital</th>
+                                <th class="fc-chs-th-num">Governance</th>
+                                <th class="fc-chs-th-num">Engagement</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @{ var rank = 1; }
+                            @foreach (var item in _heatmap)
+                            {
+                                <tr class="fc-chs-row">
+                                    <td class="fc-text-muted">@(rank++)</td>
+                                    <td class="fc-chs-entity-name">@item.InstitutionName</td>
+                                    <td><span class="fc-badge fc-badge--sm fc-badge--outline">@item.LicenceType</span></td>
+                                    <td class="fc-chs-td-score"><strong style="color:@GetScoreColor(item.OverallScore)">@item.OverallScore.ToString("0.#")</strong></td>
+                                    <td>
+                                        <span class="fc-chs-rating fc-chs-rating--@RatingClass(item.Rating)">
+                                            @ComplianceHealthService.RatingLabel(item.Rating)
+                                        </span>
+                                    </td>
+                                    <td class="fc-chs-td-score @PillarClass(item.FilingTimeliness)">@item.FilingTimeliness.ToString("0.#")</td>
+                                    <td class="fc-chs-td-score @PillarClass(item.DataQuality)">@item.DataQuality.ToString("0.#")</td>
+                                    <td class="fc-chs-td-score @PillarClass(item.RegulatoryCapital)">@item.RegulatoryCapital.ToString("0.#")</td>
+                                    <td class="fc-chs-td-score @PillarClass(item.AuditGovernance)">@item.AuditGovernance.ToString("0.#")</td>
+                                    <td class="fc-chs-td-score @PillarClass(item.Engagement)">@item.Engagement.ToString("0.#")</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        }
+
+        <!-- Watch List -->
+        @if (_watchlist is not null && _watchlist.Count > 0)
+        {
+            <div class="fc-card fc-mb-4">
+                <div class="fc-card__header">
+                    <h2 class="fc-card__title">Watch List</h2>
+                    <span class="fc-badge fc-badge--danger">@_watchlist.Count institutions</span>
+                </div>
+                <div class="fc-card__body fc-chs-table-wrap">
+                    <table class="fc-chs-table">
+                        <thead>
+                            <tr>
+                                <th>Institution</th>
+                                <th>Type</th>
+                                <th class="fc-chs-th-num">CHS</th>
+                                <th>Rating</th>
+                                <th>Trend</th>
+                                <th class="fc-chs-th-num">Declines</th>
+                                <th class="fc-chs-th-num">4-Wk Change</th>
+                                <th>Reason</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var item in _watchlist)
+                            {
+                                <tr class="fc-chs-row">
+                                    <td class="fc-chs-entity-name">@item.InstitutionName</td>
+                                    <td><span class="fc-badge fc-badge--sm fc-badge--outline">@item.LicenceType</span></td>
+                                    <td class="fc-chs-td-score"><strong style="color:@GetScoreColor(item.CurrentScore)">@item.CurrentScore.ToString("0.#")</strong></td>
+                                    <td>
+                                        <span class="fc-chs-rating fc-chs-rating--@RatingClass(item.Rating)">
+                                            @ComplianceHealthService.RatingLabel(item.Rating)
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <span class="fc-chs-trend fc-chs-trend--@item.Trend.ToString().ToLower()">
+                                            @ComplianceHealthService.TrendArrow(item.Trend)
+                                        </span>
+                                    </td>
+                                    <td class="fc-chs-td-score">
+                                        @if (item.ConsecutiveDeclines >= 3)
+                                        {
+                                            <span class="fc-badge fc-badge--sm fc-badge--danger">@item.ConsecutiveDeclines</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="fc-text-muted">@item.ConsecutiveDeclines</span>
+                                        }
+                                    </td>
+                                    <td class="fc-chs-td-score">
+                                        <span style="color:@(item.ScoreChange >= 0 ? "var(--cbn-success)" : "var(--cbn-danger)")">
+                                            @(item.ScoreChange >= 0 ? "+" : "")@item.ScoreChange.ToString("0.#")
+                                        </span>
+                                    </td>
+                                    <td><span class="fc-text-muted">@item.WatchReason</span></td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        }
+    }
+</div>
+
+@code {
+    private SectorChsSummary? _summary;
+    private List<ChsHeatmapItem>? _heatmap;
+    private List<ChsWatchListItem>? _watchlist;
+    private Exception? _error;
+    private bool _loading = true;
+
+    private string _regulatorCode = "CBN";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await ReloadAsync();
+    }
+
+    private async Task ReloadAsync()
+    {
+        _loading = true;
+        _error = null;
+        StateHasChanged();
+
+        try
+        {
+            _summary = await ChsService.GetSectorSummary(_regulatorCode, default);
+            _heatmap = await ChsService.GetSectorHeatmap(_regulatorCode, default);
+            _watchlist = await ChsService.GetWatchList(_regulatorCode, default);
+        }
+        catch (Exception ex)
+        {
+            _error = ex;
+        }
+        finally
+        {
+            _loading = false;
+            StateHasChanged();
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender || _summary is null) return;
+        await RenderCharts();
+    }
+
+    private async Task RenderCharts()
+    {
+        if (_summary is null) return;
+
+        try
+        {
+            // Rating Distribution bar chart
+            var ratingLabels = new[] { "A+", "A", "B", "C", "D", "F" };
+            var ratingValues = new[]
+            {
+                ChsRating.APlus, ChsRating.A, ChsRating.B,
+                ChsRating.C, ChsRating.D, ChsRating.F
+            };
+
+            await Charts.InitChart("chs-rating-dist", new
+            {
+                type = "bar",
+                labels = ratingLabels,
+                yLabel = "Institutions",
+                legend = false,
+                datasets = new object[]
+                {
+                    new
+                    {
+                        label = "Count",
+                        color = "primary",
+                        data = ratingValues.Select(r =>
+                            _summary.RatingDistribution.TryGetValue(r, out var count) ? (double)count : 0
+                        ).ToArray()
+                    }
+                }
+            });
+
+            // Sector CHS trend line chart
+            if (_summary.SectorTrend.Count > 0)
+            {
+                await Charts.InitChart("chs-sector-trend", new
+                {
+                    type = "line",
+                    labels = _summary.SectorTrend.Select(s => s.PeriodLabel).ToArray(),
+                    yLabel = "Average CHS",
+                    legend = false,
+                    datasets = new object[]
+                    {
+                        new
+                        {
+                            label = "Sector Average",
+                            color = "primary",
+                            data = _summary.SectorTrend.Select(s => (double)s.OverallScore).ToArray()
+                        }
+                    }
+                });
+            }
+        }
+        catch
+        {
+            // Chart rendering is non-critical
+        }
+    }
+
+    private int GetHighRatedCount()
+    {
+        if (_summary?.RatingDistribution is null) return 0;
+        var count = 0;
+        if (_summary.RatingDistribution.TryGetValue(ChsRating.APlus, out var ap)) count += ap;
+        if (_summary.RatingDistribution.TryGetValue(ChsRating.A, out var a)) count += a;
+        return count;
+    }
+
+    private void ExportDashboard()
+    {
+        Toast.Info("Export feature will generate a compliance health report. Coming soon.");
+    }
+
+    // ── UI Helpers ──
+
+    private static string GetScoreLevel(decimal score) =>
+        score >= 80 ? "green" : score >= 60 ? "amber" : "red";
+
+    private static string GetScoreColor(decimal score) =>
+        score >= 80 ? "var(--cbn-success)" : score >= 60 ? "var(--cbn-warning)" : "var(--cbn-danger)";
+
+    private static string PillarClass(decimal score) =>
+        score >= 80 ? "fc-chs-score--good" : score >= 60 ? "fc-chs-score--watch" : "fc-chs-score--poor";
+
+    private static string RatingClass(ChsRating rating) => rating switch
+    {
+        ChsRating.APlus or ChsRating.A => "green",
+        ChsRating.B => "blue",
+        ChsRating.C => "amber",
+        ChsRating.D => "orange",
+        _ => "red"
+    };
+}
+
+<style>
+    /* ── CHS Banner ── */
+    .fc-chs-banner {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        padding: 1rem 1.5rem;
+        border-radius: 0.75rem;
+        margin-bottom: 1.5rem;
+        position: relative;
+        overflow: hidden;
+    }
+    .fc-chs-banner--green { background: linear-gradient(135deg, #059669 0%, #047857 100%); color: #fff; }
+    .fc-chs-banner--amber { background: linear-gradient(135deg, #D97706 0%, #B45309 100%); color: #fff; }
+    .fc-chs-banner--red   { background: linear-gradient(135deg, #DC2626 0%, #B91C1C 100%); color: #fff; }
+    .fc-chs-banner__orb {
+        width: 48px; height: 48px; border-radius: 50%;
+        background: rgba(255,255,255,0.15); flex-shrink: 0;
+    }
+    .fc-chs-banner__body { display: flex; flex-direction: column; gap: 0.25rem; }
+    .fc-chs-banner__headline { font-size: 1.125rem; font-weight: 700; }
+    .fc-chs-banner__sub { font-size: 0.8125rem; opacity: 0.85; }
+
+    /* ── Score colors ── */
+    .fc-chs-stat--green { color: var(--cbn-success); }
+    .fc-chs-stat--red   { color: var(--cbn-danger); }
+
+    /* ── Heatmap & Watch List Table ── */
+    .fc-chs-table-wrap { overflow-x: auto; }
+    .fc-chs-table {
+        width: 100%; border-collapse: collapse; font-size: 0.8125rem;
+    }
+    .fc-chs-table th {
+        text-align: left; padding: 0.625rem 0.75rem;
+        font-weight: 600; color: var(--cbn-text-secondary, #6b7280);
+        border-bottom: 2px solid var(--cbn-border, #e5e7eb);
+        white-space: nowrap;
+    }
+    .fc-chs-th-num { text-align: right; }
+    .fc-chs-table td {
+        padding: 0.5rem 0.75rem;
+        border-bottom: 1px solid var(--cbn-border, #f3f4f6);
+        vertical-align: middle;
+    }
+    .fc-chs-row:hover { background: var(--cbn-surface-hover, #f9fafb); }
+    .fc-chs-entity-name { font-weight: 500; white-space: nowrap; }
+    .fc-chs-td-score { text-align: right; font-variant-numeric: tabular-nums; }
+
+    .fc-chs-score--good  { color: var(--cbn-success); }
+    .fc-chs-score--watch { color: var(--cbn-warning); }
+    .fc-chs-score--poor  { color: var(--cbn-danger); }
+
+    /* ── Rating badges ── */
+    .fc-chs-rating {
+        display: inline-block; padding: 0.125rem 0.5rem;
+        border-radius: 0.25rem; font-weight: 600; font-size: 0.75rem;
+    }
+    .fc-chs-rating--green  { background: #d1fae5; color: #065f46; }
+    .fc-chs-rating--blue   { background: #dbeafe; color: #1e40af; }
+    .fc-chs-rating--amber  { background: #fef3c7; color: #92400e; }
+    .fc-chs-rating--orange { background: #ffedd5; color: #9a3412; }
+    .fc-chs-rating--red    { background: #fee2e2; color: #991b1b; }
+
+    /* ── Trend arrows ── */
+    .fc-chs-trend { font-size: 1.125rem; font-weight: 700; }
+    .fc-chs-trend--improving { color: var(--cbn-success); }
+    .fc-chs-trend--stable    { color: var(--cbn-info, #6b7280); }
+    .fc-chs-trend--declining { color: var(--cbn-danger); }
+</style>

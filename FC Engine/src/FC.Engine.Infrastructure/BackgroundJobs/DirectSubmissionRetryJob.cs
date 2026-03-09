@@ -1,4 +1,5 @@
 using FC.Engine.Domain.Abstractions;
+using FC.Engine.Domain.Models;
 using FC.Engine.Infrastructure.Export;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;

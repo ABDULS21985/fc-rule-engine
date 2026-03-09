@@ -1,3 +1,4 @@
+using FC.Engine.Domain.Models;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 

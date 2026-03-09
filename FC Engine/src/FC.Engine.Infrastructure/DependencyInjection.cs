@@ -6,6 +6,7 @@ using FC.Engine.Infrastructure.BackgroundJobs;
 using FC.Engine.Infrastructure.Caching;
 using FC.Engine.Infrastructure.Charts;
 using FC.Engine.Infrastructure.DynamicSchema;
+using FC.Engine.Domain.Models;
 using FC.Engine.Infrastructure.Export;
 using FC.Engine.Infrastructure.Export.Adapters;
 using FC.Engine.Infrastructure.Export.ApiClients;

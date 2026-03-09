@@ -44,6 +44,9 @@ public static class PermissionCatalog
     public const string NotificationManage = "notification.manage";
     public const string AdminPlatform = "admin.platform";
 
+    public const string ComplianceHealthView = "compliance.health_view";
+    public const string ComplianceHealthAdmin = "compliance.health_admin";
+
     public static readonly IReadOnlyList<string> All = new[]
     {
         TemplateRead, TemplateEdit, TemplatePublish,
@@ -57,7 +60,8 @@ public static class PermissionCatalog
         AuditRead,
         CalendarRead, CalendarManage,
         NotificationManage,
-        AdminPlatform
+        AdminPlatform,
+        ComplianceHealthView, ComplianceHealthAdmin
     };
 
     private static readonly IReadOnlyList<string> AdminWithoutPlatform = All
@@ -74,20 +78,23 @@ public static class PermissionCatalog
                 SubmissionRead, SubmissionCreate, SubmissionEdit, SubmissionValidate, SubmissionSubmit,
                 SubmissionDirectSubmit, SubmissionDirectStatus,
                 ReportRead,
-                CalendarRead
+                CalendarRead,
+                ComplianceHealthView
             },
             ["Checker"] = new[]
             {
                 TemplateRead,
                 SubmissionRead, SubmissionReview, SubmissionReject,
                 SubmissionDirectStatus,
-                ReportRead
+                ReportRead,
+                ComplianceHealthView
             },
             ["Approver"] = new[]
             {
                 TemplateRead,
                 SubmissionRead, SubmissionApprove, SubmissionReject,
-                ReportRead
+                ReportRead,
+                ComplianceHealthView
             },
             ["Viewer"] = new[]
             {
@@ -95,7 +102,8 @@ public static class PermissionCatalog
                 SubmissionRead,
                 SubmissionDirectStatus,
                 ReportRead,
-                CalendarRead
+                CalendarRead,
+                ComplianceHealthView
             },
             ["PlatformAdmin"] = All
         };

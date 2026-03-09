@@ -1,6 +1,7 @@
 using FC.Engine.Domain.Abstractions;
 using FC.Engine.Domain.Entities;
 using FC.Engine.Domain.Enums;
+using FC.Engine.Domain.Models;
 using FC.Engine.Infrastructure.Export;
 using FC.Engine.Infrastructure.Metadata;
 using Microsoft.EntityFrameworkCore;

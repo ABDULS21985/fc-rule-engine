@@ -5,7 +5,7 @@ using FC.Engine.Domain.Enums;
 using FC.Engine.Domain.Events;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using FC.Engine.Infrastructure.Export;
+using FC.Engine.Domain.Models;
 
 namespace FC.Engine.Application.Services;
 

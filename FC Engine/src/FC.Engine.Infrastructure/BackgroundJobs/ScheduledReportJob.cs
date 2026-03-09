@@ -2,6 +2,7 @@ using System.Text.Json;
 using ClosedXML.Excel;
 using FC.Engine.Domain.Abstractions;
 using FC.Engine.Domain.Enums;
+using FC.Engine.Domain.Models;
 using FC.Engine.Domain.Notifications;
 using FC.Engine.Domain.ValueObjects;
 using FC.Engine.Infrastructure.Export;

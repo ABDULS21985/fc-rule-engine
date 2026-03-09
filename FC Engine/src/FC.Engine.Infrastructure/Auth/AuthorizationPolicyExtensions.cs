@@ -27,6 +27,9 @@ public static class AuthorizationPolicyExtensions
         // Direct regulatory submission (RG-34)
         options.AddPolicy("CanDirectSubmit", policy => policy.RequireClaim("perm", PermissionCatalog.SubmissionDirectSubmit));
         options.AddPolicy("CanViewDirectStatus", policy => policy.RequireClaim("perm", PermissionCatalog.SubmissionDirectStatus));
+        // Compliance Health Score (RG-32)
+        options.AddPolicy("CanViewComplianceHealth", policy => policy.RequireClaim("perm", PermissionCatalog.ComplianceHealthView));
+        options.AddPolicy("CanAdminComplianceHealth", policy => policy.RequireClaim("perm", PermissionCatalog.ComplianceHealthAdmin));
         // Platform admin
         options.AddPolicy("PlatformAdmin", policy => policy.RequireClaim("perm", PermissionCatalog.AdminPlatform));
     }

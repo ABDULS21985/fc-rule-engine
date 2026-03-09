@@ -2,6 +2,7 @@ using System.Net.Http.Headers;
 using System.Text;
 using System.Xml.Linq;
 using FC.Engine.Domain.Abstractions;
+using FC.Engine.Domain.Models;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 

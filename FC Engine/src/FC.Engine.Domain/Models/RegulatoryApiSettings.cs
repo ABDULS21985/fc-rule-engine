@@ -1,4 +1,4 @@
-namespace FC.Engine.Infrastructure.Export;
+namespace FC.Engine.Domain.Models;
 
 public class RegulatoryApiSettings
 {
