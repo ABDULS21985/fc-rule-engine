@@ -1,323 +1,568 @@
-using FC.Engine.Application.Services;
+using Dapper;
 using FC.Engine.Domain.Abstractions;
-using FC.Engine.Domain.Enums;
 using Microsoft.Extensions.Logging;
 
 namespace FC.Engine.Infrastructure.Services;
 
 /// <summary>
-/// Compliance-as-a-Service orchestrator — delegates to existing services
-/// to provide a unified, embeddable compliance API.
+/// Compliance-as-a-Service orchestrator — implements all CaaS API endpoints.
+/// Partner isolation is enforced by filtering every query by PartnerId.
 /// </summary>
-public class CaaSService : ICaaSService
+public sealed class CaaSService : ICaaSService
 {
-    private readonly ITemplateMetadataCache _templateCache;
-    private readonly ValidationOrchestrator _validationOrchestrator;
-    private readonly IFilingCalendarService _filingCalendarService;
-    private readonly IEntitlementService _entitlementService;
-    private readonly ISubmissionRepository _submissionRepo;
-    private readonly IDataFeedService _dataFeedService;
-    private readonly ILogger<CaaSService> _logger;
+    private readonly IDbConnectionFactory _db;
+    private readonly IValidationPipeline _validation;
+    private readonly ITemplateEngine _templateEngine;
+    private readonly ISubmissionOrchestrator _submission;
+    private readonly ICaaSWebhookDispatcher _webhook;
+    private readonly ILogger<CaaSService> _log;
 
     public CaaSService(
-        ITemplateMetadataCache templateCache,
-        ValidationOrchestrator validationOrchestrator,
-        IFilingCalendarService filingCalendarService,
-        IEntitlementService entitlementService,
-        ISubmissionRepository submissionRepo,
-        IDataFeedService dataFeedService,
-        ILogger<CaaSService> logger)
+        IDbConnectionFactory db,
+        IValidationPipeline validation,
+        ITemplateEngine templateEngine,
+        ISubmissionOrchestrator submission,
+        ICaaSWebhookDispatcher webhook,
+        ILogger<CaaSService> log)
     {
-        _templateCache = templateCache;
-        _validationOrchestrator = validationOrchestrator;
-        _filingCalendarService = filingCalendarService;
-        _entitlementService = entitlementService;
-        _submissionRepo = submissionRepo;
-        _dataFeedService = dataFeedService;
-        _logger = logger;
+        _db = db;
+        _validation = validation;
+        _templateEngine = templateEngine;
+        _submission = submission;
+        _webhook = webhook;
+        _log = log;
     }
 
-    public async Task<CaaSValidationResponse> ValidateAsync(
-        Guid tenantId, CaaSValidateRequest request, CancellationToken ct = default)
+    // ── Validate ─────────────────────────────────────────────────────────────
+    public async Task<CaaSValidateResponse> ValidateAsync(
+        ResolvedPartner partner,
+        CaaSValidateRequest request,
+        Guid requestId,
+        CancellationToken ct = default)
     {
-        var template = await _templateCache.GetPublishedTemplate(tenantId, request.ReturnCode, ct);
+        EnsureModuleAllowed(partner, request.ModuleCode);
 
-        var report = await _validationOrchestrator.ValidateRelaxed(
-            request.Records, template, tenantId, ct);
+        var report = await _validation.ValidateAsync(
+            partner.InstitutionId, request.ModuleCode,
+            request.PeriodCode, request.Fields, ct);
 
-        var response = new CaaSValidationResponse
-        {
-            IsValid = report.IsValid,
-            ErrorCount = report.ErrorCount,
-            WarningCount = report.WarningCount,
-            Errors = report.Errors.Select(e => new CaaSValidationError
-            {
-                RuleId = e.RuleId,
-                Field = e.Field,
-                Message = e.Message,
-                Severity = e.Severity.ToString(),
-                Category = e.Category.ToString(),
-                ExpectedValue = e.ExpectedValue,
-                ActualValue = e.ActualValue
-            }).ToList()
-        };
-
-        // Compute a preview score: 100 - (errors * 10) - (warnings * 2), clamped 0..100
-        var rawScore = 100.0 - (report.ErrorCount * 10) - (report.WarningCount * 2);
-        response.ComplianceScorePreview = Math.Clamp(rawScore, 0, 100);
-
-        return response;
-    }
-
-    public async Task<CaaSSubmitResponse> SubmitReturnAsync(
-        Guid tenantId, int institutionId, CaaSSubmitRequest request, CancellationToken ct = default)
-    {
-        var sw = System.Diagnostics.Stopwatch.StartNew();
-
-        // Use the DataFeed service for JSON-based submission
-        var feedRequest = new DataFeedRequest
-        {
-            PeriodCode = request.PeriodCode,
-            InstitutionCode = request.InstitutionCode,
-            Fields = request.Records.SelectMany(row =>
-                row.Select(kv => new DataFeedFieldValue
-                {
-                    FieldCode = kv.Key,
-                    Value = kv.Value
-                })).ToList()
-        };
-
-        var feedResult = await _dataFeedService.ProcessFeed(
-            tenantId, request.ReturnCode, feedRequest, null, ct);
-
-        sw.Stop();
-
-        // Also run validation for the response
-        CaaSValidationResponse? validationResult = null;
-        if (feedResult.Success)
-        {
-            try
-            {
-                var template = await _templateCache.GetPublishedTemplate(tenantId, request.ReturnCode, ct);
-                var report = await _validationOrchestrator.ValidateRelaxed(
-                    request.Records, template, tenantId, ct);
-
-                validationResult = new CaaSValidationResponse
-                {
-                    IsValid = report.IsValid,
-                    ErrorCount = report.ErrorCount,
-                    WarningCount = report.WarningCount,
-                    Errors = report.Errors.Select(e => new CaaSValidationError
-                    {
-                        RuleId = e.RuleId,
-                        Field = e.Field,
-                        Message = e.Message,
-                        Severity = e.Severity.ToString(),
-                        Category = e.Category.ToString(),
-                        ExpectedValue = e.ExpectedValue,
-                        ActualValue = e.ActualValue
-                    }).ToList()
-                };
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Post-submission validation preview failed for {ReturnCode}", request.ReturnCode);
-            }
-        }
-
-        return new CaaSSubmitResponse
-        {
-            Success = feedResult.Success,
-            SubmissionId = feedResult.SubmissionId,
-            Status = feedResult.Status,
-            ProcessingDurationMs = sw.ElapsedMilliseconds,
-            ValidationResult = validationResult
-        };
-    }
-
-    public async Task<CaaSTemplateResponse?> GetTemplateStructureAsync(
-        Guid tenantId, string moduleCode, CancellationToken ct = default)
-    {
-        var allTemplates = await _templateCache.GetAllPublishedTemplates(tenantId, ct);
-        var moduleTemplates = allTemplates
-            .Where(t => string.Equals(t.ModuleCode, moduleCode, StringComparison.OrdinalIgnoreCase))
+        var errors = report.Violations
+            .Where(v => v.Severity == "ERROR")
+            .Select(v => new CaaSFieldError(
+                v.FieldCode, v.FieldLabel, v.ErrorCode, v.Message, "ERROR"))
             .ToList();
 
-        if (moduleTemplates.Count == 0)
-            return null;
+        var warnings = report.Violations
+            .Where(v => v.Severity == "WARNING")
+            .Select(v => new CaaSFieldError(
+                v.FieldCode, v.FieldLabel, v.ErrorCode, v.Message, "WARNING"))
+            .ToList();
 
-        return new CaaSTemplateResponse
+        var score = ComputeComplianceScore(errors.Count, warnings.Count, report.TotalFields);
+
+        string? sessionToken = null;
+        if (request.PersistSession)
         {
-            ModuleCode = moduleCode,
-            ModuleName = moduleTemplates.FirstOrDefault()?.Name ?? moduleCode,
-            Returns = moduleTemplates.Select(t => new CaaSTemplateReturn
-            {
-                ReturnCode = t.ReturnCode,
-                ReturnName = t.Name,
-                Frequency = t.Frequency.ToString(),
-                VersionNumber = t.CurrentVersion.VersionNumber,
-                Fields = t.CurrentVersion.Fields.Select(f => new CaaSFieldDefinition
-                {
-                    FieldName = f.FieldName,
-                    DisplayName = f.DisplayName,
-                    DataType = f.DataType.ToString(),
-                    IsRequired = f.IsRequired,
-                    MinValue = f.MinValue,
-                    MaxValue = f.MaxValue,
-                    MaxLength = f.MaxLength,
-                    AllowedValues = f.AllowedValues,
-                    Description = f.HelpText
-                }).ToList(),
-                Formulas = t.CurrentVersion.IntraSheetFormulas.Select(f => new CaaSFormulaDefinition
-                {
-                    RuleId = f.RuleCode,
-                    Expression = f.CustomExpression ?? string.Empty,
-                    Description = f.RuleName
-                }).ToList()
-            }).ToList()
-        };
+            sessionToken = await CreateValidationSessionAsync(
+                partner.PartnerId, request, report, errors.Count == 0, ct);
+        }
+
+        if (errors.Count > 0)
+        {
+            await _webhook.EnqueueAsync(partner.PartnerId,
+                WebhookEventType.ValidationFailed,
+                new { requestId, request.ModuleCode, request.PeriodCode, errorCount = errors.Count }, ct);
+        }
+
+        _log.LogInformation(
+            "CaaS validate: Partner={Partner} Module={Module} Period={Period} " +
+            "IsValid={IsValid} Errors={Errors} RequestId={RequestId}",
+            partner.PartnerCode, request.ModuleCode, request.PeriodCode,
+            errors.Count == 0, errors.Count, requestId);
+
+        return new CaaSValidateResponse(
+            IsValid: errors.Count == 0,
+            SessionToken: sessionToken,
+            ErrorCount: errors.Count,
+            WarningCount: warnings.Count,
+            Errors: errors,
+            Warnings: warnings,
+            ComplianceScore: score,
+            RequestId: requestId);
     }
 
-    public async Task<List<CaaSDeadlineItem>> GetDeadlinesAsync(
-        Guid tenantId, CancellationToken ct = default)
+    // ── Submit ───────────────────────────────────────────────────────────────
+    public async Task<CaaSSubmitResponse> SubmitAsync(
+        ResolvedPartner partner,
+        CaaSSubmitRequest request,
+        Guid requestId,
+        CancellationToken ct = default)
     {
-        var ragItems = await _filingCalendarService.GetRagStatus(tenantId, ct);
+        Dictionary<string, object?> fields;
+        string moduleCode;
+        string periodCode;
 
-        return ragItems.Select(r => new CaaSDeadlineItem
+        if (request.SessionToken is not null)
         {
-            ModuleCode = r.ModuleCode,
-            ModuleName = r.ModuleName,
-            ReturnCode = r.ModuleCode,
-            PeriodCode = r.PeriodLabel,
-            Deadline = r.Deadline,
-            RagStatus = r.Color.ToString(),
-            DaysRemaining = (r.Deadline.Date - DateTime.UtcNow.Date).Days
+            var session = await GetValidSessionAsync(
+                partner.PartnerId, request.SessionToken, ct);
+
+            if (session is null)
+                return SubmitFail(requestId, "Session token is invalid or expired.");
+
+            if (session.IsValid != true)
+                return SubmitFail(requestId, "Session has validation errors — cannot submit.");
+
+            fields     = System.Text.Json.JsonSerializer
+                .Deserialize<Dictionary<string, object?>>(session.SubmittedData)!;
+            moduleCode = session.ModuleCode;
+            periodCode = session.PeriodCode;
+        }
+        else
+        {
+            if (request.ModuleCode is null || request.PeriodCode is null || request.Fields is null)
+                return SubmitFail(requestId,
+                    "ModuleCode, PeriodCode, and Fields are required when no SessionToken is provided.");
+
+            var validateReq = new CaaSValidateRequest(
+                request.ModuleCode, request.PeriodCode, request.Fields, PersistSession: false);
+            var validation = await ValidateAsync(partner, validateReq, requestId, ct);
+
+            if (!validation.IsValid)
+                return SubmitFail(requestId,
+                    $"Validation failed with {validation.ErrorCount} error(s). " +
+                    "Use /validate to review errors before submitting.");
+
+            fields     = request.Fields;
+            moduleCode = request.ModuleCode;
+            periodCode = request.PeriodCode;
+        }
+
+        EnsureModuleAllowed(partner, moduleCode);
+
+        var returnInstanceId = await CreateReturnInstanceAsync(
+            partner.InstitutionId, moduleCode, periodCode, fields,
+            request.SubmittedByExternalUserId, ct);
+
+        var submissionResult = await _submission.SubmitBatchAsync(
+            partner.InstitutionId,
+            request.RegulatorCode,
+            new[] { (int)returnInstanceId },
+            request.SubmittedByExternalUserId,
+            ct);
+
+        if (request.SessionToken is not null)
+        {
+            await MarkSessionConvertedAsync(
+                partner.PartnerId, request.SessionToken, returnInstanceId, ct);
+        }
+
+        if (submissionResult.Success)
+        {
+            await _webhook.EnqueueAsync(partner.PartnerId,
+                WebhookEventType.FilingCompleted,
+                new
+                {
+                    requestId, moduleCode, periodCode,
+                    batchReference = submissionResult.BatchReference,
+                    receiptReference = submissionResult.Receipt?.ReceiptReference,
+                    returnInstanceId
+                }, ct);
+
+            _log.LogInformation(
+                "CaaS submit: Partner={Partner} Module={Module} Period={Period} " +
+                "BatchRef={BatchRef} RequestId={RequestId}",
+                partner.PartnerCode, moduleCode, periodCode,
+                submissionResult.BatchReference, requestId);
+        }
+
+        return submissionResult.Success
+            ? new CaaSSubmitResponse(
+                Success: true,
+                ReturnInstanceId: returnInstanceId,
+                BatchId: submissionResult.BatchId,
+                BatchReference: submissionResult.BatchReference,
+                ReceiptReference: submissionResult.Receipt?.ReceiptReference,
+                ErrorMessage: null,
+                RequestId: requestId)
+            : SubmitFail(requestId, submissionResult.ErrorMessage ?? "Submission failed.");
+    }
+
+    // ── GetTemplate ──────────────────────────────────────────────────────────
+    public async Task<CaaSTemplateResponse> GetTemplateAsync(
+        ResolvedPartner partner,
+        string moduleCode,
+        Guid requestId,
+        CancellationToken ct = default)
+    {
+        EnsureModuleAllowed(partner, moduleCode);
+
+        var template = await _templateEngine.GetTemplateAsync(
+            partner.InstitutionId, moduleCode, ct);
+
+        var fields = template.Fields.Select(f => new CaaSFieldDefinition(
+            FieldCode: f.Code,
+            FieldLabel: f.Label,
+            DataType: f.DataType,
+            IsRequired: f.IsRequired,
+            ValidationRule: f.ValidationRule,
+            MinValue: f.MinValue,
+            MaxValue: f.MaxValue,
+            Description: f.Description)).ToList();
+
+        var formulas = template.Formulas.Select(f => new CaaSFormula(
+            FormulaCode: f.Code,
+            Description: f.Description,
+            Expression: f.Expression)).ToList();
+
+        return new CaaSTemplateResponse(
+            ModuleCode: moduleCode,
+            ModuleName: template.ModuleName,
+            RegulatorCode: template.RegulatorCode,
+            PeriodType: template.PeriodType,
+            Fields: fields,
+            Formulas: formulas,
+            RequestId: requestId);
+    }
+
+    // ── GetDeadlines ─────────────────────────────────────────────────────────
+    public async Task<CaaSDeadlinesResponse> GetDeadlinesAsync(
+        ResolvedPartner partner,
+        Guid requestId,
+        CancellationToken ct = default)
+    {
+        await using var conn = await _db.OpenAsync(ct);
+
+        var rows = await conn.QueryAsync<FilingDeadlineRow>(
+            """
+            SELECT fd.ModuleCode, m.ModuleName, fd.PeriodCode,
+                   fd.DeadlineDate, m.RegulatorCode
+            FROM   FilingDeadlines fd
+            JOIN   ReturnModules m ON m.Code = fd.ModuleCode
+            WHERE  fd.DeadlineDate >= CAST(SYSUTCDATETIME() AS DATE)
+              AND  fd.DeadlineDate <= DATEADD(DAY, 90, CAST(SYSUTCDATETIME() AS DATE))
+              AND  fd.ModuleCode IN (
+                       SELECT value FROM OPENJSON(
+                           (SELECT AllowedModuleCodes FROM CaaSPartners WHERE Id = @PartnerId)))
+            ORDER BY fd.DeadlineDate ASC
+            """,
+            new { PartnerId = partner.PartnerId });
+
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+
+        var deadlines = rows.Select(r =>
+        {
+            var dl = DateOnly.FromDateTime(r.DeadlineDate);
+            return new CaaSDeadline(
+                ModuleCode: r.ModuleCode,
+                ModuleName: r.ModuleName,
+                PeriodCode: r.PeriodCode,
+                DeadlineDate: dl,
+                DaysRemaining: dl.DayNumber - today.DayNumber,
+                IsOverdue: dl < today,
+                RegulatorCode: r.RegulatorCode);
         }).ToList();
+
+        var approaching = deadlines.Where(d => d.DaysRemaining is >= 0 and <= 7).ToList();
+        if (approaching.Count > 0)
+            await _webhook.EnqueueAsync(partner.PartnerId,
+                WebhookEventType.DeadlineApproaching,
+                new
+                {
+                    deadlines = approaching.Select(d => new
+                        { d.ModuleCode, d.PeriodCode, d.DeadlineDate, d.DaysRemaining })
+                }, ct);
+
+        return new CaaSDeadlinesResponse(deadlines, requestId);
     }
 
-    public async Task<CaaSScoreResponse> GetComplianceScoreAsync(
-        Guid tenantId, int institutionId, CaaSScoreRequest request, CancellationToken ct = default)
+    // ── GetScore ─────────────────────────────────────────────────────────────
+    public async Task<CaaSScoreResponse> GetScoreAsync(
+        ResolvedPartner partner,
+        CaaSScoreRequest request,
+        Guid requestId,
+        CancellationToken ct = default)
     {
-        var submissions = await _submissionRepo.GetByInstitution(institutionId, ct);
+        await using var conn = await _db.OpenAsync(ct);
 
-        if (!string.IsNullOrWhiteSpace(request.ModuleCode))
+        var periodFilter = request.PeriodCode ?? GetCurrentPeriodCode();
+
+        var rows = await conn.QueryAsync<ModuleScoreRow>(
+            """
+            SELECT m.Code              AS ModuleCode,
+                   m.ModuleName,
+                   COUNT(ri.Id)        AS TotalReturns,
+                   SUM(CASE WHEN ri.Status = 'APPROVED' THEN 1 ELSE 0 END) AS Approved,
+                   SUM(CASE WHEN ri.Status = 'OVERDUE'  THEN 1 ELSE 0 END) AS Overdue,
+                   SUM(CASE WHEN ri.Status = 'PENDING'
+                         OR ri.Status = 'DRAFT'          THEN 1 ELSE 0 END) AS Pending,
+                   ISNULL(SUM(ve.ErrorCount), 0)                            AS ValidationErrors
+            FROM   ReturnModules m
+            LEFT JOIN ReturnInstances ri
+                   ON ri.ModuleCode = m.Code
+                  AND ri.InstitutionId = @InstitutionId
+                  AND ri.ReportingPeriod = @Period
+            LEFT JOIN (
+                SELECT ReturnInstanceId, COUNT(*) AS ErrorCount
+                FROM   ValidationResults
+                WHERE  Severity = 'ERROR'
+                GROUP BY ReturnInstanceId
+            ) ve ON ve.ReturnInstanceId = ri.Id
+            WHERE  m.Code IN (
+                       SELECT value FROM OPENJSON(
+                           (SELECT AllowedModuleCodes FROM CaaSPartners WHERE Id = @PartnerId)))
+            GROUP BY m.Code, m.ModuleName
+            """,
+            new { InstitutionId = partner.InstitutionId,
+                  Period = periodFilter, PartnerId = partner.PartnerId });
+
+        var moduleScores = rows.Select(r =>
         {
-            submissions = submissions
-                .Where(s => string.Equals(s.ReturnCode, request.ModuleCode, StringComparison.OrdinalIgnoreCase)
-                            || (s.ReturnCode?.StartsWith(request.ModuleCode, StringComparison.OrdinalIgnoreCase) ?? false))
-                .ToList();
-        }
+            var score = r.TotalReturns == 0
+                ? 100.0
+                : Math.Max(0, 100.0 - (r.Overdue * 20) - (r.ValidationErrors * 2) - (r.Pending * 5));
+            return new CaaSModuleScore(
+                r.ModuleCode, r.ModuleName, Math.Round(score, 1),
+                r.Pending, r.Overdue, r.ValidationErrors);
+        }).ToList();
 
-        var total = submissions.Count;
-        var clean = submissions.Count(s => s.Status == SubmissionStatus.Accepted);
-        var late = 0; // Would need SLA data to compute
+        var overall = moduleScores.Count == 0
+            ? 100.0
+            : Math.Round(moduleScores.Average(s => s.Score), 1);
 
-        var passRate = total > 0 ? (double)clean / total * 100 : 100;
-        var deadlineAdherence = total > 0 ? (double)(total - late) / total * 100 : 100;
-        var completeness = total > 0 ? Math.Min(100, total * 10.0) : 0;
-
-        var overall = (passRate * 0.5) + (deadlineAdherence * 0.3) + (completeness * 0.2);
-
-        return new CaaSScoreResponse
+        var rating = overall switch
         {
-            OverallScore = Math.Round(overall, 1),
-            Rating = overall switch
-            {
-                >= 90 => "Excellent",
-                >= 75 => "Good",
-                >= 50 => "Fair",
-                _ => "Poor"
-            },
-            Breakdown = new CaaSScoreBreakdown
-            {
-                ValidationPassRate = Math.Round(passRate, 1),
-                DeadlineAdherence = Math.Round(deadlineAdherence, 1),
-                CompletenessScore = Math.Round(completeness, 1),
-                TotalSubmissions = total,
-                CleanSubmissions = clean,
-                LateSubmissions = late
-            }
+            >= 95 => "EXCELLENT",
+            >= 80 => "GOOD",
+            >= 65 => "SATISFACTORY",
+            >= 50 => "NEEDS_ATTENTION",
+            _     => "CRITICAL"
         };
+
+        await _webhook.EnqueueAsync(partner.PartnerId, WebhookEventType.ScoreUpdated,
+            new { requestId, overall, rating, period = periodFilter }, ct);
+
+        return new CaaSScoreResponse(overall, rating, moduleScores, requestId);
     }
 
-    public async Task<List<CaaSRegulatoryChange>> GetRegulatoryChangesAsync(
-        Guid tenantId, string? moduleCode, CancellationToken ct = default)
+    // ── GetChanges ───────────────────────────────────────────────────────────
+    public async Task<CaaSChangesResponse> GetChangesAsync(
+        ResolvedPartner partner,
+        Guid requestId,
+        CancellationToken ct = default)
     {
-        var allTemplates = await _templateCache.GetAllPublishedTemplates(tenantId, ct);
+        await using var conn = await _db.OpenAsync(ct);
 
-        if (!string.IsNullOrWhiteSpace(moduleCode))
-        {
-            allTemplates = allTemplates
-                .Where(t => string.Equals(t.ModuleCode, moduleCode, StringComparison.OrdinalIgnoreCase))
-                .ToList();
-        }
+        var rows = await conn.QueryAsync<RegulatoryChangeRow>(
+            """
+            SELECT rc.Id           AS ChangeId,
+                   rc.RegulatorCode,
+                   rc.ModuleCode,
+                   rc.Title,
+                   rc.Summary,
+                   rc.EffectiveDate,
+                   rc.Severity
+            FROM   RegulatoryChanges rc
+            WHERE  rc.EffectiveDate >= DATEADD(DAY, -30, CAST(SYSUTCDATETIME() AS DATE))
+              AND  rc.IsPublished = 1
+              AND  rc.ModuleCode IN (
+                       SELECT value FROM OPENJSON(
+                           (SELECT AllowedModuleCodes FROM CaaSPartners WHERE Id = @PartnerId)))
+            ORDER BY rc.EffectiveDate DESC
+            """,
+            new { PartnerId = partner.PartnerId });
 
-        // Surface templates where version > 1 as "changes"
-        return allTemplates
-            .Where(t => t.CurrentVersion.VersionNumber > 1)
-            .Select(t => new CaaSRegulatoryChange
-            {
-                ModuleCode = t.ModuleCode ?? string.Empty,
-                ReturnCode = t.ReturnCode,
-                FromVersion = t.CurrentVersion.VersionNumber - 1,
-                ToVersion = t.CurrentVersion.VersionNumber,
-                ChangeType = "TemplateUpdated",
-                Description = $"Template '{t.Name}' updated to version {t.CurrentVersion.VersionNumber}",
-                EffectiveDate = DateTime.UtcNow // Would need publish date from version entity
-            }).ToList();
+        var changes = rows.Select(r => new CaaSRegulatoryChange(
+            ChangeId: r.ChangeId,
+            RegulatorCode: r.RegulatorCode,
+            ModuleCode: r.ModuleCode,
+            Title: r.Title,
+            Summary: r.Summary,
+            EffectiveDate: DateOnly.FromDateTime(r.EffectiveDate),
+            Severity: r.Severity)).ToList();
+
+        if (changes.Any(c => c.Severity == "MAJOR"))
+            await _webhook.EnqueueAsync(partner.PartnerId, WebhookEventType.ChangesDetected,
+                new
+                {
+                    requestId,
+                    majorCount = changes.Count(c => c.Severity == "MAJOR"),
+                    changes = changes.Where(c => c.Severity == "MAJOR").Take(5)
+                }, ct);
+
+        return new CaaSChangesResponse(changes, requestId);
     }
 
+    // ── Simulate ─────────────────────────────────────────────────────────────
     public async Task<CaaSSimulateResponse> SimulateAsync(
-        Guid tenantId, CaaSSimulateRequest request, CancellationToken ct = default)
+        ResolvedPartner partner,
+        CaaSSimulateRequest request,
+        Guid requestId,
+        CancellationToken ct = default)
     {
-        var template = await _templateCache.GetPublishedTemplate(tenantId, request.ReturnCode, ct);
+        EnsureModuleAllowed(partner, request.ModuleCode);
 
-        // Apply overrides to each record
-        var records = request.Records.Select(r =>
+        var results = new List<CaaSScenarioResult>();
+
+        foreach (var scenario in request.Scenarios)
         {
-            var merged = new Dictionary<string, object?>(r);
-            if (request.Overrides != null)
-            {
-                foreach (var ov in request.Overrides)
-                    merged[ov.Key] = ov.Value;
-            }
-            return merged;
-        }).ToList();
+            var scenarioFields = new Dictionary<string, object?>(request.Fields);
+            foreach (var (key, value) in scenario.FieldOverrides)
+                scenarioFields[key] = value;
 
-        var report = await _validationOrchestrator.ValidateRelaxed(records, template, tenantId, ct);
+            var report = await _validation.ValidateAsync(
+                partner.InstitutionId, request.ModuleCode,
+                request.PeriodCode, scenarioFields, ct);
 
-        var validationResponse = new CaaSValidationResponse
-        {
-            IsValid = report.IsValid,
-            ErrorCount = report.ErrorCount,
-            WarningCount = report.WarningCount,
-            Errors = report.Errors.Select(e => new CaaSValidationError
-            {
-                RuleId = e.RuleId,
-                Field = e.Field,
-                Message = e.Message,
-                Severity = e.Severity.ToString(),
-                Category = e.Category.ToString(),
-                ExpectedValue = e.ExpectedValue,
-                ActualValue = e.ActualValue
-            }).ToList()
-        };
+            var errors = report.Violations
+                .Where(v => v.Severity == "ERROR")
+                .Select(v => new CaaSFieldError(
+                    v.FieldCode, v.FieldLabel, v.ErrorCode, v.Message, "ERROR"))
+                .ToList();
 
-        var score = 100.0 - (report.ErrorCount * 10) - (report.WarningCount * 2);
-        var recommendations = new List<string>();
-        if (report.ErrorCount > 0)
-            recommendations.Add($"Fix {report.ErrorCount} validation error(s) before submission.");
-        if (report.WarningCount > 0)
-            recommendations.Add($"Review {report.WarningCount} warning(s) for potential data quality issues.");
-        if (report.IsValid)
-            recommendations.Add("Data is compliant — ready for submission.");
+            var score = ComputeComplianceScore(
+                errors.Count,
+                report.Violations.Count(v => v.Severity == "WARNING"),
+                report.TotalFields);
 
-        return new CaaSSimulateResponse
-        {
-            ScenarioName = request.ScenarioName ?? "Unnamed Scenario",
-            ValidationResult = validationResponse,
-            ProjectedComplianceScore = Math.Clamp(score, 0, 100),
-            Recommendations = recommendations
-        };
+            results.Add(new CaaSScenarioResult(
+                ScenarioName: scenario.ScenarioName,
+                IsValid: errors.Count == 0,
+                ComplianceScore: score,
+                Errors: errors,
+                ComputedValues: report.ComputedValues));
+        }
+
+        return new CaaSSimulateResponse(results, requestId);
     }
+
+    // ── Private helpers ───────────────────────────────────────────────────────
+    private static void EnsureModuleAllowed(ResolvedPartner partner, string moduleCode)
+    {
+        if (!partner.AllowedModuleCodes.Contains(moduleCode, StringComparer.OrdinalIgnoreCase))
+            throw new CaaSModuleNotEntitledException(
+                $"Partner '{partner.PartnerCode}' is not entitled to module '{moduleCode}'.");
+    }
+
+    private async Task<string> CreateValidationSessionAsync(
+        int partnerId,
+        CaaSValidateRequest request,
+        CaaSValidationReport report,
+        bool isValid,
+        CancellationToken ct)
+    {
+        var token = Convert.ToHexString(
+            System.Security.Cryptography.RandomNumberGenerator.GetBytes(32))
+            .ToLowerInvariant();
+
+        await using var conn = await _db.OpenAsync(ct);
+        await conn.ExecuteAsync(
+            """
+            INSERT INTO CaaSValidationSessions
+                (PartnerId, SessionToken, ModuleCode, PeriodCode,
+                 SubmittedData, ValidationResult, IsValid, ExpiresAt)
+            VALUES (@PartnerId, @Token, @ModuleCode, @PeriodCode,
+                    @Data, @Result, @IsValid,
+                    DATEADD(HOUR, 24, SYSUTCDATETIME()))
+            """,
+            new
+            {
+                PartnerId = partnerId,
+                Token = token,
+                ModuleCode = request.ModuleCode,
+                PeriodCode = request.PeriodCode,
+                Data   = System.Text.Json.JsonSerializer.Serialize(request.Fields),
+                Result = System.Text.Json.JsonSerializer.Serialize(report),
+                IsValid = isValid
+            });
+
+        return token;
+    }
+
+    private async Task<ValidationSessionRow?> GetValidSessionAsync(
+        int partnerId, string sessionToken, CancellationToken ct)
+    {
+        await using var conn = await _db.OpenAsync(ct);
+        return await conn.QuerySingleOrDefaultAsync<ValidationSessionRow>(
+            """
+            SELECT Id, PartnerId, SessionToken, ModuleCode, PeriodCode,
+                   SubmittedData, IsValid
+            FROM   CaaSValidationSessions
+            WHERE  SessionToken = @Token
+              AND  PartnerId = @PartnerId
+              AND  ExpiresAt > SYSUTCDATETIME()
+              AND  ConvertedToReturnId IS NULL
+            """,
+            new { Token = sessionToken, PartnerId = partnerId });
+    }
+
+    private async Task MarkSessionConvertedAsync(
+        int partnerId, string sessionToken, long returnInstanceId, CancellationToken ct)
+    {
+        await using var conn = await _db.OpenAsync(ct);
+        await conn.ExecuteAsync(
+            """
+            UPDATE CaaSValidationSessions
+            SET    ConvertedToReturnId = @ReturnId, UpdatedAt = SYSUTCDATETIME()
+            WHERE  SessionToken = @Token AND PartnerId = @PartnerId
+            """,
+            new { ReturnId = returnInstanceId, Token = sessionToken, PartnerId = partnerId });
+    }
+
+    private async Task<long> CreateReturnInstanceAsync(
+        int institutionId, string moduleCode, string periodCode,
+        Dictionary<string, object?> fields, int submittedBy, CancellationToken ct)
+    {
+        await using var conn = await _db.OpenAsync(ct);
+        return await conn.ExecuteScalarAsync<long>(
+            """
+            INSERT INTO ReturnInstances
+                (InstitutionId, ModuleCode, ReturnVersion, ReportingPeriod,
+                 Status, FieldDataJson, CreatedBy, CreatedAt)
+            OUTPUT INSERTED.Id
+            VALUES (@InstitutionId, @ModuleCode, 1, @Period,
+                    'APPROVED', @Fields, @CreatedBy, SYSUTCDATETIME())
+            """,
+            new
+            {
+                InstitutionId = institutionId,
+                ModuleCode = moduleCode,
+                Period = periodCode,
+                Fields = System.Text.Json.JsonSerializer.Serialize(fields),
+                CreatedBy = submittedBy
+            });
+    }
+
+    private static double ComputeComplianceScore(int errors, int warnings, int totalFields)
+    {
+        if (totalFields == 0) return 100.0;
+        var deductions = errors * 10.0 + warnings * 2.0;
+        return Math.Max(0, Math.Round(100.0 - deductions / totalFields * 10, 1));
+    }
+
+    private static string GetCurrentPeriodCode()
+    {
+        var now = DateTime.UtcNow;
+        return $"{now.Year}-{now.Month:D2}";
+    }
+
+    private static CaaSSubmitResponse SubmitFail(Guid requestId, string error)
+        => new(false, null, null, null, null, error, requestId);
+
+    // ── Private row types ─────────────────────────────────────────────────────
+    private sealed record FilingDeadlineRow(
+        string ModuleCode, string ModuleName, string PeriodCode,
+        DateTime DeadlineDate, string RegulatorCode);
+
+    private sealed record ModuleScoreRow(
+        string ModuleCode, string ModuleName, int TotalReturns,
+        int Approved, int Overdue, int Pending, int ValidationErrors);
+
+    private sealed record RegulatoryChangeRow(
+        string ChangeId, string RegulatorCode, string ModuleCode,
+        string Title, string Summary, DateTime EffectiveDate, string Severity);
+
+    private sealed record ValidationSessionRow(
+        long Id, int PartnerId, string SessionToken,
+        string ModuleCode, string PeriodCode, string SubmittedData, bool? IsValid);
 }

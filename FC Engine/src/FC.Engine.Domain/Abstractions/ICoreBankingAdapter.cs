@@ -1,44 +1,50 @@
 namespace FC.Engine.Domain.Abstractions;
 
-/// <summary>
-/// Adapter for extracting return data from core banking systems.
-/// Implementations connect to specific platforms (Finacle, T24, BankOne, Flexcube).
-/// </summary>
+public enum CoreBankingSystem { Finacle, T24, BankOne, Flexcube }
+
+public interface ICoreBankingAdapterFactory
+{
+    ICoreBankingAdapter GetAdapter(CoreBankingSystem system);
+}
+
 public interface ICoreBankingAdapter
 {
-    /// <summary>Unique adapter name, e.g. "Finacle", "T24", "BankOne", "Flexcube".</summary>
-    string AdapterName { get; }
+    CoreBankingSystem SystemType { get; }
 
     /// <summary>
-    /// Extracts return data from the core banking system and maps it to template fields.
+    /// Extracts data from the core banking system for a given module and period,
+    /// returning a field map keyed by RegOS module field codes.
     /// </summary>
-    Task<CoreBankingExtractResult> ExtractReturnData(
+    Task<CoreBankingExtractionResult> ExtractReturnDataAsync(
         string moduleCode,
         string periodCode,
         CoreBankingConnectionConfig config,
         CancellationToken ct = default);
 
-    /// <summary>Test connectivity to the core banking system.</summary>
-    Task<bool> TestConnectionAsync(CoreBankingConnectionConfig config, CancellationToken ct = default);
+    /// <summary>Tests connectivity to the core banking system.</summary>
+    Task<ConnectionTestResult> TestConnectionAsync(
+        CoreBankingConnectionConfig config,
+        CancellationToken ct = default);
 }
 
-/// <summary>Connection configuration for a core banking system.</summary>
-public class CoreBankingConnectionConfig
-{
-    public string BaseUrl { get; set; } = string.Empty;
-    public string? DatabaseConnectionString { get; set; }
-    public string? Username { get; set; }
-    public string? Password { get; set; }
-    public string? ApiKey { get; set; }
-    public Dictionary<string, string> AdditionalSettings { get; set; } = new();
-}
+public sealed record CoreBankingConnectionConfig(
+    string SystemType,
+    string? BaseUrl,
+    string? DatabaseServer,
+    string Credential,           // decrypted from Key Vault at runtime
+    string FieldMappingJson      // JSON: RegOS field code → CB query/field
+);
 
-/// <summary>Result of a core banking data extraction.</summary>
-public class CoreBankingExtractResult
-{
-    public bool Success { get; set; }
-    public Dictionary<string, object> FieldValues { get; set; } = new();
-    public List<string> Warnings { get; set; } = new();
-    public string? ErrorMessage { get; set; }
-    public DateTime ExtractedAtUtc { get; set; } = DateTime.UtcNow;
-}
+public sealed record CoreBankingExtractionResult(
+    bool Success,
+    string ModuleCode,
+    string PeriodCode,
+    Dictionary<string, object?> ExtractedFields,
+    IReadOnlyList<string> UnmappedFields,
+    string? ErrorMessage,
+    DateTimeOffset ExtractedAt);
+
+public sealed record ConnectionTestResult(
+    bool Success,
+    string Message,
+    long LatencyMs);

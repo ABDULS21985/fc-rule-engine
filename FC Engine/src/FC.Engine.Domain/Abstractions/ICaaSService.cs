@@ -1,179 +1,228 @@
-using FC.Engine.Domain.Entities;
-
 namespace FC.Engine.Domain.Abstractions;
 
+// ── Partner Resolution (resolved from API key in middleware) ──────────────────
+
+public sealed record ResolvedPartner(
+    int PartnerId,
+    string PartnerCode,
+    int InstitutionId,
+    PartnerTier Tier,
+    string Environment,
+    IReadOnlyList<string> AllowedModuleCodes);
+
+// ── Tier Enums & Constants ────────────────────────────────────────────────────
+
+public enum PartnerTier { Starter, Growth, Enterprise }
+
+public enum CaaSEnvironment { Live, Test }
+
+public static class RateLimitThresholds
+{
+    public static int GetRequestsPerMinute(PartnerTier tier) => tier switch
+    {
+        PartnerTier.Starter    => 100,
+        PartnerTier.Growth     => 1_000,
+        PartnerTier.Enterprise => 10_000,
+        _                      => 100
+    };
+}
+
+// ── Request / Response DTOs ──────────────────────────────────────────────────
+
+public sealed record CaaSValidateRequest(
+    string ModuleCode,
+    string PeriodCode,
+    Dictionary<string, object?> Fields,
+    bool PersistSession = false);
+
+public sealed record CaaSValidateResponse(
+    bool IsValid,
+    string? SessionToken,
+    int ErrorCount,
+    int WarningCount,
+    IReadOnlyList<CaaSFieldError> Errors,
+    IReadOnlyList<CaaSFieldError> Warnings,
+    double ComplianceScore,
+    Guid RequestId);
+
+public sealed record CaaSFieldError(
+    string FieldCode,
+    string FieldLabel,
+    string ErrorCode,
+    string Message,
+    string Severity);
+
+public sealed record CaaSSubmitRequest(
+    string? SessionToken,
+    string? ModuleCode,
+    string? PeriodCode,
+    Dictionary<string, object?>? Fields,
+    string RegulatorCode,
+    int SubmittedByExternalUserId);
+
+public sealed record CaaSSubmitResponse(
+    bool Success,
+    long? ReturnInstanceId,
+    long? BatchId,
+    string? BatchReference,
+    string? ReceiptReference,
+    string? ErrorMessage,
+    Guid RequestId);
+
+public sealed record CaaSTemplateResponse(
+    string ModuleCode,
+    string ModuleName,
+    string RegulatorCode,
+    string PeriodType,
+    IReadOnlyList<CaaSFieldDefinition> Fields,
+    IReadOnlyList<CaaSFormula> Formulas,
+    Guid RequestId);
+
+public sealed record CaaSFieldDefinition(
+    string FieldCode,
+    string FieldLabel,
+    string DataType,
+    bool IsRequired,
+    string? ValidationRule,
+    decimal? MinValue,
+    decimal? MaxValue,
+    string? Description);
+
+public sealed record CaaSFormula(
+    string FormulaCode,
+    string Description,
+    string Expression);
+
+public sealed record CaaSDeadlinesResponse(
+    IReadOnlyList<CaaSDeadline> Upcoming,
+    Guid RequestId);
+
+public sealed record CaaSDeadline(
+    string ModuleCode,
+    string ModuleName,
+    string PeriodCode,
+    DateOnly DeadlineDate,
+    int DaysRemaining,
+    bool IsOverdue,
+    string RegulatorCode);
+
+public sealed record CaaSScoreRequest(
+    string? PeriodCode);
+
+public sealed record CaaSScoreResponse(
+    double OverallScore,
+    string Rating,
+    IReadOnlyList<CaaSModuleScore> ByModule,
+    Guid RequestId);
+
+public sealed record CaaSModuleScore(
+    string ModuleCode,
+    string ModuleName,
+    double Score,
+    int PendingReturns,
+    int OverdueReturns,
+    int ValidationErrors);
+
+public sealed record CaaSChangesResponse(
+    IReadOnlyList<CaaSRegulatoryChange> Changes,
+    Guid RequestId);
+
+public sealed record CaaSRegulatoryChange(
+    string ChangeId,
+    string RegulatorCode,
+    string ModuleCode,
+    string Title,
+    string Summary,
+    DateOnly EffectiveDate,
+    string Severity);
+
+public sealed record CaaSSimulateRequest(
+    string ModuleCode,
+    string PeriodCode,
+    Dictionary<string, object?> Fields,
+    IReadOnlyList<CaaSScenario> Scenarios);
+
+public sealed record CaaSScenario(
+    string ScenarioName,
+    Dictionary<string, object?> FieldOverrides);
+
+public sealed record CaaSSimulateResponse(
+    IReadOnlyList<CaaSScenarioResult> Results,
+    Guid RequestId);
+
+public sealed record CaaSScenarioResult(
+    string ScenarioName,
+    bool IsValid,
+    double ComplianceScore,
+    IReadOnlyList<CaaSFieldError> Errors,
+    Dictionary<string, object?> ComputedValues);
+
+// ── Main CaaS Service Interface ───────────────────────────────────────────────
+
+/// <summary>
+/// Implements all CaaS API operations for external partner access.
+/// </summary>
 public interface ICaaSService
 {
-    /// <summary>Validate data against a module template without persisting.</summary>
-    Task<CaaSValidationResponse> ValidateAsync(
-        Guid tenantId, CaaSValidateRequest request, CancellationToken ct = default);
+    Task<CaaSValidateResponse> ValidateAsync(
+        ResolvedPartner partner,
+        CaaSValidateRequest request,
+        Guid requestId,
+        CancellationToken ct = default);
 
-    /// <summary>Submit a complete return via API.</summary>
-    Task<CaaSSubmitResponse> SubmitReturnAsync(
-        Guid tenantId, int institutionId, CaaSSubmitRequest request, CancellationToken ct = default);
+    Task<CaaSSubmitResponse> SubmitAsync(
+        ResolvedPartner partner,
+        CaaSSubmitRequest request,
+        Guid requestId,
+        CancellationToken ct = default);
 
-    /// <summary>Get template structure for a specific module.</summary>
-    Task<CaaSTemplateResponse?> GetTemplateStructureAsync(
-        Guid tenantId, string moduleCode, CancellationToken ct = default);
+    Task<CaaSTemplateResponse> GetTemplateAsync(
+        ResolvedPartner partner,
+        string moduleCode,
+        Guid requestId,
+        CancellationToken ct = default);
 
-    /// <summary>Get filing deadlines for all entitled modules.</summary>
-    Task<List<CaaSDeadlineItem>> GetDeadlinesAsync(
-        Guid tenantId, CancellationToken ct = default);
+    Task<CaaSDeadlinesResponse> GetDeadlinesAsync(
+        ResolvedPartner partner,
+        Guid requestId,
+        CancellationToken ct = default);
 
-    /// <summary>Compute compliance health score.</summary>
-    Task<CaaSScoreResponse> GetComplianceScoreAsync(
-        Guid tenantId, int institutionId, CaaSScoreRequest request, CancellationToken ct = default);
+    Task<CaaSScoreResponse> GetScoreAsync(
+        ResolvedPartner partner,
+        CaaSScoreRequest request,
+        Guid requestId,
+        CancellationToken ct = default);
 
-    /// <summary>Get regulatory changes affecting this institution.</summary>
-    Task<List<CaaSRegulatoryChange>> GetRegulatoryChangesAsync(
-        Guid tenantId, string? moduleCode, CancellationToken ct = default);
+    Task<CaaSChangesResponse> GetChangesAsync(
+        ResolvedPartner partner,
+        Guid requestId,
+        CancellationToken ct = default);
 
-    /// <summary>Run a scenario simulation (validate without persisting).</summary>
     Task<CaaSSimulateResponse> SimulateAsync(
-        Guid tenantId, CaaSSimulateRequest request, CancellationToken ct = default);
+        ResolvedPartner partner,
+        CaaSSimulateRequest request,
+        Guid requestId,
+        CancellationToken ct = default);
 }
 
-// ─── Request / Response DTOs ────────────────────────────────────────
+// ── Custom Exceptions ─────────────────────────────────────────────────────────
 
-public class CaaSValidateRequest
+public sealed class CaaSModuleNotEntitledException : Exception
 {
-    public string ModuleCode { get; set; } = string.Empty;
-    public string ReturnCode { get; set; } = string.Empty;
-    public List<Dictionary<string, object?>> Records { get; set; } = new();
+    public CaaSModuleNotEntitledException(string message) : base(message) { }
 }
 
-public class CaaSValidationResponse
+public sealed class CaaSRateLimitExceededException : Exception
 {
-    public bool IsValid { get; set; }
-    public int ErrorCount { get; set; }
-    public int WarningCount { get; set; }
-    public List<CaaSValidationError> Errors { get; set; } = new();
-    public double? ComplianceScorePreview { get; set; }
+    public int RetryAfterSeconds { get; }
+    public CaaSRateLimitExceededException(int retryAfter)
+        : base($"Rate limit exceeded. Retry after {retryAfter}s.")
+    {
+        RetryAfterSeconds = retryAfter;
+    }
 }
 
-public class CaaSValidationError
+public sealed class CaaSSessionExpiredException : Exception
 {
-    public string RuleId { get; set; } = string.Empty;
-    public string Field { get; set; } = string.Empty;
-    public string Message { get; set; } = string.Empty;
-    public string Severity { get; set; } = string.Empty;
-    public string Category { get; set; } = string.Empty;
-    public string? ExpectedValue { get; set; }
-    public string? ActualValue { get; set; }
-}
-
-public class CaaSSubmitRequest
-{
-    public string ReturnCode { get; set; } = string.Empty;
-    public string PeriodCode { get; set; } = string.Empty;
-    public string? InstitutionCode { get; set; }
-    public List<Dictionary<string, object?>> Records { get; set; } = new();
-    public bool AutoApprove { get; set; }
-}
-
-public class CaaSSubmitResponse
-{
-    public bool Success { get; set; }
-    public int SubmissionId { get; set; }
-    public string Status { get; set; } = string.Empty;
-    public long ProcessingDurationMs { get; set; }
-    public CaaSValidationResponse? ValidationResult { get; set; }
-}
-
-public class CaaSTemplateResponse
-{
-    public string ModuleCode { get; set; } = string.Empty;
-    public string ModuleName { get; set; } = string.Empty;
-    public List<CaaSTemplateReturn> Returns { get; set; } = new();
-}
-
-public class CaaSTemplateReturn
-{
-    public string ReturnCode { get; set; } = string.Empty;
-    public string ReturnName { get; set; } = string.Empty;
-    public string Frequency { get; set; } = string.Empty;
-    public int VersionNumber { get; set; }
-    public List<CaaSFieldDefinition> Fields { get; set; } = new();
-    public List<CaaSFormulaDefinition> Formulas { get; set; } = new();
-}
-
-public class CaaSFieldDefinition
-{
-    public string FieldName { get; set; } = string.Empty;
-    public string DisplayName { get; set; } = string.Empty;
-    public string DataType { get; set; } = string.Empty;
-    public bool IsRequired { get; set; }
-    public string? MinValue { get; set; }
-    public string? MaxValue { get; set; }
-    public int? MaxLength { get; set; }
-    public string? AllowedValues { get; set; }
-    public string? Description { get; set; }
-}
-
-public class CaaSFormulaDefinition
-{
-    public string RuleId { get; set; } = string.Empty;
-    public string Expression { get; set; } = string.Empty;
-    public string? Description { get; set; }
-}
-
-public class CaaSDeadlineItem
-{
-    public string ModuleCode { get; set; } = string.Empty;
-    public string ModuleName { get; set; } = string.Empty;
-    public string ReturnCode { get; set; } = string.Empty;
-    public string PeriodCode { get; set; } = string.Empty;
-    public DateTime Deadline { get; set; }
-    public string RagStatus { get; set; } = string.Empty;
-    public int? DaysRemaining { get; set; }
-}
-
-public class CaaSScoreRequest
-{
-    public string? ModuleCode { get; set; }
-    public string? PeriodCode { get; set; }
-}
-
-public class CaaSScoreResponse
-{
-    public double OverallScore { get; set; }
-    public string Rating { get; set; } = string.Empty; // Excellent, Good, Fair, Poor
-    public CaaSScoreBreakdown Breakdown { get; set; } = new();
-}
-
-public class CaaSScoreBreakdown
-{
-    public double ValidationPassRate { get; set; }
-    public double DeadlineAdherence { get; set; }
-    public double CompletenessScore { get; set; }
-    public int TotalSubmissions { get; set; }
-    public int CleanSubmissions { get; set; }
-    public int LateSubmissions { get; set; }
-}
-
-public class CaaSRegulatoryChange
-{
-    public string ModuleCode { get; set; } = string.Empty;
-    public string ReturnCode { get; set; } = string.Empty;
-    public int FromVersion { get; set; }
-    public int ToVersion { get; set; }
-    public string ChangeType { get; set; } = string.Empty; // FieldAdded, FieldRemoved, RuleChanged
-    public string Description { get; set; } = string.Empty;
-    public DateTime EffectiveDate { get; set; }
-}
-
-public class CaaSSimulateRequest
-{
-    public string ReturnCode { get; set; } = string.Empty;
-    public string? ScenarioName { get; set; }
-    public List<Dictionary<string, object?>> Records { get; set; } = new();
-    public Dictionary<string, object?>? Overrides { get; set; }
-}
-
-public class CaaSSimulateResponse
-{
-    public string ScenarioName { get; set; } = string.Empty;
-    public CaaSValidationResponse ValidationResult { get; set; } = new();
-    public double? ProjectedComplianceScore { get; set; }
-    public List<string> Recommendations { get; set; } = new();
+    public CaaSSessionExpiredException() : base("Validation session has expired or been used.") { }
 }
