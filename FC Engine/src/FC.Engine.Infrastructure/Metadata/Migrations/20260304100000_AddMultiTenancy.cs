@@ -55,7 +55,7 @@ namespace FC.Engine.Infrastructure.Metadata.Migrations
             // ═══════════════════════════════════════════════════════════
             migrationBuilder.Sql($@"
                 INSERT INTO dbo.tenants (TenantId, TenantName, TenantSlug, TenantStatus, CreatedAt, UpdatedAt)
-                VALUES ('{DefaultTenantId}', 'FC Engine Legacy', 'fc-engine-legacy', 'Active', SYSUTCDATETIME(), SYSUTCDATETIME());
+                VALUES ('{DefaultTenantId}', 'RegOS™ Legacy', 'fc-engine-legacy', 'Active', SYSUTCDATETIME(), SYSUTCDATETIME());
             ");
 
             // ═══════════════════════════════════════════════════════════

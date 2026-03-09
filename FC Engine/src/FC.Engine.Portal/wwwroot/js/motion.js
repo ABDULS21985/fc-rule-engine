@@ -1,5 +1,5 @@
 /**
- * FC Engine — Motion Design System (JS Interop)
+ * RegOS™ — Motion Design System (JS Interop)
  * Handles: Ripple effects, number counters, card tilt, toast dismiss, form shake.
  * All interactions respect prefers-reduced-motion.
  */

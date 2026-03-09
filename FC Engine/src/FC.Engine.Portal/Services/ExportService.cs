@@ -451,7 +451,7 @@ public class ExportService
         }
 
         sb.AppendLine("</tbody></table>");
-        sb.AppendLine($"<div class=\"footer\">This document was generated automatically by FC Engine on {generatedAt}. Submission #{submission.Id} &bull; {submission.ReturnCode} &bull; {Esc(institutionName)}</div>");
+        sb.AppendLine($"<div class=\"footer\">This document was generated automatically by RegOS™ on {generatedAt}. Submission #{submission.Id} &bull; {submission.ReturnCode} &bull; {Esc(institutionName)}</div>");
         sb.AppendLine("</body></html>");
 
         return Encoding.UTF8.GetBytes(sb.ToString());

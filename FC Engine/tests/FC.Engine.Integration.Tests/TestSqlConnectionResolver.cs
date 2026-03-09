@@ -36,6 +36,6 @@ internal static class TestSqlConnectionResolver
         }
 
         throw new InvalidOperationException(
-            "No usable SQL test connection string found. Set FCENGINE_TEST_CONNSTRING to a reachable SQL Server with FC Engine schema.");
+            "No usable SQL test connection string found. Set FCENGINE_TEST_CONNSTRING to a reachable SQL Server with RegOS™ schema.");
     }
 }

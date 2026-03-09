@@ -1,8 +1,8 @@
-# FC Engine - Metadata-Driven Architecture
+# RegOS™ - Metadata-Driven Architecture
 
 ## Overview
 
-FC Engine is a **metadata-driven** CBN DFIS FC Returns Data Processing Engine. Instead of hardcoding 103+ return template definitions in C# classes, all template structures, validation formulas, and business rules are stored as database metadata and interpreted at runtime.
+RegOS™ is a **metadata-driven** CBN DFIS FC Returns Data Processing Engine. Instead of hardcoding 103+ return template definitions in C# classes, all template structures, validation formulas, and business rules are stored as database metadata and interpreted at runtime.
 
 **Key benefit**: CBN business users can create, modify, and publish new return templates entirely through the Admin Portal — zero code changes, zero deployments.
 
@@ -25,7 +25,7 @@ FC Engine is a **metadata-driven** CBN DFIS FC Returns Data Processing Engine. I
 ## Solution Structure
 
 ```
-FC Engine/
+RegOS™/
 ├── src/
 │   ├── FC.Engine.Domain/              # Entities, interfaces, value objects, enums
 │   │   ├── Abstractions/              # ITemplateRepository, IFormulaRepository, IDdlEngine, etc.

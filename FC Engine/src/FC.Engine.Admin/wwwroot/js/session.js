@@ -1,5 +1,5 @@
 /**
- * FCSession — Session lifecycle manager for FC Engine Admin Portal.
+ * FCSession — Session lifecycle manager for RegOS™ Admin Portal.
  *
  * Responsibilities:
  *   • Inactivity detection (throttled document events)

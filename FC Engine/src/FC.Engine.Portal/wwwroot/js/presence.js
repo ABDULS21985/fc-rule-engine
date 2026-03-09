@@ -1,5 +1,5 @@
 /**
- * FC Engine Portal — Presence System
+ * RegOS™ Portal — Presence System
  * Handles field-focus tracking so other users can see who is editing which field.
  * The .NET side handles polling, avatar rendering, and toast notifications.
  */

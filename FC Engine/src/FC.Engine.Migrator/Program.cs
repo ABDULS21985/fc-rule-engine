@@ -26,7 +26,7 @@ var logger = host.Services.GetRequiredService<ILogger<Program>>();
 
 try
 {
-    logger.LogInformation("FC Engine Migrator starting...");
+    logger.LogInformation("RegOS™ Migrator starting...");
 
     using var scope = host.Services.CreateScope();
     var db = scope.ServiceProvider.GetRequiredService<MetadataDbContext>();
@@ -265,10 +265,10 @@ try
     var rulesCreated = await businessRuleSeeder.SeedDefaultRules();
     logger.LogInformation("Business rules seeded: {Created} created", rulesCreated);
 
-    logger.LogInformation("FC Engine Migrator completed successfully");
+    logger.LogInformation("RegOS™ Migrator completed successfully");
 }
 catch (Exception ex)
 {
-    logger.LogError(ex, "FC Engine Migrator failed");
+    logger.LogError(ex, "RegOS™ Migrator failed");
     Environment.ExitCode = 1;
 }

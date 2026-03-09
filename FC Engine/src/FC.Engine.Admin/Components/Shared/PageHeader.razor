@@ -28,7 +28,23 @@
     @* ── Breadcrumb row ───────────────────────────────────── *@
     @{
         var crumbs = Breadcrumbs ?? _autoCrumbs;
+        var contextLabel = ResolveContextLabel(crumbs);
+        var spotlightLabel = ResolveSpotlightLabel(crumbs, contextLabel);
     }
+    <div class="fc-ph__hero">
+        <div class="fc-ph__eyebrow-row">
+            <div class="fc-ph__eyebrow">
+                <span class="fc-ph__eyebrow-dot" aria-hidden="true"></span>
+                <span>@contextLabel</span>
+            </div>
+            <div class="fc-ph__hero-pills">
+                <span class="fc-ph__hero-pill">Live control plane</span>
+                @if (!string.IsNullOrWhiteSpace(spotlightLabel))
+                {
+                    <span class="fc-ph__hero-pill fc-ph__hero-pill--ghost">@spotlightLabel</span>
+                }
+            </div>
+        </div>
     @if (crumbs.Count > 1)
     {
         <nav class="fc-ph__breadcrumb" aria-label="Breadcrumb">
@@ -196,6 +212,7 @@
         </div>
     }
 </div>
+</div>
 
 @code {
     [Parameter] public string Title { get; set; } = string.Empty;
@@ -283,6 +300,34 @@
         }
 
         return crumbs;
+    }
+
+    private string ResolveContextLabel(IReadOnlyList<BreadcrumbItem> crumbs)
+    {
+        if (crumbs.Count > 1)
+        {
+            var contextualItem = crumbs
+                .Skip(1)
+                .FirstOrDefault(crumb => !string.Equals(crumb.Label, "Home", StringComparison.OrdinalIgnoreCase) && crumb.Label != Title);
+
+            if (contextualItem is not null)
+            {
+                return contextualItem.Label;
+            }
+        }
+
+        return Title;
+    }
+
+    private static string? ResolveSpotlightLabel(IReadOnlyList<BreadcrumbItem> crumbs, string contextLabel)
+    {
+        var current = crumbs.LastOrDefault()?.Label;
+        if (string.IsNullOrWhiteSpace(current))
+        {
+            return null;
+        }
+
+        return string.Equals(current, contextLabel, StringComparison.OrdinalIgnoreCase) ? null : current;
     }
 
     private static string GetSegmentLabel(string[] segments, int index) => (index, segments) switch

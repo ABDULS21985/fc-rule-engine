@@ -1,5 +1,5 @@
 /**
- * fcHelp — JS interop for the FC Engine help system.
+ * fcHelp — JS interop for the RegOS™ help system.
  *
  * Responsibilities:
  *   • Provide element bounding-rect queries for feature tour spotlight positioning.

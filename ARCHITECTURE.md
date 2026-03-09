@@ -1,12 +1,12 @@
-# FC Engine — Complete System Architecture
+# RegOS™ — Complete System Architecture
 
-**Purpose:** This document provides a comprehensive architecture reference for AI agents tasked with expanding FC Engine into a complete multi-tenant system.
+**Purpose:** This document provides a comprehensive architecture reference for AI agents tasked with expanding RegOS™ into a complete multi-tenant system.
 
 ---
 
 ## 1. Executive Summary
 
-FC Engine is a **regulatory return collection and validation engine** built for the Central Bank of Nigeria (CBN). It automates ingestion, structural validation, formula evaluation, and cross-sheet reconciliation of financial returns submitted in XML format by Finance Companies (FCs).
+RegOS™ is a **regulatory return collection and validation engine** built for the Central Bank of Nigeria (CBN). It automates ingestion, structural validation, formula evaluation, and cross-sheet reconciliation of financial returns submitted in XML format by Finance Companies (FCs).
 
 ### What the System Does
 1. **Template Management** — Define return templates (schemas) with fields, sections, formulas, and validation rules
@@ -47,7 +47,7 @@ FC Engine is a **regulatory return collection and validation engine** built for 
 ## 3. Solution Structure (Clean Architecture)
 
 ```
-FC Engine/
+RegOS™/
 ├── src/
 │   ├── FC.Engine.Domain/          # Core domain — entities, enums, abstractions (interfaces)
 │   ├── FC.Engine.Application/     # Business logic — services, orchestrators, DTOs
@@ -981,4 +981,4 @@ Each table has:
 
 ---
 
-*This document provides the complete architectural blueprint for AI agents to understand and expand FC Engine into a full multi-tenant system.*
+*This document provides the complete architectural blueprint for AI agents to understand and expand RegOS™ into a full multi-tenant system.*

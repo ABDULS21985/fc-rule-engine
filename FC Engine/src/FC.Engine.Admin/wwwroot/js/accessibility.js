@@ -1,5 +1,5 @@
 /**
- * FCAccessibility — Accessibility utilities for FC Engine Admin Portal
+ * FCAccessibility — Accessibility utilities for RegOS™ Admin Portal
  * Covers: focus trap, keyboard shortcuts, route announcer, high-contrast detection.
  */
 window.FCAccessibility = (function () {

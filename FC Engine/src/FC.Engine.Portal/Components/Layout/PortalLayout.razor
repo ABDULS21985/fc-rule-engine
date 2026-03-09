@@ -27,10 +27,13 @@
     <!-- Sidebar -->
     <aside class="portal-sidebar" aria-label="Main navigation" @onkeydown="HandleSidebarKeyDown">
         <div class="portal-sidebar-brand">
-            <img src="@_branding.LogoSmallUrl" alt="@_branding.CompanyName" class="portal-sidebar-logo" width="40" height="33" />
+            <div class="portal-sidebar-brand-mark">
+                <img src="@_branding.LogoSmallUrl" alt="@_branding.CompanyName" class="portal-sidebar-logo" width="40" height="33" />
+            </div>
             <div class="portal-sidebar-brand-text">
                 <span class="portal-sidebar-brand-name">@_branding.CompanyName</span>
                 <span class="portal-sidebar-brand-sub">FI Portal</span>
+                <span class="portal-sidebar-brand-chip">Operational Workspace</span>
             </div>
         </div>
 
@@ -42,6 +45,7 @@
                     var instCode = instAuth.User.FindFirst("InstitutionId")?.Value ?? "";
                 }
                 <div class="portal-sidebar-institution">
+                    <span class="portal-sidebar-inst-label">Regulatory perimeter</span>
                     <span class="portal-sidebar-inst-name">@instName</span>
                     @if (!string.IsNullOrEmpty(instCode))
                     {
@@ -107,86 +111,97 @@
                         }
                     </svg>
                 </button>
-                <nav class="portal-topbar-breadcrumb" aria-label="Breadcrumb">
-                    <ol>
-                        <li><a href="/">Home</a></li>
-                        @if (_currentPageName != "Dashboard")
-                        {
-                            <li aria-current="page">@_currentPageName</li>
-                        }
-                    </ol>
-                </nav>
+                <div class="portal-topbar-context">
+                    <span class="portal-topbar-kicker">Institution operations</span>
+                    <nav class="portal-topbar-breadcrumb" aria-label="Breadcrumb">
+                        <ol>
+                            <li><a href="/">Home</a></li>
+                            @if (_currentPageName != "Dashboard")
+                            {
+                                <li aria-current="page">@_currentPageName</li>
+                            }
+                        </ol>
+                    </nav>
+                </div>
             </div>
 
             <div class="portal-topbar-right">
-                <button class="portal-tour-help-btn"
-                        @onclick="TriggerPageTour"
-                        title="Start page tour"
-                        aria-label="Start guided page tour"
-                        type="button">?</button>
-                <button class="portal-theme-toggle"
-                        @onclick="ToggleTheme"
-                        title="@(_isDark ? "Switch to light mode" : "Switch to dark mode")"
-                        aria-label="@(_isDark ? "Switch to light mode" : "Switch to dark mode")"
-                        type="button">
-                    @if (_isDark)
-                    {
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="18" height="18" aria-hidden="true">
-                            <circle cx="12" cy="12" r="5"/>
-                            <line x1="12" y1="1" x2="12" y2="3"/>
-                            <line x1="12" y1="21" x2="12" y2="23"/>
-                            <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/>
-                            <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
-                            <line x1="1" y1="12" x2="3" y2="12"/>
-                            <line x1="21" y1="12" x2="23" y2="12"/>
-                            <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/>
-                            <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
-                        </svg>
-                    }
-                    else
-                    {
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="18" height="18" aria-hidden="true">
-                            <path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/>
-                        </svg>
-                    }
-                </button>
-                <NotificationBell />
+                <div class="portal-topbar-signal" aria-hidden="true">
+                    <span class="portal-topbar-signal-dot"></span>
+                    <span>Live workspace</span>
+                </div>
+                <div class="portal-topbar-actions">
+                    <button class="portal-tour-help-btn"
+                            @onclick="TriggerPageTour"
+                            title="Start page tour"
+                            aria-label="Start guided page tour"
+                            type="button">?</button>
+                    <button class="portal-theme-toggle"
+                            @onclick="ToggleTheme"
+                            title="@(_isDark ? "Switch to light mode" : "Switch to dark mode")"
+                            aria-label="@(_isDark ? "Switch to light mode" : "Switch to dark mode")"
+                            type="button">
+                        @if (_isDark)
+                        {
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="18" height="18" aria-hidden="true">
+                                <circle cx="12" cy="12" r="5"/>
+                                <line x1="12" y1="1" x2="12" y2="3"/>
+                                <line x1="12" y1="21" x2="12" y2="23"/>
+                                <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/>
+                                <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+                                <line x1="1" y1="12" x2="3" y2="12"/>
+                                <line x1="21" y1="12" x2="23" y2="12"/>
+                                <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/>
+                                <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+                            </svg>
+                        }
+                        else
+                        {
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="18" height="18" aria-hidden="true">
+                                <path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/>
+                            </svg>
+                        }
+                    </button>
+                    <NotificationBell />
+                </div>
             </div>
         </header>
 
         <main id="main-content" class="portal-content" role="main">
-            @if (ViewAsService.IsViewingAs)
-            {
-                <div class="pd-viewing-banner pd-viewing-banner--gold" role="alert">
-                    <span class="pd-viewing-banner__text">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14" aria-hidden="true" style="display:inline-block;vertical-align:-2px;margin-right:6px"><path d="M15 3h4a2 2 0 012 2v14a2 2 0 01-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
-                        Viewing as: <strong>@ViewAsService.ViewingAsTenantName</strong>
-                        <span class="pd-viewing-banner__sub">— All actions reflect this institution's context.</span>
-                    </span>
-                    <button class="pd-viewing-banner__stop" type="button" @onclick="StopViewingAs" aria-label="Stop viewing as @ViewAsService.ViewingAsTenantName">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="12" height="12" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-                        Stop viewing
-                    </button>
-                </div>
-            }
-            @if (_sandboxContext?.IsSandbox == true)
-            {
-                <div class="portal-sandbox-banner">
-                    <span>
-                        TRAINING MODE: This is a sandbox environment. Data here does not affect production.
-                    </span>
-                    <div class="portal-sandbox-actions">
-                        <button class="portal-btn portal-btn-sm portal-btn-outline" @onclick="SwitchToProduction" type="button">Switch to Production</button>
-                        <button class="portal-btn portal-btn-sm portal-btn-outline" @onclick="ResetSandboxData" disabled="@_sandboxBusy" type="button">Reset Sandbox Data</button>
+            <div class="portal-content-shell">
+                @if (ViewAsService.IsViewingAs)
+                {
+                    <div class="pd-viewing-banner pd-viewing-banner--gold" role="alert">
+                        <span class="pd-viewing-banner__text">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14" aria-hidden="true" style="display:inline-block;vertical-align:-2px;margin-right:6px"><path d="M15 3h4a2 2 0 012 2v14a2 2 0 01-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
+                            Viewing as: <strong>@ViewAsService.ViewingAsTenantName</strong>
+                            <span class="pd-viewing-banner__sub">— All actions reflect this institution's context.</span>
+                        </span>
+                        <button class="pd-viewing-banner__stop" type="button" @onclick="StopViewingAs" aria-label="Stop viewing as @ViewAsService.ViewingAsTenantName">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="12" height="12" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                            Stop viewing
+                        </button>
                     </div>
+                }
+                @if (_sandboxContext?.IsSandbox == true)
+                {
+                    <div class="portal-sandbox-banner">
+                        <span>
+                            TRAINING MODE: This is a sandbox environment. Data here does not affect production.
+                        </span>
+                        <div class="portal-sandbox-actions">
+                            <button class="portal-btn portal-btn-sm portal-btn-outline" @onclick="SwitchToProduction" type="button">Switch to Production</button>
+                            <button class="portal-btn portal-btn-sm portal-btn-outline" @onclick="ResetSandboxData" disabled="@_sandboxBusy" type="button">Reset Sandbox Data</button>
+                        </div>
+                    </div>
+                }
+                @if (!string.IsNullOrWhiteSpace(_sandboxMessage))
+                {
+                    <div class="portal-alert portal-alert-info">@_sandboxMessage</div>
+                }
+                <div class="portal-page-enter portal-page-stage">
+                    @Body
                 </div>
-            }
-            @if (!string.IsNullOrWhiteSpace(_sandboxMessage))
-            {
-                <div class="portal-alert portal-alert-info">@_sandboxMessage</div>
-            }
-            <div class="portal-page-enter">
-                @Body
             </div>
         </main>
     </div>

@@ -1,4 +1,4 @@
-# FC Engine — Endpoint Audit Findings
+# RegOS™ — Endpoint Audit Findings
 
 **Date:** 2026-03-08
 **Branch:** `RegOS`

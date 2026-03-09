@@ -1,5 +1,5 @@
 /**
- * FC Engine — Advanced Form System (JS Interop)
+ * RegOS™ — Advanced Form System (JS Interop)
  * Handles: Currency formatting, outside-click detection, drag-drop,
  *          rich text editing, calendar positioning, conditional field animations.
  * All interactions respect prefers-reduced-motion.

@@ -1,109 +1,129 @@
 @inject IJSRuntime JS
 
 <div class="portal-ph">
+    @{
+        var contextLabel = ResolveContextLabel();
+        var spotlightLabel = ResolveSpotlightLabel();
+    }
 
-    @* ── Breadcrumb nav ── *@
-    @if (Breadcrumb is { Count: > 0 })
-    {
-        <nav class="portal-ph-breadcrumb" aria-label="Breadcrumb">
-            <ol class="portal-ph-bc-list">
-                @{
-                    var items = Breadcrumb.ToList();
-                    bool needsTruncation = items.Count > 2;
-                }
-
-                @for (int i = 0; i < items.Count; i++)
+    <div class="portal-ph-hero">
+        <div class="portal-ph-meta-row">
+            <div class="portal-ph-kicker">
+                <span class="portal-ph-kicker-dot" aria-hidden="true"></span>
+                <span>@contextLabel</span>
+            </div>
+            <div class="portal-ph-meta">
+                <span class="portal-ph-meta-pill">Live workspace</span>
+                @if (!string.IsNullOrWhiteSpace(spotlightLabel))
                 {
-                    var item = items[i];
-                    var isLast = i == items.Count - 1;
-                    // On mobile: hide middle items (1..Count-2), always show Home[0] and Current[last]
-                    var mobileHidden = needsTruncation && !_mobileExpanded && i > 0 && !isLast;
+                    <span class="portal-ph-meta-pill portal-ph-meta-pill--ghost">@spotlightLabel</span>
+                }
+            </div>
+        </div>
 
-                    <li class="portal-ph-bc-item @(mobileHidden ? "portal-ph-bc-item--mobile-hidden" : "")">
-                        @if (item.IsCurrent || string.IsNullOrEmpty(item.Url))
-                        {
-                            @if (item.ChipTooltip is not null)
+        @* ── Breadcrumb nav ── *@
+        @if (Breadcrumb is { Count: > 0 })
+        {
+            <nav class="portal-ph-breadcrumb" aria-label="Breadcrumb">
+                <ol class="portal-ph-bc-list">
+                    @{
+                        var items = Breadcrumb.ToList();
+                        bool needsTruncation = items.Count > 2;
+                    }
+
+                    @for (int i = 0; i < items.Count; i++)
+                    {
+                        var item = items[i];
+                        var isLast = i == items.Count - 1;
+                        // On mobile: hide middle items (1..Count-2), always show Home[0] and Current[last]
+                        var mobileHidden = needsTruncation && !_mobileExpanded && i > 0 && !isLast;
+
+                        <li class="portal-ph-bc-item @(mobileHidden ? "portal-ph-bc-item--mobile-hidden" : "")">
+                            @if (item.IsCurrent || string.IsNullOrEmpty(item.Url))
                             {
-                                @* Period chip: highlighted with a CSS tooltip for deadline info *@
-                                <span class="portal-ph-bc-chip"
-                                      data-tooltip="@item.ChipTooltip"
-                                      aria-current="@(item.IsCurrent ? "page" : null)">
-                                    @item.Label
-                                    @if (item.HasStatusDot)
-                                    {
-                                        <span class="portal-ph-bc-dot" aria-hidden="true"></span>
-                                    }
-                                </span>
+                                @if (item.ChipTooltip is not null)
+                                {
+                                    @* Period chip: highlighted with a CSS tooltip for deadline info *@
+                                    <span class="portal-ph-bc-chip"
+                                          data-tooltip="@item.ChipTooltip"
+                                          aria-current="@(item.IsCurrent ? "page" : null)">
+                                        @item.Label
+                                        @if (item.HasStatusDot)
+                                        {
+                                            <span class="portal-ph-bc-dot" aria-hidden="true"></span>
+                                        }
+                                    </span>
+                                }
+                                else
+                                {
+                                    <span class="portal-ph-bc-current" aria-current="@(item.IsCurrent ? "page" : null)">@item.Label</span>
+                                }
                             }
                             else
                             {
-                                <span class="portal-ph-bc-current" aria-current="@(item.IsCurrent ? "page" : null)">@item.Label</span>
+                                <a href="@item.Url" class="portal-ph-bc-link">@item.Label</a>
                             }
-                        }
-                        else
-                        {
-                            <a href="@item.Url" class="portal-ph-bc-link">@item.Label</a>
-                        }
 
-                        @if (!isLast)
-                        {
-                            <span class="portal-ph-bc-sep" aria-hidden="true">
-                                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg>
-                            </span>
-                        }
-                    </li>
-                    @* After Home (item 0): show collapse ellipsis on mobile when middle items are hidden *@
-                    @if (needsTruncation && !_mobileExpanded && i == 0)
-                    {
-                        <li class="portal-ph-bc-item portal-ph-bc-ellipsis-item" aria-hidden="false">
-                            <button class="portal-ph-bc-expand-btn"
-                                    @onclick="() => _mobileExpanded = true"
-                                    aria-label="Show full breadcrumb path"
-                                    aria-expanded="false">
-                                <span aria-hidden="true">…</span>
-                            </button>
-                            <span class="portal-ph-bc-sep" aria-hidden="true">
-                                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg>
-                            </span>
+                            @if (!isLast)
+                            {
+                                <span class="portal-ph-bc-sep" aria-hidden="true">
+                                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg>
+                                </span>
+                            }
                         </li>
-                    }
-                }
-            </ol>
-        </nav>
-    }
-
-    @* ── Title row: back button + page title + action slots ── *@
-    @if (BackUrl is not null || Title is not null || PrimaryAction is not null || SecondaryActions is not null)
-    {
-        <div class="portal-ph-header-row">
-            <div class="portal-ph-header-left">
-                @if (BackUrl is not null)
-                {
-                    <a href="@BackUrl" class="portal-ph-back-btn" aria-label="Go back to previous page">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>
-                        Back
-                    </a>
-                }
-                @if (Title is not null)
-                {
-                    <div class="portal-ph-title-block">
-                        <h1 class="portal-ph-title">@Title</h1>
-                        @if (Subtitle is not null)
+                        @* After Home (item 0): show collapse ellipsis on mobile when middle items are hidden *@
+                        @if (needsTruncation && !_mobileExpanded && i == 0)
                         {
-                            <p class="portal-ph-subtitle">@Subtitle</p>
+                            <li class="portal-ph-bc-item portal-ph-bc-ellipsis-item" aria-hidden="false">
+                                <button class="portal-ph-bc-expand-btn"
+                                        @onclick="() => _mobileExpanded = true"
+                                        aria-label="Show full breadcrumb path"
+                                        aria-expanded="false">
+                                    <span aria-hidden="true">…</span>
+                                </button>
+                                <span class="portal-ph-bc-sep" aria-hidden="true">
+                                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg>
+                                </span>
+                            </li>
                         }
+                    }
+                </ol>
+            </nav>
+        }
+
+        @* ── Title row: back button + page title + action slots ── *@
+        @if (BackUrl is not null || Title is not null || PrimaryAction is not null || SecondaryActions is not null)
+        {
+            <div class="portal-ph-header-row">
+                <div class="portal-ph-header-left">
+                    @if (BackUrl is not null)
+                    {
+                        <a href="@BackUrl" class="portal-ph-back-btn" aria-label="Go back to previous page">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>
+                            Back
+                        </a>
+                    }
+                    @if (Title is not null)
+                    {
+                        <div class="portal-ph-title-block">
+                            <h1 class="portal-ph-title">@Title</h1>
+                            @if (Subtitle is not null)
+                            {
+                                <p class="portal-ph-subtitle">@Subtitle</p>
+                            }
+                        </div>
+                    }
+                </div>
+                @if (PrimaryAction is not null || SecondaryActions is not null)
+                {
+                    <div class="portal-ph-header-actions">
+                        @SecondaryActions
+                        @PrimaryAction
                     </div>
                 }
             </div>
-            @if (PrimaryAction is not null || SecondaryActions is not null)
-            {
-                <div class="portal-ph-header-actions">
-                    @SecondaryActions
-                    @PrimaryAction
-                </div>
-            }
-        </div>
-    }
+        }
+    </div>
 
 </div>
 
@@ -130,6 +150,36 @@
     [Parameter] public RenderFragment? SecondaryActions { get; set; }
 
     private bool _mobileExpanded;
+
+    private string ResolveContextLabel()
+    {
+        if (Breadcrumb is { Count: > 1 })
+        {
+            var contextualItem = Breadcrumb
+                .Skip(1)
+                .FirstOrDefault(item => !string.Equals(item.Label, "Home", StringComparison.OrdinalIgnoreCase) && !item.IsCurrent);
+
+            if (contextualItem is not null)
+            {
+                return contextualItem.Label;
+            }
+        }
+
+        return Title ?? "Operations";
+    }
+
+    private string? ResolveSpotlightLabel()
+    {
+        var currentLabel = Breadcrumb?.LastOrDefault()?.Label ?? Title;
+        if (string.IsNullOrWhiteSpace(currentLabel))
+        {
+            return null;
+        }
+
+        return string.Equals(currentLabel, ResolveContextLabel(), StringComparison.OrdinalIgnoreCase)
+            ? null
+            : currentLabel;
+    }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {

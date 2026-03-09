@@ -25,7 +25,7 @@ Generated from `/Templates` workbook/XSD artifacts vs imported module-definition
 
 - Workbook: `Templates/BDC_Reporting_Templates.xlsx`
 - XSD: `Templates/BDC_Return_Schema_v1.0.xsd`
-- Definition: `FC Engine/src/FC.Engine.Migrator/SeedData/ModuleDefinitions/rg08-bdc-cbn-module-definition.json`
+- Definition: `RegOS™/src/FC.Engine.Migrator/SeedData/ModuleDefinitions/rg08-bdc-cbn-module-definition.json`
 - JSON formulas: 120
 - JSON cross-sheet rules: 3
 - JSON inter-module flows: 4
@@ -42,7 +42,7 @@ Top XSD elements not matched (normalized exact):
 
 - Workbook: `Templates/MFB_Reporting_Templates.xlsx`
 - XSD: `Templates/MFB_Return_Schema_v1.0.xsd`
-- Definition: `FC Engine/src/FC.Engine.Migrator/SeedData/ModuleDefinitions/rg08-mfb-par-module-definition.json`
+- Definition: `RegOS™/src/FC.Engine.Migrator/SeedData/ModuleDefinitions/rg08-mfb-par-module-definition.json`
 - JSON formulas: 150
 - JSON cross-sheet rules: 3
 - JSON inter-module flows: 7
@@ -59,7 +59,7 @@ Top XSD elements not matched (normalized exact):
 
 - Workbook: `Templates/NFIU_Reporting_Templates.xlsx`
 - XSD: `Templates/NFIU_Return_Schema_v1.0.xsd`
-- Definition: `FC Engine/src/FC.Engine.Migrator/SeedData/ModuleDefinitions/rg08-nfiu-aml-module-definition.json`
+- Definition: `RegOS™/src/FC.Engine.Migrator/SeedData/ModuleDefinitions/rg08-nfiu-aml-module-definition.json`
 - JSON formulas: 90
 - JSON cross-sheet rules: 3
 - JSON inter-module flows: 0
@@ -76,7 +76,7 @@ Top XSD elements not matched (normalized exact):
 
 - Workbook: `Templates/DMB_Reporting_Templates.xlsx`
 - XSD: `Templates/DMB_Return_Schema_v1.0.xsd`
-- Definition: `FC Engine/docs/module-definitions/rg09/dmb_basel3.json`
+- Definition: `RegOS™/docs/module-definitions/rg09/dmb_basel3.json`
 - JSON formulas: 265
 - JSON cross-sheet rules: 28
 - JSON inter-module flows: 10
@@ -93,7 +93,7 @@ Top XSD elements not matched (normalized exact):
 
 - Workbook: `Templates/NDIC_Returns_Reporting_Templates.xlsx`
 - XSD: `Templates/NDIC_Return_Schema_v1.0.xsd`
-- Definition: `FC Engine/docs/module-definitions/rg09/ndic_returns.json`
+- Definition: `RegOS™/docs/module-definitions/rg09/ndic_returns.json`
 - JSON formulas: 81
 - JSON cross-sheet rules: 18
 - JSON inter-module flows: 2
@@ -110,7 +110,7 @@ Top XSD elements not matched (normalized exact):
 
 - Workbook: `Templates/PSP_Fintech_Reporting_Templates.xlsx`
 - XSD: `Templates/PSP_Return_Schema_v1.0.xsd`
-- Definition: `FC Engine/docs/module-definitions/rg09/psp_fintech.json`
+- Definition: `RegOS™/docs/module-definitions/rg09/psp_fintech.json`
 - JSON formulas: 69
 - JSON cross-sheet rules: 18
 - JSON inter-module flows: 7
@@ -127,7 +127,7 @@ Top XSD elements not matched (normalized exact):
 
 - Workbook: `Templates/PMB_CBN_FMBN_Reporting_Templates.xlsx`
 - XSD: `Templates/PMB_Return_Schema_v1.0.xsd`
-- Definition: `FC Engine/docs/module-definitions/rg09/pmb_cbn.json`
+- Definition: `RegOS™/docs/module-definitions/rg09/pmb_cbn.json`
 - JSON formulas: 60
 - JSON cross-sheet rules: 16
 - JSON inter-module flows: 6
@@ -144,7 +144,7 @@ Top XSD elements not matched (normalized exact):
 
 - Workbook: `Templates/Insurance_NAICOM_Reporting_Templates.xlsx`
 - XSD: `Templates/Insurance_Return_Schema_v1.0.xsd`
-- Definition: `FC Engine/docs/module-definitions/rg10/insurance_naicom.json`
+- Definition: `RegOS™/docs/module-definitions/rg10/insurance_naicom.json`
 - JSON formulas: 113
 - JSON cross-sheet rules: 19
 - JSON inter-module flows: 3
@@ -161,7 +161,7 @@ Top XSD elements not matched (normalized exact):
 
 - Workbook: `Templates/PFA_PenCom_Reporting_Templates.xlsx`
 - XSD: `Templates/PFA_Return_Schema_v1.0.xsd`
-- Definition: `FC Engine/docs/module-definitions/rg10/pfa_pencom.json`
+- Definition: `RegOS™/docs/module-definitions/rg10/pfa_pencom.json`
 - JSON formulas: 100
 - JSON cross-sheet rules: 19
 - JSON inter-module flows: 3
@@ -178,7 +178,7 @@ Top XSD elements not matched (normalized exact):
 
 - Workbook: `Templates/Capital_Market_SEC_Reporting_Templates.xlsx`
 - XSD: `Templates/SEC_CMO_Return_Schema_v1.0.xsd`
-- Definition: `FC Engine/docs/module-definitions/rg10/cmo_sec.json`
+- Definition: `RegOS™/docs/module-definitions/rg10/cmo_sec.json`
 - JSON formulas: 98
 - JSON cross-sheet rules: 21
 - JSON inter-module flows: 4
@@ -195,7 +195,7 @@ Top XSD elements not matched (normalized exact):
 
 - Workbook: `Templates/DFI_CBN_Reporting_Templates.xlsx`
 - XSD: `Templates/DFI_Return_Schema_v1.0.xsd`
-- Definition: `FC Engine/docs/module-definitions/rg10/dfi_cbn.json`
+- Definition: `RegOS™/docs/module-definitions/rg10/dfi_cbn.json`
 - JSON formulas: 92
 - JSON cross-sheet rules: 19
 - JSON inter-module flows: 5
@@ -212,7 +212,7 @@ Top XSD elements not matched (normalized exact):
 
 - Workbook: `Templates/IMTO_CBN_Reporting_Templates.xlsx`
 - XSD: `Templates/IMTO_Return_Schema_v1.0.xsd`
-- Definition: `FC Engine/docs/module-definitions/rg10/imto_cbn.json`
+- Definition: `RegOS™/docs/module-definitions/rg10/imto_cbn.json`
 - JSON formulas: 91
 - JSON cross-sheet rules: 19
 - JSON inter-module flows: 3

@@ -1,6 +1,6 @@
-# FC Engine
+# RegOS™
 
-A regulatory return collection and validation engine built for financial institutions. FC Engine automates the ingestion, structural validation, formula evaluation, and cross-sheet reconciliation of financial returns submitted in XML format.
+A regulatory return collection and validation engine built for financial institutions. RegOS™ automates the ingestion, structural validation, formula evaluation, and cross-sheet reconciliation of financial returns submitted in XML format.
 
 ## Table of Contents
 
@@ -20,7 +20,7 @@ A regulatory return collection and validation engine built for financial institu
 
 ## Overview
 
-FC Engine manages the full lifecycle of financial/regulatory return templates and submissions:
+RegOS™ manages the full lifecycle of financial/regulatory return templates and submissions:
 
 1. **Template Management** — Define return templates with versioned field schemas, item codes, and structural categories (FixedRow, MultiRow, ItemCoded).
 2. **XML Ingestion** — Accept XML submissions, validate against dynamically generated XSD schemas, and parse data into structured records.
@@ -61,7 +61,7 @@ Dependencies flow inward — Infrastructure and Presentation depend on Domain/Ap
 ## Solution Structure
 
 ```
-FC Engine/
+RegOS™/
 ├── src/
 │   ├── FC.Engine.Domain/              # Core domain entities, enums, abstractions
 │   │   ├── Abstractions/              # Repository & service interfaces
@@ -290,7 +290,7 @@ The Blazor Server admin portal provides:
 1. **Clone the repository**:
    ```bash
    git clone <repository-url>
-   cd "FC Engine"
+   cd "RegOS™"
    ```
 
 2. **Configure environment variables**:
@@ -324,7 +324,7 @@ The Blazor Server admin portal provides:
 
 3. **Run the migrator**:
    ```bash
-   cd "FC Engine"
+   cd "RegOS™"
    dotnet run --project src/FC.Engine.Migrator
    ```
 
@@ -364,7 +364,7 @@ Logging is configured via the `Serilog` section in `appsettings.json`. Default l
 
 ## Database
 
-FC Engine uses SQL Server with two logical schemas:
+RegOS™ uses SQL Server with two logical schemas:
 
 ### Metadata Tables (EF Core)
 
@@ -390,7 +390,7 @@ Physical tables created/altered by the DDL Engine when template versions are pub
 
 ```bash
 # Apply migrations
-cd "FC Engine"
+cd "RegOS™"
 dotnet ef database update --project src/FC.Engine.Infrastructure --startup-project src/FC.Engine.Api
 
 # Add a new migration
@@ -412,7 +412,7 @@ The solution includes three test projects:
 ### Running Tests
 
 ```bash
-cd "FC Engine"
+cd "RegOS™"
 
 # Run all tests
 dotnet test

@@ -1,5 +1,5 @@
 /**
- * FC Engine Chart Module (fcCharts)
+ * RegOS™ Chart Module (fcCharts)
  * Wraps Chart.js with the design-system token palette, custom tooltips,
  * dark-mode awareness, and a clean init/destroy lifecycle for Blazor.
  */

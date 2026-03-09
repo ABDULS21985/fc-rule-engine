@@ -1,4 +1,4 @@
-# FC Engine E2E Test Report
+# RegOS™ E2E Test Report
 
 **Date:** 2026-03-09
 **Environment:** Docker (localhost)
@@ -224,7 +224,7 @@ All 31 authenticated pages and 5 auth/error pages rendered successfully.
 ### HIGH
 
 3. **API Authentication - Tenant Lacks `api_access` Entitlement**
-   - Valid credentials authenticate successfully (200 at validation level) but return 403 because the tenant (`FC Engine Legacy`) doesn't have the `api_access` feature flag enabled
+   - Valid credentials authenticate successfully (200 at validation level) but return 403 because the tenant (`RegOS™ Legacy`) doesn't have the `api_access` feature flag enabled
    - **Recommendation:** Enable `api_access` entitlement for the default/test tenant, or seed it automatically during development setup
 
 4. **`/platform/regulatory-calendar` Contains `InvalidOperationException`**

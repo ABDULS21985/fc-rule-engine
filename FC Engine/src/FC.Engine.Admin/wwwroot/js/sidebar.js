@@ -1,5 +1,5 @@
 /**
- * FC Engine — Intelligent Sidebar Interop
+ * RegOS™ — Intelligent Sidebar Interop
  * Handles: LocalStorage persistence, context menu, tooltips, hover-expand.
  * Respects prefers-reduced-motion where applicable.
  */

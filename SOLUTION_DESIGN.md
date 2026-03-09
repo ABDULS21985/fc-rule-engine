@@ -1,4 +1,4 @@
-# FC Engine — Solution Design Document
+# RegOS™ — Solution Design Document
 
 **Version:** 1.0
 **Last Updated:** March 2026
@@ -33,7 +33,7 @@
 
 ## 1. Executive Summary
 
-FC Engine is a regulatory return collection and validation engine built for financial institutions under the Central Bank of Nigeria (CBN) supervisory framework. It automates the ingestion, structural validation, formula evaluation, and cross-sheet reconciliation of financial returns submitted in XML format.
+RegOS™ is a regulatory return collection and validation engine built for financial institutions under the Central Bank of Nigeria (CBN) supervisory framework. It automates the ingestion, structural validation, formula evaluation, and cross-sheet reconciliation of financial returns submitted in XML format.
 
 The system manages 103+ return templates across four reporting frequencies (Monthly, Quarterly, Semi-Annual, Computed), with each template following a controlled versioning lifecycle. Submitted returns pass through a five-phase validation pipeline that enforces XSD schema compliance, type/range constraints, intra-sheet formulas, cross-sheet reconciliation, and configurable business rules.
 
@@ -62,7 +62,7 @@ The system manages 103+ return templates across four reporting frequencies (Mont
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
-│                        FC Engine System                              │
+│                        RegOS™ System                              │
 │                                                                      │
 │  ┌──────────────┐    ┌──────────────┐    ┌──────────────────────┐   │
 │  │   REST API    │    │ Admin Portal │    │    Migrator CLI       │   │
@@ -170,7 +170,7 @@ FC.Engine.Migrator ───────┤
 ## 4. Solution Structure
 
 ```
-FC Engine/
+RegOS™/
 ├── FCEngine.sln                          # Solution file (9 projects)
 │
 ├── src/
@@ -784,7 +784,7 @@ App.razor (root)
 
 ### 10.1 Dual-Database Strategy
 
-FC Engine employs a dual-ORM strategy with a single SQL Server instance:
+RegOS™ employs a dual-ORM strategy with a single SQL Server instance:
 
 ```
 ┌─────────────────────────────────────────────────┐
@@ -1523,7 +1523,7 @@ DDL execution uses separate connection (outside EF transaction) for DDL compatib
 
 ```bash
 # Apply EF Core migrations
-cd "FC Engine"
+cd "RegOS™"
 dotnet ef database update --project src/FC.Engine.Infrastructure --startup-project src/FC.Engine.Api
 
 # Add a new migration
@@ -1564,18 +1564,18 @@ dotnet run --project src/FC.Engine.Migrator
 
 | File | Description |
 |------|-------------|
-| [FCEngine.sln](FC Engine/FCEngine.sln) | Solution file |
-| [ReturnTemplate.cs](FC Engine/src/FC.Engine.Domain/Metadata/ReturnTemplate.cs) | Core template entity with version management |
-| [TemplateVersion.cs](FC Engine/src/FC.Engine.Domain/Metadata/TemplateVersion.cs) | Version lifecycle (Draft → Review → Published) |
-| [Submission.cs](FC Engine/src/FC.Engine.Domain/Entities/Submission.cs) | Submission entity with status transitions |
-| [ReturnDataRecord.cs](FC Engine/src/FC.Engine.Domain/DataRecord/ReturnDataRecord.cs) | Universal data container |
-| [ReturnCode.cs](FC Engine/src/FC.Engine.Domain/ValueObjects/ReturnCode.cs) | Value object with parsing/transformation |
-| [IngestionOrchestrator.cs](FC Engine/src/FC.Engine.Application/Services/IngestionOrchestrator.cs) | XML submission processing pipeline |
-| [ValidationOrchestrator.cs](FC Engine/src/FC.Engine.Application/Services/ValidationOrchestrator.cs) | Multi-phase validation coordinator |
-| [ExpressionParser.cs](FC Engine/src/FC.Engine.Infrastructure/Validation/ExpressionParser.cs) | Shunting-yard expression evaluator |
-| [DdlEngine.cs](FC Engine/src/FC.Engine.Infrastructure/DynamicSchema/DdlEngine.cs) | DDL script generation |
-| [MetadataDbContext.cs](FC Engine/src/FC.Engine.Infrastructure/Metadata/MetadataDbContext.cs) | EF Core context with 17 DbSets |
-| [DependencyInjection.cs](FC Engine/src/FC.Engine.Infrastructure/DependencyInjection.cs) | Infrastructure service registration |
-| [Program.cs (API)](FC Engine/src/FC.Engine.Api/Program.cs) | API startup configuration |
-| [Program.cs (Admin)](FC Engine/src/FC.Engine.Admin/Program.cs) | Admin portal startup configuration |
-| [Program.cs (Migrator)](FC Engine/src/FC.Engine.Migrator/Program.cs) | Database migration orchestration |
+| [FCEngine.sln](RegOS™/FCEngine.sln) | Solution file |
+| [ReturnTemplate.cs](RegOS™/src/FC.Engine.Domain/Metadata/ReturnTemplate.cs) | Core template entity with version management |
+| [TemplateVersion.cs](RegOS™/src/FC.Engine.Domain/Metadata/TemplateVersion.cs) | Version lifecycle (Draft → Review → Published) |
+| [Submission.cs](RegOS™/src/FC.Engine.Domain/Entities/Submission.cs) | Submission entity with status transitions |
+| [ReturnDataRecord.cs](RegOS™/src/FC.Engine.Domain/DataRecord/ReturnDataRecord.cs) | Universal data container |
+| [ReturnCode.cs](RegOS™/src/FC.Engine.Domain/ValueObjects/ReturnCode.cs) | Value object with parsing/transformation |
+| [IngestionOrchestrator.cs](RegOS™/src/FC.Engine.Application/Services/IngestionOrchestrator.cs) | XML submission processing pipeline |
+| [ValidationOrchestrator.cs](RegOS™/src/FC.Engine.Application/Services/ValidationOrchestrator.cs) | Multi-phase validation coordinator |
+| [ExpressionParser.cs](RegOS™/src/FC.Engine.Infrastructure/Validation/ExpressionParser.cs) | Shunting-yard expression evaluator |
+| [DdlEngine.cs](RegOS™/src/FC.Engine.Infrastructure/DynamicSchema/DdlEngine.cs) | DDL script generation |
+| [MetadataDbContext.cs](RegOS™/src/FC.Engine.Infrastructure/Metadata/MetadataDbContext.cs) | EF Core context with 17 DbSets |
+| [DependencyInjection.cs](RegOS™/src/FC.Engine.Infrastructure/DependencyInjection.cs) | Infrastructure service registration |
+| [Program.cs (API)](RegOS™/src/FC.Engine.Api/Program.cs) | API startup configuration |
+| [Program.cs (Admin)](RegOS™/src/FC.Engine.Admin/Program.cs) | Admin portal startup configuration |
+| [Program.cs (Migrator)](RegOS™/src/FC.Engine.Migrator/Program.cs) | Database migration orchestration |

@@ -1,4 +1,4 @@
-# FC Engine Admin Portal — User Guide
+# RegOS™ Admin Portal — User Guide
 
 **Central Bank of Nigeria (CBN) — DFIS Financial Returns Collection & Analysis System**
 
@@ -66,7 +66,7 @@ After logging in, you will see:
 
 ## 2. Dashboard Overview
 
-The Dashboard is the first page you see after logging in. It provides a summary of your FC Engine system.
+The Dashboard is the first page you see after logging in. It provides a summary of your RegOS™ system.
 
 ### 2.1 Statistics Cards
 
@@ -899,4 +899,4 @@ This workflow walks through creating a completely new return template from scrat
 
 ---
 
-*FC Engine Admin Portal v1.0 — Central Bank of Nigeria, DFIS Department*
+*RegOS™ Admin Portal v1.0 — Central Bank of Nigeria, DFIS Department*

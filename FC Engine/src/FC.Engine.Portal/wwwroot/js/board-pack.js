@@ -1,4 +1,4 @@
-// FC Engine Portal — Board Pack Generator JS interop
+// RegOS™ Portal — Board Pack Generator JS interop
 (function () {
     'use strict';
 

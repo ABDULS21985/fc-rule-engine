@@ -1,6 +1,6 @@
-# Comprehensive Fix Prompt — FC Engine E2E Test Failures
+# Comprehensive Fix Prompt — RegOS™ E2E Test Failures
 
-You are a senior .NET / Blazor engineer. Your job is to fix **all 6 issues** discovered during end-to-end testing of the FC Engine platform. Each fix includes the exact file path, the current broken code, and the precise change required. Apply every fix, verify no regressions, and rebuild the Docker containers.
+You are a senior .NET / Blazor engineer. Your job is to fix **all 6 issues** discovered during end-to-end testing of the RegOS™ platform. Each fix includes the exact file path, the current broken code, and the precise change required. Apply every fix, verify no regressions, and rebuild the Docker containers.
 
 ---
 
@@ -12,7 +12,7 @@ You are a senior .NET / Blazor engineer. Your job is to fix **all 6 issues** dis
 | Admin Portal | http://localhost:5001 | Blazor Server (.NET 8) |
 | Institution Portal | http://localhost:5300 | Blazor Server (.NET 8) |
 | SQL Server | localhost:1433 | MSSQL 2022 |
-| Docker Compose | `FC Engine/docker/docker-compose.yml` | |
+| Docker Compose | `RegOS™/docker/docker-compose.yml` | |
 
 ---
 
@@ -22,7 +22,7 @@ You are a senior .NET / Blazor engineer. Your job is to fix **all 6 issues** dis
 The Institution Portal explicitly disables Blazor prerendering (`prerender: false`), causing the browser to receive an empty `<body>` with only `<script>` tags. No HTML content appears until the WebSocket circuit connects. If the circuit is slow or fails, users see a blank white page. The Admin Portal does NOT have this problem because it uses the default `RenderMode.InteractiveServer` (prerender: true).
 
 ### File to Edit
-`FC Engine/src/FC.Engine.Portal/Components/App.razor`
+`RegOS™/src/FC.Engine.Portal/Components/App.razor`
 
 ### Current Code (lines 17 and 20)
 ```razor
@@ -40,7 +40,7 @@ The Institution Portal explicitly disables Blazor prerendering (`prerender: fals
 <Routes @rendermode="RenderMode.InteractiveServer" />
 ```
 
-This matches the Admin Portal's `App.razor` at `FC Engine/src/FC.Engine.Admin/Components/App.razor` lines 17 and 20, which already uses `RenderMode.InteractiveServer` (prerender defaults to `true`).
+This matches the Admin Portal's `App.razor` at `RegOS™/src/FC.Engine.Admin/Components/App.razor` lines 17 and 20, which already uses `RenderMode.InteractiveServer` (prerender defaults to `true`).
 
 ### Verification
 After the change, `curl http://localhost:5300/login` should return HTML with visible `<input>` and `<button>` elements in the response body, not just empty Blazor component markers and `<script>` tags.
@@ -62,7 +62,7 @@ The portal Docker container crashes after ~9–15 Playwright page navigations. D
 
 ### Part A: Docker Compose Resource Limits and Restart Policy
 
-**File:** `FC Engine/docker/docker-compose.yml`
+**File:** `RegOS™/docker/docker-compose.yml`
 
 **Current portal service definition (lines ~86–104):**
 ```yaml
@@ -105,7 +105,7 @@ Also add `restart: unless-stopped` to the `admin` and `api` services for consist
 
 ### Part B: Configure Blazor Circuit Options
 
-**File:** `FC Engine/src/FC.Engine.Portal/Program.cs`
+**File:** `RegOS™/src/FC.Engine.Portal/Program.cs`
 
 After the line (approximately line 122):
 ```csharp
@@ -129,11 +129,11 @@ This limits the number of zombie circuits retained in memory and reduces the ret
 ### Part C: Add Circuit Disconnect Monitoring (Port from Admin)
 
 The Admin Portal has circuit disconnect handling in:
-- `FC Engine/src/FC.Engine.Admin/Components/Shared/SessionExpiredModal.razor` (line 151+)
-- `FC Engine/src/FC.Engine.Admin/wwwroot/js/session.js` (lines 143–191)
+- `RegOS™/src/FC.Engine.Admin/Components/Shared/SessionExpiredModal.razor` (line 151+)
+- `RegOS™/src/FC.Engine.Admin/wwwroot/js/session.js` (lines 143–191)
 
 Port equivalent circuit reconnection logic to the Portal:
-1. Create `FC Engine/src/FC.Engine.Portal/Components/Shared/CircuitHandler.razor` (or add to existing layout) that monitors the Blazor circuit state
+1. Create `RegOS™/src/FC.Engine.Portal/Components/Shared/CircuitHandler.razor` (or add to existing layout) that monitors the Blazor circuit state
 2. Add a reconnection UI overlay so users see "Reconnecting..." instead of a frozen page
 3. Use the `Blazor.reconnect` API in the portal's JS to handle `components-reconnect-modal` gracefully
 
@@ -155,7 +155,7 @@ Blazor.addEventListener('enhancedload', () => {
 
 ### Part D: Add GC Tuning to Portal Dockerfile
 
-**File:** `FC Engine/docker/Dockerfile.portal`
+**File:** `RegOS™/docker/Dockerfile.portal`
 
 In the final stage `ENTRYPOINT` or via an `ENV` instruction, add:
 ```dockerfile
@@ -173,7 +173,7 @@ This tells the .NET GC to be more aggressive about collecting memory (conserve l
 The `ApiKeyMiddleware` skip list is correct for the current routes, but it's missing the `/error` endpoint and lacks documentation about the required `/api/v1/` prefix.
 
 ### File to Edit
-`FC Engine/src/FC.Engine.Api/Middleware/ApiKeyMiddleware.cs`
+`RegOS™/src/FC.Engine.Api/Middleware/ApiKeyMiddleware.cs`
 
 ### Current Code (lines 30–36)
 ```csharp
@@ -199,7 +199,7 @@ if (path.Equals("/health", StringComparison.OrdinalIgnoreCase) ||
 ```
 
 ### Additional: Add OpenAPI/Swagger Documentation
-In `FC Engine/src/FC.Engine.Api/Endpoints/AuthEndpoints.cs`, add XML summary comments to the login endpoint so Swagger documents that the base URL is `/api/v1/auth/login`:
+In `RegOS™/src/FC.Engine.Api/Endpoints/AuthEndpoints.cs`, add XML summary comments to the login endpoint so Swagger documents that the base URL is `/api/v1/auth/login`:
 ```csharp
 group.MapPost("/login", async (...) => { ... })
     .AllowAnonymous()
@@ -217,7 +217,7 @@ The `EntitlementService.HasFeatureAccess()` method checks whether the tenant's f
 The API login endpoint at `AuthEndpoints.cs:32` calls `entitlementService.HasFeatureAccess(user.TenantId, "api_access", ct)` which returns `false`, causing a **403 Forbidden** even though credentials are valid.
 
 ### File to Edit
-`FC Engine/src/FC.Engine.Infrastructure/Services/EntitlementService.cs`
+`RegOS™/src/FC.Engine.Infrastructure/Services/EntitlementService.cs`
 
 ### Current Code (lines 145–149)
 ```csharp
@@ -252,7 +252,7 @@ After fixing, `POST /api/v1/auth/login` with `{"email":"admin@fc001.com","passwo
 The `/platform/regulatory-calendar` page throws a JS interop `InvalidOperationException` when the "Download Template" button is clicked (and the exception leaks into the pre-rendered HTML). The code calls `JS.InvokeVoidAsync("downloadFile", ...)` but no global `downloadFile` function exists. The only download function is `window.dataTable.downloadFile` in `data-table.js`, and it expects base64-encoded content, not raw text.
 
 ### File to Edit
-`FC Engine/src/FC.Engine.Admin/Components/Pages/Platform/RegulatoryCalendarImport.razor`
+`RegOS™/src/FC.Engine.Admin/Components/Pages/Platform/RegulatoryCalendarImport.razor`
 
 ### Current Code (lines 289–293)
 ```csharp
@@ -279,7 +279,7 @@ Changes:
 3. Encoding: raw CSV string → Base64-encoded string (match what `dataTable.downloadFile` expects)
 
 ### Also Check
-Look at the `dataTable.downloadFile` implementation in `FC Engine/src/FC.Engine.Admin/wwwroot/js/data-table.js` line 167 to confirm the exact function signature. It should be:
+Look at the `dataTable.downloadFile` implementation in `RegOS™/src/FC.Engine.Admin/wwwroot/js/data-table.js` line 167 to confirm the exact function signature. It should be:
 ```javascript
 downloadFile: function(fileName, contentType, base64Content) { ... }
 ```
@@ -294,15 +294,15 @@ If the signature differs, adjust the Razor call accordingly.
 Both the Admin and Portal load Google Fonts (Inter and Plus Jakarta Sans) from `fonts.googleapis.com`. In Docker containers without internet access, or during E2E tests in network-restricted environments, this causes rendering timeouts and screenshot failures.
 
 ### Files to Edit
-- `FC Engine/src/FC.Engine.Admin/Components/App.razor` (lines 13–16)
-- `FC Engine/src/FC.Engine.Portal/Components/App.razor` (lines 13–16)
+- `RegOS™/src/FC.Engine.Admin/Components/App.razor` (lines 13–16)
+- `RegOS™/src/FC.Engine.Portal/Components/App.razor` (lines 13–16)
 
 ### Steps
 
 **Step 1:** Download the font files. Create directories:
 ```
-FC Engine/src/FC.Engine.Admin/wwwroot/fonts/
-FC Engine/src/FC.Engine.Portal/wwwroot/fonts/
+RegOS™/src/FC.Engine.Admin/wwwroot/fonts/
+RegOS™/src/FC.Engine.Portal/wwwroot/fonts/
 ```
 
 Download Inter (wght 400, 500, 600, 700) and Plus Jakarta Sans (wght 400, 500, 600, 700) as `.woff2` files from Google Fonts.
@@ -405,7 +405,7 @@ After applying all 6 fixes:
 
 ### 1. Rebuild Docker Containers
 ```bash
-cd "FC Engine/docker"
+cd "RegOS™/docker"
 docker compose build portal admin api
 docker compose up -d
 ```
@@ -475,16 +475,16 @@ npx playwright test
 
 | # | File | Change |
 |---|------|--------|
-| 1 | `FC Engine/src/FC.Engine.Portal/Components/App.razor` | `prerender: false` → `RenderMode.InteractiveServer` |
-| 2a | `FC Engine/docker/docker-compose.yml` | Add `restart: unless-stopped` + resource limits to portal |
-| 2b | `FC Engine/src/FC.Engine.Portal/Program.cs` | Add `CircuitOptions` configuration |
-| 2c | `FC Engine/docker/Dockerfile.portal` | Add GC tuning env vars |
-| 3 | `FC Engine/src/FC.Engine.Api/Middleware/ApiKeyMiddleware.cs` | Add `/error` to skip list |
-| 4 | `FC Engine/src/FC.Engine.Infrastructure/Services/EntitlementService.cs` | Add `all_features` wildcard to `HasFeatureAccess()` |
-| 5 | `FC Engine/src/FC.Engine.Admin/Components/Pages/Platform/RegulatoryCalendarImport.razor` | Fix JS interop: function name, arg order, base64 encoding |
-| 6a | `FC Engine/src/FC.Engine.Admin/Components/App.razor` | Replace Google Fonts CDN with local `css/fonts.css` |
-| 6b | `FC Engine/src/FC.Engine.Portal/Components/App.razor` | Same as 6a |
-| 6c | `FC Engine/src/FC.Engine.Admin/wwwroot/css/fonts.css` | New file — `@font-face` declarations |
-| 6d | `FC Engine/src/FC.Engine.Portal/wwwroot/css/fonts.css` | New file — same as 6c |
-| 6e | `FC Engine/src/FC.Engine.Admin/wwwroot/fonts/*.woff2` | New files — font binaries |
-| 6f | `FC Engine/src/FC.Engine.Portal/wwwroot/fonts/*.woff2` | New files — font binaries |
+| 1 | `RegOS™/src/FC.Engine.Portal/Components/App.razor` | `prerender: false` → `RenderMode.InteractiveServer` |
+| 2a | `RegOS™/docker/docker-compose.yml` | Add `restart: unless-stopped` + resource limits to portal |
+| 2b | `RegOS™/src/FC.Engine.Portal/Program.cs` | Add `CircuitOptions` configuration |
+| 2c | `RegOS™/docker/Dockerfile.portal` | Add GC tuning env vars |
+| 3 | `RegOS™/src/FC.Engine.Api/Middleware/ApiKeyMiddleware.cs` | Add `/error` to skip list |
+| 4 | `RegOS™/src/FC.Engine.Infrastructure/Services/EntitlementService.cs` | Add `all_features` wildcard to `HasFeatureAccess()` |
+| 5 | `RegOS™/src/FC.Engine.Admin/Components/Pages/Platform/RegulatoryCalendarImport.razor` | Fix JS interop: function name, arg order, base64 encoding |
+| 6a | `RegOS™/src/FC.Engine.Admin/Components/App.razor` | Replace Google Fonts CDN with local `css/fonts.css` |
+| 6b | `RegOS™/src/FC.Engine.Portal/Components/App.razor` | Same as 6a |
+| 6c | `RegOS™/src/FC.Engine.Admin/wwwroot/css/fonts.css` | New file — `@font-face` declarations |
+| 6d | `RegOS™/src/FC.Engine.Portal/wwwroot/css/fonts.css` | New file — same as 6c |
+| 6e | `RegOS™/src/FC.Engine.Admin/wwwroot/fonts/*.woff2` | New files — font binaries |
+| 6f | `RegOS™/src/FC.Engine.Portal/wwwroot/fonts/*.woff2` | New files — font binaries |

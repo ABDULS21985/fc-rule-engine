@@ -3,6 +3,9 @@
 @using FC.Engine.Domain.Abstractions
 @using FC.Engine.Domain.ValueObjects
 @using FC.Engine.Infrastructure.Metadata
+@using FC.Engine.Admin.Components.Layout
+@using FC.Engine.Admin.Components.Shared
+@using Microsoft.AspNetCore.Components.Authorization
 @using Microsoft.EntityFrameworkCore
 @inject NavigationManager Navigation
 @inject ITenantBrandingService BrandingService
@@ -35,10 +38,13 @@
     <!-- Sidebar -->
     <aside id="fc-sidebar-nav" class="fc-shell__sidebar" aria-label="Main navigation" @onkeydown="HandleSidebarKeyDown">
         <div class="fc-sidebar__brand">
-            <img src="@_branding.LogoSmallUrl" alt="@_branding.CompanyName" class="fc-sidebar__logo fc-img-lazyload" loading="lazy" width="40" height="33" />
+            <div class="fc-sidebar__logo-mark">
+                <img src="@_branding.LogoSmallUrl" alt="@_branding.CompanyName" class="fc-sidebar__logo fc-img-lazyload" loading="lazy" width="40" height="33" />
+            </div>
             <div class="fc-sidebar__brand-text">
                 <span class="fc-sidebar-brand-name">@_branding.CompanyName</span>
                 <span class="fc-sidebar-brand-sub">Admin Portal</span>
+                <span class="fc-sidebar__brand-chip">Control Plane</span>
             </div>
             <button class="fc-sidebar__collapse-btn"
                     @onclick="ToggleSidebarCollapse"
@@ -121,59 +127,68 @@
                         }
                     </svg>
                 </button>
-                <nav class="fc-topbar__breadcrumb" aria-label="Breadcrumb">
-                    <ol>
-                        <li><a href="/">Home</a></li>
-                        @if (_currentPageName != "Dashboard")
-                        {
-                            <li aria-current="page">@_currentPageName</li>
-                        }
-                    </ol>
-                </nav>
+                <div class="fc-topbar__context">
+                    <span class="fc-topbar__kicker">Platform command center</span>
+                    <nav class="fc-topbar__breadcrumb" aria-label="Breadcrumb">
+                        <ol>
+                            <li><a href="/">Home</a></li>
+                            @if (_currentPageName != "Dashboard")
+                            {
+                                <li aria-current="page">@_currentPageName</li>
+                            }
+                        </ol>
+                    </nav>
+                </div>
             </div>
 
             <div class="fc-topbar__right">
-                <div class="fc-palette-hint-wrap">
-                    <button id="fc-topbar-search" class="fc-topbar__search-trigger" @onclick="OpenCommandPalette" aria-label="Open command palette (Cmd+K)">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16" aria-hidden="true">
-                            <circle cx="11" cy="11" r="8"/>
-                            <line x1="21" y1="21" x2="16.65" y2="16.65"/>
-                        </svg>
-                        <span>Search...</span>
-                        <kbd class="cmd-palette-kbd">&#8984;K</kbd>
-                    </button>
-                    @if (_showPaletteHint)
-                    {
-                        <div class="fc-palette-hint" role="tooltip" aria-live="polite">
-                            Pro tip: Press <kbd>⌘K</kbd>
-                        </div>
-                    }
+                <div class="fc-topbar__status" aria-hidden="true">
+                    <span class="fc-topbar__status-dot"></span>
+                    <span>Operationally live</span>
                 </div>
-                <!-- Session timer indicator — PlatformAdmin only -->
-                <AuthorizeView Roles="PlatformAdmin">
-                    @if (SessionSvc.RemainingSec >= 0)
-                    {
-                        <div class="fc-session-indicator @(SessionSvc.IsWarningActive ? "fc-session-indicator--warning" : "")"
-                             title="Session time remaining"
-                             aria-label="Session time remaining: @SessionSvc.RemainingDisplay">
-                            <span class="fc-session-indicator__dot" aria-hidden="true"></span>
-                            Session: @SessionSvc.RemainingDisplay
-                        </div>
-                    }
-                </AuthorizeView>
+                <div class="fc-topbar__actions">
+                    <div class="fc-palette-hint-wrap">
+                        <button id="fc-topbar-search" class="fc-topbar__search-trigger" @onclick="OpenCommandPalette" aria-label="Open command palette (Cmd+K)">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16" aria-hidden="true">
+                                <circle cx="11" cy="11" r="8"/>
+                                <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                            </svg>
+                            <span>Search...</span>
+                            <kbd class="cmd-palette-kbd">&#8984;K</kbd>
+                        </button>
+                        @if (_showPaletteHint)
+                        {
+                            <div class="fc-palette-hint" role="tooltip" aria-live="polite">
+                                Pro tip: Press <kbd>⌘K</kbd>
+                            </div>
+                        }
+                    </div>
+                    <!-- Session timer indicator — PlatformAdmin only -->
+                    <AuthorizeView Roles="PlatformAdmin">
+                        @if (SessionSvc.RemainingSec >= 0)
+                        {
+                            <div class="fc-session-indicator @(SessionSvc.IsWarningActive ? "fc-session-indicator--warning" : "")"
+                                 title="Session time remaining"
+                                 aria-label="Session time remaining: @SessionSvc.RemainingDisplay">
+                                <span class="fc-session-indicator__dot" aria-hidden="true"></span>
+                                Session: @SessionSvc.RemainingDisplay
+                            </div>
+                        }
+                    </AuthorizeView>
 
-                <button class="fc-topbar__notification" aria-label="Notifications">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="18" height="18" aria-hidden="true">
-                        <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/>
-                        <path d="M13.73 21a2 2 0 01-3.46 0"/>
-                    </svg>
-                </button>
-                <button class="fc-topbar__help"
-                        @onclick="() => HelpSvc.TogglePanel(new Uri(Navigation.Uri).AbsolutePath)"
-                        aria-label="Open help panel"
-                        title="Help (Shift+/)">
-                    ?
-                </button>
+                    <button class="fc-topbar__notification" aria-label="Notifications">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="18" height="18" aria-hidden="true">
+                            <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+                            <path d="M13.73 21a2 2 0 01-3.46 0"/>
+                        </svg>
+                    </button>
+                    <button class="fc-topbar__help"
+                            @onclick="() => HelpSvc.TogglePanel(new Uri(Navigation.Uri).AbsolutePath)"
+                            aria-label="Open help panel"
+                            title="Help (Shift+/)">
+                        ?
+                    </button>
+                </div>
             </div>
         </header>
 
@@ -196,7 +211,9 @@
                 <span class="print-letterhead-accent"></span>
             </div>
 
-            @Body
+            <div class="fc-shell__content-frame">
+                @Body
+            </div>
 
             <!-- Print footer (visible only in print) -->
             <div class="print-footer" aria-hidden="true">

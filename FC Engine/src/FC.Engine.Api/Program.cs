@@ -159,7 +159,7 @@ builder.Services.AddHttpContextAccessor();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
 {
-    options.SwaggerDoc("v1", new() { Title = "FC Engine API", Version = "v1" });
+    options.SwaggerDoc("v1", new() { Title = "RegOS™ API", Version = "v1" });
     options.AddSecurityDefinition("ApiKey", new OpenApiSecurityScheme
     {
         In = ParameterLocation.Header,

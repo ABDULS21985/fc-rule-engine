@@ -1,4 +1,4 @@
-// FC Engine Portal — JS interop functions
+// RegOS™ Portal — JS interop functions
 
 // ── Scroll to first matching element ──────────────────────────────────────────
 window.portalScrollToElement = function (selector) {
