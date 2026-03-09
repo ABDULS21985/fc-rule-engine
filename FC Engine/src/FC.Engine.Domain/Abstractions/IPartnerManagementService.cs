@@ -51,7 +51,7 @@ public class PartnerOnboardingRequest
     public string AdminEmail { get; set; } = string.Empty;
     public string AdminFullName { get; set; } = string.Empty;
 
-    public PartnerTier PartnerTier { get; set; } = PartnerTier.Silver;
+    public Enums.PartnerTier PartnerTier { get; set; } = Enums.PartnerTier.Silver;
     public PartnerBillingModel BillingModel { get; set; } = PartnerBillingModel.Direct;
     public decimal? CommissionRate { get; set; }
     public decimal? WholesaleDiscount { get; set; }
@@ -97,7 +97,7 @@ public class PartnerSubTenantSummary
 
 public class UpdatePartnerConfigRequest
 {
-    public PartnerTier PartnerTier { get; set; }
+    public Enums.PartnerTier PartnerTier { get; set; }
     public PartnerBillingModel BillingModel { get; set; }
     public decimal? CommissionRate { get; set; }
     public decimal? WholesaleDiscount { get; set; }

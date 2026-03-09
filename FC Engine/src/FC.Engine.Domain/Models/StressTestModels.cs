@@ -151,3 +151,135 @@ public class StressTestReport
     public DateTime GeneratedAt { get; set; } = DateTime.UtcNow;
     public string RegulatorCode { get; set; } = string.Empty;
 }
+
+// ── RG-37 Full Implementation: Enums ─────────────────────────────────────────
+
+public enum ScenarioCategory  { NgfsClimate, Macro, Custom }
+public enum ScenarioSeverity  { Mild, Moderate, Severe, Extreme }
+public enum StressTestRunStatus { Running, Completed, Failed }
+public enum FailureCause { DirectShock, Interbank, DepositFlight }
+public enum PhysicalHazard { None, Flood, Drought, HeatStress, FloodDrought }
+
+// ── RG-37 Full Implementation: Records ───────────────────────────────────────
+
+public sealed record EntityShockResult(
+    int    InstitutionId,
+    string InstitutionType,
+    // Pre-stress
+    decimal PreCAR,
+    decimal PreNPL,
+    decimal PreLCR,
+    decimal PreNSFR,
+    decimal PreROA,
+    decimal PreTotalAssets,
+    decimal PreTotalDeposits,
+    // Post-stress
+    decimal PostCAR,
+    decimal PostNPL,
+    decimal PostLCR,
+    decimal PostNSFR,
+    decimal PostROA,
+    decimal PostCapitalShortfall,
+    decimal AdditionalProvisions,
+    // Flags
+    bool   BreachesCAR,
+    bool   BreachesLCR,
+    bool   BreachesNSFR,
+    bool   IsInsolvent,
+    // NDIC
+    decimal InsurableDeposits,
+    decimal UninsurableDeposits,
+    // Contagion (mutable via `with`)
+    bool    IsContagionVictim  = false,
+    int?    ContagionRound     = null,
+    string? FailureCauseCode   = null
+);
+
+public sealed record ResolvedShockParameters(
+    int    ScenarioId,
+    string InstitutionType,
+    decimal GDPGrowthShock,
+    decimal OilPriceShockPct,
+    decimal FXDepreciationPct,
+    decimal InflationShockPp,
+    int    InterestRateShockBps,
+    // NGFS
+    decimal CarbonTaxUSDPerTon,
+    decimal StrandedAssetsPct,
+    string? PhysicalRiskHazardCode,
+    // Transmission coefficients
+    decimal CARDeltaPerGDPPp,
+    decimal NPLDeltaPerGDPPp,
+    decimal LCRDeltaPerRateHike100,
+    decimal CARDeltaPerFXPct,
+    decimal NPLDeltaPerFXPct,
+    decimal CARDeltaPerOilPct,
+    decimal NPLDeltaPerOilPct,
+    decimal LCRDeltaPerCyber,
+    decimal DepositOutflowPctCyber
+);
+
+public sealed record SectorStressAggregate(
+    string InstitutionType,
+    int    EntityCount,
+    decimal PreAvgCAR,
+    decimal PreAvgNPL,
+    decimal PreAvgLCR,
+    decimal PostAvgCAR,
+    decimal PostAvgNPL,
+    decimal PostAvgLCR,
+    int    EntitiesBreachingCAR,
+    int    EntitiesBreachingLCR,
+    int    EntitiesInsolvent,
+    int    EntitiesContagionVictims,
+    decimal TotalCapitalShortfall,
+    decimal TotalAdditionalProvisions,
+    decimal TotalInsurableDepositsAtRisk,
+    decimal TotalUninsurableDepositsAtRisk
+);
+
+public sealed record StressTestRunSummary(
+    long   RunId,
+    Guid   RunGuid,
+    string ScenarioCode,
+    string ScenarioName,
+    string PeriodCode,
+    string TimeHorizon,
+    int    EntitiesShocked,
+    int    ContagionRounds,
+    double SystemicResilienceScore,
+    string ResilienceRating,
+    IReadOnlyList<SectorStressAggregate> BySector,
+    decimal TotalCapitalShortfallNgn,
+    decimal TotalNDICExposureAtRisk,
+    TimeSpan Duration,
+    string? ExecutiveSummary = null
+);
+
+public sealed record ContagionEvent(
+    int  ContagionRound,
+    int  FailingInstitutionId,
+    int  AffectedInstitutionId,
+    decimal ExposureAmount,
+    string ExposureType,
+    string TransmissionType
+);
+
+public sealed record PrudentialMetricSnapshot(
+    int     InstitutionId,
+    string  InstitutionType,
+    string  RegulatorCode,
+    string  PeriodCode,
+    decimal CAR,
+    decimal NPL,
+    decimal LCR,
+    decimal NSFR,
+    decimal ROA,
+    decimal TotalAssets,
+    decimal TotalDeposits,
+    decimal OilSectorExposurePct,
+    decimal AgriExposurePct,
+    decimal FXLoansAssetPct,
+    decimal BondPortfolioAssetPct,
+    decimal TopDepositorConcentration
+);

@@ -1,6 +1,7 @@
-using FC.Engine.Domain.Abstractions;
 using FC.Engine.Application.Services;
+using FC.Engine.Domain.Abstractions;
 using FC.Engine.Infrastructure.Audit;
+using FC.Engine.Infrastructure;
 using FC.Engine.Infrastructure.Auth;
 using FC.Engine.Infrastructure.BackgroundJobs;
 using FC.Engine.Infrastructure.Caching;
@@ -220,6 +221,12 @@ public static class DependencyInjection
         services.AddScoped<IStressTestService, StressTestService>();
         services.AddScoped<IExaminationWorkspaceService, ExaminationWorkspaceService>();
 
+        // ── Early Warning & Systemic Risk Engine (RG-36) ──
+        services.AddEarlyWarningEngine(configuration);
+
+        // ── Sector-Wide Stress Testing Framework (RG-37) ──
+        services.AddStressTestingFramework(configuration);
+
         // ── Compliance Health Scoring (RG-32) ──
         services.AddScoped<IComplianceHealthService, ComplianceHealthService>();
         services.AddHostedService<ChsComputationJob>();
@@ -350,7 +357,7 @@ public static class DependencyInjection
         services.AddScoped<ISubmissionSigningService, BatchSubmissionSigningService>();
         services.AddScoped<ISubmissionEventPublisher, MassTransitSubmissionEventPublisher>();
         services.AddScoped<ISubmissionBatchAuditLogger, SubmissionBatchAuditLogger>();
-        services.AddScoped<ISubmissionOrchestrator, FC.Engine.Application.Services.SubmissionOrchestrator>();
+        services.AddScoped<ISubmissionOrchestrator, SubmissionOrchestrator>();
         services.AddScoped<IRegulatorQueryService, RegulatorQueryService>();
 
         // Channel adapters (Polly v8 resilience built into base class)
@@ -414,15 +421,7 @@ public static class DependencyInjection
         services.AddHostedService<BatchQuerySyncJob>();
 
         // ── Compliance-as-a-Service (RG-35) ──
-        services.AddScoped<ICaaSService, CaaSService>();
-        services.AddScoped<ICoreBankingAdapter, FC.Engine.Infrastructure.Services.CoreBanking.FinacleAdapter>();
-        services.AddScoped<ICoreBankingAdapter, FC.Engine.Infrastructure.Services.CoreBanking.T24Adapter>();
-        services.AddScoped<ICoreBankingAdapter, FC.Engine.Infrastructure.Services.CoreBanking.BankOneAdapter>();
-        services.AddScoped<ICoreBankingAdapter, FC.Engine.Infrastructure.Services.CoreBanking.FlexcubeAdapter>();
-        services.AddHostedService<AutoFilingJob>();
-        services.AddHttpClient("FinacleClient", client => client.Timeout = TimeSpan.FromSeconds(30));
-        services.AddHttpClient("T24Client", client => client.Timeout = TimeSpan.FromSeconds(30));
-        services.AddHttpClient("FlexcubeClient", client => client.Timeout = TimeSpan.FromSeconds(30));
+        services.AddCaaSEngine(configuration);
 
         return services;
     }

@@ -258,3 +258,235 @@ a { color: inherit; }
 @media (max-width: 980px) {
     .rg-chs-kpi-grid { grid-template-columns: repeat(2, 1fr); }
 }
+
+/* ── Supervisor Heatmap (RG-36) ── */
+
+.rg-page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 1rem;
+    padding-bottom: 0.75rem;
+}
+
+.rg-border-bottom { border-bottom: 1px solid var(--rg-border); }
+
+.rg-page { padding: 0; }
+
+.rg-header-controls {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+}
+
+.rg-select {
+    border: 1px solid var(--rg-border);
+    border-radius: 8px;
+    padding: 0.45rem 0.55rem;
+    background: #fff;
+    color: var(--rg-text);
+    font-size: 0.875rem;
+}
+
+.rg-section-heading {
+    font-size: 1rem;
+    font-weight: 600;
+    margin: 1.25rem 0 0.5rem;
+    color: var(--rg-text);
+}
+
+.rg-text-right { text-align: right; }
+
+.rg-alert {
+    border-radius: 8px;
+    padding: 0.75rem 1rem;
+    margin-bottom: 0.75rem;
+    font-size: 0.9rem;
+}
+
+.rg-alert-danger   { background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; }
+.rg-alert-critical { background: #fef2f2; color: #7f1d1d; border: 1px solid #f87171; }
+
+.rg-spinner-center { display: flex; justify-content: center; padding: 3rem; }
+.rg-spinner {
+    width: 2rem; height: 2rem;
+    border: 3px solid var(--rg-border);
+    border-top-color: var(--rg-primary);
+    border-radius: 50%;
+    animation: rg-spin 0.7s linear infinite;
+}
+@keyframes rg-spin { to { transform: rotate(360deg); } }
+
+/* 4-col grid */
+.rg-grid-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+
+/* Risk band summary row */
+.rg-risk-summary-row {
+    display: flex;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+    flex-wrap: wrap;
+}
+
+.rg-risk-card {
+    flex: 1 1 100px;
+    border-radius: 10px;
+    padding: 0.75rem 1rem;
+    text-align: center;
+    border: 1px solid transparent;
+}
+
+.rg-risk-card-green    { background: #f0fdf4; border-color: #86efac; }
+.rg-risk-card-amber    { background: #fffbeb; border-color: #fcd34d; }
+.rg-risk-card-red      { background: #fff1f2; border-color: #fca5a5; }
+.rg-risk-card-critical { background: #fef2f2; border-color: #f87171; }
+
+.rg-risk-card-count { display: block; font-size: 1.5rem; font-weight: 700; }
+.rg-risk-card-label { display: block; font-size: 0.75rem; color: var(--rg-muted); text-transform: uppercase; letter-spacing: .04em; }
+
+/* Heatmap bubble grid */
+.rg-heatmap-container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    align-items: flex-end;
+    padding: 1rem 0;
+}
+
+.rg-heatmap-cell {
+    position: relative;
+    border-radius: 8px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: transform 0.15s, box-shadow 0.15s;
+    overflow: hidden;
+    border: 1px solid transparent;
+}
+
+.rg-heatmap-cell:hover { transform: scale(1.06); box-shadow: 0 4px 12px rgba(0,0,0,.12); }
+
+.rg-band-green    { background: #dcfce7; border-color: #86efac; color: #166534; }
+.rg-band-amber    { background: #fef3c7; border-color: #fcd34d; color: #92400e; }
+.rg-band-red      { background: #fee2e2; border-color: #fca5a5; color: #991b1b; }
+.rg-band-critical { background: #fef2f2; border-color: #f87171; color: #7f1d1d; }
+
+/* Pulse border for critical EWI cells */
+.rg-has-critical { animation: rg-pulse-border 1.5s ease-in-out infinite; }
+@keyframes rg-pulse-border {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(220,38,38,.4); }
+    50%       { box-shadow: 0 0 0 4px rgba(220,38,38,.1); }
+}
+
+.rg-cell-abbr  { font-size: 0.68rem; font-weight: 700; line-height: 1.1; text-align: center; }
+.rg-cell-score { font-size: 0.72rem; font-weight: 600; }
+
+.rg-cell-ewi-badge {
+    position: absolute;
+    top: 2px; right: 3px;
+    background: #dc2626;
+    color: #fff;
+    border-radius: 999px;
+    font-size: 0.6rem;
+    font-weight: 700;
+    min-width: 1rem;
+    height: 1rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 0.2rem;
+}
+
+/* Heatmap legend */
+.rg-heatmap-legend {
+    display: flex;
+    gap: 1rem;
+    flex-wrap: wrap;
+    font-size: 0.78rem;
+    margin-top: 0.75rem;
+    color: var(--rg-muted);
+}
+
+.rg-legend-item { display: flex; align-items: center; gap: 0.35rem; }
+.rg-legend-dot  { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+
+/* CAMELS grid (institution drill-down) */
+.rg-camels-grid {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 0.5rem;
+    margin: 1rem 0;
+}
+
+.rg-camels-cell {
+    border-radius: 8px;
+    padding: 0.75rem;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+}
+
+.rg-camels-letter { font-size: 1.2rem; font-weight: 700; }
+.rg-camels-score  { font-size: 1rem; font-weight: 600; }
+.rg-camels-label  { font-size: 0.68rem; color: var(--rg-muted); }
+
+.rg-score-strong        { background: #dcfce7; color: #166534; }
+.rg-score-satisfactory  { background: #d1fae5; color: #065f46; }
+.rg-score-fair          { background: #fef3c7; color: #92400e; }
+.rg-score-marginal      { background: #fee2e2; color: #991b1b; }
+.rg-score-unsatisfactory{ background: #fef2f2; color: #7f1d1d; }
+
+/* Severity / CAMELS badges */
+.rg-severity-badge {
+    border-radius: 999px;
+    padding: 0.15rem 0.5rem;
+    font-size: 0.72rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.rg-severity-low      { background: #f0fdf4; color: #166534; }
+.rg-severity-medium   { background: #fffbeb; color: #92400e; }
+.rg-severity-high     { background: #fff1f2; color: #991b1b; }
+.rg-severity-critical { background: #7f1d1d; color: #fff; }
+
+.rg-camels-badge {
+    border-radius: 4px;
+    padding: 0.1rem 0.45rem;
+    font-size: 0.72rem;
+    font-weight: 700;
+    background: #e2e8f0;
+    color: #334155;
+}
+
+/* Contagion network */
+.rg-badge-critical { background: #fef2f2; color: #7f1d1d; border-color: #f87171; }
+.rg-badge-red      { background: #fee2e2; color: #991b1b; border-color: #fca5a5; }
+.rg-badge-amber    { background: #fef3c7; color: #92400e; border-color: #fcd34d; }
+.rg-badge-green    { background: #dcfce7; color: #166534; border-color: #86efac; }
+
+.rg-row-dsib     { background: #fef2f2; }
+.rg-row-critical { background: #fef2f2; }
+
+/* Btn variants */
+.rg-btn.secondary {
+    border-color: var(--rg-border);
+    background: #fff;
+    color: var(--rg-text);
+}
+
+.rg-btn.warning {
+    border-color: #b45309;
+    background: #f59e0b;
+    color: #fff;
+}
+
+.rg-btn.sm { padding: 0.25rem 0.5rem; font-size: 0.78rem; }
+
+@media (max-width: 980px) {
+    .rg-camels-grid  { grid-template-columns: repeat(3, 1fr); }
+    .rg-grid-4       { grid-template-columns: repeat(2, 1fr); }
+}

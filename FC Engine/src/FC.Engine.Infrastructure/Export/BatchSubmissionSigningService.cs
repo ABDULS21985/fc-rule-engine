@@ -87,8 +87,8 @@ public sealed class BatchSubmissionSigningService : ISubmissionSigningService
                 return Task.FromResult(false);
 
             using var cert = new X509Certificate2(certPath, _settings.DigitalSignature.CertificatePassword);
-            var rsa = cert.GetRSAPublicKey()
-                ?? return Task.FromResult(false);
+            var rsa = cert.GetRSAPublicKey();
+            if (rsa is null) return Task.FromResult(false);
 
             var payloadHash = SHA512.HashData(payloadContent);
             var valid = rsa.VerifyHash(

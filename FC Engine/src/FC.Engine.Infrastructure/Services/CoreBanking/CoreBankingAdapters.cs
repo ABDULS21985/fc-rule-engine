@@ -1,326 +1,438 @@
-using System.Net.Http.Json;
 using FC.Engine.Domain.Abstractions;
-using Microsoft.Extensions.Logging;
 
 namespace FC.Engine.Infrastructure.Services.CoreBanking;
 
-/// <summary>
-/// Adapter for Infosys Finacle core banking system.
-/// Extracts GL balances and maps them to return template fields.
-/// </summary>
-public class FinacleAdapter : ICoreBankingAdapter
+// ============================================================
+// Finacle (Infosys) Core Banking Adapter
+// Protocol: Finacle EAI REST API with Bearer token auth
+// Query types: GL_BALANCE:{glCode} | REPORT:{reportCode}:{column}
+// ============================================================
+public sealed class FinacleCoreBankingAdapter : ICoreBankingAdapter
 {
-    private readonly IHttpClientFactory _httpClientFactory;
-    private readonly ILogger<FinacleAdapter> _logger;
+    public CoreBankingSystem SystemType => CoreBankingSystem.Finacle;
 
-    public string AdapterName => "Finacle";
+    private readonly IHttpClientFactory _httpFactory;
 
-    public FinacleAdapter(IHttpClientFactory httpClientFactory, ILogger<FinacleAdapter> logger)
+    public FinacleCoreBankingAdapter(IHttpClientFactory httpFactory)
+        => _httpFactory = httpFactory;
+
+    public async Task<CoreBankingExtractionResult> ExtractReturnDataAsync(
+        string moduleCode, string periodCode,
+        CoreBankingConnectionConfig config, CancellationToken ct = default)
     {
-        _httpClientFactory = httpClientFactory;
-        _logger = logger;
+        var mapping = System.Text.Json.JsonSerializer
+            .Deserialize<Dictionary<string, string>>(config.FieldMappingJson)
+            ?? throw new InvalidOperationException("Invalid Finacle field mapping JSON.");
+
+        var (year, month) = ParsePeriodCode(periodCode);
+
+        var http = _httpFactory.CreateClient();
+        http.BaseAddress = new Uri(config.BaseUrl!);
+        http.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue(
+                "Bearer", config.Credential);
+
+        var extractedFields = new Dictionary<string, object?>();
+        var unmapped        = new List<string>();
+
+        foreach (var (regoFieldCode, finacleQuery) in mapping)
+        {
+            try
+            {
+                var value = await FetchFinacleValueAsync(http, finacleQuery, year, month, ct);
+                extractedFields[regoFieldCode] = value;
+            }
+            catch (Exception ex)
+            {
+                extractedFields[regoFieldCode] = null;
+                unmapped.Add($"{regoFieldCode} (error: {ex.Message})");
+            }
+        }
+
+        return new CoreBankingExtractionResult(
+            Success:         true,
+            ModuleCode:      moduleCode,
+            PeriodCode:      periodCode,
+            ExtractedFields: extractedFields,
+            UnmappedFields:  unmapped,
+            ErrorMessage:    null,
+            ExtractedAt:     DateTimeOffset.UtcNow);
     }
 
-    public async Task<CoreBankingExtractResult> ExtractReturnData(
-        string moduleCode, string periodCode, CoreBankingConnectionConfig config, CancellationToken ct = default)
+    public async Task<ConnectionTestResult> TestConnectionAsync(
+        CoreBankingConnectionConfig config, CancellationToken ct = default)
     {
-        _logger.LogInformation("Finacle: Extracting data for module {Module}, period {Period}", moduleCode, periodCode);
-
-        var result = new CoreBankingExtractResult { Success = true };
-
+        var sw = System.Diagnostics.Stopwatch.StartNew();
         try
         {
-            var client = _httpClientFactory.CreateClient("FinacleClient");
-            client.BaseAddress = new Uri(config.BaseUrl.TrimEnd('/'));
+            var http = _httpFactory.CreateClient();
+            http.BaseAddress = new Uri(config.BaseUrl!);
+            http.DefaultRequestHeaders.Authorization =
+                new System.Net.Http.Headers.AuthenticationHeaderValue(
+                    "Bearer", config.Credential);
 
-            if (!string.IsNullOrWhiteSpace(config.ApiKey))
-                client.DefaultRequestHeaders.Add("X-Api-Key", config.ApiKey);
+            var response = await http.GetAsync("/eai/api/v1/health", ct);
+            sw.Stop();
 
-            // Finacle REST API: query GL balances for the reporting period
-            // GET /api/gl/balances?branch=ALL&period={periodCode}&module={moduleCode}
-            var endpoint = $"/api/gl/balances?branch=ALL&period={Uri.EscapeDataString(periodCode)}&module={Uri.EscapeDataString(moduleCode)}";
-            var response = await client.GetAsync(endpoint, ct);
-
-            if (!response.IsSuccessStatusCode)
-            {
-                result.Success = false;
-                result.ErrorMessage = $"Finacle API returned {response.StatusCode}";
-                return result;
-            }
-
-            var data = await response.Content.ReadFromJsonAsync<Dictionary<string, object>>(ct);
-            if (data != null)
-                result.FieldValues = data;
-
-            result.Warnings.Add("Finacle adapter: verify GL account mapping matches template fields");
+            return response.IsSuccessStatusCode
+                ? new ConnectionTestResult(true, "Connected successfully.", sw.ElapsedMilliseconds)
+                : new ConnectionTestResult(false,
+                    $"Health check returned HTTP {(int)response.StatusCode}.",
+                    sw.ElapsedMilliseconds);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Finacle extraction failed for {Module}/{Period}", moduleCode, periodCode);
-            result.Success = false;
-            result.ErrorMessage = $"Finacle connection error: {ex.Message}";
+            sw.Stop();
+            return new ConnectionTestResult(false, ex.Message, sw.ElapsedMilliseconds);
         }
-
-        return result;
     }
 
-    public async Task<bool> TestConnectionAsync(CoreBankingConnectionConfig config, CancellationToken ct = default)
+    private static async Task<object?> FetchFinacleValueAsync(
+        HttpClient http, string query, int year, int month, CancellationToken ct)
     {
-        try
-        {
-            var client = _httpClientFactory.CreateClient("FinacleClient");
-            client.BaseAddress = new Uri(config.BaseUrl.TrimEnd('/'));
+        var parts = query.Split(':');
 
-            if (!string.IsNullOrWhiteSpace(config.ApiKey))
-                client.DefaultRequestHeaders.Add("X-Api-Key", config.ApiKey);
-
-            var response = await client.GetAsync("/api/health", ct);
-            return response.IsSuccessStatusCode;
-        }
-        catch
+        if (parts[0] == "GL_BALANCE")
         {
-            return false;
+            var glCode = parts[1];
+            var resp = await http.GetAsync(
+                $"/eai/api/v1/gl/balance?glCode={Uri.EscapeDataString(glCode)}" +
+                $"&year={year}&month={month:D2}", ct);
+            resp.EnsureSuccessStatusCode();
+            var json = await resp.Content.ReadAsStringAsync(ct);
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+            return doc.RootElement.GetProperty("closingBalance").GetDecimal();
         }
+
+        if (parts[0] == "REPORT")
+        {
+            var reportCode = parts[1];
+            var column     = parts[2];
+            var resp = await http.GetAsync(
+                $"/eai/api/v1/reports/{Uri.EscapeDataString(reportCode)}/data" +
+                $"?year={year}&month={month:D2}&column={Uri.EscapeDataString(column)}", ct);
+            resp.EnsureSuccessStatusCode();
+            var json = await resp.Content.ReadAsStringAsync(ct);
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+            return doc.RootElement.GetProperty("value").GetDecimal();
+        }
+
+        throw new InvalidOperationException($"Unknown Finacle query type: {parts[0]}");
+    }
+
+    private static (int Year, int Month) ParsePeriodCode(string periodCode)
+    {
+        if (periodCode.Contains("-Q"))
+        {
+            var year    = int.Parse(periodCode[..4]);
+            var quarter = int.Parse(periodCode[6..]);
+            return (year, (quarter - 1) * 3 + 1);
+        }
+        var parts = periodCode.Split('-');
+        return (int.Parse(parts[0]), int.Parse(parts[1]));
     }
 }
 
-/// <summary>
-/// Adapter for Temenos T24/Transact core banking system.
-/// </summary>
-public class T24Adapter : ICoreBankingAdapter
+// ============================================================
+// T24 / Transact (Temenos) Core Banking Adapter
+// Protocol: T24 Transact REST API with Basic auth (user:pass in Credential)
+// Query types: ENQUIRY:{enquiryName}:{fieldName}
+// ============================================================
+public sealed class T24CoreBankingAdapter : ICoreBankingAdapter
 {
-    private readonly IHttpClientFactory _httpClientFactory;
-    private readonly ILogger<T24Adapter> _logger;
+    public CoreBankingSystem SystemType => CoreBankingSystem.T24;
 
-    public string AdapterName => "T24";
+    private readonly IHttpClientFactory _httpFactory;
 
-    public T24Adapter(IHttpClientFactory httpClientFactory, ILogger<T24Adapter> logger)
+    public T24CoreBankingAdapter(IHttpClientFactory httpFactory)
+        => _httpFactory = httpFactory;
+
+    public async Task<CoreBankingExtractionResult> ExtractReturnDataAsync(
+        string moduleCode, string periodCode,
+        CoreBankingConnectionConfig config, CancellationToken ct = default)
     {
-        _httpClientFactory = httpClientFactory;
-        _logger = logger;
+        var mapping = System.Text.Json.JsonSerializer
+            .Deserialize<Dictionary<string, string>>(config.FieldMappingJson)!;
+
+        var http = _httpFactory.CreateClient();
+        http.BaseAddress = new Uri(config.BaseUrl!);
+        http.DefaultRequestHeaders.Add("Authorization",
+            $"Basic {Convert.ToBase64String(
+                System.Text.Encoding.UTF8.GetBytes(config.Credential))}");
+
+        var extractedFields = new Dictionary<string, object?>();
+        var unmapped        = new List<string>();
+
+        foreach (var (regoFieldCode, t24Query) in mapping)
+        {
+            try
+            {
+                var value = await FetchT24ValueAsync(http, t24Query, periodCode, ct);
+                extractedFields[regoFieldCode] = value;
+            }
+            catch (Exception ex)
+            {
+                extractedFields[regoFieldCode] = null;
+                unmapped.Add($"{regoFieldCode}: {ex.Message}");
+            }
+        }
+
+        return new CoreBankingExtractionResult(
+            true, moduleCode, periodCode, extractedFields,
+            unmapped, null, DateTimeOffset.UtcNow);
     }
 
-    public async Task<CoreBankingExtractResult> ExtractReturnData(
-        string moduleCode, string periodCode, CoreBankingConnectionConfig config, CancellationToken ct = default)
+    public async Task<ConnectionTestResult> TestConnectionAsync(
+        CoreBankingConnectionConfig config, CancellationToken ct = default)
     {
-        _logger.LogInformation("T24: Extracting data for module {Module}, period {Period}", moduleCode, periodCode);
-
-        var result = new CoreBankingExtractResult { Success = true };
-
+        var sw = System.Diagnostics.Stopwatch.StartNew();
         try
         {
-            var client = _httpClientFactory.CreateClient("T24Client");
-            client.BaseAddress = new Uri(config.BaseUrl.TrimEnd('/'));
+            var http = _httpFactory.CreateClient();
+            http.BaseAddress = new Uri(config.BaseUrl!);
+            http.DefaultRequestHeaders.Add("Authorization",
+                $"Basic {Convert.ToBase64String(
+                    System.Text.Encoding.UTF8.GetBytes(config.Credential))}");
 
-            if (!string.IsNullOrWhiteSpace(config.Username) && !string.IsNullOrWhiteSpace(config.Password))
-            {
-                var credentials = Convert.ToBase64String(
-                    System.Text.Encoding.UTF8.GetBytes($"{config.Username}:{config.Password}"));
-                client.DefaultRequestHeaders.Authorization =
-                    new System.Net.Http.Headers.AuthenticationHeaderValue("Basic", credentials);
-            }
-
-            // T24 IRIS API: query account balances
-            var endpoint = $"/api/v1.0.0/party/customers/balances?period={Uri.EscapeDataString(periodCode)}";
-            var response = await client.GetAsync(endpoint, ct);
-
-            if (!response.IsSuccessStatusCode)
-            {
-                result.Success = false;
-                result.ErrorMessage = $"T24 API returned {response.StatusCode}";
-                return result;
-            }
-
-            var data = await response.Content.ReadFromJsonAsync<Dictionary<string, object>>(ct);
-            if (data != null)
-                result.FieldValues = data;
-
-            result.Warnings.Add("T24 adapter: verify IRIS field mapping matches template fields");
+            var resp = await http.GetAsync("/T24/api/v1.0.0/meta/ping", ct);
+            sw.Stop();
+            return resp.IsSuccessStatusCode
+                ? new ConnectionTestResult(true, "T24 Transact API reachable.", sw.ElapsedMilliseconds)
+                : new ConnectionTestResult(false, $"HTTP {(int)resp.StatusCode}", sw.ElapsedMilliseconds);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "T24 extraction failed for {Module}/{Period}", moduleCode, periodCode);
-            result.Success = false;
-            result.ErrorMessage = $"T24 connection error: {ex.Message}";
+            sw.Stop();
+            return new ConnectionTestResult(false, ex.Message, sw.ElapsedMilliseconds);
         }
-
-        return result;
     }
 
-    public async Task<bool> TestConnectionAsync(CoreBankingConnectionConfig config, CancellationToken ct = default)
+    private static async Task<object?> FetchT24ValueAsync(
+        HttpClient http, string query, string periodCode, CancellationToken ct)
     {
-        try
+        var parts = query.Split(':');
+        if (parts[0] == "ENQUIRY")
         {
-            var client = _httpClientFactory.CreateClient("T24Client");
-            client.BaseAddress = new Uri(config.BaseUrl.TrimEnd('/'));
-            var response = await client.GetAsync("/api/v1.0.0/system/health", ct);
-            return response.IsSuccessStatusCode;
+            var enquiryName = parts[1];
+            var fieldName   = parts[2];
+            var resp = await http.GetAsync(
+                $"/T24/api/v1.0.0/enquiry/{Uri.EscapeDataString(enquiryName)}" +
+                $"?period={Uri.EscapeDataString(periodCode)}", ct);
+            resp.EnsureSuccessStatusCode();
+            var json = await resp.Content.ReadAsStringAsync(ct);
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+            return doc.RootElement
+                .GetProperty("body")[0]
+                .GetProperty(fieldName)
+                .GetDecimal();
         }
-        catch
-        {
-            return false;
-        }
+        throw new InvalidOperationException($"Unknown T24 query type: {parts[0]}");
     }
 }
 
-/// <summary>
-/// Adapter for BankOne core banking system — direct database connector.
-/// </summary>
-public class BankOneAdapter : ICoreBankingAdapter
+// ============================================================
+// BankOne Core Banking Adapter
+// Protocol: BankOne REST API with Ocp-Apim-Subscription-Key header
+// Query types: GL:{accountCode}
+// ============================================================
+public sealed class BankOneCoreBankingAdapter : ICoreBankingAdapter
 {
-    private readonly ILogger<BankOneAdapter> _logger;
+    public CoreBankingSystem SystemType => CoreBankingSystem.BankOne;
 
-    public string AdapterName => "BankOne";
+    private readonly IHttpClientFactory _httpFactory;
 
-    public BankOneAdapter(ILogger<BankOneAdapter> logger)
+    public BankOneCoreBankingAdapter(IHttpClientFactory httpFactory)
+        => _httpFactory = httpFactory;
+
+    public async Task<CoreBankingExtractionResult> ExtractReturnDataAsync(
+        string moduleCode, string periodCode,
+        CoreBankingConnectionConfig config, CancellationToken ct = default)
     {
-        _logger = logger;
+        var mapping = System.Text.Json.JsonSerializer
+            .Deserialize<Dictionary<string, string>>(config.FieldMappingJson)!;
+
+        var http = _httpFactory.CreateClient();
+        http.BaseAddress = new Uri(config.BaseUrl!);
+        http.DefaultRequestHeaders.Add("Ocp-Apim-Subscription-Key", config.Credential);
+
+        var extractedFields = new Dictionary<string, object?>();
+        var unmapped        = new List<string>();
+
+        foreach (var (regoFieldCode, bankOneEndpoint) in mapping)
+        {
+            try
+            {
+                var value = await FetchBankOneValueAsync(http, bankOneEndpoint, periodCode, ct);
+                extractedFields[regoFieldCode] = value;
+            }
+            catch (Exception ex)
+            {
+                extractedFields[regoFieldCode] = null;
+                unmapped.Add($"{regoFieldCode}: {ex.Message}");
+            }
+        }
+
+        return new CoreBankingExtractionResult(
+            true, moduleCode, periodCode, extractedFields,
+            unmapped, null, DateTimeOffset.UtcNow);
     }
 
-    public async Task<CoreBankingExtractResult> ExtractReturnData(
-        string moduleCode, string periodCode, CoreBankingConnectionConfig config, CancellationToken ct = default)
+    public async Task<ConnectionTestResult> TestConnectionAsync(
+        CoreBankingConnectionConfig config, CancellationToken ct = default)
     {
-        _logger.LogInformation("BankOne: Extracting data for module {Module}, period {Period}", moduleCode, periodCode);
-
-        var result = new CoreBankingExtractResult { Success = true };
-
+        var sw = System.Diagnostics.Stopwatch.StartNew();
         try
         {
-            if (string.IsNullOrWhiteSpace(config.DatabaseConnectionString))
-            {
-                result.Success = false;
-                result.ErrorMessage = "BankOne adapter requires a database connection string";
-                return result;
-            }
+            var http = _httpFactory.CreateClient();
+            http.BaseAddress = new Uri(config.BaseUrl!);
+            http.DefaultRequestHeaders.Add("Ocp-Apim-Subscription-Key", config.Credential);
 
-            // BankOne uses direct SQL queries to extract GL data
-            // Query pattern: SELECT GLCode, Balance, Currency FROM GL_Balances
-            //                WHERE ReportingPeriod = @periodCode
-            using var connection = new Microsoft.Data.SqlClient.SqlConnection(config.DatabaseConnectionString);
-            await connection.OpenAsync(ct);
-
-            var sql = @"
-                SELECT gl.GLCode, gl.Balance, gl.Currency, gl.BranchCode
-                FROM GL_Balances gl
-                WHERE gl.ReportingPeriod = @PeriodCode
-                ORDER BY gl.GLCode";
-
-            using var cmd = new Microsoft.Data.SqlClient.SqlCommand(sql, connection);
-            cmd.Parameters.AddWithValue("@PeriodCode", periodCode);
-
-            using var reader = await cmd.ExecuteReaderAsync(ct);
-            while (await reader.ReadAsync(ct))
-            {
-                var glCode = reader.GetString(0);
-                var balance = reader.GetDecimal(1);
-                result.FieldValues[glCode] = balance;
-            }
-
-            result.Warnings.Add("BankOne adapter: verify GL code mapping matches template field names");
+            var resp = await http.GetAsync("/BankOneWebAPI/api/v3/AccountEnquiry/Ping", ct);
+            sw.Stop();
+            return resp.IsSuccessStatusCode
+                ? new ConnectionTestResult(true, "BankOne API reachable.", sw.ElapsedMilliseconds)
+                : new ConnectionTestResult(false, $"HTTP {(int)resp.StatusCode}", sw.ElapsedMilliseconds);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "BankOne extraction failed for {Module}/{Period}", moduleCode, periodCode);
-            result.Success = false;
-            result.ErrorMessage = $"BankOne database error: {ex.Message}";
+            sw.Stop();
+            return new ConnectionTestResult(false, ex.Message, sw.ElapsedMilliseconds);
         }
-
-        return result;
     }
 
-    public async Task<bool> TestConnectionAsync(CoreBankingConnectionConfig config, CancellationToken ct = default)
+    private static async Task<object?> FetchBankOneValueAsync(
+        HttpClient http, string query, string periodCode, CancellationToken ct)
     {
-        try
+        var parts = query.Split(':');
+        if (parts[0] == "GL")
         {
-            if (string.IsNullOrWhiteSpace(config.DatabaseConnectionString))
-                return false;
-
-            using var connection = new Microsoft.Data.SqlClient.SqlConnection(config.DatabaseConnectionString);
-            await connection.OpenAsync(ct);
-            return true;
+            var accountCode = parts[1];
+            var resp = await http.GetAsync(
+                $"/BankOneWebAPI/api/v3/Reports/GLBalance" +
+                $"?accountCode={Uri.EscapeDataString(accountCode)}" +
+                $"&period={Uri.EscapeDataString(periodCode)}", ct);
+            resp.EnsureSuccessStatusCode();
+            var json = await resp.Content.ReadAsStringAsync(ct);
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+            return doc.RootElement.GetProperty("data").GetProperty("balance").GetDecimal();
         }
-        catch
-        {
-            return false;
-        }
+        throw new InvalidOperationException($"Unknown BankOne query type: {parts[0]}");
     }
 }
 
-/// <summary>
-/// Adapter for Oracle Flexcube core banking system — API integration.
-/// </summary>
-public class FlexcubeAdapter : ICoreBankingAdapter
+// ============================================================
+// Flexcube (Oracle) Core Banking Adapter
+// Protocol: Oracle FCUBS REST APIs with Bearer token + appId header
+// Query types: GL_INQUIRY:{glCode}
+// ============================================================
+public sealed class FlexcubeCoreBankingAdapter : ICoreBankingAdapter
 {
-    private readonly IHttpClientFactory _httpClientFactory;
-    private readonly ILogger<FlexcubeAdapter> _logger;
+    public CoreBankingSystem SystemType => CoreBankingSystem.Flexcube;
 
-    public string AdapterName => "Flexcube";
+    private readonly IHttpClientFactory _httpFactory;
 
-    public FlexcubeAdapter(IHttpClientFactory httpClientFactory, ILogger<FlexcubeAdapter> logger)
+    public FlexcubeCoreBankingAdapter(IHttpClientFactory httpFactory)
+        => _httpFactory = httpFactory;
+
+    public async Task<CoreBankingExtractionResult> ExtractReturnDataAsync(
+        string moduleCode, string periodCode,
+        CoreBankingConnectionConfig config, CancellationToken ct = default)
     {
-        _httpClientFactory = httpClientFactory;
-        _logger = logger;
+        var mapping = System.Text.Json.JsonSerializer
+            .Deserialize<Dictionary<string, string>>(config.FieldMappingJson)!;
+
+        var http = _httpFactory.CreateClient();
+        http.BaseAddress = new Uri(config.BaseUrl!);
+        http.DefaultRequestHeaders.Add("appId", "FCUBS");
+        http.DefaultRequestHeaders.Add("branchCode", "001");
+        http.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue(
+                "Bearer", config.Credential);
+
+        var extractedFields = new Dictionary<string, object?>();
+        var unmapped        = new List<string>();
+
+        foreach (var (regoFieldCode, fcQuery) in mapping)
+        {
+            try
+            {
+                var value = await FetchFlexcubeValueAsync(http, fcQuery, periodCode, ct);
+                extractedFields[regoFieldCode] = value;
+            }
+            catch (Exception ex)
+            {
+                extractedFields[regoFieldCode] = null;
+                unmapped.Add($"{regoFieldCode}: {ex.Message}");
+            }
+        }
+
+        return new CoreBankingExtractionResult(
+            true, moduleCode, periodCode, extractedFields,
+            unmapped, null, DateTimeOffset.UtcNow);
     }
 
-    public async Task<CoreBankingExtractResult> ExtractReturnData(
-        string moduleCode, string periodCode, CoreBankingConnectionConfig config, CancellationToken ct = default)
+    public async Task<ConnectionTestResult> TestConnectionAsync(
+        CoreBankingConnectionConfig config, CancellationToken ct = default)
     {
-        _logger.LogInformation("Flexcube: Extracting data for module {Module}, period {Period}", moduleCode, periodCode);
-
-        var result = new CoreBankingExtractResult { Success = true };
-
+        var sw = System.Diagnostics.Stopwatch.StartNew();
         try
         {
-            var client = _httpClientFactory.CreateClient("FlexcubeClient");
-            client.BaseAddress = new Uri(config.BaseUrl.TrimEnd('/'));
+            var http = _httpFactory.CreateClient();
+            http.BaseAddress = new Uri(config.BaseUrl!);
+            http.DefaultRequestHeaders.Add("appId", "FCUBS");
+            http.DefaultRequestHeaders.Authorization =
+                new System.Net.Http.Headers.AuthenticationHeaderValue(
+                    "Bearer", config.Credential);
 
-            if (!string.IsNullOrWhiteSpace(config.Username) && !string.IsNullOrWhiteSpace(config.Password))
-            {
-                var credentials = Convert.ToBase64String(
-                    System.Text.Encoding.UTF8.GetBytes($"{config.Username}:{config.Password}"));
-                client.DefaultRequestHeaders.Authorization =
-                    new System.Net.Http.Headers.AuthenticationHeaderValue("Basic", credentials);
-            }
-
-            // Flexcube SOAP/REST gateway: query GL balances
-            var endpoint = $"/FCJRESTService/api/gl/balances/{Uri.EscapeDataString(periodCode)}";
-            var response = await client.GetAsync(endpoint, ct);
-
-            if (!response.IsSuccessStatusCode)
-            {
-                result.Success = false;
-                result.ErrorMessage = $"Flexcube API returned {response.StatusCode}";
-                return result;
-            }
-
-            var data = await response.Content.ReadFromJsonAsync<Dictionary<string, object>>(ct);
-            if (data != null)
-                result.FieldValues = data;
-
-            result.Warnings.Add("Flexcube adapter: verify GL account mapping matches template fields");
+            var resp = await http.GetAsync("/service/FCUBS/STTM/BANK/SUMMARY", ct);
+            sw.Stop();
+            return resp.IsSuccessStatusCode
+                ? new ConnectionTestResult(true, "Flexcube API reachable.", sw.ElapsedMilliseconds)
+                : new ConnectionTestResult(false, $"HTTP {(int)resp.StatusCode}", sw.ElapsedMilliseconds);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Flexcube extraction failed for {Module}/{Period}", moduleCode, periodCode);
-            result.Success = false;
-            result.ErrorMessage = $"Flexcube connection error: {ex.Message}";
+            sw.Stop();
+            return new ConnectionTestResult(false, ex.Message, sw.ElapsedMilliseconds);
         }
-
-        return result;
     }
 
-    public async Task<bool> TestConnectionAsync(CoreBankingConnectionConfig config, CancellationToken ct = default)
+    private static async Task<object?> FetchFlexcubeValueAsync(
+        HttpClient http, string query, string periodCode, CancellationToken ct)
     {
-        try
+        var parts = query.Split(':');
+        if (parts[0] == "GL_INQUIRY")
         {
-            var client = _httpClientFactory.CreateClient("FlexcubeClient");
-            client.BaseAddress = new Uri(config.BaseUrl.TrimEnd('/'));
-            var response = await client.GetAsync("/FCJRESTService/api/health", ct);
-            return response.IsSuccessStatusCode;
+            var glCode = parts[1];
+            var resp = await http.GetAsync(
+                $"/service/FCUBS/GLTM/GLAES/GLMIS_QUERY" +
+                $"?gl_code={Uri.EscapeDataString(glCode)}&period={Uri.EscapeDataString(periodCode)}", ct);
+            resp.EnsureSuccessStatusCode();
+            var json = await resp.Content.ReadAsStringAsync(ct);
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+            return doc.RootElement
+                .GetProperty("fcubs-body")
+                .GetProperty("Glaes-Details")[0]
+                .GetProperty("ACY_AVG_BALANCE")
+                .GetDecimal();
         }
-        catch
-        {
-            return false;
-        }
+        throw new InvalidOperationException($"Unknown Flexcube query type: {parts[0]}");
     }
+}
+
+// ============================================================
+// Factory — resolves adapter by CoreBankingSystem enum
+// ============================================================
+public sealed class CoreBankingAdapterFactory : ICoreBankingAdapterFactory
+{
+    private readonly IReadOnlyDictionary<CoreBankingSystem, ICoreBankingAdapter> _adapters;
+
+    public CoreBankingAdapterFactory(IEnumerable<ICoreBankingAdapter> adapters)
+        => _adapters = adapters.ToDictionary(a => a.SystemType);
+
+    public ICoreBankingAdapter GetAdapter(CoreBankingSystem system)
+        => _adapters.TryGetValue(system, out var adapter)
+            ? adapter
+            : throw new InvalidOperationException(
+                $"No core banking adapter registered for system '{system}'.");
 }

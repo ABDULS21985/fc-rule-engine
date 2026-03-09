@@ -134,9 +134,6 @@ public class MetadataDbContext : DbContext
     public DbSet<EvidencePackage> EvidencePackages => Set<EvidencePackage>();
     public DbSet<DdlMigrationRecord> DdlMigrations => Set<DdlMigrationRecord>();
 
-    // Compliance-as-a-Service (RG-35)
-    public DbSet<FC.Engine.Infrastructure.BackgroundJobs.CaasAutoFilingConfig> CaasAutoFilingConfigs => Set<FC.Engine.Infrastructure.BackgroundJobs.CaasAutoFilingConfig>();
-
     // Compliance Health Scoring (RG-32)
     public DbSet<ChsScoreSnapshot> ChsScoreSnapshots => Set<ChsScoreSnapshot>();
 

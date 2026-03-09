@@ -35,7 +35,7 @@ public sealed class CaaSApiKeyService : ICaaSApiKeyService
         var keyHash   = ComputeKeyHash(rawKey);
         var keyPrefix = rawKey[..12]; // "regos_live_a" — safe to display
 
-        await using var conn = await _db.OpenAsync(ct);
+        using var conn = await _db.OpenAsync(ct);
 
         var keyId = await conn.ExecuteScalarAsync<long>(
             """
@@ -76,7 +76,7 @@ public sealed class CaaSApiKeyService : ICaaSApiKeyService
 
         var keyHash = ComputeKeyHash(rawKey);
 
-        await using var conn = await _db.OpenAsync(ct);
+        using var conn = await _db.OpenAsync(ct);
 
         var row = await conn.QuerySingleOrDefaultAsync<ApiKeyValidationRow>(
             """
@@ -123,7 +123,7 @@ public sealed class CaaSApiKeyService : ICaaSApiKeyService
     public async Task RevokeKeyAsync(
         int partnerId, long keyId, int revokedByUserId, CancellationToken ct = default)
     {
-        await using var conn = await _db.OpenAsync(ct);
+        using var conn = await _db.OpenAsync(ct);
         var affected = await conn.ExecuteAsync(
             """
             UPDATE CaaSApiKeys
@@ -144,7 +144,7 @@ public sealed class CaaSApiKeyService : ICaaSApiKeyService
     public async Task<IReadOnlyList<CaaSApiKeyInfo>> ListKeysAsync(
         int partnerId, CancellationToken ct = default)
     {
-        await using var conn = await _db.OpenAsync(ct);
+        using var conn = await _db.OpenAsync(ct);
         var rows = await conn.QueryAsync<CaaSApiKeyRow>(
             """
             SELECT Id, KeyPrefix, DisplayName, Environment,

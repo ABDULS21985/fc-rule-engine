@@ -164,7 +164,7 @@ public sealed class NfiuGoAmlChannelAdapter : RegulatoryChannelAdapterBase
                     new XElement(ns + "encodedContent",
                         Convert.ToBase64String(payload.ExportedFileContent)))));
 
-        using var sb = new StringBuilder();
+        var sb = new StringBuilder();
         using (var writer = XmlWriter.Create(sb, new XmlWriterSettings
         {
             Indent = false,

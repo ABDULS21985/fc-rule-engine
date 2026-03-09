@@ -1,3 +1,4 @@
+using FC.Engine.Domain.Abstractions;
 using FC.Engine.Domain.Models;
 using FC.Engine.Domain.Models.BatchSubmission;
 using FC.Engine.Infrastructure.Export.ChannelAdapters;

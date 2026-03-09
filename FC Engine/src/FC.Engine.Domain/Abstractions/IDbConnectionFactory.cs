@@ -13,3 +13,14 @@ public interface IDbConnectionFactory
     /// </summary>
     Task<IDbConnection> CreateConnectionAsync(Guid? tenantId, CancellationToken ct = default);
 }
+
+public static class DbConnectionFactoryExtensions
+{
+    /// <summary>
+    /// Opens a connection without tenant context — used by CaaS services which
+    /// isolate by PartnerId rather than TenantId row-level security.
+    /// </summary>
+    public static Task<IDbConnection> OpenAsync(
+        this IDbConnectionFactory factory, CancellationToken ct = default)
+        => factory.CreateConnectionAsync(null, ct);
+}

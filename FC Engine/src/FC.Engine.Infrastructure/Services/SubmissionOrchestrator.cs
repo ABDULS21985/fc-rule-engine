@@ -9,7 +9,7 @@ using FC.Engine.Infrastructure.Metadata;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
-namespace FC.Engine.Application.Services;
+namespace FC.Engine.Infrastructure.Services;
 
 /// <summary>
 /// Orchestrates end-to-end regulatory batch submission:

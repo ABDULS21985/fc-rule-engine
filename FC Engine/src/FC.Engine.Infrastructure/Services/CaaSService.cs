@@ -231,7 +231,7 @@ public sealed class CaaSService : ICaaSService
         Guid requestId,
         CancellationToken ct = default)
     {
-        await using var conn = await _db.OpenAsync(ct);
+        using var conn = await _db.OpenAsync(ct);
 
         var rows = await conn.QueryAsync<FilingDeadlineRow>(
             """
@@ -283,7 +283,7 @@ public sealed class CaaSService : ICaaSService
         Guid requestId,
         CancellationToken ct = default)
     {
-        await using var conn = await _db.OpenAsync(ct);
+        using var conn = await _db.OpenAsync(ct);
 
         var periodFilter = request.PeriodCode ?? GetCurrentPeriodCode();
 
@@ -351,7 +351,7 @@ public sealed class CaaSService : ICaaSService
         Guid requestId,
         CancellationToken ct = default)
     {
-        await using var conn = await _db.OpenAsync(ct);
+        using var conn = await _db.OpenAsync(ct);
 
         var rows = await conn.QueryAsync<RegulatoryChangeRow>(
             """
@@ -455,7 +455,7 @@ public sealed class CaaSService : ICaaSService
             System.Security.Cryptography.RandomNumberGenerator.GetBytes(32))
             .ToLowerInvariant();
 
-        await using var conn = await _db.OpenAsync(ct);
+        using var conn = await _db.OpenAsync(ct);
         await conn.ExecuteAsync(
             """
             INSERT INTO CaaSValidationSessions
@@ -482,7 +482,7 @@ public sealed class CaaSService : ICaaSService
     private async Task<ValidationSessionRow?> GetValidSessionAsync(
         int partnerId, string sessionToken, CancellationToken ct)
     {
-        await using var conn = await _db.OpenAsync(ct);
+        using var conn = await _db.OpenAsync(ct);
         return await conn.QuerySingleOrDefaultAsync<ValidationSessionRow>(
             """
             SELECT Id, PartnerId, SessionToken, ModuleCode, PeriodCode,
@@ -499,7 +499,7 @@ public sealed class CaaSService : ICaaSService
     private async Task MarkSessionConvertedAsync(
         int partnerId, string sessionToken, long returnInstanceId, CancellationToken ct)
     {
-        await using var conn = await _db.OpenAsync(ct);
+        using var conn = await _db.OpenAsync(ct);
         await conn.ExecuteAsync(
             """
             UPDATE CaaSValidationSessions
@@ -513,7 +513,7 @@ public sealed class CaaSService : ICaaSService
         int institutionId, string moduleCode, string periodCode,
         Dictionary<string, object?> fields, int submittedBy, CancellationToken ct)
     {
-        await using var conn = await _db.OpenAsync(ct);
+        using var conn = await _db.OpenAsync(ct);
         return await conn.ExecuteScalarAsync<long>(
             """
             INSERT INTO ReturnInstances

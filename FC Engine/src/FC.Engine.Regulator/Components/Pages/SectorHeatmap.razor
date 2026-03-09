@@ -1,0 +1,152 @@
+@page "/supervisor/heatmap"
+@attribute [Authorize(Policy = "RegulatorOnly")]
+@inject IHeatmapQueryService HeatmapService
+@inject NavigationManager Nav
+@using FC.Engine.Domain.Abstractions
+@using FC.Engine.Domain.Enums
+@using FC.Engine.Domain.Models
+@using Microsoft.AspNetCore.Authorization
+
+<PageTitle>Sector Risk Heatmap — RegOS™ SupTech</PageTitle>
+
+<div class="rg-page">
+    <div class="rg-page-header rg-border-bottom">
+        <div>
+            <h1 class="rg-page-title">Sector Risk Heatmap</h1>
+            <p class="rg-muted">
+                @_cells.Count supervised entities · Period: @_periodCode
+            </p>
+        </div>
+        <div class="rg-header-controls">
+            <select @bind="_institutionTypeFilter" class="rg-select">
+                <option value="">All Institution Types</option>
+                <option value="DMB">Deposit Money Banks</option>
+                <option value="MFB">Microfinance Banks</option>
+                <option value="PSP">Payment Service Providers</option>
+                <option value="BDC">Bureau de Change</option>
+                <option value="PFA">Pension Fund Administrators</option>
+                <option value="INSURER">Insurers</option>
+            </select>
+            <button class="rg-btn primary" @onclick="LoadDataAsync">Refresh</button>
+        </div>
+    </div>
+
+    @if (_loading)
+    {
+        <div class="rg-spinner-center"><div class="rg-spinner"></div></div>
+    }
+    else if (!string.IsNullOrWhiteSpace(_error))
+    {
+        <div class="rg-alert rg-alert-danger">@_error</div>
+    }
+    else
+    {
+        <!-- Risk band summary cards -->
+        <div class="rg-risk-summary-row">
+            @foreach (var band in new[] { "Critical", "Red", "Amber", "Green" })
+            {
+                var count = _cells.Count(c =>
+                    string.Equals(c.Band.ToString(), band, StringComparison.OrdinalIgnoreCase));
+                <div class="rg-risk-card rg-risk-card-@band.ToLowerInvariant()">
+                    <span class="rg-risk-card-count">@count</span>
+                    <span class="rg-risk-card-label">@band</span>
+                </div>
+            }
+        </div>
+
+        <!-- Heatmap grid -->
+        <div class="rg-heatmap-container">
+            @foreach (var cell in _cells.OrderByDescending(c => c.CompositeScore))
+            {
+                var bandClass = cell.Band switch
+                {
+                    RiskBand.Green    => "rg-band-green",
+                    RiskBand.Amber    => "rg-band-amber",
+                    RiskBand.Red      => "rg-band-red",
+                    RiskBand.Critical => "rg-band-critical",
+                    _                 => "rg-band-green"
+                };
+
+                var sizeRem = cell.TotalAssets > 0
+                    ? Math.Max(4, Math.Min(14, 2 + Math.Log10((double)cell.TotalAssets + 1) * 1.5))
+                    : 4.0;
+
+                <div class="rg-heatmap-cell @bandClass @(cell.HasCriticalEWI ? "rg-has-critical" : "")"
+                     style="width:@(sizeRem.ToString("F1"))rem; height:@(sizeRem.ToString("F1"))rem;"
+                     title="@cell.InstitutionName — Score: @cell.CompositeScore.ToString("F2") | EWIs: @cell.ActiveEWICount"
+                     @onclick="() => DrillDown(cell.InstitutionId)">
+                    <span class="rg-cell-abbr">
+                        @(cell.InstitutionName.Length > 8
+                            ? cell.InstitutionName[..8]
+                            : cell.InstitutionName)
+                    </span>
+                    <span class="rg-cell-score">@cell.CompositeScore.ToString("F1")</span>
+                    @if (cell.ActiveEWICount > 0)
+                    {
+                        <span class="rg-cell-ewi-badge">@cell.ActiveEWICount</span>
+                    }
+                </div>
+            }
+        </div>
+
+        <!-- Legend -->
+        <div class="rg-heatmap-legend">
+            <span class="rg-legend-item"><span class="rg-legend-dot rg-band-green"></span> Green (≤1.5): Stable</span>
+            <span class="rg-legend-item"><span class="rg-legend-dot rg-band-amber"></span> Amber (1.5–2.5): Watch</span>
+            <span class="rg-legend-item"><span class="rg-legend-dot rg-band-red"></span> Red (2.5–3.5): Intervene</span>
+            <span class="rg-legend-item"><span class="rg-legend-dot rg-band-critical"></span> Critical (&gt;3.5): Emergency</span>
+            <span class="rg-legend-item rg-muted">Bubble size = total assets (log scale)</span>
+        </div>
+    }
+</div>
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
+
+    private IReadOnlyList<HeatmapCell> _cells = Array.Empty<HeatmapCell>();
+    private bool _loading = true;
+    private string? _error;
+    private string? _institutionTypeFilter;
+    private string _periodCode = string.Empty;
+    private string _regulatorCode = "CBN";
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (AuthState is not null)
+        {
+            var state = await AuthState;
+            _regulatorCode = state.User.FindFirst("RegulatorCode")?.Value?.Trim() ?? "CBN";
+        }
+
+        _periodCode = DeriveCurrentPeriod();
+        await LoadDataAsync();
+    }
+
+    private async Task LoadDataAsync()
+    {
+        _loading = true;
+        _error   = null;
+        try
+        {
+            _cells = await HeatmapService.GetSectorHeatmapAsync(
+                _regulatorCode, _periodCode, _institutionTypeFilter);
+        }
+        catch (Exception ex)
+        {
+            _error = $"Could not load heatmap data: {ex.Message}";
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private void DrillDown(int institutionId)
+        => Nav.NavigateTo($"/supervisor/institution/{institutionId}?period={_periodCode}");
+
+    private static string DeriveCurrentPeriod()
+    {
+        var now = DateTime.UtcNow.AddMonths(-1);
+        return $"{now.Year}-{now.Month:D2}";
+    }
+}

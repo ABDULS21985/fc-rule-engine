@@ -10,7 +10,7 @@ public sealed record DispatchPayload(
     PayloadDigest Digest,
     BatchSignatureInfo Signature,
     byte[]? EvidencePackage,
-    IDictionary<string, string> Metadata);
+    IReadOnlyDictionary<string, string> Metadata);
 
 public sealed record BatchRegulatorReceipt(
     string ReceiptReference,

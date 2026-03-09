@@ -21,7 +21,7 @@ public sealed class CaaSWebhookDispatcher : ICaaSWebhookDispatcher
         ILogger<CaaSWebhookDispatcher> log)
     {
         _db         = db;
-        _httpClient = httpFactory.CreateClient("CaaSWebhook");
+        _httpClient = httpFactory.CreateClient("Webhook");
         _log        = log;
     }
 
@@ -29,7 +29,7 @@ public sealed class CaaSWebhookDispatcher : ICaaSWebhookDispatcher
         int partnerId, WebhookEventType eventType,
         object payload, CancellationToken ct = default)
     {
-        await using var conn = await _db.OpenAsync(ct);
+        using var conn = await _db.OpenAsync(ct);
 
         var partner = await conn.QuerySingleOrDefaultAsync<WebhookConfigRow>(
             """
@@ -67,7 +67,7 @@ public sealed class CaaSWebhookDispatcher : ICaaSWebhookDispatcher
 
     public async Task ProcessPendingAsync(CancellationToken ct = default)
     {
-        await using var conn = await _db.OpenAsync(ct);
+        using var conn = await _db.OpenAsync(ct);
 
         var deliveries = await conn.QueryAsync<WebhookDeliveryRow>(
             """

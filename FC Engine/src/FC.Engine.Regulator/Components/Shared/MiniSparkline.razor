@@ -1,0 +1,81 @@
+@* Renders an inline SVG sparkline from a JSON double array, e.g. "[1.2, 2.5, 3.1, 2.8]" *@
+@if (_points.Count >= 2)
+{
+    <svg width="@Width" height="@Height" viewBox="0 0 @Width @Height"
+         style="vertical-align:middle;overflow:visible;"
+         aria-hidden="true">
+        <polyline points="@_polylinePoints"
+                  fill="none"
+                  stroke="@_strokeColor"
+                  stroke-width="1.5"
+                  stroke-linejoin="round"
+                  stroke-linecap="round" />
+    </svg>
+}
+
+@code {
+    /// <summary>JSON array of double values, e.g. "[1.2, 2.5, 3.1]"</summary>
+    [Parameter] public string? DataJson { get; set; }
+
+    [Parameter] public int Width  { get; set; } = 60;
+    [Parameter] public int Height { get; set; } = 20;
+
+    /// <summary>
+    /// Override stroke colour. When null, colour is derived from trend direction:
+    /// rising = red, falling = green, flat = muted.
+    /// </summary>
+    [Parameter] public string? Color { get; set; }
+
+    private List<double> _points = new();
+    private string _polylinePoints = string.Empty;
+    private string _strokeColor = "#64748b";
+
+    protected override void OnParametersSet()
+    {
+        _points.Clear();
+
+        if (!string.IsNullOrWhiteSpace(DataJson))
+        {
+            try
+            {
+                _points = System.Text.Json.JsonSerializer.Deserialize<List<double>>(DataJson)
+                          ?? new List<double>();
+            }
+            catch { /* malformed JSON — render nothing */ }
+        }
+
+        if (_points.Count < 2)
+            return;
+
+        var min = _points.Min();
+        var max = _points.Max();
+        var range = max - min;
+
+        // Build SVG polyline points string
+        var sb = new System.Text.StringBuilder();
+        for (int i = 0; i < _points.Count; i++)
+        {
+            double x = i * (Width - 2.0) / (_points.Count - 1) + 1;
+            double y = range > 0
+                ? Height - 2 - (_points[i] - min) / range * (Height - 4) + 1
+                : Height / 2.0;
+
+            if (i > 0) sb.Append(' ');
+            sb.Append($"{x:F1},{y:F1}");
+        }
+        _polylinePoints = sb.ToString();
+
+        // Derive trend colour
+        if (!string.IsNullOrEmpty(Color))
+        {
+            _strokeColor = Color;
+        }
+        else
+        {
+            var delta = _points[^1] - _points[0];
+            _strokeColor = delta > 0.05  ? "#dc2626"   // rising  → red (risk up)
+                         : delta < -0.05 ? "#15803d"   // falling → green (risk down)
+                         : "#64748b";                  // flat    → muted
+        }
+    }
+}

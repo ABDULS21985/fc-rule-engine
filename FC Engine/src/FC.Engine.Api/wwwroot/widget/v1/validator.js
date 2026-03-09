@@ -1,413 +1,354 @@
 /**
- * RegOS™ Embeddable Validation Widget v1
- *
+ * RegOS™ Embedded Validator Widget v1.0
+ * Zero external dependencies. Self-contained.
  * Usage:
  *   <script src="https://cdn.regos.app/widget/v1/validator.js"></script>
- *   <div id="regos-validator" data-module="PSP_FINTECH" data-api-key="regos_live_..."></div>
- *
- * The widget auto-discovers elements with id="regos-validator" and renders
- * a real-time validation form with compliance score preview.
+ *   <div id="regos-validator"
+ *        data-module="PSP_FINTECH"
+ *        data-period="2026-03"
+ *        data-api-key="regos_live_..."
+ *        data-api-base="https://api.regos.app"
+ *        data-theme="#006AFF">
+ *   </div>
  */
-(function () {
+(function (window) {
     'use strict';
 
     const WIDGET_VERSION = '1.0.0';
-    const DEFAULT_API_BASE = '/api/v1';
-    const DEBOUNCE_MS = 600;
 
-    // ── Styles ──────────────────────────────────────────────────
-    const STYLES = `
-        .regos-widget {
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: #ffffff;
-            border: 1px solid #e5e7eb;
-            border-radius: 12px;
-            padding: 24px;
-            max-width: 640px;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.08);
-        }
-        .regos-widget * { box-sizing: border-box; }
-        .regos-widget-header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            margin-bottom: 20px;
-            padding-bottom: 16px;
-            border-bottom: 1px solid #f3f4f6;
-        }
-        .regos-widget-title {
-            font-size: 16px;
-            font-weight: 700;
-            color: #111827;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-        .regos-widget-badge {
-            font-size: 11px;
-            font-weight: 600;
-            padding: 2px 8px;
-            border-radius: 9999px;
-            background: #e0e7ff;
-            color: #3730a3;
-        }
-        .regos-score-ring {
-            width: 56px;
-            height: 56px;
-            position: relative;
-        }
-        .regos-score-ring svg {
-            transform: rotate(-90deg);
-            width: 56px;
-            height: 56px;
-        }
-        .regos-score-ring .bg {
-            fill: none;
-            stroke: #f3f4f6;
-            stroke-width: 5;
-        }
-        .regos-score-ring .fg {
-            fill: none;
-            stroke-width: 5;
-            stroke-linecap: round;
-            transition: stroke-dashoffset 0.5s ease, stroke 0.3s ease;
-        }
-        .regos-score-value {
-            position: absolute;
-            inset: 0;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 14px;
-            font-weight: 700;
-            color: #111827;
-        }
-        .regos-fields {
-            display: flex;
-            flex-direction: column;
-            gap: 14px;
-            margin-bottom: 20px;
-        }
-        .regos-field-group {
-            display: flex;
-            flex-direction: column;
-            gap: 4px;
-        }
-        .regos-field-group label {
-            font-size: 13px;
-            font-weight: 600;
-            color: #374151;
-        }
-        .regos-field-group input,
-        .regos-field-group select {
-            padding: 8px 12px;
-            border: 1px solid #d1d5db;
-            border-radius: 8px;
-            font-size: 14px;
-            color: #111827;
-            background: #ffffff;
-            transition: border-color 0.2s, box-shadow 0.2s;
-            outline: none;
-        }
-        .regos-field-group input:focus,
-        .regos-field-group select:focus {
-            border-color: #6366f1;
-            box-shadow: 0 0 0 3px rgba(99,102,241,0.1);
-        }
-        .regos-field-group input.regos-error {
-            border-color: #ef4444;
-            box-shadow: 0 0 0 3px rgba(239,68,68,0.1);
-        }
-        .regos-field-group input.regos-valid {
-            border-color: #10b981;
-        }
-        .regos-field-hint {
-            font-size: 12px;
-            color: #ef4444;
-            min-height: 16px;
-        }
-        .regos-results {
-            background: #f9fafb;
-            border: 1px solid #e5e7eb;
-            border-radius: 8px;
-            padding: 16px;
-        }
-        .regos-results-header {
-            font-size: 13px;
-            font-weight: 600;
-            color: #374151;
-            margin-bottom: 8px;
-        }
-        .regos-error-item {
-            display: flex;
-            align-items: flex-start;
-            gap: 8px;
-            padding: 6px 0;
-            font-size: 13px;
-            color: #6b7280;
-            border-bottom: 1px solid #f3f4f6;
-        }
-        .regos-error-item:last-child { border-bottom: none; }
-        .regos-error-icon {
-            flex-shrink: 0;
-            width: 16px;
-            height: 16px;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 10px;
-            font-weight: 700;
-            margin-top: 2px;
-        }
-        .regos-error-icon.error { background: #fee2e2; color: #dc2626; }
-        .regos-error-icon.warning { background: #fef3c7; color: #d97706; }
-        .regos-loading {
-            text-align: center;
-            padding: 20px;
-            color: #9ca3af;
-            font-size: 13px;
-        }
-        .regos-powered {
-            text-align: right;
-            font-size: 11px;
-            color: #9ca3af;
-            margin-top: 12px;
-        }
-        .regos-powered a {
-            color: #6366f1;
-            text-decoration: none;
-            font-weight: 600;
-        }
-    `;
-
-    // ── Widget Class ────────────────────────────────────────────
-    class RegOSValidator {
-        constructor(container) {
-            this.container = container;
-            this.module = container.getAttribute('data-module') || '';
-            this.apiKey = container.getAttribute('data-api-key') || '';
-            this.apiBase = container.getAttribute('data-api-base') || DEFAULT_API_BASE;
-            this.returnCode = container.getAttribute('data-return-code') || '';
-            this.fields = [];
-            this.errors = [];
-            this.score = null;
-            this.debounceTimer = null;
-
-            this.init();
-        }
-
-        async init() {
-            this.injectStyles();
-            this.renderLoading();
-
-            try {
-                await this.loadTemplate();
-                this.render();
-            } catch (err) {
-                this.renderError('Failed to load template: ' + err.message);
-            }
-        }
-
-        injectStyles() {
-            if (document.getElementById('regos-widget-styles')) return;
-            const style = document.createElement('style');
-            style.id = 'regos-widget-styles';
-            style.textContent = STYLES;
-            document.head.appendChild(style);
-        }
-
-        async loadTemplate() {
-            const url = `${this.apiBase}/caas/templates/${encodeURIComponent(this.module)}`;
-            const res = await fetch(url, {
-                headers: { 'X-Api-Key': this.apiKey }
-            });
-            if (!res.ok) throw new Error(`HTTP ${res.status}`);
-            const data = await res.json();
-
-            // Use the first return's fields, or match by returnCode
-            const ret = this.returnCode
-                ? data.returns?.find(r => r.returnCode === this.returnCode)
-                : data.returns?.[0];
-
-            this.returnCode = ret?.returnCode || this.returnCode;
-            this.fields = ret?.fields || [];
-        }
-
-        render() {
-            const circumference = 2 * Math.PI * 22;
-            const scoreVal = this.score != null ? Math.round(this.score) : '—';
-            const offset = this.score != null
-                ? circumference - (this.score / 100) * circumference
-                : circumference;
-            const strokeColor = this.score >= 75 ? '#10b981' : this.score >= 50 ? '#f59e0b' : '#ef4444';
-
-            this.container.innerHTML = `
-                <div class="regos-widget">
-                    <div class="regos-widget-header">
-                        <div class="regos-widget-title">
-                            Compliance Validator
-                            <span class="regos-widget-badge">${this.escapeHtml(this.module)}</span>
-                        </div>
-                        <div class="regos-score-ring">
-                            <svg viewBox="0 0 50 50">
-                                <circle class="bg" cx="25" cy="25" r="22"/>
-                                <circle class="fg" cx="25" cy="25" r="22"
-                                    stroke="${this.score != null ? strokeColor : '#e5e7eb'}"
-                                    stroke-dasharray="${circumference}"
-                                    stroke-dashoffset="${offset}"/>
-                            </svg>
-                            <div class="regos-score-value">${scoreVal}</div>
-                        </div>
-                    </div>
-                    <div class="regos-fields">
-                        ${this.fields.map(f => this.renderField(f)).join('')}
-                    </div>
-                    ${this.renderResults()}
-                    <div class="regos-powered">Powered by <a href="https://regos.app" target="_blank">RegOS™</a></div>
-                </div>
-            `;
-
-            // Attach input listeners
-            this.fields.forEach(f => {
-                const input = this.container.querySelector(`[data-field="${f.fieldName}"]`);
-                if (input) {
-                    input.addEventListener('input', () => this.onFieldChange());
-                }
-            });
-        }
-
-        renderField(field) {
-            const err = this.errors.find(e => e.field === field.fieldName);
-            const cls = err ? 'regos-error' : (this.score != null ? 'regos-valid' : '');
-            const type = this.mapFieldType(field.dataType);
-
-            return `
-                <div class="regos-field-group">
-                    <label>${this.escapeHtml(field.displayName)}${field.isRequired ? ' *' : ''}</label>
-                    <input type="${type}"
-                           data-field="${this.escapeHtml(field.fieldName)}"
-                           class="${cls}"
-                           placeholder="${this.escapeHtml(field.description || field.displayName)}"
-                           ${field.minValue ? `min="${field.minValue}"` : ''}
-                           ${field.maxValue ? `max="${field.maxValue}"` : ''}
-                           ${field.maxLength ? `maxlength="${field.maxLength}"` : ''} />
-                    <div class="regos-field-hint">${err ? this.escapeHtml(err.message) : ''}</div>
-                </div>
-            `;
-        }
-
-        renderResults() {
-            if (this.errors.length === 0 && this.score == null) return '';
-
-            if (this.errors.length === 0) {
-                return `<div class="regos-results">
-                    <div class="regos-results-header" style="color:#059669;">✓ All validations passed</div>
-                </div>`;
-            }
-
-            return `
-                <div class="regos-results">
-                    <div class="regos-results-header">
-                        ${this.errors.length} issue${this.errors.length > 1 ? 's' : ''} found
-                    </div>
-                    ${this.errors.slice(0, 10).map(e => `
-                        <div class="regos-error-item">
-                            <div class="regos-error-icon ${e.severity === 'Error' ? 'error' : 'warning'}">
-                                ${e.severity === 'Error' ? '✕' : '!'}
-                            </div>
-                            <div><strong>${this.escapeHtml(e.field)}</strong>: ${this.escapeHtml(e.message)}</div>
-                        </div>
-                    `).join('')}
-                </div>
-            `;
-        }
-
-        renderLoading() {
-            this.container.innerHTML = `<div class="regos-widget"><div class="regos-loading">Loading template…</div></div>`;
-        }
-
-        renderError(msg) {
-            this.container.innerHTML = `<div class="regos-widget"><div class="regos-loading" style="color:#ef4444;">${this.escapeHtml(msg)}</div></div>`;
-        }
-
-        onFieldChange() {
-            clearTimeout(this.debounceTimer);
-            this.debounceTimer = setTimeout(() => this.validate(), DEBOUNCE_MS);
-        }
-
-        async validate() {
-            const record = {};
-            this.fields.forEach(f => {
-                const input = this.container.querySelector(`[data-field="${f.fieldName}"]`);
-                if (input && input.value !== '') {
-                    const val = (f.dataType === 'Money' || f.dataType === 'Decimal' || f.dataType === 'Integer' || f.dataType === 'Percentage')
-                        ? parseFloat(input.value)
-                        : input.value;
-                    record[f.fieldName] = val;
-                }
-            });
-
-            try {
-                const res = await fetch(`${this.apiBase}/caas/validate`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-Api-Key': this.apiKey
-                    },
-                    body: JSON.stringify({
-                        moduleCode: this.module,
-                        returnCode: this.returnCode,
-                        records: [record]
-                    })
-                });
-
-                if (!res.ok) throw new Error(`HTTP ${res.status}`);
-                const data = await res.json();
-
-                this.errors = data.errors || [];
-                this.score = data.complianceScorePreview;
-                this.render();
-            } catch (err) {
-                console.error('[RegOS Widget] Validation failed:', err);
-            }
-        }
-
-        mapFieldType(dataType) {
-            switch (dataType) {
-                case 'Money': case 'Decimal': case 'Integer': case 'Percentage':
-                    return 'number';
-                case 'Date':
-                    return 'date';
-                default:
-                    return 'text';
-            }
-        }
-
-        escapeHtml(str) {
-            if (!str) return '';
-            return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-        }
+    // ── Utilities ────────────────────────────────────────────────────────
+    function debounce(fn, delayMs) {
+        let timer;
+        return function (...args) {
+            clearTimeout(timer);
+            timer = setTimeout(() => fn.apply(this, args), delayMs);
+        };
     }
 
-    // ── Auto-Init ───────────────────────────────────────────────
-    function initWidgets() {
-        document.querySelectorAll('#regos-validator, [data-regos-validator]').forEach(el => {
-            if (!el.__regosInit) {
-                el.__regosInit = true;
-                new RegOSValidator(el);
+    function sanitizeHtml(str) {
+        return String(str)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+    }
+
+    // ── API client ────────────────────────────────────────────────────────
+    function CaaSClient(apiBase, apiKey) {
+        this.apiBase = apiBase.replace(/\/$/, '');
+        this.apiKey  = apiKey;
+    }
+
+    CaaSClient.prototype.get = async function (path) {
+        const resp = await fetch(this.apiBase + path, {
+            headers: { 'Authorization': 'Bearer ' + this.apiKey,
+                       'Accept': 'application/json' }
+        });
+        if (!resp.ok) throw new Error('API error: ' + resp.status);
+        return resp.json();
+    };
+
+    CaaSClient.prototype.post = async function (path, body) {
+        const resp = await fetch(this.apiBase + path, {
+            method: 'POST',
+            headers: { 'Authorization': 'Bearer ' + this.apiKey,
+                       'Content-Type': 'application/json',
+                       'Accept': 'application/json' },
+            body: JSON.stringify(body)
+        });
+        if (!resp.ok) throw new Error('API error: ' + resp.status);
+        return resp.json();
+    };
+
+    // ── Widget renderer ───────────────────────────────────────────────────
+    function RegOSValidator(container, options) {
+        this.container  = container;
+        this.options    = options;
+        this.client     = new CaaSClient(options.apiBase, options.apiKey);
+        this.template   = null;
+        this.fieldValues = {};
+        this.sessionToken = null;
+        this._init();
+    }
+
+    RegOSValidator.prototype._init = async function () {
+        this._renderSkeleton();
+        try {
+            const data = await this.client.get(
+                '/api/v1/caas/templates/' + encodeURIComponent(this.options.module));
+            this.template = data;
+            this._renderForm(data);
+        } catch (err) {
+            this._renderError('Failed to load template: ' + err.message);
+        }
+    };
+
+    RegOSValidator.prototype._renderSkeleton = function () {
+        const theme = this.options.theme || '#006AFF';
+        this.container.innerHTML =
+            '<div class="regos-widget" style="--regos-primary:' + sanitizeHtml(theme) + '">' +
+            '  <div class="regos-header">' +
+            '    <span class="regos-logo">RegOS\u2122</span>' +
+            '    <span class="regos-module-name">Loading\u2026</span>' +
+            '  </div>' +
+            '  <div class="regos-body regos-loading">' +
+            '    <div class="regos-spinner"></div>' +
+            '  </div>' +
+            '</div>' +
+            '<style>' + this._getStyles() + '</style>';
+    };
+
+    RegOSValidator.prototype._renderForm = function (template) {
+        const self = this;
+        const fields = template.fields.map(f => self._renderField(f)).join('');
+
+        const body = this.container.querySelector('.regos-body');
+        body.className = 'regos-body';
+        body.innerHTML =
+            '<form class="regos-form" id="regos-form-' + this.options.module + '">' +
+            fields +
+            '  <div class="regos-actions">' +
+            '    <button type="button" class="regos-btn regos-btn-validate" id="regos-validate-btn">' +
+            '      Validate' +
+            '    </button>' +
+            '    <button type="button" class="regos-btn regos-btn-submit" ' +
+            '            id="regos-submit-btn" disabled>Submit</button>' +
+            '  </div>' +
+            '  <div class="regos-result" id="regos-result"></div>' +
+            '</form>';
+
+        // Bind field change events
+        body.querySelectorAll('[data-field]').forEach(function (input) {
+            input.addEventListener('input', debounce(function () {
+                self.fieldValues[input.dataset.field] = input.value;
+                self._liveValidate();
+            }, 600));
+        });
+
+        // Validate button
+        body.querySelector('#regos-validate-btn').addEventListener('click', function () {
+            self._validate(true);
+        });
+
+        // Submit button
+        body.querySelector('#regos-submit-btn').addEventListener('click', function () {
+            self._submit();
+        });
+
+        // Update header
+        this.container.querySelector('.regos-module-name').textContent = template.moduleName;
+    };
+
+    RegOSValidator.prototype._renderField = function (field) {
+        const required = field.isRequired ? '<span class="regos-required">*</span>' : '';
+        const inputType = field.dataType === 'DATE' ? 'date'
+            : (field.dataType === 'BOOLEAN' ? 'checkbox' : 'number');
+
+        return '<div class="regos-field" id="regos-field-' + sanitizeHtml(field.fieldCode) + '">' +
+               '  <label class="regos-label">' +
+               sanitizeHtml(field.fieldLabel) + required +
+               '  </label>' +
+               '  <input type="' + inputType + '"' +
+               '         class="regos-input"' +
+               '         data-field="' + sanitizeHtml(field.fieldCode) + '"' +
+               (field.isRequired ? ' required' : '') +
+               (field.minValue !== null ? ' min="' + field.minValue + '"' : '') +
+               (field.maxValue !== null ? ' max="' + field.maxValue + '"' : '') +
+               '  />' +
+               '  <span class="regos-field-error" id="regos-err-' +
+               sanitizeHtml(field.fieldCode) + '"></span>' +
+               '</div>';
+    };
+
+    RegOSValidator.prototype._liveValidate = async function () {
+        if (Object.keys(this.fieldValues).length < 2) return;
+        try {
+            const result = await this.client.post('/api/v1/caas/validate', {
+                moduleCode: this.options.module,
+                periodCode: this.options.period,
+                fields: this.fieldValues,
+                persistSession: false
+            });
+            this._updateFieldErrors(result.errors);
+            this._updateScorePreview(result.complianceScore);
+        } catch (_) { /* Live validation failures are non-blocking */ }
+    };
+
+    RegOSValidator.prototype._validate = async function (persistSession) {
+        const resultDiv = this.container.querySelector('#regos-result');
+        resultDiv.innerHTML = '<div class="regos-spinner"></div>';
+
+        try {
+            const result = await this.client.post('/api/v1/caas/validate', {
+                moduleCode: this.options.module,
+                periodCode: this.options.period,
+                fields: this.fieldValues,
+                persistSession: persistSession === true
+            });
+
+            this.sessionToken = result.sessionToken || null;
+            this._updateFieldErrors(result.errors);
+
+            if (result.isValid) {
+                resultDiv.innerHTML =
+                    '<div class="regos-alert regos-alert-success">' +
+                    '\u2713 Validation passed. Score: ' + result.complianceScore.toFixed(1) + '/100' +
+                    '</div>';
+                const submitBtn = this.container.querySelector('#regos-submit-btn');
+                if (submitBtn) submitBtn.disabled = false;
+            } else {
+                resultDiv.innerHTML =
+                    '<div class="regos-alert regos-alert-error">' +
+                    '\u2717 ' + result.errorCount + ' error(s) found. Please correct and re-validate.' +
+                    '</div>';
+            }
+
+            // Emit custom event for host page integration
+            this.container.dispatchEvent(new CustomEvent('regos:validated', {
+                bubbles: true, detail: result
+            }));
+        } catch (err) {
+            resultDiv.innerHTML =
+                '<div class="regos-alert regos-alert-error">Validation failed: ' +
+                sanitizeHtml(err.message) + '</div>';
+        }
+    };
+
+    RegOSValidator.prototype._submit = async function () {
+        if (!this.sessionToken && !this.options.autoSubmitRegulator) {
+            this._validate(true).then(() => {
+                if (this.sessionToken) this._submit();
+            });
+            return;
+        }
+
+        const resultDiv = this.container.querySelector('#regos-result');
+        resultDiv.innerHTML = '<div class="regos-spinner"></div> Submitting\u2026';
+
+        try {
+            const result = await this.client.post('/api/v1/caas/submit', {
+                sessionToken: this.sessionToken,
+                regulatorCode: this.options.regulatorCode || 'CBN',
+                submittedByExternalUserId: 0
+            });
+
+            if (result.success) {
+                resultDiv.innerHTML =
+                    '<div class="regos-alert regos-alert-success">' +
+                    '\u2713 Submitted successfully. Receipt: ' +
+                    sanitizeHtml(result.receiptReference || 'pending') + '</div>';
+                this.container.querySelector('#regos-submit-btn').disabled = true;
+
+                this.container.dispatchEvent(new CustomEvent('regos:submitted', {
+                    bubbles: true, detail: result
+                }));
+            } else {
+                resultDiv.innerHTML =
+                    '<div class="regos-alert regos-alert-error">' +
+                    sanitizeHtml(result.errorMessage || 'Submission failed.') + '</div>';
+            }
+        } catch (err) {
+            resultDiv.innerHTML =
+                '<div class="regos-alert regos-alert-error">Submit error: ' +
+                sanitizeHtml(err.message) + '</div>';
+        }
+    };
+
+    RegOSValidator.prototype._updateFieldErrors = function (errors) {
+        // Clear all existing errors
+        this.container.querySelectorAll('.regos-field-error').forEach(function (el) {
+            el.textContent = '';
+            el.closest('.regos-field').classList.remove('regos-field-invalid');
+        });
+
+        errors.forEach(function (err) {
+            const errEl = document.getElementById('regos-err-' + err.fieldCode);
+            if (errEl) {
+                errEl.textContent = err.message;
+                errEl.closest('.regos-field').classList.add('regos-field-invalid');
             }
         });
+    };
+
+    RegOSValidator.prototype._updateScorePreview = function (score) {
+        let preview = this.container.querySelector('.regos-score-preview');
+        if (!preview) {
+            preview = document.createElement('div');
+            preview.className = 'regos-score-preview';
+            this.container.querySelector('.regos-actions').before(preview);
+        }
+        const colour = score >= 80 ? '#22c55e' : score >= 60 ? '#f59e0b' : '#ef4444';
+        preview.innerHTML =
+            '<span style="color:' + colour + '">Score: ' + score.toFixed(1) + '/100</span>';
+    };
+
+    RegOSValidator.prototype._renderError = function (msg) {
+        this.container.innerHTML =
+            '<div class="regos-widget"><div class="regos-alert regos-alert-error">' +
+            sanitizeHtml(msg) + '</div></div>';
+    };
+
+    RegOSValidator.prototype._getStyles = function () {
+        return `.regos-widget{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;background:#fff}
+.regos-header{background:var(--regos-primary,#006AFF);color:#fff;padding:12px 16px;
+display:flex;justify-content:space-between;align-items:center}
+.regos-logo{font-weight:700;font-size:14px}
+.regos-module-name{font-size:12px;opacity:.85}
+.regos-body{padding:16px}
+.regos-field{margin-bottom:14px}
+.regos-label{display:block;font-size:13px;font-weight:500;color:#374151;margin-bottom:4px}
+.regos-required{color:#ef4444;margin-left:2px}
+.regos-input{width:100%;padding:8px 10px;border:1px solid #d1d5db;border-radius:6px;
+font-size:13px;box-sizing:border-box;transition:border-color .15s}
+.regos-input:focus{outline:none;border-color:var(--regos-primary,#006AFF)}
+.regos-field-invalid .regos-input{border-color:#ef4444}
+.regos-field-error{color:#ef4444;font-size:11px;display:block;margin-top:3px}
+.regos-actions{display:flex;gap:8px;margin-top:16px}
+.regos-btn{padding:9px 20px;border:none;border-radius:6px;font-size:13px;
+cursor:pointer;font-weight:500;transition:opacity .15s}
+.regos-btn-validate{background:var(--regos-primary,#006AFF);color:#fff}
+.regos-btn-submit{background:#10b981;color:#fff}
+.regos-btn:disabled{opacity:.45;cursor:not-allowed}
+.regos-alert{padding:10px 14px;border-radius:6px;font-size:13px;margin-top:12px}
+.regos-alert-success{background:#ecfdf5;color:#065f46;border:1px solid #a7f3d0}
+.regos-alert-error{background:#fef2f2;color:#991b1b;border:1px solid #fecaca}
+.regos-spinner{display:inline-block;width:20px;height:20px;border:2px solid #e2e8f0;
+border-top-color:var(--regos-primary,#006AFF);border-radius:50%;
+animation:regos-spin .7s linear infinite}
+.regos-loading{display:flex;justify-content:center;padding:32px}
+.regos-score-preview{font-size:13px;font-weight:600;margin-bottom:8px}
+@keyframes regos-spin{to{transform:rotate(360deg)}}`;
+    };
+
+    // ── Auto-initialise all matching containers ───────────────────────────
+    function autoInit() {
+        document.querySelectorAll('[id="regos-validator"], [data-regos-widget]')
+            .forEach(function (container) {
+                const d = container.dataset;
+                if (!d.apiKey || !d.module) {
+                    console.warn('RegOS Widget: data-api-key and data-module are required.');
+                    return;
+                }
+                new RegOSValidator(container, {
+                    module:           d.module,
+                    period:           d.period || new Date().toISOString().slice(0, 7),
+                    apiKey:           d.apiKey,
+                    apiBase:          d.apiBase || 'https://api.regos.app',
+                    theme:            d.theme || '#006AFF',
+                    regulatorCode:    d.regulatorCode || 'CBN'
+                });
+            });
     }
 
-    // Initialize on DOM ready
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', initWidgets);
-    } else {
-        initWidgets();
-    }
-
-    // Expose for manual initialization
+    // Expose global API for manual initialisation
     window.RegOSValidator = RegOSValidator;
-    window.RegOS = { version: WIDGET_VERSION, init: initWidgets };
-})();
+
+    // Auto-init on DOM ready
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', autoInit);
+    } else {
+        autoInit();
+    }
+
+})(window);

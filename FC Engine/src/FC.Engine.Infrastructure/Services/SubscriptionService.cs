@@ -644,17 +644,17 @@ public class SubscriptionService : ISubscriptionService
         return decimal.Round(value, 4, MidpointRounding.AwayFromZero);
     }
 
-    private static decimal GetDefaultCommissionRate(PartnerTier tier) => tier switch
+    private static decimal GetDefaultCommissionRate(FC.Engine.Domain.Enums.PartnerTier tier) => tier switch
     {
-        PartnerTier.Platinum => 0.20m,
-        PartnerTier.Gold => 0.15m,
+        FC.Engine.Domain.Enums.PartnerTier.Platinum => 0.20m,
+        FC.Engine.Domain.Enums.PartnerTier.Gold => 0.15m,
         _ => 0.10m
     };
 
-    private static decimal GetDefaultWholesaleDiscount(PartnerTier tier) => tier switch
+    private static decimal GetDefaultWholesaleDiscount(FC.Engine.Domain.Enums.PartnerTier tier) => tier switch
     {
-        PartnerTier.Platinum => 0.40m,
-        PartnerTier.Gold => 0.30m,
+        FC.Engine.Domain.Enums.PartnerTier.Platinum => 0.40m,
+        FC.Engine.Domain.Enums.PartnerTier.Gold => 0.30m,
         _ => 0.20m
     };
 

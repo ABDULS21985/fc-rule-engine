@@ -232,6 +232,9 @@ app.UseSerilogRequestLogging();
 // 7. Authentication (JWT Bearer)
 app.UseAuthentication();
 
+// 7a. CaaS API key auth (resolves partner from Bearer token for /api/v1/caas/* routes)
+app.UseMiddleware<CaaSAuthMiddleware>();
+
 // 8. Dual auth middleware (JWT Bearer first, then API key fallback)
 app.UseApiKeyAuth();
 
@@ -302,7 +305,7 @@ v1.MapWebhookEndpoints();
 v1.MapDirectSubmissionEndpoints();
 v1.MapSubmissionBatchEndpoints();
 v1.MapRegulatoryQueryEndpoints();
-v1.MapCaaSEndpoints();
+app.MapCaaSEndpoints();
 v1.MapStressTestEndpoints();
 v1.MapWhiteLabelDocsEndpoints();
 v1.MapComplianceEndpoints();

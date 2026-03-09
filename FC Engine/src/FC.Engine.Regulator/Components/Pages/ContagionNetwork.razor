@@ -1,0 +1,158 @@
+@page "/supervisor/contagion"
+@attribute [Authorize(Policy = "RegulatorOnly")]
+@inject IContagionAnalyzer ContagionAnalyzer
+@using FC.Engine.Domain.Abstractions
+@using FC.Engine.Domain.Models
+@using Microsoft.AspNetCore.Authorization
+
+<PageTitle>Contagion Network Analysis — RegOS™ SupTech</PageTitle>
+
+<div class="rg-page">
+    <div class="rg-page-header rg-border-bottom">
+        <div>
+            <h1 class="rg-page-title">Interbank Contagion Network</h1>
+            <p class="rg-muted">
+                Systemic importance ranking · D-SIB identification · Exposure network
+            </p>
+        </div>
+        <button class="rg-btn primary" @onclick="LoadAsync">Refresh</button>
+    </div>
+
+    @if (_loading)
+    {
+        <div class="rg-spinner-center"><div class="rg-spinner"></div></div>
+    }
+    else if (!string.IsNullOrWhiteSpace(_error))
+    {
+        <div class="rg-alert rg-alert-danger">@_error</div>
+    }
+    else
+    {
+        <!-- D-SIB alert banner -->
+        @if (_dsibs.Count > 0)
+        {
+            <div class="rg-alert rg-alert-critical" style="margin-bottom:1rem;">
+                <strong>⚠ @_dsibs.Count Domestically Systemically Important Bank(s) detected</strong>
+                with elevated contagion risk. Immediate supervisory attention required.
+            </div>
+        }
+
+        @if (!_nodes.Any())
+        {
+            <p class="rg-muted">No interbank exposure data available for this period.</p>
+        }
+        else
+        {
+            <!-- Summary KPIs -->
+            <div class="rg-grid rg-grid-4" style="margin-bottom:1.5rem;">
+                <div class="rg-card" style="text-align:center;">
+                    <div style="font-size:1.6rem;font-weight:700;">@_nodes.Count</div>
+                    <div class="rg-muted" style="font-size:.8rem;">Institutions in Network</div>
+                </div>
+                <div class="rg-card" style="text-align:center;">
+                    <div style="font-size:1.6rem;font-weight:700;color:#dc2626;">@_dsibs.Count</div>
+                    <div class="rg-muted" style="font-size:.8rem;">D-SIBs Identified</div>
+                </div>
+                <div class="rg-card" style="text-align:center;">
+                    <div style="font-size:1.6rem;font-weight:700;">
+                        @(_nodes.Count > 0
+                            ? _nodes.Max(n => n.ContagionRiskScore).ToString("F0")
+                            : "0")
+                    </div>
+                    <div class="rg-muted" style="font-size:.8rem;">Max Contagion Score</div>
+                </div>
+                <div class="rg-card" style="text-align:center;">
+                    <div style="font-size:1.6rem;font-weight:700;">
+                        ₦@((_nodes.Sum(n => n.TotalOutbound) / 1000).ToString("N0"))B
+                    </div>
+                    <div class="rg-muted" style="font-size:.8rem;">Total Interbank Exposure</div>
+                </div>
+            </div>
+
+            <!-- Contagion node table -->
+            <div class="rg-card" style="overflow:auto;">
+                <table class="rg-table">
+                    <thead>
+                        <tr>
+                            <th>Institution</th>
+                            <th>Type</th>
+                            <th class="rg-text-right">Outbound (₦M)</th>
+                            <th class="rg-text-right">Inbound (₦M)</th>
+                            <th class="rg-text-right">Eigenvector</th>
+                            <th class="rg-text-right">Betweenness</th>
+                            <th class="rg-text-right">Contagion Score</th>
+                            <th>D-SIB</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var node in _nodes.OrderByDescending(n => n.ContagionRiskScore))
+                        {
+                            <tr class="@(node.IsSystemicallyImportant ? "rg-row-dsib" : "")">
+                                <td>@node.InstitutionName</td>
+                                <td><span class="rg-badge">@node.InstitutionType</span></td>
+                                <td class="rg-text-right">@node.TotalOutbound.ToString("N0")</td>
+                                <td class="rg-text-right">@node.TotalInbound.ToString("N0")</td>
+                                <td class="rg-text-right">@node.EigenvectorCentrality.ToString("F4")</td>
+                                <td class="rg-text-right">@node.BetweennessCentrality.ToString("F4")</td>
+                                <td class="rg-text-right">
+                                    <ContagionScoreBadge Score="@node.ContagionRiskScore" />
+                                </td>
+                                <td>
+                                    @if (node.IsSystemicallyImportant)
+                                    {
+                                        <span class="rg-badge rg-badge-critical">D-SIB</span>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    }
+</div>
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
+
+    private IReadOnlyList<ContagionNode> _nodes = Array.Empty<ContagionNode>();
+    private List<ContagionNode> _dsibs = new();
+    private bool _loading = true;
+    private string? _error;
+    private string _regulatorCode = "CBN";
+    private string _periodCode = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (AuthState is not null)
+        {
+            var state = await AuthState;
+            _regulatorCode = state.User.FindFirst("RegulatorCode")?.Value?.Trim() ?? "CBN";
+        }
+
+        var now = DateTime.UtcNow.AddMonths(-1);
+        _periodCode = $"{now.Year}-{now.Month:D2}";
+
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _error   = null;
+        try
+        {
+            _nodes = await ContagionAnalyzer.AnalyzeAsync(
+                _regulatorCode, _periodCode, Guid.NewGuid());
+            _dsibs = _nodes.Where(n => n.IsSystemicallyImportant).ToList();
+        }
+        catch (Exception ex)
+        {
+            _error = $"Could not load contagion data: {ex.Message}";
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+}
