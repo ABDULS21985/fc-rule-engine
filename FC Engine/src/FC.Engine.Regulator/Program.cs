@@ -181,6 +181,33 @@ app.MapGet("/workspace/{projectId:int}/report", async (
     return Results.File(pdf, "application/pdf", fileName);
 }).RequireAuthorization("RegulatorOnly");
 
+app.MapGet("/stress-test/report/pdf", async (
+    HttpContext context,
+    IStressTestService stressTestService) =>
+{
+    var regulatorCode = context.User.FindFirst("RegulatorCode")?.Value;
+    if (string.IsNullOrWhiteSpace(regulatorCode))
+    {
+        return Results.BadRequest(new { error = "Missing regulator context." });
+    }
+
+    // Run a default stress test to generate the report
+    var scenarioParam = context.Request.Query["scenario"].FirstOrDefault() ?? "NgfsOrderly";
+    if (!Enum.TryParse<FC.Engine.Domain.Models.StressScenarioType>(scenarioParam, out var scenarioType))
+    {
+        scenarioType = FC.Engine.Domain.Models.StressScenarioType.NgfsOrderly;
+    }
+
+    var report = await stressTestService.RunStressTestAsync(
+        regulatorCode,
+        new FC.Engine.Domain.Models.StressTestRequest { ScenarioType = scenarioType },
+        context.RequestAborted);
+
+    var pdf = await stressTestService.GenerateReportPdfAsync(regulatorCode, report, context.RequestAborted);
+    var fileName = $"stress-test-{scenarioType}-{DateTime.UtcNow:yyyyMMddHHmmss}.pdf";
+    return Results.File(pdf, "application/pdf", fileName);
+}).RequireAuthorization("RegulatorOnly");
+
 app.MapRazorComponents<FC.Engine.Regulator.Components.App>()
     .AddInteractiveServerRenderMode();
 

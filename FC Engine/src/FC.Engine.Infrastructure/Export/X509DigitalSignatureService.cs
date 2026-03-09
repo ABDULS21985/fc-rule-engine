@@ -1,0 +1,118 @@
+using System.Security.Cryptography;
+using System.Security.Cryptography.X509Certificates;
+using FC.Engine.Domain.Abstractions;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
+
+namespace FC.Engine.Infrastructure.Export;
+
+public class X509DigitalSignatureService : IDigitalSignatureService
+{
+    private readonly RegulatoryApiSettings _settings;
+    private readonly ILogger<X509DigitalSignatureService> _logger;
+    private X509Certificate2? _cachedCertificate;
+
+    public X509DigitalSignatureService(
+        IOptions<RegulatoryApiSettings> options,
+        ILogger<X509DigitalSignatureService> logger)
+    {
+        _settings = options.Value;
+        _logger = logger;
+    }
+
+    public Task<DigitalSignatureResult> SignPackageAsync(
+        byte[] packageBytes, string regulatorCode, CancellationToken ct = default)
+    {
+        try
+        {
+            var cert = LoadCertificate();
+            if (cert is null)
+            {
+                return Task.FromResult(new DigitalSignatureResult
+                {
+                    Success = false,
+                    ErrorMessage = "Digital signature certificate is not configured."
+                });
+            }
+
+            using var rsa = cert.GetRSAPrivateKey()
+                ?? throw new InvalidOperationException("Certificate does not contain an RSA private key.");
+
+            var hash = SHA256.HashData(packageBytes);
+            var signature = rsa.SignHash(hash, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+
+            return Task.FromResult(new DigitalSignatureResult
+            {
+                Success = true,
+                Signature = signature,
+                Algorithm = "SHA256withRSA",
+                Hash = Convert.ToHexStringLower(hash),
+                CertificateThumbprint = cert.Thumbprint,
+                SignedAt = DateTime.UtcNow
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to sign package for regulator {Regulator}", regulatorCode);
+            return Task.FromResult(new DigitalSignatureResult
+            {
+                Success = false,
+                ErrorMessage = ex.Message
+            });
+        }
+    }
+
+    public Task<bool> VerifySignatureAsync(
+        byte[] packageBytes, byte[] signature, string certificateThumbprint,
+        CancellationToken ct = default)
+    {
+        try
+        {
+            var cert = LoadCertificate();
+            if (cert is null)
+            {
+                return Task.FromResult(false);
+            }
+
+            using var rsa = cert.GetRSAPublicKey()
+                ?? throw new InvalidOperationException("Certificate does not contain an RSA public key.");
+
+            var hash = SHA256.HashData(packageBytes);
+            var isValid = rsa.VerifyHash(hash, signature, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+            return Task.FromResult(isValid);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to verify signature for thumbprint {Thumbprint}", certificateThumbprint);
+            return Task.FromResult(false);
+        }
+    }
+
+    private X509Certificate2? LoadCertificate()
+    {
+        if (_cachedCertificate is not null)
+        {
+            return _cachedCertificate;
+        }
+
+        var certPath = _settings.DigitalSignature.CertificatePath;
+        if (string.IsNullOrWhiteSpace(certPath))
+        {
+            return null;
+        }
+
+        if (!File.Exists(certPath))
+        {
+            _logger.LogWarning("Digital signature certificate file not found: {Path}", certPath);
+            return null;
+        }
+
+        var password = _settings.DigitalSignature.CertificatePassword;
+        _cachedCertificate = string.IsNullOrWhiteSpace(password)
+            ? new X509Certificate2(certPath)
+            : new X509Certificate2(certPath, password, X509KeyStorageFlags.MachineKeySet);
+
+        _logger.LogInformation("Loaded digital signature certificate: {Thumbprint}", _cachedCertificate.Thumbprint);
+        return _cachedCertificate;
+    }
+}

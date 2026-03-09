@@ -52,6 +52,12 @@ builder.Services.AddScoped<FC.Engine.Admin.Services.KeyboardShortcutService>();
 builder.Services.AddScoped<FC.Engine.Admin.Services.HealthAlertService>();
 builder.Services.AddScoped<FC.Engine.Infrastructure.Charts.ChartJsInterop>();
 
+// Scenario simulation engine
+builder.Services.AddSingleton<FC.Engine.Admin.Services.Scenarios.IScenarioEngine,
+                              FC.Engine.Admin.Services.Scenarios.ScenarioEngine>();
+builder.Services.AddSingleton<FC.Engine.Admin.Services.Scenarios.IScenarioTemplateService,
+                              FC.Engine.Admin.Services.Scenarios.ScenarioTemplateService>();
+
 // Platform Admin services
 builder.Services.AddScoped<FC.Engine.Admin.Services.TenantManagementService>();
 builder.Services.AddScoped<FC.Engine.Admin.Services.PlatformAdminService>();

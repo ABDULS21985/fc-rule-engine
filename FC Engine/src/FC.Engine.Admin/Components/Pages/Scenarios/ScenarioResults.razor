@@ -1,0 +1,298 @@
+@page "/scenarios/{Id:int}/results"
+@using FC.Engine.Admin.Services.Scenarios
+@inject IScenarioEngine Engine
+@inject NavigationManager Nav
+@inject FC.Engine.Infrastructure.Charts.ChartJsInterop Charts
+
+<PageHeader Title="@(_result?.ScenarioName ?? "Scenario Results")" BackUrl="/scenarios"
+            StatusBadge="@_statusBadge" StatusVariant="@_statusVariant">
+    <SecondaryActions>
+        <button class="fc-btn fc-btn--outline" @onclick="CompareWith">Compare with Another</button>
+        <button class="fc-btn fc-btn--outline" @onclick="EditScenario">Re-run with Changes</button>
+    </SecondaryActions>
+</PageHeader>
+
+@if (_loading)
+{
+    <div class="fc-sc-results-strip">
+        @for (var i = 0; i < 4; i++)
+        {
+            <div class="fc-sc-stat-card"><SkeletonLoader Variant="SkeletonVariant.Stat" Index="i" /></div>
+        }
+    </div>
+}
+else if (_result == null)
+{
+    <EmptyState Variant="EmptyState.EmptyStateVariant.Generic"
+                Title="Scenario not found"
+                Message="This scenario may have been deleted or has not been run yet." />
+}
+else
+{
+    <!-- Summary Strip -->
+    <div class="fc-sc-results-strip">
+        <div class="fc-sc-stat-card">
+            <span class="fc-sc-stat-card-label">Fields Affected</span>
+            <span class="fc-sc-stat-card-value">@_result.TotalFieldsAffected</span>
+            <span class="fc-sc-stat-card-sub">overridden + computed</span>
+        </div>
+        <div class="fc-sc-stat-card">
+            <span class="fc-sc-stat-card-label">Formulas Recomputed</span>
+            <span class="fc-sc-stat-card-value">@_result.FormulasRecomputed</span>
+            <span class="fc-sc-stat-card-sub">calculated field impacts</span>
+        </div>
+        <div class="fc-sc-stat-card">
+            <span class="fc-sc-stat-card-label">Validation Errors</span>
+            <span class="fc-sc-stat-card-value fc-sc-stat-card-value--danger">@_result.ValidationErrors</span>
+            <span class="fc-sc-stat-card-sub">critical threshold violations</span>
+        </div>
+        <div class="fc-sc-stat-card">
+            <span class="fc-sc-stat-card-label">Breaches Detected</span>
+            <span class="fc-sc-stat-card-value fc-sc-stat-card-value--danger">@_result.Breaches.Count</span>
+            <span class="fc-sc-stat-card-sub">regulatory thresholds exceeded</span>
+        </div>
+    </div>
+
+    <!-- Breach Alerts Panel -->
+    @if (_result.Breaches.Count > 0)
+    {
+        <div class="fc-sc-breach-panel">
+            <h4 class="fc-sc-breach-panel-title">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+                    <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+                </svg>
+                Breach Alerts (@_result.Breaches.Count)
+            </h4>
+            <ul class="fc-sc-breach-list">
+                @foreach (var breach in _result.Breaches)
+                {
+                    <li class="fc-sc-breach-item">
+                        <BreachIndicator Severity="breach.Severity" Compact />
+                        <span class="fc-sc-breach-item-message">@breach.Message</span>
+                    </li>
+                }
+            </ul>
+        </div>
+    }
+
+    <!-- Key Metrics Table -->
+    <section class="fc-section" style="margin-bottom:var(--space-5);">
+        <div class="fc-section-header">
+            <h3>
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12V7H5a2 2 0 010-4h14v4"/><path d="M3 5v14a2 2 0 002 2h16v-5"/><path d="M18 12a2 2 0 000 4h4v-4h-4z"/></svg>
+                Key Metrics Impact
+            </h3>
+        </div>
+        <div class="fc-section-body" style="padding:0;">
+            <table class="fc-sc-metric-table">
+                <thead>
+                    <tr>
+                        <th>Metric</th>
+                        <th>Baseline</th>
+                        <th>Scenario</th>
+                        <th>Delta</th>
+                        <th>Change %</th>
+                        <th>Threshold</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var m in _result.KeyMetrics)
+                    {
+                        var isRatio = !m.MetricName.Contains("₦");
+                        var higherIsBetter = !m.MetricName.Contains("NPL") && !m.MetricName.Contains("Open Position")
+                            && !m.MetricName.Contains("NDIC") && !m.MetricName.Contains("Provisioning")
+                            && !m.MetricName.Contains("Loan-to-Deposit") && !m.MetricName.Contains("Stranded")
+                            && !m.MetricName.Contains("Concentration");
+                        <tr>
+                            <td>
+                                <div class="fc-sc-metric-name">@m.MetricName</div>
+                                <div class="fc-sc-metric-field">@m.FieldName</div>
+                            </td>
+                            <td>@FormatMetric(m.BaselineValue, isRatio)</td>
+                            <td style="font-weight:600;">@FormatMetric(m.ScenarioValue, isRatio)</td>
+                            <td>
+                                <MetricDelta Baseline="m.BaselineValue" Scenario="m.ScenarioValue"
+                                             Format="@(isRatio ? "P1" : "N1")" HigherIsBetter="higherIsBetter" />
+                            </td>
+                            <td style="@(m.DeltaPct < 0 ? "color:var(--cbn-danger);" : m.DeltaPct > 0 ? "color:var(--cbn-success);" : "")">
+                                @(m.DeltaPct >= 0 ? "+" : "")@m.DeltaPct.ToString("N1")%
+                            </td>
+                            <td>@(m.Threshold.HasValue ? FormatMetric(m.Threshold.Value, isRatio) : "—")</td>
+                            <td><BreachIndicator Severity="m.Breach" /></td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <!-- Charts -->
+    <div class="fc-sc-chart-row">
+        <div class="fc-sc-chart-card">
+            <h4>Baseline vs Scenario</h4>
+            <canvas id="sc-bar-chart" class="fc-sc-chart-canvas"></canvas>
+        </div>
+        <div class="fc-sc-chart-card">
+            <h4>Impact Distribution</h4>
+            <canvas id="sc-delta-chart" class="fc-sc-chart-canvas"></canvas>
+        </div>
+    </div>
+
+    <!-- Pro-Forma Return -->
+    <section class="fc-section">
+        <div class="fc-section-header">
+            <h3>
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14,2 14,8 20,8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10,9 9,9 8,9"/></svg>
+                Pro-Forma Return Fields
+            </h3>
+        </div>
+        <div class="fc-section-body" style="padding:0;">
+            <table class="fc-sc-proforma-table">
+                <thead>
+                    <tr>
+                        <th>Field</th>
+                        <th>Section</th>
+                        <th>Baseline</th>
+                        <th>Scenario</th>
+                        <th>Type</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var f in _result.ProFormaFields)
+                    {
+                        var rowClass = f.Breach != BreachSeverity.None ? "fc-sc-proforma-row--breach"
+                            : f.IsOverridden ? "fc-sc-proforma-row--overridden"
+                            : f.IsComputed ? "fc-sc-proforma-row--computed" : "";
+                        <tr class="@rowClass">
+                            <td style="font-weight:600;">@f.DisplayName</td>
+                            <td>@f.SectionName</td>
+                            <td>@(f.BaselineValue?.ToString() ?? "—")</td>
+                            <td style="font-weight:600;">@(f.ScenarioValue?.ToString() ?? "—")</td>
+                            <td>
+                                @if (f.IsOverridden)
+                                {
+                                    <span class="fc-sc-proforma-badge fc-sc-proforma-badge--override">Override</span>
+                                }
+                                else if (f.IsComputed)
+                                {
+                                    <span class="fc-sc-proforma-badge fc-sc-proforma-badge--computed">Computed</span>
+                                }
+                            </td>
+                            <td><BreachIndicator Severity="f.Breach" /></td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <div style="margin-top:var(--space-4);display:flex;justify-content:flex-end;gap:var(--space-3);">
+        <span style="color:var(--cbn-text-muted);font-size:var(--text-caption);align-self:center;">
+            Run completed in @_result.DurationMs ms at @_result.RunAt.ToString("HH:mm:ss dd MMM yyyy")
+        </span>
+    </div>
+}
+
+@code {
+    [Parameter] public int Id { get; set; }
+
+    private bool _loading = true;
+    private ScenarioResult? _result;
+    private string _statusBadge = "";
+    private string _statusVariant = "success";
+
+    protected override async Task OnInitializedAsync()
+    {
+        var scenario = await Engine.GetScenario(Id);
+        if (scenario?.Status == ScenarioStatus.Completed)
+        {
+            // Re-run to get cached result
+            _result = await Engine.RunScenario(Guid.Empty, Id);
+        }
+        else if (scenario != null)
+        {
+            _result = await Engine.RunScenario(Guid.Empty, Id);
+        }
+
+        if (_result != null)
+        {
+            var worst = _result.Breaches.Count > 0
+                ? _result.Breaches.Max(b => b.Severity)
+                : BreachSeverity.None;
+            _statusBadge = worst switch
+            {
+                BreachSeverity.Critical => "Critical",
+                BreachSeverity.Breach => "Breach",
+                BreachSeverity.Warning => "Warning",
+                _ => "Pass"
+            };
+            _statusVariant = worst switch
+            {
+                BreachSeverity.Critical or BreachSeverity.Breach => "danger",
+                BreachSeverity.Warning => "warning",
+                _ => "success"
+            };
+        }
+
+        _loading = false;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && _result != null)
+        {
+            await RenderCharts();
+        }
+    }
+
+    private async Task RenderCharts()
+    {
+        if (_result == null) return;
+
+        var labels = _result.KeyMetrics.Select(m => TruncateLabel(m.MetricName)).ToArray();
+        var baselines = _result.KeyMetrics.Select(m => m.BaselineValue).ToArray();
+        var scenarios = _result.KeyMetrics.Select(m => m.ScenarioValue).ToArray();
+        var deltas = _result.KeyMetrics.Select(m => m.DeltaPct).ToArray();
+
+        // Baseline vs Scenario grouped bar
+        await Charts.InitChart("sc-bar-chart", new
+        {
+            type = "bar",
+            labels,
+            datasets = new[]
+            {
+                new { label = "Baseline", data = baselines, color = "#006B3F" },
+                new { label = "Scenario", data = scenarios, color = "#dc2626" },
+            },
+            indexAxis = "y",
+            legend = true,
+        });
+
+        // Delta % bar
+        await Charts.InitChart("sc-delta-chart", new
+        {
+            type = "bar",
+            labels,
+            datasets = new[]
+            {
+                new { label = "Change %", data = deltas, color = "#C8A415" },
+            },
+        });
+    }
+
+    private static string TruncateLabel(string label)
+    {
+        if (label.Length <= 20) return label;
+        var paren = label.IndexOf('(');
+        return paren > 0 ? label[..paren].Trim() : label[..20] + "...";
+    }
+
+    private static string FormatMetric(decimal value, bool isRatio)
+        => isRatio ? $"{value:N1}%" : $"₦{value:N1}";
+
+    private void CompareWith() => Nav.NavigateTo($"/scenarios/compare?ids={Id}");
+    private void EditScenario() => Nav.NavigateTo($"/scenarios/build/{Id}");
+}

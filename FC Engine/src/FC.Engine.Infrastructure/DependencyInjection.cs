@@ -8,6 +8,7 @@ using FC.Engine.Infrastructure.Charts;
 using FC.Engine.Infrastructure.DynamicSchema;
 using FC.Engine.Infrastructure.Export;
 using FC.Engine.Infrastructure.Export.Adapters;
+using FC.Engine.Infrastructure.Export.ApiClients;
 using FC.Engine.Infrastructure.Metadata;
 using FC.Engine.Infrastructure.Metadata.Repositories;
 using FC.Engine.Infrastructure.Importing.Parsers;
@@ -213,7 +214,12 @@ public static class DependencyInjection
         services.AddScoped<ISectorAnalyticsService, SectorAnalyticsService>();
         services.AddScoped<IEntityBenchmarkingService, EntityBenchmarkingService>();
         services.AddScoped<IEarlyWarningService, EarlyWarningService>();
+        services.AddScoped<ISystemicRiskService, SystemicRiskService>();
+        services.AddScoped<IStressTestService, StressTestService>();
         services.AddScoped<IExaminationWorkspaceService, ExaminationWorkspaceService>();
+
+        // ── Compliance Health Scoring (RG-32) ──
+        services.AddScoped<IComplianceHealthService, ComplianceHealthService>();
 
         // ── Report Builder (RG-18) ──
         services.AddScoped<ISavedReportRepository, SavedReportRepository>();
@@ -270,6 +276,83 @@ public static class DependencyInjection
         services.AddHostedService<DataBreachEscalationJob>();
         services.AddHostedService<RetentionEnforcementJob>();
         services.AddHostedService<ScheduledReportJob>();
+
+        // ── Regulatory Direct Submission (RG-34) ──
+        services.Configure<RegulatoryApiSettings>(configuration.GetSection(RegulatoryApiSettings.SectionName));
+        services.AddScoped<IDirectSubmissionRepository, DirectSubmissionRepository>();
+        services.AddScoped<IDigitalSignatureService, X509DigitalSignatureService>();
+        services.AddScoped<IRegulatorySubmissionService, RegulatorySubmissionService>();
+
+        // Regulator API clients (HttpClient factory pattern)
+        services.AddHttpClient<CbnEfassApiClient>((sp, client) =>
+        {
+            var opts = sp.GetRequiredService<IOptions<RegulatoryApiSettings>>().Value;
+            if (!string.IsNullOrWhiteSpace(opts.Cbn.BaseUrl))
+                client.BaseAddress = new Uri(opts.Cbn.BaseUrl.TrimEnd('/'));
+            client.Timeout = TimeSpan.FromSeconds(opts.Cbn.TimeoutSeconds);
+            client.DefaultRequestHeaders.Add("User-Agent", "RegOS-DirectSubmission/1.0");
+        });
+        services.AddHttpClient<NfiuGoAmlApiClient>((sp, client) =>
+        {
+            var opts = sp.GetRequiredService<IOptions<RegulatoryApiSettings>>().Value;
+            if (!string.IsNullOrWhiteSpace(opts.Nfiu.BaseUrl))
+                client.BaseAddress = new Uri(opts.Nfiu.BaseUrl.TrimEnd('/'));
+            client.Timeout = TimeSpan.FromSeconds(opts.Nfiu.TimeoutSeconds);
+            client.DefaultRequestHeaders.Add("User-Agent", "RegOS-DirectSubmission/1.0");
+        });
+        services.AddHttpClient<NdicApiClient>((sp, client) =>
+        {
+            var opts = sp.GetRequiredService<IOptions<RegulatoryApiSettings>>().Value;
+            if (!string.IsNullOrWhiteSpace(opts.Ndic.BaseUrl))
+                client.BaseAddress = new Uri(opts.Ndic.BaseUrl.TrimEnd('/'));
+            client.Timeout = TimeSpan.FromSeconds(opts.Ndic.TimeoutSeconds);
+            client.DefaultRequestHeaders.Add("User-Agent", "RegOS-DirectSubmission/1.0");
+        });
+        services.AddHttpClient<SecApiClient>((sp, client) =>
+        {
+            var opts = sp.GetRequiredService<IOptions<RegulatoryApiSettings>>().Value;
+            if (!string.IsNullOrWhiteSpace(opts.Sec.BaseUrl))
+                client.BaseAddress = new Uri(opts.Sec.BaseUrl.TrimEnd('/'));
+            client.Timeout = TimeSpan.FromSeconds(opts.Sec.TimeoutSeconds);
+            client.DefaultRequestHeaders.Add("User-Agent", "RegOS-DirectSubmission/1.0");
+        });
+        services.AddHttpClient<NaicomApiClient>((sp, client) =>
+        {
+            var opts = sp.GetRequiredService<IOptions<RegulatoryApiSettings>>().Value;
+            if (!string.IsNullOrWhiteSpace(opts.Naicom.BaseUrl))
+                client.BaseAddress = new Uri(opts.Naicom.BaseUrl.TrimEnd('/'));
+            client.Timeout = TimeSpan.FromSeconds(opts.Naicom.TimeoutSeconds);
+            client.DefaultRequestHeaders.Add("User-Agent", "RegOS-DirectSubmission/1.0");
+        });
+        services.AddHttpClient<PencomApiClient>((sp, client) =>
+        {
+            var opts = sp.GetRequiredService<IOptions<RegulatoryApiSettings>>().Value;
+            if (!string.IsNullOrWhiteSpace(opts.Pencom.BaseUrl))
+                client.BaseAddress = new Uri(opts.Pencom.BaseUrl.TrimEnd('/'));
+            client.Timeout = TimeSpan.FromSeconds(opts.Pencom.TimeoutSeconds);
+            client.DefaultRequestHeaders.Add("User-Agent", "RegOS-DirectSubmission/1.0");
+        });
+
+        services.AddScoped<IRegulatorApiClient, CbnEfassApiClient>();
+        services.AddScoped<IRegulatorApiClient, NfiuGoAmlApiClient>();
+        services.AddScoped<IRegulatorApiClient, NdicApiClient>();
+        services.AddScoped<IRegulatorApiClient, SecApiClient>();
+        services.AddScoped<IRegulatorApiClient, NaicomApiClient>();
+        services.AddScoped<IRegulatorApiClient, PencomApiClient>();
+
+        services.AddHostedService<DirectSubmissionRetryJob>();
+        services.AddHostedService<RegulatorStatusPollingJob>();
+
+        // ── Compliance-as-a-Service (RG-35) ──
+        services.AddScoped<ICaaSService, CaaSService>();
+        services.AddScoped<ICoreBankingAdapter, FC.Engine.Infrastructure.Services.CoreBanking.FinacleAdapter>();
+        services.AddScoped<ICoreBankingAdapter, FC.Engine.Infrastructure.Services.CoreBanking.T24Adapter>();
+        services.AddScoped<ICoreBankingAdapter, FC.Engine.Infrastructure.Services.CoreBanking.BankOneAdapter>();
+        services.AddScoped<ICoreBankingAdapter, FC.Engine.Infrastructure.Services.CoreBanking.FlexcubeAdapter>();
+        services.AddHostedService<AutoFilingJob>();
+        services.AddHttpClient("FinacleClient", client => client.Timeout = TimeSpan.FromSeconds(30));
+        services.AddHttpClient("T24Client", client => client.Timeout = TimeSpan.FromSeconds(30));
+        services.AddHttpClient("FlexcubeClient", client => client.Timeout = TimeSpan.FromSeconds(30));
 
         return services;
     }

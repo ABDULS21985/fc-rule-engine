@@ -1,0 +1,75 @@
+@using FC.Engine.Admin.Services.Scenarios
+
+<div class="fc-sc-card @(Selected ? "fc-sc-card--selected" : "")" @onclick="OnClick">
+    <div class="fc-sc-card-header">
+        @if (!string.IsNullOrEmpty(IconSvg))
+        {
+            <div class="fc-sc-card-icon">
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" aria-hidden="true">@((MarkupString)IconSvg)</svg>
+            </div>
+        }
+        <div class="fc-sc-card-title-group">
+            <h4 class="fc-sc-card-title">@Title</h4>
+            @if (!string.IsNullOrEmpty(Category))
+            {
+                <span class="fc-sc-card-category">@Category</span>
+            }
+        </div>
+        @if (Status != ScenarioStatus.Draft)
+        {
+            <span class="fc-detail-status fc-detail-status-@Status.ToString().ToLowerInvariant()">
+                <span class="fc-detail-status-dot"></span>
+                @Status
+            </span>
+        }
+    </div>
+
+    @if (!string.IsNullOrEmpty(Description))
+    {
+        <p class="fc-sc-card-desc">@Description</p>
+    }
+
+    <div class="fc-sc-card-footer">
+        <div class="fc-sc-card-modules">
+            @foreach (var mod in Modules)
+            {
+                <span class="fc-sc-card-chip">@mod</span>
+            }
+        </div>
+        @if (BreachCount > 0)
+        {
+            <span class="fc-sc-breach fc-sc-breach--breach">
+                <span class="fc-sc-breach-dot"></span>
+                <span class="fc-sc-breach-label">@BreachCount breach@(BreachCount != 1 ? "es" : "")</span>
+            </span>
+        }
+        @if (OnRun.HasDelegate)
+        {
+            <button class="fc-btn fc-btn--gold fc-btn--sm" @onclick="HandleRun" @onclick:stopPropagation="true">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5,3 19,12 5,21"/></svg>
+                Run
+            </button>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter] public string Title { get; set; } = "";
+    [Parameter] public string Description { get; set; } = "";
+    [Parameter] public string Category { get; set; } = "";
+    [Parameter] public string IconSvg { get; set; } = "";
+    [Parameter] public List<string> Modules { get; set; } = [];
+    [Parameter] public ScenarioStatus Status { get; set; } = ScenarioStatus.Draft;
+    [Parameter] public int BreachCount { get; set; }
+    [Parameter] public bool Selected { get; set; }
+    [Parameter] public EventCallback OnClick { get; set; }
+    [Parameter] public EventCallback OnRun { get; set; }
+}
+
+@code {
+    private async Task HandleRun()
+    {
+        if (OnRun.HasDelegate)
+            await OnRun.InvokeAsync();
+    }
+}

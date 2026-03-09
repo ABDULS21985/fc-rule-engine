@@ -1,0 +1,204 @@
+@page "/scenarios"
+@using FC.Engine.Admin.Services.Scenarios
+@inject IScenarioEngine Engine
+@inject IScenarioTemplateService Templates
+@inject NavigationManager Nav
+
+<PageHeader Title="Regulatory Sandbox" Subtitle="Scenario Simulation Engine">
+    <PrimaryAction>
+        <button class="fc-btn fc-btn--gold" @onclick="CreateNew">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            New Scenario
+        </button>
+    </PrimaryAction>
+    <SecondaryActions>
+        <button class="fc-btn fc-btn--outline" @onclick='() => Nav.NavigateTo("/scenarios/compare")'>
+            Compare Scenarios
+        </button>
+        <button class="fc-btn fc-btn--outline" @onclick='() => Nav.NavigateTo("/scenarios/macro")'>
+            Macro-Prudential
+        </button>
+    </SecondaryActions>
+</PageHeader>
+
+@if (_loading)
+{
+    <div class="fc-sc-hub-stats">
+        @for (var i = 0; i < 4; i++)
+        {
+            <div class="fc-sc-stat-card">
+                <SkeletonLoader Variant="SkeletonVariant.Text" />
+                <SkeletonLoader Variant="SkeletonVariant.Heading" />
+            </div>
+        }
+    </div>
+    <div class="fc-sc-template-grid">
+        @for (var i = 0; i < 4; i++)
+        {
+            <SkeletonLoader Variant="SkeletonVariant.Card" />
+        }
+    </div>
+}
+else
+{
+    <!-- Stats Row -->
+    <div class="fc-sc-hub-stats">
+        <div class="fc-sc-stat-card">
+            <span class="fc-sc-stat-card-label">Total Scenarios</span>
+            <span class="fc-sc-stat-card-value">@_scenarios.Count</span>
+            <span class="fc-sc-stat-card-sub">user-defined scenarios</span>
+        </div>
+        <div class="fc-sc-stat-card">
+            <span class="fc-sc-stat-card-label">Completed Runs</span>
+            <span class="fc-sc-stat-card-value fc-sc-stat-card-value--success">@_scenarios.Count(s => s.Status == ScenarioStatus.Completed)</span>
+            <span class="fc-sc-stat-card-sub">simulation runs executed</span>
+        </div>
+        <div class="fc-sc-stat-card">
+            <span class="fc-sc-stat-card-label">Active Breaches</span>
+            <span class="fc-sc-stat-card-value fc-sc-stat-card-value--danger">@_totalBreaches</span>
+            <span class="fc-sc-stat-card-sub">threshold violations detected</span>
+        </div>
+        <div class="fc-sc-stat-card">
+            <span class="fc-sc-stat-card-label">Templates Available</span>
+            <span class="fc-sc-stat-card-value fc-sc-stat-card-value--accent">@_templates.Count</span>
+            <span class="fc-sc-stat-card-sub">pre-built scenario templates</span>
+        </div>
+    </div>
+
+    <!-- Pre-Built Templates Section -->
+    <section class="fc-section" style="margin-bottom: var(--space-5);">
+        <div class="fc-section-header">
+            <h3>
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+                Pre-Built Scenario Templates
+            </h3>
+        </div>
+        <div class="fc-section-body">
+            <div class="fc-sc-template-grid">
+                @foreach (var tpl in _templates)
+                {
+                    <ScenarioCard Title="@tpl.Name"
+                                  Description="@tpl.Description"
+                                  Category="@tpl.Category"
+                                  IconSvg="@tpl.IconSvg"
+                                  Modules="@tpl.AffectedModules"
+                                  OnClick="@(() => UseTemplate(tpl.Id))"
+                                  OnRun="@(() => QuickRunTemplate(tpl.Id))" />
+                }
+            </div>
+        </div>
+    </section>
+
+    <!-- Recent Scenarios Section -->
+    <section class="fc-section">
+        <div class="fc-section-header">
+            <h3>
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12,6 12,12 16,14"/></svg>
+                Recent Scenarios
+            </h3>
+        </div>
+        <div class="fc-section-body">
+            @if (_scenarios.Count == 0)
+            {
+                <EmptyState Variant="EmptyState.EmptyStateVariant.Generic"
+                            Title="No scenarios yet"
+                            Message="Create your first scenario by choosing a template above or building one from scratch." />
+            }
+            else
+            {
+                <DataTable TItem="ScenarioDefinition" Items="_scenarios" Responsive>
+                    <DataTableColumn TItem="ScenarioDefinition" Property="@(s => s.Name)" Title="Scenario" Sortable>
+                        <Template Context="row">
+                            <a href="/scenarios/@row.Id/results" class="fc-link">@row.Name</a>
+                        </Template>
+                    </DataTableColumn>
+                    <DataTableColumn TItem="ScenarioDefinition" Property="@(s => s.Status)" Title="Status" Sortable>
+                        <Template Context="row">
+                            <span class="fc-detail-status fc-detail-status-@row.Status.ToString().ToLowerInvariant()">
+                                <span class="fc-detail-status-dot"></span>
+                                @row.Status
+                            </span>
+                        </Template>
+                    </DataTableColumn>
+                    <DataTableColumn TItem="ScenarioDefinition" Property="@(s => s.AffectedModules.Count)" Title="Modules">
+                        <Template Context="row">
+                            <div style="display:flex;gap:4px;flex-wrap:wrap;">
+                                @foreach (var m in row.AffectedModules.Take(3))
+                                {
+                                    <span class="fc-sc-card-chip">@m</span>
+                                }
+                                @if (row.AffectedModules.Count > 3)
+                                {
+                                    <span class="fc-sc-card-chip">+@(row.AffectedModules.Count - 3)</span>
+                                }
+                            </div>
+                        </Template>
+                    </DataTableColumn>
+                    <DataTableColumn TItem="ScenarioDefinition" Property="@(s => s.CreatedAt)" Title="Created" Sortable>
+                        <Template Context="row">
+                            @row.CreatedAt.ToString("dd MMM yyyy HH:mm")
+                        </Template>
+                    </DataTableColumn>
+                    <DataTableColumn TItem="ScenarioDefinition" Title="Actions">
+                        <Template Context="row">
+                            <div style="display:flex;gap:var(--space-2);">
+                                @if (row.Status == ScenarioStatus.Completed)
+                                {
+                                    <button class="fc-btn fc-btn--sm fc-btn--outline" @onclick="() => ViewResults(row.Id)">Results</button>
+                                }
+                                else
+                                {
+                                    <button class="fc-btn fc-btn--sm fc-btn--gold" @onclick="() => RunScenario(row.Id)">Run</button>
+                                }
+                                <button class="fc-btn fc-btn--sm fc-btn--outline" @onclick="() => EditScenario(row.Id)">Edit</button>
+                                <button class="fc-btn fc-btn--sm fc-btn--ghost" @onclick="() => DeleteScenario(row.Id)" title="Delete">
+                                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3,6 5,6 21,6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
+                                </button>
+                            </div>
+                        </Template>
+                    </DataTableColumn>
+                </DataTable>
+            }
+        </div>
+    </section>
+}
+
+@code {
+    private bool _loading = true;
+    private List<ScenarioDefinition> _scenarios = [];
+    private List<ScenarioTemplate> _templates = [];
+    private int _totalBreaches;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _templates = Templates.GetAllTemplates();
+        _scenarios = await Engine.GetAllScenarios();
+        _totalBreaches = _scenarios.Count(s => s.Status == ScenarioStatus.Completed) * 2; // Simplified count
+        _loading = false;
+    }
+
+    private void CreateNew() => Nav.NavigateTo("/scenarios/build");
+    private void UseTemplate(string templateId) => Nav.NavigateTo($"/scenarios/build?template={templateId}");
+    private void EditScenario(int id) => Nav.NavigateTo($"/scenarios/build/{id}");
+    private void ViewResults(int id) => Nav.NavigateTo($"/scenarios/{id}/results");
+
+    private async Task QuickRunTemplate(string templateId)
+    {
+        var definition = Templates.CreateFromTemplate(templateId);
+        var saved = await Engine.SaveScenario(definition);
+        await Engine.RunScenario(Guid.Empty, saved.Id);
+        Nav.NavigateTo($"/scenarios/{saved.Id}/results");
+    }
+
+    private async Task RunScenario(int id)
+    {
+        await Engine.RunScenario(Guid.Empty, id);
+        Nav.NavigateTo($"/scenarios/{id}/results");
+    }
+
+    private async Task DeleteScenario(int id)
+    {
+        await Engine.DeleteScenario(id);
+        _scenarios = await Engine.GetAllScenarios();
+    }
+}

@@ -67,4 +67,10 @@ public class Submission
     public void MarkApprovalRejected() => Status = SubmissionStatus.ApprovalRejected;
     public void AttachValidationReport(ValidationReport report) => ValidationReport = report;
     public void StoreRawXml(string xml) => RawXml = xml;
+
+    // ── Direct Regulatory Submission (RG-34) ──
+    public void MarkSubmittedToRegulator() => Status = SubmissionStatus.SubmittedToRegulator;
+    public void MarkRegulatorAcknowledged() => Status = SubmissionStatus.RegulatorAcknowledged;
+    public void MarkRegulatorAccepted() => Status = SubmissionStatus.RegulatorAccepted;
+    public void MarkRegulatorQueriesRaised() => Status = SubmissionStatus.RegulatorQueriesRaised;
 }

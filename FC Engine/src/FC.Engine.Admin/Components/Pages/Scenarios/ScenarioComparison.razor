@@ -1,0 +1,310 @@
+@page "/scenarios/compare"
+@using FC.Engine.Admin.Services.Scenarios
+@inject IScenarioEngine Engine
+@inject IScenarioTemplateService TemplateService
+@inject NavigationManager Nav
+@inject FC.Engine.Infrastructure.Charts.ChartJsInterop Charts
+
+<PageHeader Title="Scenario Comparison" Subtitle="Side-by-Side Metric Analysis" BackUrl="/scenarios">
+    <SecondaryActions>
+        <button class="fc-btn fc-btn--outline" @onclick="ExportView">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7,10 12,15 17,10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            Export
+        </button>
+    </SecondaryActions>
+</PageHeader>
+
+<!-- Scenario Selectors -->
+<div class="fc-sc-selector-row">
+    @for (var i = 0; i < _selectedIds.Count; i++)
+    {
+        var idx = i;
+        <div class="fc-sc-selector-item">
+            <span class="fc-sc-selector-label">Scenario @(idx + 1):</span>
+            <select class="fc-form-input" style="min-width:250px;" value="@_selectedIds[idx]" @onchange="e => OnSelectorChanged(idx, e)">
+                <option value="0">— Select scenario —</option>
+                @foreach (var s in _allScenarios)
+                {
+                    <option value="@s.Id">@s.Name (@s.Status)</option>
+                }
+            </select>
+        </div>
+    }
+    @if (_selectedIds.Count < 3)
+    {
+        <button class="fc-btn fc-btn--sm fc-btn--outline" @onclick="AddScenarioSlot">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            Add Scenario
+        </button>
+    }
+    <button class="fc-btn fc-btn--primary fc-btn--sm" @onclick="RunComparison"
+            disabled="@(_selectedIds.Count(id => id > 0) < 2 || _running)">
+        @if (_running) { <span class="fc-btn-spinner"></span> }
+        Compare
+    </button>
+</div>
+
+@if (_report == null && !_loading)
+{
+    <EmptyState Variant="EmptyState.EmptyStateVariant.Generic"
+                Title="Select scenarios to compare"
+                Message="Choose at least 2 scenarios above and click Compare to see a side-by-side analysis." />
+}
+else if (_loading)
+{
+    <SkeletonLoader Variant="SkeletonVariant.TableRows" />
+}
+else if (_report != null)
+{
+    <!-- Comparison Table -->
+    <section class="fc-section" style="margin-bottom:var(--space-5);" id="comparison-container">
+        <div class="fc-section-header">
+            <h3>Metric Comparison</h3>
+        </div>
+        <div class="fc-sc-compare-wrapper">
+            <table class="fc-sc-compare-table">
+                <thead>
+                    <tr>
+                        <th>Metric</th>
+                        <th>Baseline</th>
+                        @foreach (var s in _report.Scenarios)
+                        {
+                            <th>@s.ScenarioName</th>
+                        }
+                    </tr>
+                </thead>
+                <tbody>
+                    @{
+                        var grouped = GroupMetricsByCategory(_report);
+                    }
+                    @foreach (var group in grouped)
+                    {
+                        <tr>
+                            <td class="fc-sc-compare-category" colspan="@(2 + _report.Scenarios.Count)">@group.Key</td>
+                        </tr>
+                        @foreach (var metricName in group.Value)
+                        {
+                            <tr>
+                                <td>@metricName</td>
+                                <td>
+                                    @{
+                                        var first = _report.Scenarios.FirstOrDefault()?.KeyMetrics.FirstOrDefault(m => m.MetricName == metricName);
+                                    }
+                                    @if (first != null)
+                                    {
+                                        var isRatio = !metricName.Contains("₦");
+                                        @FormatMetric(first.BaselineValue, isRatio)
+                                    }
+                                </td>
+                                @foreach (var s in _report.Scenarios)
+                                {
+                                    var metric = s.KeyMetrics.FirstOrDefault(m => m.MetricName == metricName);
+                                    if (metric != null)
+                                    {
+                                        var cellClass = metric.Breach switch
+                                        {
+                                            BreachSeverity.Critical => "fc-sc-compare-cell--critical",
+                                            BreachSeverity.Breach => "fc-sc-compare-cell--breach",
+                                            BreachSeverity.Warning => "fc-sc-compare-cell--warning",
+                                            _ => ""
+                                        };
+                                        var isRatio = !metricName.Contains("₦");
+                                        <td class="@cellClass">
+                                            <div style="font-weight:600;">@FormatMetric(metric.ScenarioValue, isRatio)</div>
+                                            <div style="font-size:var(--text-caption);color:@(metric.DeltaPct < 0 ? "var(--cbn-danger)" : metric.DeltaPct > 0 ? "var(--cbn-success)" : "var(--cbn-text-muted)");">
+                                                @(metric.DeltaPct >= 0 ? "+" : "")@metric.DeltaPct.ToString("N1")%
+                                            </div>
+                                            <BreachIndicator Severity="metric.Breach" Compact />
+                                        </td>
+                                    }
+                                    else
+                                    {
+                                        <td>—</td>
+                                    }
+                                }
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <!-- Charts -->
+    <div class="fc-sc-chart-row">
+        <div class="fc-sc-chart-card">
+            <h4>Scenario Comparison — Key Metrics</h4>
+            <canvas id="sc-compare-bar" class="fc-sc-chart-canvas"></canvas>
+        </div>
+        <div class="fc-sc-chart-card">
+            <h4>Breach Distribution</h4>
+            <canvas id="sc-compare-breach" class="fc-sc-chart-canvas"></canvas>
+        </div>
+    </div>
+
+    <!-- Breach Summary -->
+    @if (_report.Scenarios.Any(s => s.Breaches.Count > 0))
+    {
+        <section class="fc-section">
+            <div class="fc-section-header"><h3>Breach Summary by Scenario</h3></div>
+            <div class="fc-section-body">
+                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:var(--space-4);">
+                    @foreach (var s in _report.Scenarios)
+                    {
+                        <div class="fc-sc-stat-card" style="@(s.Breaches.Count > 0 ? "border-left:3px solid var(--cbn-danger);" : "border-left:3px solid var(--cbn-success);")">
+                            <span class="fc-sc-stat-card-label">@s.ScenarioName</span>
+                            <span class="fc-sc-stat-card-value @(s.Breaches.Count > 0 ? "fc-sc-stat-card-value--danger" : "fc-sc-stat-card-value--success")">
+                                @s.Breaches.Count breach@(s.Breaches.Count != 1 ? "es" : "")
+                            </span>
+                            @foreach (var b in s.Breaches.Take(3))
+                            {
+                                <div style="font-size:var(--text-caption);display:flex;align-items:center;gap:4px;margin-top:2px;">
+                                    <BreachIndicator Severity="b.Severity" Compact />
+                                    <span>@b.MetricName</span>
+                                </div>
+                            }
+                            @if (s.Breaches.Count > 3)
+                            {
+                                <span style="font-size:var(--text-caption);color:var(--cbn-text-muted);">+@(s.Breaches.Count - 3) more</span>
+                            }
+                        </div>
+                    }
+                </div>
+            </div>
+        </section>
+    }
+}
+
+@code {
+    [SupplyParameterFromQuery(Name = "ids")] public string? InitialIds { get; set; }
+
+    private List<int> _selectedIds = [0, 0];
+    private List<ScenarioDefinition> _allScenarios = [];
+    private ComparisonReport? _report;
+    private bool _loading;
+    private bool _running;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _allScenarios = await Engine.GetAllScenarios();
+
+        if (!string.IsNullOrEmpty(InitialIds))
+        {
+            _selectedIds = InitialIds.Split(',')
+                .Select(s => int.TryParse(s.Trim(), out var v) ? v : 0)
+                .Where(v => v > 0)
+                .ToList();
+            while (_selectedIds.Count < 2) _selectedIds.Add(0);
+
+            if (_selectedIds.Count(id => id > 0) >= 1)
+            {
+                // Auto-run if we have at least one valid scenario
+            }
+        }
+    }
+
+    private void AddScenarioSlot()
+    {
+        if (_selectedIds.Count < 3)
+            _selectedIds.Add(0);
+    }
+
+    private void OnSelectorChanged(int idx, ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out var id))
+            _selectedIds[idx] = id;
+    }
+
+    private async Task RunComparison()
+    {
+        var validIds = _selectedIds.Where(id => id > 0).Distinct().ToList();
+        if (validIds.Count < 2) return;
+
+        _running = true;
+        _loading = true;
+        StateHasChanged();
+
+        try
+        {
+            _report = await Engine.CompareScenarios(Guid.Empty, validIds);
+        }
+        finally
+        {
+            _running = false;
+            _loading = false;
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_report != null && _report.Scenarios.Count > 0)
+        {
+            await RenderComparisonCharts();
+        }
+    }
+
+    private async Task RenderComparisonCharts()
+    {
+        if (_report == null) return;
+
+        var labels = _report.SharedMetricNames
+            .Take(8)
+            .Select(n => n.Length > 18 ? n[..18] + "..." : n)
+            .ToArray();
+
+        var colors = new[] { "#006B3F", "#dc2626", "#C8A415" };
+        var datasets = _report.Scenarios.Select((s, i) => new
+        {
+            label = s.ScenarioName.Length > 20 ? s.ScenarioName[..20] + "..." : s.ScenarioName,
+            data = _report.SharedMetricNames.Take(8)
+                .Select(n => s.KeyMetrics.FirstOrDefault(m => m.MetricName == n)?.ScenarioValue ?? 0m)
+                .ToArray(),
+            color = colors[i % colors.Length],
+        }).ToArray();
+
+        await Charts.InitChart("sc-compare-bar", new
+        {
+            type = "bar",
+            labels,
+            datasets,
+            legend = true,
+        });
+
+        // Breach distribution donut
+        var breachLabels = _report.Scenarios.Select(s => s.ScenarioName).ToArray();
+        var breachValues = _report.Scenarios.Select(s => (decimal)s.Breaches.Count).ToArray();
+        var breachColors = colors.Take(_report.Scenarios.Count).ToArray();
+
+        await Charts.RenderDonutWithColors("sc-compare-breach", breachLabels, breachValues, breachColors);
+    }
+
+    private static Dictionary<string, List<string>> GroupMetricsByCategory(ComparisonReport report)
+    {
+        var result = new Dictionary<string, List<string>>();
+        foreach (var metricName in report.SharedMetricNames)
+        {
+            var category = metricName switch
+            {
+                _ when metricName.Contains("Capital") || metricName.Contains("CAR") || metricName.Contains("Tier") => "Capital Adequacy",
+                _ when metricName.Contains("LCR") || metricName.Contains("NSFR") || metricName.Contains("Deposit") || metricName.Contains("Loan-to") => "Liquidity",
+                _ when metricName.Contains("NPL") || metricName.Contains("Provision") || metricName.Contains("Stranded") || metricName.Contains("Concentration") => "Asset Quality",
+                _ when metricName.Contains("NII") || metricName.Contains("ROE") || metricName.Contains("NDIC") => "Profitability & P&L",
+                _ when metricName.Contains("FX") || metricName.Contains("Bond") => "Market Risk",
+                _ => "Other"
+            };
+
+            if (!result.ContainsKey(category))
+                result[category] = [];
+            result[category].Add(metricName);
+        }
+        return result;
+    }
+
+    private static string FormatMetric(decimal value, bool isRatio)
+        => isRatio ? $"{value:N1}%" : $"₦{value:N1}";
+
+    private void ExportView()
+    {
+        // Trigger print via JS interop
+    }
+}

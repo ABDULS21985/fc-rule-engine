@@ -1,0 +1,33 @@
+@using FC.Engine.Admin.Services.Scenarios
+
+@if (Severity != BreachSeverity.None)
+{
+    <span class="fc-sc-breach fc-sc-breach--@Severity.ToString().ToLowerInvariant()" title="@TooltipText">
+        <span class="fc-sc-breach-dot"></span>
+        @if (!Compact)
+        {
+            <span class="fc-sc-breach-label">@LabelText</span>
+        }
+    </span>
+}
+
+@code {
+    [Parameter] public BreachSeverity Severity { get; set; }
+    [Parameter] public bool Compact { get; set; }
+
+    private string LabelText => Severity switch
+    {
+        BreachSeverity.Warning => "Warning",
+        BreachSeverity.Breach => "BREACH",
+        BreachSeverity.Critical => "CRITICAL",
+        _ => ""
+    };
+
+    private string TooltipText => Severity switch
+    {
+        BreachSeverity.Warning => "Approaching regulatory threshold",
+        BreachSeverity.Breach => "Regulatory threshold breached",
+        BreachSeverity.Critical => "Critical: far beyond regulatory threshold",
+        _ => ""
+    };
+}

@@ -1,0 +1,418 @@
+@page "/scenarios/macro"
+@using FC.Engine.Admin.Services.Scenarios
+@inject IScenarioEngine Engine
+@inject IScenarioTemplateService TemplateService
+@inject FC.Engine.Infrastructure.Charts.ChartJsInterop Charts
+
+<PageHeader Title="Macro-Prudential Scenarios" Subtitle="Sector-Wide Impact Analysis" BackUrl="/scenarios">
+    <SecondaryActions>
+        @if (_result != null)
+        {
+            <button class="fc-btn fc-btn--outline" @onclick="Reset">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23,4 23,10 17,10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
+                New Analysis
+            </button>
+        }
+    </SecondaryActions>
+</PageHeader>
+
+@if (_result == null)
+{
+    <!-- Shock Selector -->
+    <section class="fc-section" style="margin-bottom:var(--space-5);">
+        <div class="fc-section-header">
+            <h3>
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+                Select Macro Shock
+            </h3>
+        </div>
+        <div class="fc-section-body">
+            <div class="fc-sc-macro-shock-grid">
+                @foreach (var tpl in _templates)
+                {
+                    var isSelected = _selectedTemplateId == tpl.Id;
+                    <div class="fc-sc-macro-shock-card @(isSelected ? "fc-sc-macro-shock-card--selected" : "")"
+                         @onclick="() => SelectShock(tpl.Id)">
+                        <div style="display:flex;align-items:center;gap:var(--space-2);margin-bottom:var(--space-2);">
+                            <div class="fc-sc-card-icon">
+                                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" aria-hidden="true">@((MarkupString)tpl.IconSvg)</svg>
+                            </div>
+                            <strong style="font-size:var(--text-body-sm);">@tpl.Name</strong>
+                        </div>
+                        <p style="font-size:var(--text-caption);color:var(--cbn-text-secondary);margin:0 0 var(--space-2);">@tpl.Description</p>
+                        <div style="display:flex;gap:4px;flex-wrap:wrap;">
+                            @foreach (var mod in tpl.AffectedModules)
+                            {
+                                <span class="fc-sc-card-chip">@mod</span>
+                            }
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+    </section>
+
+    <!-- Configuration -->
+    @if (!string.IsNullOrEmpty(_selectedTemplateId))
+    {
+        <div class="fc-sc-macro-config">
+            <label>Shock Magnitude:</label>
+            <input type="range" min="10" max="200" step="5" @bind="_magnitudePct" style="flex:1;max-width:300px;" />
+            <span style="font-weight:600;min-width:50px;text-align:center;">@_magnitudePct%</span>
+
+            <label style="margin-left:var(--space-4);">Institution Types:</label>
+            <div style="display:flex;gap:var(--space-2);">
+                @foreach (var t in _institutionTypes)
+                {
+                    var isChecked = _selectedTypes.Contains(t);
+                    <label style="display:flex;align-items:center;gap:4px;font-size:var(--text-body-sm);cursor:pointer;">
+                        <input type="checkbox" checked="@isChecked" @onchange="() => ToggleType(t)" />
+                        @t
+                    </label>
+                }
+            </div>
+
+            <button class="fc-btn fc-btn--gold" @onclick="RunAnalysis" disabled="@_running" style="margin-left:auto;">
+                @if (_running)
+                {
+                    <span class="fc-btn-spinner"></span>
+                    <text>Analysing...</text>
+                }
+                else
+                {
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5,3 19,12 5,21"/></svg>
+                    <text>Run Sector Analysis</text>
+                }
+            </button>
+        </div>
+    }
+}
+else
+{
+    <!-- Results -->
+    <!-- Sector Summary Strip -->
+    <div class="fc-sc-results-strip">
+        <div class="fc-sc-stat-card">
+            <span class="fc-sc-stat-card-label">Total Institutions</span>
+            <span class="fc-sc-stat-card-value">@_result.TotalInstitutions</span>
+            <span class="fc-sc-stat-card-sub">@_selectedTypes.Count type(s) analysed</span>
+        </div>
+        <div class="fc-sc-stat-card">
+            <span class="fc-sc-stat-card-label">Breaching Institutions</span>
+            <span class="fc-sc-stat-card-value fc-sc-stat-card-value--danger">@_result.InstitutionsBreaching</span>
+            <span class="fc-sc-stat-card-sub">@((_result.TotalInstitutions > 0 ? (decimal)_result.InstitutionsBreaching / _result.TotalInstitutions * 100 : 0).ToString("N0"))% of sector</span>
+        </div>
+        <div class="fc-sc-stat-card">
+            <span class="fc-sc-stat-card-label">Critical Breaches</span>
+            <span class="fc-sc-stat-card-value fc-sc-stat-card-value--danger">@_result.CriticalBreaches</span>
+            <span class="fc-sc-stat-card-sub">institutions in critical zone</span>
+        </div>
+        <div class="fc-sc-stat-card">
+            <span class="fc-sc-stat-card-label">Systemic Risk</span>
+            <span class="fc-sc-stat-card-value @(_systemic >= 70 ? "fc-sc-stat-card-value--danger" : _systemic >= 40 ? "fc-sc-stat-card-value--accent" : "fc-sc-stat-card-value--success")">
+                @_systemic.ToString("N0")
+            </span>
+            <span class="fc-sc-stat-card-sub">risk score (0–100)</span>
+        </div>
+    </div>
+
+    <!-- Sector Aggregates Table -->
+    <section class="fc-section" style="margin-bottom:var(--space-5);">
+        <div class="fc-section-header"><h3>Sector Aggregates</h3></div>
+        <div class="fc-section-body" style="padding:0;">
+            <table class="fc-sc-metric-table">
+                <thead>
+                    <tr>
+                        <th>Metric</th>
+                        <th>Sector Avg (Baseline)</th>
+                        <th>Sector Avg (Scenario)</th>
+                        <th>Worst Case</th>
+                        <th>Worst Institution</th>
+                        <th># Breaching</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var (key, agg) in _result.SectorAggregates)
+                    {
+                        var isRatio = !key.Contains("₦");
+                        <tr>
+                            <td class="fc-sc-metric-name">@key</td>
+                            <td>@FormatMetric(agg.SectorAvgBaseline, isRatio)</td>
+                            <td style="font-weight:600;">@FormatMetric(agg.SectorAvgScenario, isRatio)</td>
+                            <td style="font-weight:700;color:var(--cbn-danger);">@FormatMetric(agg.WorstCase, isRatio)</td>
+                            <td>@agg.WorstCaseInstitution</td>
+                            <td>
+                                @if (agg.CountBreaching > 0)
+                                {
+                                    <span style="color:var(--cbn-danger);font-weight:600;">@agg.CountBreaching</span>
+                                }
+                                else
+                                {
+                                    <span style="color:var(--cbn-success);">0</span>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <!-- Institution Heatmap -->
+    <section class="fc-section" style="margin-bottom:var(--space-5);">
+        <div class="fc-section-header">
+            <h3>Institution Impact Heatmap</h3>
+            <div style="display:flex;gap:var(--space-2);align-items:center;font-size:var(--text-caption);">
+                <span class="fc-sc-heatmap-cell fc-sc-heatmap-cell--green" style="padding:2px 8px;border-radius:4px;">Safe</span>
+                <span class="fc-sc-heatmap-cell fc-sc-heatmap-cell--amber" style="padding:2px 8px;border-radius:4px;">Warning</span>
+                <span class="fc-sc-heatmap-cell fc-sc-heatmap-cell--red" style="padding:2px 8px;border-radius:4px;">Breach</span>
+                <span class="fc-sc-heatmap-cell fc-sc-heatmap-cell--critical" style="padding:2px 8px;border-radius:4px;">Critical</span>
+            </div>
+        </div>
+        <div class="fc-section-body" style="padding:0;overflow-x:auto;">
+            <table class="fc-sc-metric-table" style="min-width:800px;">
+                <thead>
+                    <tr>
+                        <th>Institution</th>
+                        <th>Type</th>
+                        <th>SII</th>
+                        @foreach (var metricName in _heatmapMetrics)
+                        {
+                            <th>@TruncateMetric(metricName)</th>
+                        }
+                        <th>Worst</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var inst in _result.Impacts.OrderByDescending(i => i.WorstBreach).ThenByDescending(i => i.IsSystemicallyImportant))
+                    {
+                        <tr>
+                            <td style="font-weight:600;">@inst.InstitutionName</td>
+                            <td><span class="fc-sc-card-chip">@inst.InstitutionType</span></td>
+                            <td>
+                                @if (inst.IsSystemicallyImportant)
+                                {
+                                    <span class="fc-sc-sii-badge">SII</span>
+                                }
+                            </td>
+                            @foreach (var metricName in _heatmapMetrics)
+                            {
+                                var metric = inst.Metrics.FirstOrDefault(m => m.MetricName == metricName);
+                                if (metric != null)
+                                {
+                                    var cellClass = metric.Breach switch
+                                    {
+                                        BreachSeverity.Critical => "fc-sc-heatmap-cell--critical",
+                                        BreachSeverity.Breach => "fc-sc-heatmap-cell--red",
+                                        BreachSeverity.Warning => "fc-sc-heatmap-cell--amber",
+                                        _ => "fc-sc-heatmap-cell--green"
+                                    };
+                                    var isRatio = !metricName.Contains("₦");
+                                    <td class="fc-sc-heatmap-cell @cellClass">
+                                        @FormatMetric(metric.ScenarioValue, isRatio)
+                                    </td>
+                                }
+                                else
+                                {
+                                    <td>—</td>
+                                }
+                            }
+                            <td><BreachIndicator Severity="inst.WorstBreach" /></td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <!-- Charts -->
+    <div class="fc-sc-chart-row">
+        <div class="fc-sc-chart-card">
+            <h4>CAR Distribution — Before vs After Shock</h4>
+            <canvas id="sc-macro-dist" class="fc-sc-chart-canvas"></canvas>
+        </div>
+        <div class="fc-sc-chart-card">
+            <h4>Institutions at Risk</h4>
+            <canvas id="sc-macro-risk" class="fc-sc-chart-canvas"></canvas>
+        </div>
+    </div>
+
+    <!-- At-Risk Institutions -->
+    @{
+        var atRisk = _result.Impacts
+            .Where(i => i.WorstBreach >= BreachSeverity.Breach)
+            .OrderByDescending(i => i.WorstBreach)
+            .ThenByDescending(i => i.IsSystemicallyImportant)
+            .ToList();
+    }
+    @if (atRisk.Count > 0)
+    {
+        <div class="fc-sc-breach-panel">
+            <h4 class="fc-sc-breach-panel-title">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+                    <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+                </svg>
+                At-Risk Institutions (@atRisk.Count)
+            </h4>
+            <ul class="fc-sc-breach-list">
+                @foreach (var inst in atRisk)
+                {
+                    <li class="fc-sc-breach-item">
+                        <BreachIndicator Severity="inst.WorstBreach" Compact />
+                        <span class="fc-sc-breach-item-message">
+                            <strong>@inst.InstitutionName</strong> (@inst.InstitutionType)
+                            @if (inst.IsSystemicallyImportant) { <span class="fc-sc-sii-badge" style="margin-left:4px;">SII</span> }
+                            — @inst.Breaches.Count breach@(inst.Breaches.Count != 1 ? "es" : ""):
+                            @string.Join(", ", inst.Breaches.Select(b => b.MetricName))
+                        </span>
+                    </li>
+                }
+            </ul>
+        </div>
+    }
+}
+
+@code {
+    private List<ScenarioTemplate> _templates = [];
+    private string _selectedTemplateId = "";
+    private int _magnitudePct = 100;
+    private HashSet<string> _selectedTypes = ["DMB", "MFB", "PMB", "BDC", "DFI"];
+    private static readonly string[] _institutionTypes = ["DMB", "MFB", "PMB", "BDC", "DFI"];
+    private bool _running;
+    private MacroPrudentialResult? _result;
+    private decimal _systemic;
+    private List<string> _heatmapMetrics = [];
+
+    protected override void OnInitialized()
+    {
+        _templates = TemplateService.GetAllTemplates()
+            .Where(t => t.Category == "Stress Test")
+            .ToList();
+    }
+
+    private void SelectShock(string id) => _selectedTemplateId = id;
+
+    private void ToggleType(string type)
+    {
+        if (_selectedTypes.Contains(type))
+            _selectedTypes.Remove(type);
+        else
+            _selectedTypes.Add(type);
+    }
+
+    private async Task RunAnalysis()
+    {
+        _running = true;
+        StateHasChanged();
+
+        try
+        {
+            var definition = TemplateService.CreateFromTemplate(_selectedTemplateId);
+            definition.Scope = ScenarioScope.MacroPrudential;
+
+            // Scale overrides by magnitude
+            if (_magnitudePct != 100)
+            {
+                var scale = _magnitudePct / 100m;
+                definition.Overrides = definition.Overrides
+                    .Select(o => o with { ShockValue = o.ShockValue * scale })
+                    .ToList();
+            }
+
+            _result = await Engine.RunMacroPrudential(Guid.Empty, definition);
+
+            // Filter by selected types
+            _result = _result with
+            {
+                Impacts = _result.Impacts.Where(i => _selectedTypes.Contains(i.InstitutionType)).ToList(),
+                TotalInstitutions = _result.Impacts.Count(i => _selectedTypes.Contains(i.InstitutionType)),
+                InstitutionsBreaching = _result.Impacts.Count(i => _selectedTypes.Contains(i.InstitutionType) && i.WorstBreach >= BreachSeverity.Breach),
+                CriticalBreaches = _result.Impacts.Count(i => _selectedTypes.Contains(i.InstitutionType) && i.WorstBreach == BreachSeverity.Critical),
+            };
+
+            // Compute systemic risk score
+            var siiBreaching = _result.Impacts.Count(i => i.IsSystemicallyImportant && i.WorstBreach >= BreachSeverity.Breach);
+            var breachPct = _result.TotalInstitutions > 0 ? (decimal)_result.InstitutionsBreaching / _result.TotalInstitutions * 100 : 0;
+            _systemic = Math.Min(100, breachPct * 0.6m + siiBreaching * 15m + _result.CriticalBreaches * 5m);
+
+            // Get common metrics for heatmap
+            _heatmapMetrics = _result.Impacts
+                .SelectMany(i => i.Metrics.Select(m => m.MetricName))
+                .GroupBy(n => n)
+                .OrderByDescending(g => g.Count())
+                .Take(5)
+                .Select(g => g.Key)
+                .ToList();
+        }
+        finally
+        {
+            _running = false;
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_result != null && _result.Impacts.Count > 0)
+        {
+            await RenderMacroCharts();
+        }
+    }
+
+    private async Task RenderMacroCharts()
+    {
+        if (_result == null) return;
+
+        // CAR distribution
+        var carMetric = _result.Impacts
+            .Select(i => i.Metrics.FirstOrDefault(m => m.MetricName.Contains("Capital Adequacy")))
+            .Where(m => m != null)
+            .ToList();
+
+        if (carMetric.Count > 0)
+        {
+            var labels = _result.Impacts.Select(i => i.InstitutionName.Length > 12 ? i.InstitutionName[..12] : i.InstitutionName).ToArray();
+            var baselines = carMetric.Select(m => m!.BaselineValue).ToArray();
+            var scenarios = carMetric.Select(m => m!.ScenarioValue).ToArray();
+
+            await Charts.InitChart("sc-macro-dist", new
+            {
+                type = "bar",
+                labels,
+                datasets = new[]
+                {
+                    new { label = "Baseline CAR", data = baselines, color = "#006B3F" },
+                    new { label = "Post-Shock CAR", data = scenarios, color = "#dc2626" },
+                },
+                legend = true,
+            });
+        }
+
+        // Risk donut
+        var safe = _result.Impacts.Count(i => i.WorstBreach == BreachSeverity.None);
+        var warning = _result.Impacts.Count(i => i.WorstBreach == BreachSeverity.Warning);
+        var breach = _result.Impacts.Count(i => i.WorstBreach == BreachSeverity.Breach);
+        var critical = _result.Impacts.Count(i => i.WorstBreach == BreachSeverity.Critical);
+
+        await Charts.RenderDonutWithColors("sc-macro-risk",
+            new[] { "Safe", "Warning", "Breach", "Critical" },
+            new[] { (decimal)safe, warning, breach, critical },
+            new[] { "#16a34a", "#d97706", "#dc2626", "#991b1b" });
+    }
+
+    private void Reset()
+    {
+        _result = null;
+        _selectedTemplateId = "";
+    }
+
+    private static string FormatMetric(decimal value, bool isRatio)
+        => isRatio ? $"{value:N1}%" : $"₦{value:N1}";
+
+    private static string TruncateMetric(string name)
+    {
+        var paren = name.IndexOf('(');
+        if (paren > 0 && paren < 15) return name[..paren].Trim();
+        return name.Length > 15 ? name[..15] + "..." : name;
+    }
+}

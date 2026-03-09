@@ -1,0 +1,192 @@
+@page "/submissions/direct"
+@attribute [Authorize(Policy = "PlatformAdmin")]
+@inject IDirectSubmissionRepository DirectSubmissionRepo
+@using FC.Engine.Domain.Abstractions
+@using FC.Engine.Domain.Entities
+@using FC.Engine.Domain.Enums
+
+<PageTitle>Direct Submissions — FC Engine Admin</PageTitle>
+
+<div class="admin-page">
+    <div class="admin-page-header">
+        <h1 class="admin-page-title">Direct Regulatory Submissions</h1>
+        <p class="admin-page-subtitle">Monitor submissions sent directly to regulator portals via API</p>
+    </div>
+
+    @if (isLoading)
+    {
+        <div class="admin-card" style="padding:2rem; text-align:center;">
+            <div class="admin-spinner"></div>
+            <p style="color:#6b7280; margin-top:0.75rem;">Loading direct submissions...</p>
+        </div>
+    }
+    else
+    {
+        <div class="admin-kpi-row" style="display:grid; grid-template-columns:repeat(4,1fr); gap:1rem; margin-bottom:1.5rem;">
+            <div class="admin-card admin-kpi-card" style="padding:1rem;">
+                <div style="font-size:0.75rem; color:#6b7280; font-weight:600; text-transform:uppercase;">Total Sent</div>
+                <div style="font-size:1.75rem; font-weight:700; color:#111827;">@totalSubmissions</div>
+            </div>
+            <div class="admin-card admin-kpi-card" style="padding:1rem;">
+                <div style="font-size:0.75rem; color:#059669; font-weight:600; text-transform:uppercase;">Accepted</div>
+                <div style="font-size:1.75rem; font-weight:700; color:#059669;">@acceptedCount</div>
+            </div>
+            <div class="admin-card admin-kpi-card" style="padding:1rem;">
+                <div style="font-size:0.75rem; color:#d97706; font-weight:600; text-transform:uppercase;">Pending / In-Flight</div>
+                <div style="font-size:1.75rem; font-weight:700; color:#d97706;">@pendingCount</div>
+            </div>
+            <div class="admin-card admin-kpi-card" style="padding:1rem;">
+                <div style="font-size:0.75rem; color:#dc2626; font-weight:600; text-transform:uppercase;">Failed / Exhausted</div>
+                <div style="font-size:1.75rem; font-weight:700; color:#dc2626;">@failedCount</div>
+            </div>
+        </div>
+
+        <div class="admin-card" style="padding:0;">
+            <div style="padding:1rem; border-bottom:1px solid #e5e7eb; display:flex; gap:0.75rem; align-items:center;">
+                <select class="admin-form-select" style="min-width:120px;" @bind="filterRegulator" @bind:after="ApplyFilter">
+                    <option value="">All Regulators</option>
+                    <option value="CBN">CBN</option>
+                    <option value="NFIU">NFIU</option>
+                    <option value="NDIC">NDIC</option>
+                    <option value="SEC">SEC</option>
+                    <option value="NAICOM">NAICOM</option>
+                    <option value="PENCOM">PenCom</option>
+                </select>
+                <select class="admin-form-select" style="min-width:120px;" @bind="filterStatus" @bind:after="ApplyFilter">
+                    <option value="">All Statuses</option>
+                    <option value="Submitted">Submitted</option>
+                    <option value="Acknowledged">Acknowledged</option>
+                    <option value="Accepted">Accepted</option>
+                    <option value="Failed">Failed</option>
+                    <option value="RetryScheduled">Retry Scheduled</option>
+                    <option value="Exhausted">Exhausted</option>
+                </select>
+            </div>
+
+            @if (filteredSubmissions.Count == 0)
+            {
+                <div style="padding:2rem; text-align:center; color:#6b7280;">
+                    No direct submissions found.
+                </div>
+            }
+            else
+            {
+                <div class="admin-table-wrap">
+                    <table class="admin-table">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Submission</th>
+                                <th>Regulator</th>
+                                <th>Status</th>
+                                <th>Reference</th>
+                                <th>Attempts</th>
+                                <th>Submitted</th>
+                                <th>Acknowledged</th>
+                                <th>Created By</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var ds in filteredSubmissions)
+                            {
+                                <tr>
+                                    <td>@ds.Id</td>
+                                    <td><a href="/submissions/@ds.SubmissionId">#@ds.SubmissionId</a></td>
+                                    <td><strong>@ds.RegulatorCode</strong></td>
+                                    <td>
+                                        <span class="admin-badge @GetBadgeClass(ds.Status)">
+                                            @ds.Status
+                                        </span>
+                                    </td>
+                                    <td style="font-family:monospace; font-size:0.8rem;">@(ds.RegulatorReference ?? "—")</td>
+                                    <td>@ds.AttemptCount / @ds.MaxAttempts</td>
+                                    <td>@(ds.SubmittedAt?.ToString("dd MMM yyyy HH:mm") ?? "—")</td>
+                                    <td>@(ds.AcknowledgedAt?.ToString("dd MMM yyyy HH:mm") ?? "—")</td>
+                                    <td>@ds.CreatedBy</td>
+                                </tr>
+                                @if (!string.IsNullOrEmpty(ds.ErrorMessage))
+                                {
+                                    <tr>
+                                        <td colspan="9" style="background:#fef3c7; color:#92400e; font-size:0.8rem; padding:0.35rem 1rem;">
+                                            @ds.ErrorMessage
+                                        </td>
+                                    </tr>
+                                }
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    private bool isLoading = true;
+    private List<DirectSubmission> allSubmissions = new();
+    private List<DirectSubmission> filteredSubmissions = new();
+
+    private string filterRegulator = "";
+    private string filterStatus = "";
+
+    private int totalSubmissions;
+    private int acceptedCount;
+    private int pendingCount;
+    private int failedCount;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData();
+    }
+
+    private async Task LoadData()
+    {
+        isLoading = true;
+
+        // Load all direct submissions across all tenants (admin view)
+        // For admin, we use a custom query approach — load submitted+acknowledged+etc.
+        var submitted = await DirectSubmissionRepo.GetSubmittedAwaitingStatus(500);
+        var retries = await DirectSubmissionRepo.GetPendingRetries(500);
+        allSubmissions = submitted.Concat(retries).OrderByDescending(d => d.CreatedAt).ToList();
+
+        totalSubmissions = allSubmissions.Count;
+        acceptedCount = allSubmissions.Count(d => d.Status == DirectSubmissionStatus.Accepted);
+        pendingCount = allSubmissions.Count(d => d.Status == DirectSubmissionStatus.Submitted
+            || d.Status == DirectSubmissionStatus.Acknowledged
+            || d.Status == DirectSubmissionStatus.Submitting);
+        failedCount = allSubmissions.Count(d => d.Status == DirectSubmissionStatus.Failed
+            || d.Status == DirectSubmissionStatus.Exhausted);
+
+        ApplyFilter();
+        isLoading = false;
+    }
+
+    private void ApplyFilter()
+    {
+        filteredSubmissions = allSubmissions.Where(d =>
+        {
+            if (!string.IsNullOrEmpty(filterRegulator)
+                && !string.Equals(d.RegulatorCode, filterRegulator, StringComparison.OrdinalIgnoreCase))
+                return false;
+
+            if (!string.IsNullOrEmpty(filterStatus)
+                && !string.Equals(d.Status.ToString(), filterStatus, StringComparison.OrdinalIgnoreCase))
+                return false;
+
+            return true;
+        }).ToList();
+    }
+
+    private static string GetBadgeClass(DirectSubmissionStatus status) => status switch
+    {
+        DirectSubmissionStatus.Submitted       => "admin-badge-info",
+        DirectSubmissionStatus.Acknowledged    => "admin-badge-info",
+        DirectSubmissionStatus.Accepted        => "admin-badge-success",
+        DirectSubmissionStatus.Rejected        => "admin-badge-danger",
+        DirectSubmissionStatus.Failed          => "admin-badge-danger",
+        DirectSubmissionStatus.Exhausted       => "admin-badge-danger",
+        DirectSubmissionStatus.RetryScheduled  => "admin-badge-warning",
+        DirectSubmissionStatus.QualityFeedback => "admin-badge-warning",
+        _                                      => "admin-badge-neutral",
+    };
+}

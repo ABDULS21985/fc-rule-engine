@@ -1,0 +1,411 @@
+@page "/dashboard/health"
+@attribute [Authorize(Policy = "InstitutionUser")]
+@using FC.Engine.Domain.Abstractions
+@using FC.Engine.Domain.Models
+@using FC.Engine.Infrastructure.Charts
+@using FC.Engine.Infrastructure.Services
+@inject IComplianceHealthService ChsService
+@inject ChartJsInterop Charts
+@inject IJSRuntime JS
+
+<PageTitle>Compliance Health Score — FC Engine Portal</PageTitle>
+
+@if (_loading)
+{
+    <div class="portal-page">
+        <div class="portal-chs-heroes">
+            @for (int i = 0; i < 3; i++)
+            {
+                <div class="portal-chs-hero-card">
+                    <div class="portal-skeleton" style="width:88px;height:88px;border-radius:50%;"></div>
+                    <div style="flex:1">
+                        <div class="portal-skeleton portal-skeleton-text portal-skeleton-lg" style="margin-bottom:.5rem;"></div>
+                        <div class="portal-skeleton portal-skeleton-text portal-skeleton-sm"></div>
+                    </div>
+                </div>
+            }
+        </div>
+        <div class="portal-skeleton portal-skeleton-block" style="height:340px;border-radius:var(--radius-xl);margin-top:1rem;"></div>
+        <div class="portal-skeleton portal-skeleton-block" style="height:300px;border-radius:var(--radius-xl);margin-top:1rem;"></div>
+    </div>
+}
+else if (_data is not null)
+{
+    var current = _data.Current;
+    var peer = _data.PeerComparison;
+
+    <div class="portal-page">
+
+        <!-- ════════════════════════════════════════════════════
+             PAGE HEADER
+             ════════════════════════════════════════════════════ -->
+        <PortalPageHeader Breadcrumb="_breadcrumb"
+                          Title="Compliance Health Score"
+                          Subtitle="@($"{current.TenantName} · {current.LicenceType} · Updated {_data.GeneratedAt:d MMM HH:mm}")">
+            <PrimaryAction>
+                <button class="portal-btn portal-btn-primary portal-btn-sm" @onclick="RefreshAsync">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                        <polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/>
+                    </svg>
+                    Refresh
+                </button>
+            </PrimaryAction>
+        </PortalPageHeader>
+
+        <!-- ════════════════════════════════════════════════════
+             ALERT BANNER (conditional)
+             ════════════════════════════════════════════════════ -->
+        @if (_data.ActiveAlerts.Count > 0)
+        {
+            var topAlert = _data.ActiveAlerts[0];
+            <div class="portal-chs-alert-banner portal-chs-alert-banner--@topAlert.Severity" role="alert">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                    <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+                    <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+                </svg>
+                <span>@topAlert.Message</span>
+            </div>
+        }
+
+        <!-- ════════════════════════════════════════════════════
+             HERO CARDS
+             ════════════════════════════════════════════════════ -->
+        <section class="portal-chs-heroes" aria-label="Compliance health metrics">
+
+            <!-- Score Ring -->
+            <div class="portal-chs-hero-card portal-chs-hero-card--score">
+                <div class="portal-chs-score-ring" style="--pct: @current.OverallScore; --ring-color: @GetRatingColor(current.Rating);"
+                     role="img" aria-label="Compliance Health Score: @current.OverallScore">
+                    <div class="portal-chs-ring-inner">
+                        <span class="portal-chs-ring-score">@current.OverallScore.ToString("F0")</span>
+                        <span class="portal-chs-ring-label">CHS</span>
+                    </div>
+                </div>
+                <div class="portal-chs-hero-body">
+                    <span class="portal-chs-hero-label">Health Score</span>
+                    <span class="portal-chs-hero-sub">out of 100</span>
+                </div>
+            </div>
+
+            <!-- Rating Badge -->
+            <div class="portal-chs-hero-card portal-chs-hero-card--rating">
+                <div class="portal-chs-rating-badge" style="--badge-color: @GetRatingColor(current.Rating);">
+                    @ComplianceHealthService.RatingLabel(current.Rating)
+                </div>
+                <div class="portal-chs-hero-body">
+                    <span class="portal-chs-hero-label">@ComplianceHealthService.RatingDescription(current.Rating)</span>
+                    <span class="portal-chs-trend-chip portal-chs-trend-chip--@current.Trend.ToString().ToLowerInvariant()">
+                        @ComplianceHealthService.TrendArrow(current.Trend) @current.Trend
+                    </span>
+                </div>
+            </div>
+
+            <!-- Percentile Card -->
+            <div class="portal-chs-hero-card portal-chs-hero-card--peer">
+                <div class="portal-chs-percentile-ring" style="--pct: @peer.Percentile; --ring-color: var(--cbn-info);"
+                     role="img" aria-label="@peer.Percentile th percentile">
+                    <div class="portal-chs-ring-inner">
+                        <span class="portal-chs-ring-score">@(peer.Percentile)<sup>th</sup></span>
+                    </div>
+                </div>
+                <div class="portal-chs-hero-body">
+                    <span class="portal-chs-hero-label">Percentile</span>
+                    <span class="portal-chs-hero-sub">among @peer.PeerCount @peer.LicenceType peers</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- ════════════════════════════════════════════════════
+             5-PILLAR BREAKDOWN
+             ════════════════════════════════════════════════════ -->
+        <section class="portal-chs-section" aria-label="Pillar breakdown">
+            <h2 class="portal-chs-section-title">Five-Pillar Breakdown</h2>
+
+            <div class="portal-chs-pillar-grid">
+                <!-- Radar Chart -->
+                <div class="portal-chs-chart-card">
+                    <canvas id="chs-radar-chart" class="portal-chs-chart-canvas" aria-label="Radar chart of pillar scores vs peer median"></canvas>
+                </div>
+
+                <!-- Pillar Detail Table -->
+                <div class="portal-chs-pillar-table-card">
+                    <table class="portal-chs-pillar-table" aria-label="Pillar scores detail">
+                        <thead>
+                            <tr>
+                                <th>Pillar</th>
+                                <th>Score</th>
+                                <th>Weight</th>
+                                <th>Contribution</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var pillar in _data.Pillars)
+                            {
+                                <tr>
+                                    <td>
+                                        <span class="portal-chs-pillar-name">@pillar.PillarName</span>
+                                        <span class="portal-chs-pillar-desc">@pillar.Description</span>
+                                    </td>
+                                    <td>
+                                        <div class="portal-chs-pillar-bar-wrap">
+                                            <div class="portal-chs-pillar-bar" style="--pct: @pillar.Score; --bar-color: @GetScoreColor(pillar.Score);"></div>
+                                            <span class="portal-chs-pillar-bar-val">@pillar.Score.ToString("F0")</span>
+                                        </div>
+                                    </td>
+                                    <td>@((pillar.Weight * 100).ToString("F0"))%</td>
+                                    <td><strong>@pillar.WeightedContribution.ToString("F1")</strong></td>
+                                </tr>
+                            }
+                        </tbody>
+                        <tfoot>
+                            <tr>
+                                <td><strong>Total CHS</strong></td>
+                                <td></td>
+                                <td>100%</td>
+                                <td><strong>@current.OverallScore.ToString("F1")</strong></td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- ════════════════════════════════════════════════════
+             TREND CHART
+             ════════════════════════════════════════════════════ -->
+        <section class="portal-chs-section" aria-label="Score trend">
+            <h2 class="portal-chs-section-title">12-Week Trend</h2>
+            <div class="portal-chs-chart-card portal-chs-chart-card--wide">
+                <canvas id="chs-trend-chart" class="portal-chs-chart-canvas-wide" aria-label="Line chart of CHS score over 12 weeks"></canvas>
+            </div>
+        </section>
+
+        <!-- ════════════════════════════════════════════════════
+             PEER DISTRIBUTION
+             ════════════════════════════════════════════════════ -->
+        <section class="portal-chs-section" aria-label="Peer comparison">
+            <h2 class="portal-chs-section-title">Peer Distribution — @peer.LicenceType</h2>
+
+            <div class="portal-chs-peer-grid">
+                <!-- Distribution Chart -->
+                <div class="portal-chs-chart-card">
+                    <canvas id="chs-peer-dist-chart" class="portal-chs-chart-canvas" aria-label="Bar chart of peer score distribution"></canvas>
+                </div>
+
+                <!-- Pillar Comparison Table -->
+                <div class="portal-chs-comparison-card">
+                    <h3 class="portal-chs-comparison-title">Pillar Comparison vs Peer Median</h3>
+                    <table class="portal-chs-comparison-table" aria-label="Pillar scores compared to peer median">
+                        <thead>
+                            <tr>
+                                <th>Pillar</th>
+                                <th>You</th>
+                                <th>Peer Median</th>
+                                <th>Delta</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var comp in peer.PillarComparisons)
+                            {
+                                <tr>
+                                    <td>@comp.PillarName</td>
+                                    <td>@comp.TenantScore.ToString("F0")</td>
+                                    <td>@comp.PeerMedian.ToString("F0")</td>
+                                    <td>
+                                        <span class="@(comp.Delta >= 0 ? "portal-chs-delta--positive" : "portal-chs-delta--negative")">
+                                            @(comp.Delta >= 0 ? "+" : "")@comp.Delta.ToString("F1")
+                                        </span>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+
+                    <div class="portal-chs-peer-summary">
+                        <span>Your CHS of <strong>@peer.TenantScore.ToString("F0")</strong> puts you in the <strong>@(peer.Percentile)th percentile</strong> among @peer.PeerCount @peer.LicenceType institutions.</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+    </div>
+}
+else
+{
+    <div class="portal-page">
+        <div class="portal-cdr-empty">
+            <p>Unable to load compliance health data. Please try again later.</p>
+            <button class="portal-btn portal-btn-primary portal-btn-sm" @onclick="LoadAsync">Retry</button>
+        </div>
+    </div>
+}
+
+@code {
+    private bool _loading = true;
+    private ChsDashboardData? _data;
+    private string? _error;
+    private bool _chartsRendered;
+    private Guid _tenantId;
+
+    private List<BreadcrumbItem> _breadcrumb = new()
+    {
+        new("Dashboard", "/"),
+        new("Health Score", IsCurrent: true)
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Use a well-known tenant ID from the simulated pool for demo
+        _tenantId = Guid.Parse("a1000001-0000-0000-0000-000000000002");
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _error = null;
+        _chartsRendered = false;
+        StateHasChanged();
+
+        try
+        {
+            _data = await ChsService.GetDashboard(_tenantId);
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task RefreshAsync()
+    {
+        await LoadAsync();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_data is null || _chartsRendered) return;
+        _chartsRendered = true;
+
+        try
+        {
+            await RenderRadarChart();
+            await RenderTrendChart();
+            await RenderPeerDistChart();
+        }
+        catch
+        {
+            // Chart rendering is non-critical
+        }
+    }
+
+    private async Task RenderRadarChart()
+    {
+        var current = _data!.Current;
+        var peerMedians = _data.PeerComparison.PillarComparisons;
+
+        var spec = new
+        {
+            type = "radar",
+            labels = new[] { "Filing Timeliness", "Data Quality", "Regulatory Capital", "Audit & Governance", "Engagement" },
+            datasets = new object[]
+            {
+                new
+                {
+                    label = "Your Score",
+                    data = new[] { current.FilingTimeliness, current.DataQuality, current.RegulatoryCapital, current.AuditGovernance, current.Engagement },
+                    color = "#006B3F",
+                    fill = true
+                },
+                new
+                {
+                    label = "Peer Median",
+                    data = peerMedians.Select(p => p.PeerMedian).ToArray(),
+                    color = "#94a3b8",
+                    fill = false
+                }
+            },
+            legend = true
+        };
+
+        await Charts.InitChart("chs-radar-chart", spec);
+    }
+
+    private async Task RenderTrendChart()
+    {
+        var snapshots = _data!.Trend.Snapshots;
+        var peerMedian = _data.PeerComparison.PeerMedian;
+
+        var trendData = new TrendData
+        {
+            Title = "CHS Trend",
+            Labels = snapshots.Select(s => s.PeriodLabel).ToList(),
+            Datasets = new()
+            {
+                new TrendDataset
+                {
+                    Label = "Your CHS",
+                    Data = snapshots.Select(s => s.OverallScore).ToList(),
+                    BorderColor = "#006B3F",
+                    BackgroundColor = "#006B3F"
+                },
+                new TrendDataset
+                {
+                    Label = "Peer Median",
+                    Data = snapshots.Select(_ => peerMedian).ToList(),
+                    BorderColor = "#94a3b8",
+                    BackgroundColor = "#94a3b8"
+                }
+            }
+        };
+
+        await Charts.RenderLineChart("chs-trend-chart", trendData);
+    }
+
+    private async Task RenderPeerDistChart()
+    {
+        var dist = _data!.PeerComparison.Distribution;
+
+        var distData = new TrendData
+        {
+            Title = "Score Distribution",
+            Labels = dist.Select(d => d.Label).ToList(),
+            Datasets = new()
+            {
+                new TrendDataset
+                {
+                    Label = "Institutions",
+                    Data = dist.Select(d => (decimal)d.Count).ToList(),
+                    BackgroundColor = "#0891B2",
+                    BorderColor = "#0891B2"
+                }
+            }
+        };
+
+        await Charts.RenderBarChart("chs-peer-dist-chart", distData);
+    }
+
+    // ── Helpers ──
+
+    private static string GetRatingColor(ChsRating rating) => rating switch
+    {
+        ChsRating.APlus => "#006B3F",
+        ChsRating.A => "#006B3F",
+        ChsRating.B => "#0891B2",
+        ChsRating.C => "#C8A415",
+        ChsRating.D => "#EA580C",
+        ChsRating.F => "#DC2626",
+        _ => "#64748b"
+    };
+
+    private static string GetScoreColor(decimal score) => score switch
+    {
+        >= 80 => "#006B3F",
+        >= 60 => "#C8A415",
+        _ => "#DC2626"
+    };
+}

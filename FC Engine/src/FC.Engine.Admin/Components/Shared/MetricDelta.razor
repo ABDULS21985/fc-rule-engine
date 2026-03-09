@@ -1,0 +1,34 @@
+@{
+    var delta = Scenario - Baseline;
+    var deltaPct = Baseline != 0 ? delta / Baseline * 100 : 0;
+    var isImprovement = HigherIsBetter ? delta > 0 : delta < 0;
+    var isDegradation = HigherIsBetter ? delta < 0 : delta > 0;
+    var dirClass = isImprovement ? "fc-sc-delta--positive" : isDegradation ? "fc-sc-delta--negative" : "fc-sc-delta--neutral";
+    var arrow = isImprovement ? "↑" : isDegradation ? "↓" : "→";
+}
+
+<span class="fc-sc-delta @dirClass">
+    <span class="fc-sc-delta-values">
+        <span class="fc-sc-delta-baseline">@FormatValue(Baseline)</span>
+        <span class="fc-sc-delta-arrow">→</span>
+        <span class="fc-sc-delta-scenario">@FormatValue(Scenario)</span>
+    </span>
+    <span class="fc-sc-delta-change">
+        @arrow @Math.Abs(deltaPct).ToString("N1")%
+    </span>
+</span>
+
+@code {
+    [Parameter] public decimal Baseline { get; set; }
+    [Parameter] public decimal Scenario { get; set; }
+    [Parameter] public string Format { get; set; } = "N1";
+    [Parameter] public bool HigherIsBetter { get; set; } = true;
+
+    private string FormatValue(decimal value) => Format switch
+    {
+        "P1" => $"{value:N1}%",
+        "C0" => $"₦{value:N0}",
+        "C1" => $"₦{value:N1}B",
+        _ => value.ToString(Format)
+    };
+}

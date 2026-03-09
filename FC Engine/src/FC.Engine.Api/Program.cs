@@ -223,6 +223,9 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
+// Static files (widget JS, etc.)
+app.UseStaticFiles();
+
 // 6. Serilog request logging
 app.UseSerilogRequestLogging();
 
@@ -296,6 +299,11 @@ v1.MapFilingCalendarEndpoints();
 v1.MapPrivacyEndpoints();
 v1.MapHistoricalMigrationEndpoints();
 v1.MapWebhookEndpoints();
+v1.MapDirectSubmissionEndpoints();
+v1.MapCaaSEndpoints();
+v1.MapStressTestEndpoints();
+v1.MapWhiteLabelDocsEndpoints();
+v1.MapComplianceEndpoints();
 
 // v2 endpoints (future — same implementations for now, diverge later)
 var v2 = app.MapGroup("/api/v2")

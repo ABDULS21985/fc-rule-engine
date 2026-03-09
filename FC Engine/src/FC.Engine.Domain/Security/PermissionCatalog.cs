@@ -16,6 +16,8 @@ public static class PermissionCatalog
     public const string SubmissionReject = "submission.reject";
     public const string SubmissionExport = "submission.export";
     public const string SubmissionDelete = "submission.delete";
+    public const string SubmissionDirectSubmit = "submission.direct_submit";
+    public const string SubmissionDirectStatus = "submission.direct_status";
 
     public const string UserRead = "user.read";
     public const string UserCreate = "user.create";
@@ -47,6 +49,7 @@ public static class PermissionCatalog
         TemplateRead, TemplateEdit, TemplatePublish,
         SubmissionRead, SubmissionCreate, SubmissionEdit, SubmissionValidate, SubmissionSubmit,
         SubmissionReview, SubmissionApprove, SubmissionReject, SubmissionExport, SubmissionDelete,
+        SubmissionDirectSubmit, SubmissionDirectStatus,
         UserRead, UserCreate, UserEdit, UserDeactivate, UserRoleAssign,
         BillingRead, BillingManage,
         ReportRead, ReportCreate, ReportSchedule,
@@ -69,6 +72,7 @@ public static class PermissionCatalog
             {
                 TemplateRead,
                 SubmissionRead, SubmissionCreate, SubmissionEdit, SubmissionValidate, SubmissionSubmit,
+                SubmissionDirectSubmit, SubmissionDirectStatus,
                 ReportRead,
                 CalendarRead
             },
@@ -76,6 +80,7 @@ public static class PermissionCatalog
             {
                 TemplateRead,
                 SubmissionRead, SubmissionReview, SubmissionReject,
+                SubmissionDirectStatus,
                 ReportRead
             },
             ["Approver"] = new[]
@@ -88,6 +93,7 @@ public static class PermissionCatalog
             {
                 TemplateRead,
                 SubmissionRead,
+                SubmissionDirectStatus,
                 ReportRead,
                 CalendarRead
             },

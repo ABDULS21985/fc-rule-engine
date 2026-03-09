@@ -1,0 +1,567 @@
+@page "/platform/systemic-risk"
+@attribute [Authorize(Policy = "PlatformAdmin")]
+@using FC.Engine.Domain.Abstractions
+@using FC.Engine.Domain.Enums
+@using FC.Engine.Domain.Models
+@using FC.Engine.Infrastructure.Charts
+@using FC.Engine.Admin.Services
+@inject ISystemicRiskService RiskService
+@inject ChartJsInterop Charts
+@inject ToastService Toast
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
+
+<PageTitle>Systemic Risk Engine</PageTitle>
+
+<PageHeader Title="Early Warning & Systemic Risk"
+            Subtitle="CAMELS-rated risk surveillance across all supervised entities.">
+    <SecondaryActions>
+        @if (!_loading && _data is not null)
+        {
+            <button class="fc-btn fc-btn--outline fc-btn--sm" @onclick="ExportDashboard">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                Export
+            </button>
+            <button class="fc-btn fc-btn--outline fc-btn--sm" @onclick="ReloadAsync">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
+                Refresh
+            </button>
+        }
+    </SecondaryActions>
+</PageHeader>
+
+<div class="fc-page">
+
+    @if (_loading)
+    {
+        <!-- Skeleton KPI -->
+        <div class="fc-grid fc-grid-4 fc-mb-4">
+            @for (var i = 0; i < 4; i++)
+            {
+                <div class="fc-card"><div class="fc-card__body">
+                    <div class="fc-skel fc-skel-text" style="--skel-w:80px;--skel-mb:0.5rem"></div>
+                    <div class="fc-skel fc-skel-text" style="--skel-w:60px;--skel-h:1.5rem"></div>
+                </div></div>
+            }
+        </div>
+        <div class="fc-grid fc-grid-2 fc-mb-4">
+            @for (var i = 0; i < 2; i++)
+            {
+                <div class="fc-card"><div class="fc-card__body fc-chart-height">
+                    <div class="fc-skel fc-skel-block" style="--skel-w:100%;--skel-h:100%"></div>
+                </div></div>
+            }
+        </div>
+        <div class="fc-card fc-mb-4"><div class="fc-card__body">
+            @for (var i = 0; i < 5; i++)
+            {
+                <div class="fc-skel fc-skel-text" style="--skel-w:100%;--skel-mb:0.75rem"></div>
+            }
+        </div></div>
+    }
+    else if (_error is not null)
+    {
+        <SectionErrorBoundary Title="Failed to load systemic risk data" ExternalError="@_error" OnRetry="ReloadAsync" />
+    }
+    else if (_data is not null)
+    {
+        <!-- ── Systemic Risk Index Banner ─────────────────────────── -->
+        <div class="fc-sr-banner fc-sr-banner--@GetIndexLevel(_data.Summary.SystemicRiskIndex)">
+            <div class="fc-sr-banner__orb"></div>
+            <div class="fc-sr-banner__body">
+                <span class="fc-sr-banner__headline">
+                    Systemic Risk Index: @_data.Summary.SystemicRiskIndex.ToString("0.#") / 100
+                </span>
+                <span class="fc-sr-banner__sub">
+                    @_data.Summary.TotalEntities entities monitored &middot;
+                    @_data.Summary.TotalActiveFlags active warnings &middot;
+                    Last computed @DateTime.UtcNow.ToString("HH:mm") UTC
+                </span>
+            </div>
+        </div>
+
+        <!-- ── KPI Cards ──────────────────────────────────────────── -->
+        <div class="fc-grid fc-grid-4 fc-mb-4">
+            <div class="fc-card fc-kpi-card fc-kpi-card--success">
+                <div class="fc-card__body">
+                    <div class="fc-stat-label">Stable (Green)</div>
+                    <div class="fc-stat-value fc-sr-stat--green">@_data.Summary.GreenCount</div>
+                    <div class="fc-kpi-delta">of @_data.Summary.TotalEntities entities</div>
+                </div>
+            </div>
+            <div class="fc-card fc-kpi-card fc-kpi-card--warning">
+                <div class="fc-card__body">
+                    <div class="fc-stat-label">Watch (Amber)</div>
+                    <div class="fc-stat-value fc-sr-stat--amber">@_data.Summary.AmberCount</div>
+                    <div class="fc-kpi-delta">require monitoring</div>
+                </div>
+            </div>
+            <div class="fc-card fc-kpi-card fc-kpi-card--critical">
+                <div class="fc-card__body">
+                    <div class="fc-stat-label">Intervene (Red)</div>
+                    <div class="fc-stat-value fc-sr-stat--red">@_data.Summary.RedCount</div>
+                    <div class="fc-kpi-delta">require supervisory action</div>
+                </div>
+            </div>
+            <div class="fc-card fc-kpi-card">
+                <div class="fc-card__body">
+                    <div class="fc-stat-label">Active Warnings</div>
+                    <div class="fc-stat-value">@_data.Summary.TotalActiveFlags</div>
+                    <div class="fc-kpi-delta">across all entities</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ── Heatmap & CAMELS Distribution ──────────────────────── -->
+        <div class="fc-grid fc-grid-2 fc-mb-4">
+            <div class="fc-card">
+                <div class="fc-card__header">
+                    <h2 class="fc-card__title">Risk Heatmap</h2>
+                    <span class="fc-chart-chip">Risk Score vs Asset Size</span>
+                </div>
+                <div class="fc-card__body fc-chart-height">
+                    <canvas id="sr-heatmap"></canvas>
+                </div>
+            </div>
+            <div class="fc-card">
+                <div class="fc-card__header">
+                    <h2 class="fc-card__title">CAMELS Component Distribution</h2>
+                    <span class="fc-chart-chip">Sector averages</span>
+                </div>
+                <div class="fc-card__body fc-chart-height">
+                    <canvas id="sr-camels-radar"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- ── Systemic Early Warning Indicators ──────────────────── -->
+        @if (_data.SystemicIndicators.Count > 0)
+        {
+            <div class="fc-card fc-mb-4">
+                <div class="fc-card__header">
+                    <h2 class="fc-card__title">Systemic Early Warning Indicators</h2>
+                    <span class="fc-badge fc-badge--danger">@_data.SystemicIndicators.Count active</span>
+                </div>
+                <div class="fc-card__body fc-sr-ewi-grid">
+                    @foreach (var ewi in _data.SystemicIndicators)
+                    {
+                        <div class="fc-sr-ewi-card fc-sr-ewi-card--@ewi.Severity.ToString().ToLower()">
+                            <div class="fc-sr-ewi-card__header">
+                                <span class="fc-sr-ewi-dot fc-sr-ewi-dot--@ewi.Severity.ToString().ToLower()"></span>
+                                <span class="fc-sr-ewi-card__title">@ewi.Title</span>
+                            </div>
+                            <p class="fc-sr-ewi-card__desc">@ewi.Description</p>
+                            <div class="fc-sr-ewi-card__footer">
+                                <span class="fc-sr-ewi-card__metric">
+                                    Current: <strong>@ewi.CurrentValue</strong> &middot; Threshold: @ewi.Threshold
+                                </span>
+                                <span class="fc-badge fc-badge--sm fc-badge--@(ewi.Severity == RiskRating.Red ? "danger" : "warning")">
+                                    @ewi.AffectedEntities affected
+                                </span>
+                            </div>
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+
+        <!-- ── CAMELS Scorecard Table ─────────────────────────────── -->
+        <div class="fc-card fc-mb-4">
+            <div class="fc-card__header">
+                <h2 class="fc-card__title">CAMELS Risk Scorecard</h2>
+                <span class="fc-chart-chip">@_data.Scores.Count entities rated</span>
+            </div>
+            <div class="fc-card__body fc-sr-table-wrap">
+                <table class="fc-sr-table">
+                    <thead>
+                        <tr>
+                            <th>Entity</th>
+                            <th>Type</th>
+                            <th class="fc-sr-th-num">C</th>
+                            <th class="fc-sr-th-num">A</th>
+                            <th class="fc-sr-th-num">M</th>
+                            <th class="fc-sr-th-num">E</th>
+                            <th class="fc-sr-th-num">L</th>
+                            <th class="fc-sr-th-num">S</th>
+                            <th class="fc-sr-th-num">Composite</th>
+                            <th>Rating</th>
+                            <th class="fc-sr-th-num">Flags</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var score in _data.Scores)
+                        {
+                            <tr class="fc-sr-row fc-sr-row--@score.Rating.ToString().ToLower()" @onclick="() => DrillDown(score.InstitutionId)">
+                                <td class="fc-sr-entity-name">@score.InstitutionName</td>
+                                <td><span class="fc-badge fc-badge--sm fc-badge--outline">@score.LicenceType</span></td>
+                                <td class="fc-sr-td-score @ScoreClass(score.Capital)">@score.Capital.ToString("0.0")</td>
+                                <td class="fc-sr-td-score @ScoreClass(score.AssetQuality)">@score.AssetQuality.ToString("0.0")</td>
+                                <td class="fc-sr-td-score @ScoreClass(score.Management)">@score.Management.ToString("0.0")</td>
+                                <td class="fc-sr-td-score @ScoreClass(score.Earnings)">@score.Earnings.ToString("0.0")</td>
+                                <td class="fc-sr-td-score @ScoreClass(score.Liquidity)">@score.Liquidity.ToString("0.0")</td>
+                                <td class="fc-sr-td-score @ScoreClass(score.Sensitivity)">@score.Sensitivity.ToString("0.0")</td>
+                                <td class="fc-sr-td-composite"><strong>@score.Composite.ToString("0.00")</strong></td>
+                                <td>
+                                    <span class="fc-sr-rating fc-sr-rating--@score.Rating.ToString().ToLower()">
+                                        @score.Rating
+                                    </span>
+                                </td>
+                                <td class="fc-sr-td-score">
+                                    @if (score.ActiveFlags > 0)
+                                    {
+                                        <span class="fc-badge fc-badge--sm fc-badge--danger">@score.ActiveFlags</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="fc-text-muted">0</span>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- ── Contagion Analysis ─────────────────────────────────── -->
+        <div class="fc-grid fc-grid-2 fc-mb-4">
+            <div class="fc-card">
+                <div class="fc-card__header">
+                    <h2 class="fc-card__title">Contagion Network</h2>
+                    <span class="fc-chart-chip">@_data.Contagion.Links.Count correlated pairs</span>
+                </div>
+                <div class="fc-card__body">
+                    @if (_data.Contagion.Links.Count == 0)
+                    {
+                        <div class="fc-sr-empty">
+                            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="color:var(--cbn-success)">
+                                <path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
+                            </svg>
+                            <p>No significant inter-entity correlations detected. Contagion risk is low.</p>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="fc-sr-contagion-list">
+                            @foreach (var link in _data.Contagion.Links.Take(10))
+                            {
+                                <div class="fc-sr-contagion-row">
+                                    <span class="fc-sr-contagion-entity">@link.SourceName</span>
+                                    <span class="fc-sr-contagion-arrow">
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+                                    </span>
+                                    <span class="fc-sr-contagion-entity">@link.TargetName</span>
+                                    <span class="fc-sr-contagion-strength fc-sr-contagion-strength--@(link.CorrelationStrength > 0.85m ? "high" : "med")">
+                                        @link.CorrelationStrength.ToString("0.00")
+                                    </span>
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+            </div>
+            <div class="fc-card">
+                <div class="fc-card__header">
+                    <h2 class="fc-card__title">Risk Clusters</h2>
+                    <span class="fc-chart-chip">@_data.Contagion.ClusterCount clusters</span>
+                </div>
+                <div class="fc-card__body">
+                    @if (_data.Contagion.HighRiskClusters.Count == 0)
+                    {
+                        <div class="fc-sr-empty">
+                            <p>No high-risk clusters identified.</p>
+                        </div>
+                    }
+                    else
+                    {
+                        @foreach (var cluster in _data.Contagion.HighRiskClusters)
+                        {
+                            <div class="fc-sr-cluster-card">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+                                </svg>
+                                <span>@cluster</span>
+                            </div>
+                        }
+                    }
+                </div>
+            </div>
+        </div>
+
+        <!-- ── Institutional Early Warning Flags ──────────────────── -->
+        <div class="fc-card fc-mb-4">
+            <div class="fc-card__header">
+                <h2 class="fc-card__title">Institution-Level Early Warnings</h2>
+                <span class="fc-badge fc-badge--warning">@_data.InstitutionalFlags.Count flags</span>
+            </div>
+            <div class="fc-card__body fc-sr-table-wrap">
+                <table class="fc-sr-table">
+                    <thead>
+                        <tr>
+                            <th>Entity</th>
+                            <th>Flag</th>
+                            <th>Severity</th>
+                            <th>Description</th>
+                            <th>Detected</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var flag in _data.InstitutionalFlags)
+                        {
+                            <tr>
+                                <td class="fc-sr-entity-name">@flag.InstitutionName</td>
+                                <td><code class="fc-sr-flag-code">@flag.FlagCode</code></td>
+                                <td>
+                                    <span class="fc-sr-rating fc-sr-rating--@(flag.Severity == EarlyWarningSeverity.Red ? "red" : "amber")">
+                                        @flag.Severity
+                                    </span>
+                                </td>
+                                <td>@flag.Message</td>
+                                <td class="fc-text-muted">@flag.TriggeredAt.ToString("dd MMM yyyy")</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- ── Pending Supervisory Actions ────────────────────────── -->
+        @if (_data.PendingActions.Count > 0)
+        {
+            <div class="fc-card fc-mb-4">
+                <div class="fc-card__header">
+                    <h2 class="fc-card__title">Pending Supervisory Actions</h2>
+                    <span class="fc-badge fc-badge--danger">@_data.PendingActions.Count pending</span>
+                </div>
+                <div class="fc-card__body fc-sr-table-wrap">
+                    <table class="fc-sr-table">
+                        <thead>
+                            <tr>
+                                <th>Entity</th>
+                                <th>Trigger</th>
+                                <th>Action Required</th>
+                                <th>Escalation</th>
+                                <th>Due</th>
+                                <th>Status</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var action in _data.PendingActions)
+                            {
+                                <tr>
+                                    <td class="fc-sr-entity-name">@action.InstitutionName</td>
+                                    <td><code class="fc-sr-flag-code">@action.TriggerFlag</code></td>
+                                    <td>@action.ActionType</td>
+                                    <td>
+                                        <span class="fc-badge fc-badge--sm fc-badge--@GetEscalationBadge(action.EscalationLevel)">
+                                            @action.EscalationLevel
+                                        </span>
+                                    </td>
+                                    <td class="fc-text-muted">@action.DueDate?.ToString("dd MMM yyyy")</td>
+                                    <td>
+                                        <span class="fc-badge fc-badge--sm fc-badge--outline">@action.Status</span>
+                                    </td>
+                                    <td>
+                                        <button class="fc-btn fc-btn--sm fc-btn--outline" @onclick="() => ViewLetter(action)" title="View supervisory letter">
+                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/>
+                                            </svg>
+                                        </button>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        }
+
+        <!-- ── Supervisory Letter Modal ───────────────────────────── -->
+        @if (_showLetterModal && _selectedAction is not null)
+        {
+            <div class="fc-modal-backdrop" @onclick="CloseLetterModal">
+                <div class="fc-modal fc-sr-letter-modal" @onclick:stopPropagation>
+                    <div class="fc-modal__header">
+                        <h3>Supervisory Letter — @_selectedAction.InstitutionName</h3>
+                        <button class="fc-modal__close" @onclick="CloseLetterModal" aria-label="Close">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                        </button>
+                    </div>
+                    <div class="fc-modal__body">
+                        <pre class="fc-sr-letter-content">@_selectedAction.LetterTemplate</pre>
+                    </div>
+                    <div class="fc-modal__footer">
+                        <button class="fc-btn fc-btn--outline" @onclick="CloseLetterModal">Close</button>
+                        <button class="fc-btn fc-btn--primary" @onclick="CopyLetter">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+                            Copy to Clipboard
+                        </button>
+                    </div>
+                </div>
+            </div>
+        }
+    }
+</div>
+
+@code {
+    private SystemicRiskDashboard? _data;
+    private Exception? _error;
+    private bool _loading = true;
+    private bool _showLetterModal;
+    private SupervisoryAction? _selectedAction;
+
+    // Hardcoded regulator code for now — will come from user context
+    private string _regulatorCode = "CBN";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await ReloadAsync();
+    }
+
+    private async Task ReloadAsync()
+    {
+        _loading = true;
+        _error = null;
+        StateHasChanged();
+
+        try
+        {
+            _data = await RiskService.GetDashboard(_regulatorCode);
+        }
+        catch (Exception ex)
+        {
+            _error = ex;
+        }
+        finally
+        {
+            _loading = false;
+            StateHasChanged();
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender || _data is null) return;
+        await RenderCharts();
+    }
+
+    private async Task RenderCharts()
+    {
+        if (_data is null) return;
+
+        try
+        {
+            // Risk Heatmap (scatter chart: x = risk score, y = total assets, colored by rating)
+            var greenEntities = _data.HeatmapData.Where(e => e.Rating == RiskRating.Green).ToList();
+            var amberEntities = _data.HeatmapData.Where(e => e.Rating == RiskRating.Amber).ToList();
+            var redEntities = _data.HeatmapData.Where(e => e.Rating == RiskRating.Red).ToList();
+
+            await Charts.InitChart("sr-heatmap", new
+            {
+                type = "scatter",
+                xLabel = "Risk Score (Composite)",
+                yLabel = "Total Assets",
+                yFormat = "compact",
+                legend = true,
+                datasets = new object[]
+                {
+                    new {
+                        label = "Green (Stable)",
+                        color = "success",
+                        data = greenEntities.Select(e => new { x = (double)e.RiskScore, y = (double)e.Size }).ToArray()
+                    },
+                    new {
+                        label = "Amber (Watch)",
+                        color = "warning",
+                        data = amberEntities.Select(e => new { x = (double)e.RiskScore, y = (double)e.Size }).ToArray()
+                    },
+                    new {
+                        label = "Red (Intervene)",
+                        color = "danger",
+                        data = redEntities.Select(e => new { x = (double)e.RiskScore, y = (double)e.Size }).ToArray()
+                    }
+                }
+            });
+
+            // CAMELS Radar — sector averages
+            if (_data.Scores.Count > 0)
+            {
+                var avgC = (double)_data.Scores.Average(s => s.Capital);
+                var avgA = (double)_data.Scores.Average(s => s.AssetQuality);
+                var avgM = (double)_data.Scores.Average(s => s.Management);
+                var avgE = (double)_data.Scores.Average(s => s.Earnings);
+                var avgL = (double)_data.Scores.Average(s => s.Liquidity);
+                var avgS = (double)_data.Scores.Average(s => s.Sensitivity);
+
+                await Charts.InitChart("sr-camels-radar", new
+                {
+                    type = "bar",
+                    labels = new[] { "Capital", "Asset Quality", "Management", "Earnings", "Liquidity", "Sensitivity" },
+                    yLabel = "Average Score (1-5)",
+                    legend = false,
+                    datasets = new object[]
+                    {
+                        new {
+                            label = "Sector Average",
+                            color = "primary",
+                            data = new[] { avgC, avgA, avgM, avgE, avgL, avgS }
+                        }
+                    }
+                });
+            }
+        }
+        catch
+        {
+            // Chart rendering is non-critical
+        }
+    }
+
+    private void DrillDown(int institutionId)
+    {
+        // Navigate to entity detail — future: dedicated entity risk drill-down
+        Toast.Info($"Drill-down for institution #{institutionId} — detailed view coming soon.");
+    }
+
+    private void ViewLetter(SupervisoryAction action)
+    {
+        _selectedAction = action;
+        _showLetterModal = true;
+    }
+
+    private void CloseLetterModal()
+    {
+        _showLetterModal = false;
+        _selectedAction = null;
+    }
+
+    private async Task CopyLetter()
+    {
+        if (_selectedAction?.LetterTemplate is not null)
+        {
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", _selectedAction.LetterTemplate);
+            Toast.Success("Supervisory letter copied to clipboard.");
+            CloseLetterModal();
+        }
+    }
+
+    private void ExportDashboard()
+    {
+        Toast.Info("Export feature will generate a PDF supervisory report. Coming soon.");
+    }
+
+    // ── UI Helpers ──────────────────────────────────────────────────
+
+    private static string GetIndexLevel(decimal index) =>
+        index < 30 ? "green" : index < 60 ? "amber" : "red";
+
+    private static string ScoreClass(decimal score) =>
+        score >= 4m ? "fc-sr-score--good" : score >= 2.5m ? "fc-sr-score--watch" : "fc-sr-score--poor";
+
+    private static string GetEscalationBadge(string level) => level switch
+    {
+        "Director" or "Governor" => "danger",
+        "Senior Examiner" => "warning",
+        _ => "outline"
+    };
+}

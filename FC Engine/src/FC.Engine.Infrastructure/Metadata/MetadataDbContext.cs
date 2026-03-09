@@ -83,6 +83,9 @@ public class MetadataDbContext : DbContext
     public DbSet<MigrationModuleSignOff> MigrationModuleSignOffs => Set<MigrationModuleSignOff>();
     public DbSet<KnowledgeBaseArticle> KnowledgeBaseArticles => Set<KnowledgeBaseArticle>();
 
+    // Direct regulatory submissions (RG-34)
+    public DbSet<DirectSubmission> DirectSubmissions => Set<DirectSubmission>();
+
     // Regulator portal (RG-25)
     public DbSet<RegulatorReceipt> RegulatorReceipts => Set<RegulatorReceipt>();
     public DbSet<ExaminerQuery> ExaminerQueries => Set<ExaminerQuery>();
@@ -119,6 +122,9 @@ public class MetadataDbContext : DbContext
     public DbSet<FieldChangeHistory> FieldChangeHistory => Set<FieldChangeHistory>();
     public DbSet<EvidencePackage> EvidencePackages => Set<EvidencePackage>();
     public DbSet<DdlMigrationRecord> DdlMigrations => Set<DdlMigrationRecord>();
+
+    // Compliance-as-a-Service (RG-35)
+    public DbSet<FC.Engine.Infrastructure.BackgroundJobs.CaasAutoFilingConfig> CaasAutoFilingConfigs => Set<FC.Engine.Infrastructure.BackgroundJobs.CaasAutoFilingConfig>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

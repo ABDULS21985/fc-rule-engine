@@ -149,3 +149,103 @@ public class ExaminationWorkspaceData
     public List<ExaminationAnnotation> Annotations { get; set; } = new();
     public Dictionary<int, EntityBenchmarkResult> BenchmarksByInstitution { get; set; } = new();
 }
+
+// ── RG-36: Systemic Risk Engine ──────────────────────────────────────
+
+public enum RiskRating { Green, Amber, Red }
+
+public enum CamelsComponent { Capital, AssetQuality, Management, Earnings, Liquidity, Sensitivity }
+
+public class CamelsScore
+{
+    public int InstitutionId { get; set; }
+    public string InstitutionName { get; set; } = string.Empty;
+    public string LicenceType { get; set; } = string.Empty;
+    public decimal Capital { get; set; }
+    public decimal AssetQuality { get; set; }
+    public decimal Management { get; set; }
+    public decimal Earnings { get; set; }
+    public decimal Liquidity { get; set; }
+    public decimal Sensitivity { get; set; }
+    public decimal Composite { get; set; }
+    public RiskRating Rating { get; set; }
+    public decimal TotalAssets { get; set; }
+    public int ActiveFlags { get; set; }
+}
+
+public class SystemicRiskSummary
+{
+    public int TotalEntities { get; set; }
+    public int GreenCount { get; set; }
+    public int AmberCount { get; set; }
+    public int RedCount { get; set; }
+    public decimal SectorAverageCar { get; set; }
+    public decimal SectorAverageNpl { get; set; }
+    public int TotalActiveFlags { get; set; }
+    public decimal SystemicRiskIndex { get; set; }
+}
+
+public class HeatmapEntity
+{
+    public int InstitutionId { get; set; }
+    public string InstitutionName { get; set; } = string.Empty;
+    public string LicenceType { get; set; } = string.Empty;
+    public decimal RiskScore { get; set; }
+    public decimal Size { get; set; }
+    public RiskRating Rating { get; set; }
+    public int FlagCount { get; set; }
+}
+
+public class ContagionLink
+{
+    public int SourceId { get; set; }
+    public string SourceName { get; set; } = string.Empty;
+    public int TargetId { get; set; }
+    public string TargetName { get; set; } = string.Empty;
+    public decimal CorrelationStrength { get; set; }
+}
+
+public class ContagionAnalysis
+{
+    public List<ContagionLink> Links { get; set; } = new();
+    public List<string> HighRiskClusters { get; set; } = new();
+    public int ClusterCount { get; set; }
+}
+
+public class SystemicEwi
+{
+    public string IndicatorCode { get; set; } = string.Empty;
+    public string Title { get; set; } = string.Empty;
+    public string Description { get; set; } = string.Empty;
+    public RiskRating Severity { get; set; }
+    public decimal CurrentValue { get; set; }
+    public decimal Threshold { get; set; }
+    public int AffectedEntities { get; set; }
+    public DateTime DetectedAt { get; set; } = DateTime.UtcNow;
+}
+
+public class SupervisoryAction
+{
+    public int Id { get; set; }
+    public int InstitutionId { get; set; }
+    public string InstitutionName { get; set; } = string.Empty;
+    public string TriggerFlag { get; set; } = string.Empty;
+    public string ActionType { get; set; } = string.Empty;
+    public string EscalationLevel { get; set; } = string.Empty;
+    public string Status { get; set; } = "Pending";
+    public string? LetterTemplate { get; set; }
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime? DueDate { get; set; }
+    public string? RemediationNotes { get; set; }
+}
+
+public class SystemicRiskDashboard
+{
+    public SystemicRiskSummary Summary { get; set; } = new();
+    public List<CamelsScore> Scores { get; set; } = new();
+    public List<HeatmapEntity> HeatmapData { get; set; } = new();
+    public List<EarlyWarningFlag> InstitutionalFlags { get; set; } = new();
+    public List<SystemicEwi> SystemicIndicators { get; set; } = new();
+    public ContagionAnalysis Contagion { get; set; } = new();
+    public List<SupervisoryAction> PendingActions { get; set; } = new();
+}

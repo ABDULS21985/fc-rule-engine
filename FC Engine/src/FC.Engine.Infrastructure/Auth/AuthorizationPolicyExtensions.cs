@@ -24,6 +24,9 @@ public static class AuthorizationPolicyExtensions
         options.AddPolicy("CanEditTemplates", policy => policy.RequireClaim("perm", PermissionCatalog.TemplateEdit));
         options.AddPolicy("CanPublishTemplates", policy => policy.RequireClaim("perm", PermissionCatalog.TemplatePublish));
         options.AddPolicy("CanReadTemplates", policy => policy.RequireClaim("perm", PermissionCatalog.TemplateRead));
+        // Direct regulatory submission (RG-34)
+        options.AddPolicy("CanDirectSubmit", policy => policy.RequireClaim("perm", PermissionCatalog.SubmissionDirectSubmit));
+        options.AddPolicy("CanViewDirectStatus", policy => policy.RequireClaim("perm", PermissionCatalog.SubmissionDirectStatus));
         // Platform admin
         options.AddPolicy("PlatformAdmin", policy => policy.RequireClaim("perm", PermissionCatalog.AdminPlatform));
     }

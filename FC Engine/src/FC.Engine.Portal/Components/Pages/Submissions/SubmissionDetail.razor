@@ -11,6 +11,8 @@
 @inject IRegulatorInboxService RegulatorInboxService
 @inject IJSRuntime JS
 @inject NavigationManager Navigation
+@inject IRegulatorySubmissionService DirectSubmissionService
+@inject IDirectSubmissionRepository DirectSubmissionRepo
 
 <PageTitle>Submission #@SubmissionId — FC Engine Portal</PageTitle>
 
@@ -282,6 +284,15 @@
                     <button class="portal-detail-tab @(activeTab == "audit" ? "portal-detail-tab-active" : "")"
                             role="tab" aria-selected="@(activeTab == "audit")"
                             @onclick='() => SwitchTab("audit")'>Audit Trail</button>
+                    <button class="portal-detail-tab @(activeTab == "directSubmission" ? "portal-detail-tab-active" : "")"
+                            role="tab" aria-selected="@(activeTab == "directSubmission")"
+                            @onclick='() => SwitchTab("directSubmission")'>
+                        Direct Submission
+                        @if (directSubmissions?.Count > 0)
+                        {
+                            <span class="portal-tab-count">@directSubmissions.Count</span>
+                        }
+                    </button>
                 </div>
 
                 <div class="portal-detail-tab-content">
@@ -440,6 +451,129 @@
                                                      CurrentUserId="@currentUserId"
                                                      CurrentUserName="@(string.IsNullOrEmpty(submitterName) ? _presUserName : submitterName)"
                                                      Approval="@approval" />
+                        </div>
+                    }
+
+                    @if (activeTab == "directSubmission")
+                    {
+                        <div class="portal-card" style="padding: 1.5rem;">
+                            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1.25rem;">
+                                <h3 style="margin:0; font-size:1rem; font-weight:600;">Regulatory Direct Submission</h3>
+                                @if (CanTriggerDirectSubmission())
+                                {
+                                    <div style="display:flex; gap:0.5rem; align-items:center;">
+                                        <select class="portal-form-select" style="min-width:120px; font-size:0.85rem;" @bind="selectedRegulatorCode">
+                                            <option value="">Select Regulator</option>
+                                            <option value="CBN">CBN (eFASS)</option>
+                                            <option value="NFIU">NFIU (goAML)</option>
+                                            <option value="NDIC">NDIC</option>
+                                            <option value="SEC">SEC</option>
+                                            <option value="NAICOM">NAICOM</option>
+                                            <option value="PENCOM">PenCom</option>
+                                        </select>
+                                        <button class="portal-btn portal-btn-gold portal-btn-sm"
+                                                disabled="@(isSubmittingToRegulator || string.IsNullOrEmpty(selectedRegulatorCode))"
+                                                @onclick="SubmitToRegulatorAsync">
+                                            @if (isSubmittingToRegulator)
+                                            {
+                                                <span class="portal-btn-spinner" aria-hidden="true"></span>
+                                            }
+                                            else
+                                            {
+                                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                                            }
+                                            Submit
+                                        </button>
+                                    </div>
+                                }
+                            </div>
+
+                            @if (!string.IsNullOrEmpty(directSubmissionMessage))
+                            {
+                                <div class="portal-alert @(directSubmissionSuccess ? "portal-alert-success" : "portal-alert-error")" role="alert" style="margin-bottom:1rem;">
+                                    @directSubmissionMessage
+                                </div>
+                            }
+
+                            @if (directSubmissions is null || directSubmissions.Count == 0)
+                            {
+                                <div class="portal-empty-state" style="padding:2rem; text-align:center;">
+                                    <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" stroke-width="1.5" aria-hidden="true"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                                    <p class="portal-text-muted" style="margin-top:0.75rem;">No direct submissions yet. Select a regulator and click Submit to send this return directly via API.</p>
+                                </div>
+                            }
+                            else
+                            {
+                                <div class="portal-table-wrap">
+                                    <table class="portal-table">
+                                        <thead>
+                                            <tr>
+                                                <th>Regulator</th>
+                                                <th>Status</th>
+                                                <th>Reference</th>
+                                                <th>Attempts</th>
+                                                <th>Submitted</th>
+                                                <th>Acknowledged</th>
+                                                <th></th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            @foreach (var ds in directSubmissions)
+                                            {
+                                                <tr>
+                                                    <td><strong>@ds.RegulatorCode</strong></td>
+                                                    <td>
+                                                        <span class="portal-badge @GetDirectSubmissionBadgeClass(ds.Status)">
+                                                            @ds.Status
+                                                        </span>
+                                                    </td>
+                                                    <td style="font-family:monospace; font-size:0.82rem;">@(ds.RegulatorReference ?? "—")</td>
+                                                    <td>@ds.AttemptCount / @ds.MaxAttempts</td>
+                                                    <td>@(ds.SubmittedAt?.ToString("dd MMM yyyy HH:mm") ?? "—")</td>
+                                                    <td>@(ds.AcknowledgedAt?.ToString("dd MMM yyyy HH:mm") ?? "—")</td>
+                                                    <td>
+                                                        @if (ds.Status == DirectSubmissionStatus.Failed
+                                                            || ds.Status == DirectSubmissionStatus.RetryScheduled
+                                                            || ds.Status == DirectSubmissionStatus.Exhausted)
+                                                        {
+                                                            <button class="portal-btn portal-btn-outline portal-btn-xs"
+                                                                    @onclick="() => RetryDirectSubmissionAsync(ds.Id)">
+                                                                Retry
+                                                            </button>
+                                                        }
+                                                    </td>
+                                                </tr>
+                                                @if (!string.IsNullOrEmpty(ds.ErrorMessage))
+                                                {
+                                                    <tr>
+                                                        <td colspan="7" style="background:#fef3c7; color:#92400e; font-size:0.82rem; padding:0.5rem 1rem;">
+                                                            @ds.ErrorMessage
+                                                        </td>
+                                                    </tr>
+                                                }
+                                            }
+                                        </tbody>
+                                    </table>
+                                </div>
+                            }
+
+                            @if (directSubmissions is not null)
+                            {
+                                <div style="margin-top:0.75rem; font-size:0.8rem; color:#6b7280;">
+                                    @if (submission?.Status == SubmissionStatus.RegulatorAccepted)
+                                    {
+                                        <span style="color:#059669; font-weight:600;">Regulator has accepted this return.</span>
+                                    }
+                                    else if (submission?.Status == SubmissionStatus.RegulatorAcknowledged)
+                                    {
+                                        <span style="color:#2563eb;">Awaiting regulator processing.</span>
+                                    }
+                                    else if (submission?.Status == SubmissionStatus.RegulatorQueriesRaised)
+                                    {
+                                        <span style="color:#dc2626; font-weight:600;">Regulator has raised queries. Check your inbox.</span>
+                                    }
+                                </div>
+                            }
                         </div>
                     }
 
@@ -604,6 +738,13 @@
 
     private string activeTab = "data";
 
+    // Direct Submission (RG-34)
+    private List<DirectSubmission>? directSubmissions;
+    private string selectedRegulatorCode = "";
+    private bool isSubmittingToRegulator;
+    private string? directSubmissionMessage;
+    private bool directSubmissionSuccess;
+
     private bool dataLoaded;
     private ReturnDataRecord? dataRecord;
     private List<string> fieldNames = new();
@@ -715,6 +856,7 @@
 
         await LoadExportHistory();
         await LoadExaminerQueries();
+        await LoadDirectSubmissions();
         _ = LoadDataPreview();
         isLoading = false;
     }
@@ -1051,5 +1193,97 @@
         ApprovalStatus.Approved => "Approved",
         ApprovalStatus.Rejected => "Rejected",
         _                       => approval?.Status.ToString() ?? "",
+    };
+
+    // ── Direct Submission (RG-34) ──
+
+    private async Task LoadDirectSubmissions()
+    {
+        try
+        {
+            directSubmissions = await DirectSubmissionRepo.GetByTenantAndSubmission(tenantId, SubmissionId);
+        }
+        catch
+        {
+            directSubmissions = new();
+        }
+    }
+
+    private bool CanTriggerDirectSubmission()
+    {
+        return submission is not null
+            && (submission.Status == SubmissionStatus.Accepted
+                || submission.Status == SubmissionStatus.AcceptedWithWarnings);
+    }
+
+    private async Task SubmitToRegulatorAsync()
+    {
+        if (string.IsNullOrEmpty(selectedRegulatorCode) || isSubmittingToRegulator) return;
+
+        isSubmittingToRegulator = true;
+        directSubmissionMessage = null;
+        StateHasChanged();
+
+        try
+        {
+            var submittedBy = _presUserName ?? "portal-user";
+            var result = await DirectSubmissionService.SubmitToRegulatorAsync(
+                SubmissionId, selectedRegulatorCode, submittedBy);
+
+            directSubmissionSuccess = result.Success;
+            directSubmissionMessage = result.Success
+                ? $"Submitted to {selectedRegulatorCode}. Reference: {result.RegulatorReference}"
+                : $"Submission failed: {result.Message}";
+
+            await LoadDirectSubmissions();
+            if (result.Success)
+            {
+                submission = await SubmissionRepo.GetByIdWithReport(SubmissionId);
+            }
+        }
+        catch (Exception ex)
+        {
+            directSubmissionSuccess = false;
+            directSubmissionMessage = ex.Message;
+        }
+        finally
+        {
+            isSubmittingToRegulator = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task RetryDirectSubmissionAsync(int directSubId)
+    {
+        try
+        {
+            var result = await DirectSubmissionService.RetrySubmissionAsync(directSubId);
+            directSubmissionSuccess = result.Success;
+            directSubmissionMessage = result.Success
+                ? $"Retry successful. Reference: {result.RegulatorReference}"
+                : $"Retry failed: {result.Message}";
+
+            await LoadDirectSubmissions();
+        }
+        catch (Exception ex)
+        {
+            directSubmissionSuccess = false;
+            directSubmissionMessage = ex.Message;
+        }
+
+        StateHasChanged();
+    }
+
+    private static string GetDirectSubmissionBadgeClass(DirectSubmissionStatus status) => status switch
+    {
+        DirectSubmissionStatus.Submitted    => "portal-badge-info",
+        DirectSubmissionStatus.Acknowledged => "portal-badge-info",
+        DirectSubmissionStatus.Accepted     => "portal-badge-success",
+        DirectSubmissionStatus.Rejected     => "portal-badge-danger",
+        DirectSubmissionStatus.Failed       => "portal-badge-danger",
+        DirectSubmissionStatus.Exhausted    => "portal-badge-danger",
+        DirectSubmissionStatus.RetryScheduled => "portal-badge-warning",
+        DirectSubmissionStatus.QualityFeedback => "portal-badge-warning",
+        _                                   => "portal-badge-neutral",
     };
 }

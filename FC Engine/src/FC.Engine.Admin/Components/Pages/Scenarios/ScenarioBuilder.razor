@@ -1,0 +1,474 @@
+@page "/scenarios/build"
+@page "/scenarios/build/{Id:int}"
+@using FC.Engine.Admin.Services.Scenarios
+@inject IScenarioEngine Engine
+@inject IScenarioTemplateService TemplateService
+@inject NavigationManager Nav
+
+<PageHeader Title="@(_isEdit ? "Edit Scenario" : "Build Scenario")" BackUrl="/scenarios">
+    <PrimaryAction>
+        @if (_step == 3)
+        {
+            <button class="fc-btn fc-btn--gold" @onclick="RunAndView" disabled="@_running">
+                @if (_running)
+                {
+                    <span class="fc-btn-spinner"></span>
+                }
+                Run Scenario
+            </button>
+        }
+    </PrimaryAction>
+</PageHeader>
+
+<ProgressStepper Steps="_steps" @bind-CurrentStep="_step" Clickable />
+
+<div class="fc-sc-builder-layout" style="margin-top:var(--space-5);">
+    <div class="fc-sc-builder-main">
+
+        @* ── Step 1: Define ───────────────────────────────────────── *@
+        @if (_step == 1)
+        {
+            <section class="fc-section">
+                <div class="fc-section-header"><h3>Scenario Definition</h3></div>
+                <div class="fc-section-body">
+                    <div class="fc-form-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:var(--space-4);">
+                        <div>
+                            <label class="fc-form-label">Scenario Name</label>
+                            <input type="text" class="fc-form-input" @bind="_definition.Name" placeholder="e.g. Q4 NPL Stress Test" />
+                        </div>
+                        <div>
+                            <label class="fc-form-label">Template</label>
+                            <select class="fc-form-input" @bind="_selectedTemplateId" @bind:after="OnTemplateChanged">
+                                <option value="">— Start from scratch —</option>
+                                @foreach (var t in _templates)
+                                {
+                                    <option value="@t.Id">@t.Name</option>
+                                }
+                            </select>
+                        </div>
+                    </div>
+                    <div style="margin-top:var(--space-4);">
+                        <label class="fc-form-label">Description</label>
+                        <textarea class="fc-form-input" rows="3" @bind="_definition.Description" placeholder="Describe the scenario objective..."></textarea>
+                    </div>
+                    <div style="margin-top:var(--space-4);">
+                        <label class="fc-form-label">Affected Modules</label>
+                        <div style="display:flex;gap:var(--space-2);flex-wrap:wrap;">
+                            @foreach (var mod in _allModules)
+                            {
+                                var isSelected = _definition.AffectedModules.Contains(mod);
+                                <button class="fc-sc-card-chip @(isSelected ? "" : "fc-sc-card-chip--inactive")"
+                                        style="@(isSelected ? "" : "opacity:0.4;cursor:pointer;")"
+                                        @onclick="() => ToggleModule(mod)">
+                                    @mod
+                                </button>
+                            }
+                        </div>
+                    </div>
+                    <div style="margin-top:var(--space-5);display:flex;justify-content:flex-end;">
+                        <button class="fc-btn fc-btn--primary" @onclick="() => _step = 2" disabled="@(string.IsNullOrWhiteSpace(_definition.Name))">
+                            Next: Configure Overrides
+                            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+                        </button>
+                    </div>
+                </div>
+            </section>
+        }
+
+        @* ── Step 2: Configure Overrides ──────────────────────────── *@
+        @if (_step == 2)
+        {
+            <!-- Field Overrides -->
+            <section class="fc-section" style="margin-bottom:var(--space-4);">
+                <div class="fc-section-header">
+                    <h3>Field Overrides</h3>
+                    <button class="fc-btn fc-btn--sm fc-btn--outline" @onclick="AddOverride">
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                        Add Override
+                    </button>
+                </div>
+                <div class="fc-section-body">
+                    @if (_definition.Overrides.Count == 0)
+                    {
+                        <p style="color:var(--cbn-text-muted);font-size:var(--text-body-sm);">No field overrides configured. Add overrides manually or enable macro shocks below.</p>
+                    }
+                    else
+                    {
+                        <table class="fc-sc-override-table">
+                            <thead>
+                                <tr>
+                                    <th>Field Name</th>
+                                    <th>Section</th>
+                                    <th>Shock Type</th>
+                                    <th>Value</th>
+                                    <th style="width:40px;"></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @for (var i = 0; i < _definition.Overrides.Count; i++)
+                                {
+                                    var idx = i;
+                                    var ov = _definition.Overrides[idx];
+                                    <tr>
+                                        <td>
+                                            <input type="text" class="fc-sc-override-input" value="@ov.FieldName"
+                                                   @onchange="e => UpdateOverrideField(idx, e)" placeholder="field_name" />
+                                        </td>
+                                        <td>
+                                            <input type="text" class="fc-sc-override-input" value="@ov.SectionName"
+                                                   @onchange="e => UpdateOverrideSection(idx, e)" placeholder="Section" />
+                                        </td>
+                                        <td>
+                                            <select class="fc-sc-override-select" value="@ov.ShockType" @onchange="e => UpdateOverrideType(idx, e)">
+                                                <option value="@ShockType.Relative">Relative (%)</option>
+                                                <option value="@ShockType.Absolute">Absolute (+/-)</option>
+                                                <option value="@ShockType.Override">Override (=)</option>
+                                            </select>
+                                        </td>
+                                        <td>
+                                            <input type="number" class="fc-sc-override-input" value="@ov.ShockValue"
+                                                   @onchange="e => UpdateOverrideValue(idx, e)" step="0.1" />
+                                        </td>
+                                        <td>
+                                            <button class="fc-sc-override-remove" @onclick="() => RemoveOverride(idx)" title="Remove">
+                                                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    }
+                </div>
+            </section>
+
+            <!-- Macro Shocks -->
+            <section class="fc-section" style="margin-bottom:var(--space-4);">
+                <div class="fc-section-header"><h3>Macro Shocks</h3></div>
+                <div class="fc-section-body">
+                    @if (_availableShocks.Count == 0)
+                    {
+                        <p style="color:var(--cbn-text-muted);font-size:var(--text-body-sm);">Select a template to see available macro shocks.</p>
+                    }
+                    else
+                    {
+                        @foreach (var shock in _availableShocks)
+                        {
+                            var isActive = _definition.MacroShocks.Any(s => s.Name == shock.Name);
+                            <div class="fc-sc-shock-toggle @(isActive ? "fc-sc-shock-toggle--active" : "")">
+                                <label style="display:flex;align-items:center;cursor:pointer;">
+                                    <input type="checkbox" checked="@isActive" @onchange="() => ToggleShock(shock)" style="margin-right:var(--space-2);" />
+                                </label>
+                                <div class="fc-sc-shock-toggle-info">
+                                    <div class="fc-sc-shock-toggle-name">@shock.Name</div>
+                                    <div class="fc-sc-shock-toggle-desc">@shock.Description</div>
+                                    @if (isActive)
+                                    {
+                                        <div class="fc-sc-shock-details">
+                                            @shock.Overrides.Count override(s): @string.Join(", ", shock.Overrides.Select(o => o.FieldName))
+                                        </div>
+                                    }
+                                </div>
+                            </div>
+                        }
+                    }
+                </div>
+            </section>
+
+            <div style="display:flex;justify-content:space-between;">
+                <button class="fc-btn fc-btn--outline" @onclick="() => _step = 1">
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+                    Back
+                </button>
+                <button class="fc-btn fc-btn--primary" @onclick="() => _step = 3"
+                        disabled="@(_definition.Overrides.Count == 0 && _definition.MacroShocks.Count == 0)">
+                    Next: Review & Run
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+                </button>
+            </div>
+        }
+
+        @* ── Step 3: Review & Run ─────────────────────────────────── *@
+        @if (_step == 3)
+        {
+            <section class="fc-section" style="margin-bottom:var(--space-4);">
+                <div class="fc-section-header"><h3>Scenario Summary</h3></div>
+                <div class="fc-section-body">
+                    <div style="display:grid;grid-template-columns:120px 1fr;gap:var(--space-2) var(--space-4);font-size:var(--text-body-sm);">
+                        <span style="color:var(--cbn-text-secondary);font-weight:500;">Name</span>
+                        <span style="font-weight:600;">@_definition.Name</span>
+
+                        <span style="color:var(--cbn-text-secondary);font-weight:500;">Description</span>
+                        <span>@(string.IsNullOrEmpty(_definition.Description) ? "—" : _definition.Description)</span>
+
+                        <span style="color:var(--cbn-text-secondary);font-weight:500;">Template</span>
+                        <span>@(string.IsNullOrEmpty(_selectedTemplateId) ? "Custom" : _selectedTemplateId)</span>
+
+                        <span style="color:var(--cbn-text-secondary);font-weight:500;">Modules</span>
+                        <span>
+                            @if (_definition.AffectedModules.Count > 0)
+                            {
+                                @string.Join(", ", _definition.AffectedModules)
+                            }
+                            else
+                            {
+                                <text>—</text>
+                            }
+                        </span>
+
+                        <span style="color:var(--cbn-text-secondary);font-weight:500;">Field Overrides</span>
+                        <span>@_definition.Overrides.Count override(s)</span>
+
+                        <span style="color:var(--cbn-text-secondary);font-weight:500;">Macro Shocks</span>
+                        <span>@_definition.MacroShocks.Count shock(s)</span>
+                    </div>
+                </div>
+            </section>
+
+            @if (_definition.Overrides.Count > 0)
+            {
+                <section class="fc-section" style="margin-bottom:var(--space-4);">
+                    <div class="fc-section-header"><h3>Override Details</h3></div>
+                    <div class="fc-section-body">
+                        <table class="fc-sc-override-table">
+                            <thead>
+                                <tr><th>Field</th><th>Section</th><th>Type</th><th>Value</th></tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var ov in _definition.Overrides)
+                                {
+                                    <tr>
+                                        <td style="font-weight:600;">@ov.FieldName</td>
+                                        <td>@ov.SectionName</td>
+                                        <td>
+                                            @(ov.ShockType switch
+                                            {
+                                                ShockType.Relative => $"Relative ({(ov.ShockValue >= 0 ? "+" : "")}{ov.ShockValue}%)",
+                                                ShockType.Absolute => $"Absolute ({(ov.ShockValue >= 0 ? "+" : "")}{ov.ShockValue})",
+                                                ShockType.Override => $"Set to {ov.ShockValue}",
+                                                _ => ov.ShockType.ToString()
+                                            })
+                                        </td>
+                                        <td>@ov.ShockValue</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+            }
+
+            <div style="display:flex;justify-content:space-between;align-items:center;">
+                <button class="fc-btn fc-btn--outline" @onclick="() => _step = 2">
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+                    Back
+                </button>
+                <div style="display:flex;gap:var(--space-3);">
+                    <button class="fc-btn fc-btn--outline" @onclick="SaveDraft" disabled="@_running">Save as Draft</button>
+                    <button class="fc-btn fc-btn--gold" @onclick="RunAndView" disabled="@_running">
+                        @if (_running)
+                        {
+                            <span class="fc-btn-spinner"></span>
+                            <text>Running...</text>
+                        }
+                        else
+                        {
+                            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5,3 19,12 5,21"/></svg>
+                            <text>Run Scenario</text>
+                        }
+                    </button>
+                </div>
+            </div>
+        }
+    </div>
+
+    <!-- Sidebar: Live Preview -->
+    <aside class="fc-sc-builder-sidebar">
+        <div class="fc-section">
+            <div class="fc-section-header"><h3>Preview</h3></div>
+            <div class="fc-section-body">
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--space-3);">
+                    <div class="fc-sc-stat-card">
+                        <span class="fc-sc-stat-card-label">Overrides</span>
+                        <span class="fc-sc-stat-card-value">@_definition.Overrides.Count</span>
+                    </div>
+                    <div class="fc-sc-stat-card">
+                        <span class="fc-sc-stat-card-label">Shocks</span>
+                        <span class="fc-sc-stat-card-value">@_definition.MacroShocks.Count</span>
+                    </div>
+                    <div class="fc-sc-stat-card">
+                        <span class="fc-sc-stat-card-label">Modules</span>
+                        <span class="fc-sc-stat-card-value">@_definition.AffectedModules.Count</span>
+                    </div>
+                    <div class="fc-sc-stat-card">
+                        <span class="fc-sc-stat-card-label">Est. Fields</span>
+                        <span class="fc-sc-stat-card-value">@EstimatedFields</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        @if (!string.IsNullOrEmpty(_selectedTemplateId))
+        {
+            var tpl = TemplateService.GetTemplate(_selectedTemplateId);
+            if (tpl != null)
+            {
+                <div class="fc-section">
+                    <div class="fc-section-header"><h3>Template Info</h3></div>
+                    <div class="fc-section-body" style="font-size:var(--text-body-sm);">
+                        <p style="color:var(--cbn-text-secondary);margin:0;">@tpl.Description</p>
+                    </div>
+                </div>
+            }
+        }
+    </aside>
+</div>
+
+@code {
+    [Parameter] public int? Id { get; set; }
+    [SupplyParameterFromQuery] public string? Template { get; set; }
+
+    private bool _isEdit;
+    private bool _running;
+    private int _step = 1;
+    private ScenarioDefinition _definition = new();
+    private string _selectedTemplateId = "";
+    private List<ScenarioTemplate> _templates = [];
+    private List<MacroShock> _availableShocks = [];
+    private static readonly string[] _allModules = ["DMB", "MFB", "PMB", "BDC", "IMTO", "DFI", "ESG", "FATF", "AML"];
+
+    private int EstimatedFields => _definition.Overrides.Count +
+        _definition.MacroShocks.Sum(s => s.Overrides.Count);
+
+    private static readonly List<ProgressStepper.StepItem> _steps =
+    [
+        new("Define", "Name & template"),
+        new("Configure", "Field overrides & shocks"),
+        new("Review & Run", "Confirm and execute"),
+    ];
+
+    protected override async Task OnInitializedAsync()
+    {
+        _templates = TemplateService.GetAllTemplates();
+
+        if (Id.HasValue)
+        {
+            var existing = await Engine.GetScenario(Id.Value);
+            if (existing != null)
+            {
+                _definition = existing;
+                _selectedTemplateId = existing.TemplateId ?? "";
+                _isEdit = true;
+                LoadAvailableShocks();
+            }
+        }
+        else if (!string.IsNullOrEmpty(Template))
+        {
+            _selectedTemplateId = Template;
+            OnTemplateChanged();
+        }
+    }
+
+    private void OnTemplateChanged()
+    {
+        if (string.IsNullOrEmpty(_selectedTemplateId))
+        {
+            _availableShocks = [];
+            return;
+        }
+
+        var created = TemplateService.CreateFromTemplate(_selectedTemplateId);
+        _definition.Name = created.Name;
+        _definition.Description = created.Description;
+        _definition.TemplateId = created.TemplateId;
+        _definition.AffectedModules = created.AffectedModules;
+        _definition.Overrides = created.Overrides;
+        _definition.MacroShocks = created.MacroShocks;
+        LoadAvailableShocks();
+    }
+
+    private void LoadAvailableShocks()
+    {
+        var tpl = TemplateService.GetTemplate(_selectedTemplateId);
+        _availableShocks = tpl?.DefaultShocks ?? [];
+    }
+
+    private void ToggleModule(string mod)
+    {
+        if (_definition.AffectedModules.Contains(mod))
+            _definition.AffectedModules.Remove(mod);
+        else
+            _definition.AffectedModules.Add(mod);
+    }
+
+    private void AddOverride()
+    {
+        _definition.Overrides = [.. _definition.Overrides, new FieldOverride("", "", "", ShockType.Relative, 0)];
+    }
+
+    private void RemoveOverride(int idx)
+    {
+        var list = _definition.Overrides.ToList();
+        list.RemoveAt(idx);
+        _definition.Overrides = list;
+    }
+
+    private void UpdateOverrideField(int idx, ChangeEventArgs e)
+    {
+        var ov = _definition.Overrides[idx];
+        _definition.Overrides[idx] = ov with { FieldName = e.Value?.ToString() ?? "" };
+    }
+
+    private void UpdateOverrideSection(int idx, ChangeEventArgs e)
+    {
+        var ov = _definition.Overrides[idx];
+        _definition.Overrides[idx] = ov with { SectionName = e.Value?.ToString() ?? "" };
+    }
+
+    private void UpdateOverrideType(int idx, ChangeEventArgs e)
+    {
+        var ov = _definition.Overrides[idx];
+        if (Enum.TryParse<ShockType>(e.Value?.ToString(), out var st))
+            _definition.Overrides[idx] = ov with { ShockType = st };
+    }
+
+    private void UpdateOverrideValue(int idx, ChangeEventArgs e)
+    {
+        var ov = _definition.Overrides[idx];
+        if (decimal.TryParse(e.Value?.ToString(), out var val))
+            _definition.Overrides[idx] = ov with { ShockValue = val };
+    }
+
+    private void ToggleShock(MacroShock shock)
+    {
+        var existing = _definition.MacroShocks.FirstOrDefault(s => s.Name == shock.Name);
+        if (existing != null)
+            _definition.MacroShocks = _definition.MacroShocks.Where(s => s.Name != shock.Name).ToList();
+        else
+            _definition.MacroShocks = [.. _definition.MacroShocks, shock];
+    }
+
+    private async Task SaveDraft()
+    {
+        _definition.Status = ScenarioStatus.Draft;
+        var saved = await Engine.SaveScenario(_definition);
+        Nav.NavigateTo("/scenarios");
+    }
+
+    private async Task RunAndView()
+    {
+        _running = true;
+        StateHasChanged();
+
+        try
+        {
+            var saved = await Engine.SaveScenario(_definition);
+            await Engine.RunScenario(Guid.Empty, saved.Id);
+            Nav.NavigateTo($"/scenarios/{saved.Id}/results");
+        }
+        finally
+        {
+            _running = false;
+        }
+    }
+}

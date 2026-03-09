@@ -165,3 +165,58 @@ public record ExportCompletedEvent(
 {
     public string EventType => "export.completed";
 }
+
+// ── Direct Regulatory Submission (RG-34) ──
+
+public record ReturnDirectSubmittedEvent(
+    Guid TenantId,
+    int SubmissionId,
+    string ModuleCode,
+    string ReturnCode,
+    string RegulatorCode,
+    string RegulatorReference,
+    DateTime SubmittedAt,
+    DateTime OccurredAt,
+    Guid CorrelationId) : IDomainEvent
+{
+    public string EventType => "return.direct_submitted";
+}
+
+public record ReturnDirectSubmissionFailedEvent(
+    Guid TenantId,
+    int SubmissionId,
+    string RegulatorCode,
+    string ErrorMessage,
+    int AttemptCount,
+    DateTime OccurredAt,
+    Guid CorrelationId) : IDomainEvent
+{
+    public string EventType => "return.direct_submission_failed";
+}
+
+public record RegulatorQueryRoutedEvent(
+    Guid TenantId,
+    int SubmissionId,
+    string RegulatorCode,
+    string QueryId,
+    string QueryText,
+    DateTime OccurredAt,
+    Guid CorrelationId) : IDomainEvent
+{
+    public string EventType => "return.regulator_query_routed";
+}
+
+// ── Compliance Health Score ──
+
+public record ComplianceScoreChangedEvent(
+    Guid TenantId,
+    decimal PreviousScore,
+    decimal NewScore,
+    string Rating,
+    string Trend,
+    DateTime ComputedAt,
+    DateTime OccurredAt,
+    Guid CorrelationId) : IDomainEvent
+{
+    public string EventType => "compliance.score_changed";
+}

@@ -26,6 +26,36 @@ public class EarlyWarningService : IEarlyWarningService
         "nonperformingloansratio"
     };
 
+    private static readonly string[] LcrKeys =
+    {
+        "lcr",
+        "liquiditycoverageratio",
+        "liquiditycoverage"
+    };
+
+    private static readonly string[] TotalAssetsKeys =
+    {
+        "totalassets",
+        "totalasset",
+        "assets"
+    };
+
+    private static readonly string[] DepositConcentrationKeys =
+    {
+        "top20depositorshare",
+        "top20depositorconcentration",
+        "depositconcentration",
+        "largedepositorshare"
+    };
+
+    private static readonly string[] RelatedPartyKeys =
+    {
+        "relatedpartylending",
+        "relatedpartyexposure",
+        "insiderlending",
+        "insiderexposure"
+    };
+
     private readonly MetadataDbContext _db;
 
     public EarlyWarningService(MetadataDbContext db)
@@ -72,7 +102,11 @@ public class EarlyWarningService : IEarlyWarningService
                     Quarter = RegulatorAnalyticsSupport.ResolveQuarter(x.Month, x.Quarter),
                     x.SubmittedAt,
                     Car = RegulatorAnalyticsSupport.ExtractFirstMetric(x.ParsedDataJson, CarKeys),
-                    Npl = RegulatorAnalyticsSupport.ExtractFirstMetric(x.ParsedDataJson, NplKeys)
+                    Npl = RegulatorAnalyticsSupport.ExtractFirstMetric(x.ParsedDataJson, NplKeys),
+                    Lcr = RegulatorAnalyticsSupport.ExtractFirstMetric(x.ParsedDataJson, LcrKeys),
+                    TotalAssets = RegulatorAnalyticsSupport.ExtractFirstMetric(x.ParsedDataJson, TotalAssetsKeys),
+                    DepositConcentration = RegulatorAnalyticsSupport.ExtractFirstMetric(x.ParsedDataJson, DepositConcentrationKeys),
+                    RelatedParty = RegulatorAnalyticsSupport.ExtractFirstMetric(x.ParsedDataJson, RelatedPartyKeys)
                 })
                 .OrderByDescending(x => x.Year)
                 .ThenByDescending(x => x.Quarter)
@@ -143,6 +177,18 @@ public class EarlyWarningService : IEarlyWarningService
                     Message = $"Latest NPL ratio is {nplSeries[0]:0.##}% (above 5%)."
                 });
             }
+            else if (nplSeries.Count >= 2 && (nplSeries[0] - nplSeries[1]) > 2m)
+            {
+                // NPL rising >2pp in a single quarter
+                flags.Add(new EarlyWarningFlag
+                {
+                    InstitutionId = institution.Key.InstitutionId,
+                    InstitutionName = institution.Key.InstitutionName,
+                    Severity = EarlyWarningSeverity.Red,
+                    FlagCode = "NPL_SPIKE",
+                    Message = $"NPL ratio surged {(nplSeries[0] - nplSeries[1]):0.##}pp in a single quarter (from {nplSeries[1]:0.##}% to {nplSeries[0]:0.##}%)."
+                });
+            }
             else if (nplSeries.Count == 3 && nplSeries[0] > nplSeries[1] && nplSeries[1] > nplSeries[2])
             {
                 flags.Add(new EarlyWarningFlag
@@ -153,6 +199,99 @@ public class EarlyWarningService : IEarlyWarningService
                     FlagCode = "RISING_NPL",
                     Message = "NPL ratio is increasing for 3 consecutive quarters."
                 });
+            }
+
+            // ── LCR below 110% (approaching 100% minimum) ──
+            var lcrSeries = series
+                .Select(x => x.Lcr)
+                .Where(x => x.HasValue)
+                .Select(x => x!.Value)
+                .Take(2)
+                .ToList();
+
+            if (lcrSeries.Count > 0)
+            {
+                var latestLcr = lcrSeries[0];
+                if (latestLcr < 100m)
+                {
+                    flags.Add(new EarlyWarningFlag
+                    {
+                        InstitutionId = institution.Key.InstitutionId,
+                        InstitutionName = institution.Key.InstitutionName,
+                        Severity = EarlyWarningSeverity.Red,
+                        FlagCode = "LCR_BELOW_MINIMUM",
+                        Message = $"LCR is {latestLcr:0.##}% (below 100% regulatory minimum)."
+                    });
+                }
+                else if (latestLcr < 110m)
+                {
+                    flags.Add(new EarlyWarningFlag
+                    {
+                        InstitutionId = institution.Key.InstitutionId,
+                        InstitutionName = institution.Key.InstitutionName,
+                        Severity = EarlyWarningSeverity.Amber,
+                        FlagCode = "LCR_APPROACHING_MINIMUM",
+                        Message = $"LCR is {latestLcr:0.##}% and is approaching the 100% minimum threshold."
+                    });
+                }
+            }
+
+            // ── Deposit concentration: top 20 depositors > 30% ──
+            var latestDepConcentration = series
+                .Select(x => x.DepositConcentration)
+                .FirstOrDefault(x => x.HasValue);
+
+            if (latestDepConcentration.HasValue && latestDepConcentration.Value > 30m)
+            {
+                flags.Add(new EarlyWarningFlag
+                {
+                    InstitutionId = institution.Key.InstitutionId,
+                    InstitutionName = institution.Key.InstitutionName,
+                    Severity = latestDepConcentration.Value > 50m ? EarlyWarningSeverity.Red : EarlyWarningSeverity.Amber,
+                    FlagCode = "DEPOSIT_CONCENTRATION",
+                    Message = $"Top 20 depositors represent {latestDepConcentration.Value:0.##}% of total deposits (above 30% threshold)."
+                });
+            }
+
+            // ── Related-party lending exceeding regulatory limits ──
+            var latestRelatedParty = series
+                .Select(x => x.RelatedParty)
+                .FirstOrDefault(x => x.HasValue);
+
+            if (latestRelatedParty.HasValue && latestRelatedParty.Value > 20m)
+            {
+                flags.Add(new EarlyWarningFlag
+                {
+                    InstitutionId = institution.Key.InstitutionId,
+                    InstitutionName = institution.Key.InstitutionName,
+                    Severity = latestRelatedParty.Value > 35m ? EarlyWarningSeverity.Red : EarlyWarningSeverity.Amber,
+                    FlagCode = "RELATED_PARTY_EXCESS",
+                    Message = $"Related-party lending is {latestRelatedParty.Value:0.##}% of capital (exceeds 20% regulatory limit)."
+                });
+            }
+
+            // ── Sudden asset growth (>30% quarter-on-quarter) ──
+            var assetSeries = series
+                .Select(x => x.TotalAssets)
+                .Where(x => x.HasValue)
+                .Select(x => x!.Value)
+                .Take(2)
+                .ToList();
+
+            if (assetSeries.Count == 2 && assetSeries[1] > 0)
+            {
+                var growthPct = (assetSeries[0] - assetSeries[1]) / assetSeries[1] * 100m;
+                if (growthPct > 30m)
+                {
+                    flags.Add(new EarlyWarningFlag
+                    {
+                        InstitutionId = institution.Key.InstitutionId,
+                        InstitutionName = institution.Key.InstitutionName,
+                        Severity = growthPct > 50m ? EarlyWarningSeverity.Red : EarlyWarningSeverity.Amber,
+                        FlagCode = "RAPID_ASSET_GROWTH",
+                        Message = $"Total assets grew {growthPct:0.#}% quarter-on-quarter (above 30% threshold). May indicate unsustainable expansion."
+                    });
+                }
             }
 
             var submissionIds = institution.Select(x => x.Id).ToList();
