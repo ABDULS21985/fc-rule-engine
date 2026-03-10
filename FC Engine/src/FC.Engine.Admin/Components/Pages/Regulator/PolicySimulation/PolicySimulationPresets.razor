@@ -7,7 +7,7 @@
 @using FC.Engine.Domain.Entities
 @using FC.Engine.Infrastructure.Metadata
 @using Microsoft.EntityFrameworkCore
-@inject MetadataDbContext Db
+@inject IServiceScopeFactory ScopeFactory
 
 <PageTitle>Parameter Presets — Policy Simulation</PageTitle>
 
@@ -123,7 +123,9 @@
         StateHasChanged();
         try
         {
-            var query = Db.Set<PolicyParameterPreset>().AsQueryable();
+            using var scope = ScopeFactory.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<MetadataDbContext>();
+            var query = db.Set<PolicyParameterPreset>().AsNoTracking().AsQueryable();
 
             if (!string.IsNullOrEmpty(_domainFilter))
             {
@@ -143,6 +145,10 @@
             }
 
             _presets = await query.OrderBy(p => p.PolicyDomain).ThenBy(p => p.ParameterCode).ToListAsync();
+        }
+        catch (Exception ex) when (ex.IsMissingSchemaObject())
+        {
+            _presets = new();
         }
         catch (Exception ex)
         {

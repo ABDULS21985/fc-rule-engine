@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using FC.Engine.Infrastructure.Services;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
@@ -20,7 +21,10 @@ public class TenantContextMiddleware
         _logger = logger;
     }
 
-    public async Task InvokeAsync(HttpContext context)
+    public async Task InvokeAsync(
+        HttpContext context,
+        ITenantAccessContextResolver tenantAccessContextResolver,
+        IPlatformRegulatorTenantResolver platformRegulatorTenantResolver)
     {
         // Skip tenant resolution for health, metrics endpoints and static files
         var path = context.Request.Path.Value ?? "";
@@ -65,15 +69,40 @@ public class TenantContextMiddleware
         {
             // PlatformAdmin: check for impersonation header/cookie
             var impersonateTenantId = ResolveImpersonation(context);
+            TenantAccessContext? accessContext = null;
             if (impersonateTenantId.HasValue)
             {
                 context.Items["TenantId"] = impersonateTenantId.Value;
                 context.Items["ImpersonatingTenantId"] = impersonateTenantId.Value;
                 _logger.LogDebug("PlatformAdmin impersonating tenant {TenantId}", impersonateTenantId.Value);
+                accessContext = await tenantAccessContextResolver.TryResolveAsync(
+                    impersonateTenantId.Value,
+                    context.User,
+                    context.RequestAborted);
+            }
+            else if (IsRegulatorPortalRequest(path))
+            {
+                var regulatorTenant = await platformRegulatorTenantResolver.TryResolveAsync(context.RequestAborted);
+                if (regulatorTenant is not null)
+                {
+                    context.Items["TenantId"] = regulatorTenant.TenantId;
+                    context.Items["ImpersonatingTenantId"] = regulatorTenant.TenantId;
+                    EnsureImpersonationCookie(context, regulatorTenant.TenantId);
+
+                    accessContext = await tenantAccessContextResolver.TryResolveAsync(
+                        regulatorTenant.TenantId,
+                        context.User,
+                        context.RequestAborted);
+
+                    _logger.LogDebug(
+                        "PlatformAdmin auto-bound to regulator tenant {TenantId} for path {Path}",
+                        regulatorTenant.TenantId,
+                        path);
+                }
             }
             // else: no TenantId set → RLS fn_TenantFilter allows all data
 
-            PopulateTenantSessionAttributes(context);
+            PopulateTenantSessionAttributes(context, accessContext);
             await _next(context);
             return;
         }
@@ -83,7 +112,11 @@ public class TenantContextMiddleware
         if (tenantClaim != null && Guid.TryParse(tenantClaim.Value, out var tenantId))
         {
             context.Items["TenantId"] = tenantId;
-            PopulateTenantSessionAttributes(context);
+            var accessContext = await tenantAccessContextResolver.TryResolveAsync(
+                tenantId,
+                context.User,
+                context.RequestAborted);
+            PopulateTenantSessionAttributes(context, accessContext);
             await _next(context);
             return;
         }
@@ -114,18 +147,43 @@ public class TenantContextMiddleware
         return null;
     }
 
-    private static void PopulateTenantSessionAttributes(HttpContext context)
+    private static bool IsRegulatorPortalRequest(string path)
     {
-        var tenantTypeClaim = context.User.FindFirst("TenantType")?.Value;
-        if (!string.IsNullOrWhiteSpace(tenantTypeClaim))
+        return path.StartsWith("/regulator", StringComparison.OrdinalIgnoreCase)
+            || path.StartsWith("/scenarios/macro", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static void EnsureImpersonationCookie(HttpContext context, Guid tenantId)
+    {
+        if (context.Request.Cookies.TryGetValue("ImpersonateTenantId", out var existingValue)
+            && Guid.TryParse(existingValue, out var existingTenantId)
+            && existingTenantId == tenantId)
         {
-            context.Items["TenantType"] = tenantTypeClaim;
+            return;
         }
 
-        var regulatorCodeClaim = context.User.FindFirst("RegulatorCode")?.Value;
-        if (!string.IsNullOrWhiteSpace(regulatorCodeClaim))
+        context.Response.Cookies.Append("ImpersonateTenantId", tenantId.ToString(), new CookieOptions
         {
-            context.Items["RegulatorCode"] = regulatorCodeClaim;
+            HttpOnly = true,
+            SameSite = SameSiteMode.Strict,
+            Expires = DateTimeOffset.UtcNow.AddHours(2)
+        });
+    }
+
+    private static void PopulateTenantSessionAttributes(HttpContext context, TenantAccessContext? accessContext)
+    {
+        var tenantType = accessContext?.TenantType.ToString()
+            ?? context.User.FindFirst("TenantType")?.Value;
+        if (!string.IsNullOrWhiteSpace(tenantType))
+        {
+            context.Items["TenantType"] = tenantType;
+        }
+
+        var regulatorCode = accessContext?.RegulatorCode
+            ?? context.User.FindFirst("RegulatorCode")?.Value;
+        if (!string.IsNullOrWhiteSpace(regulatorCode))
+        {
+            context.Items["RegulatorCode"] = regulatorCode;
         }
     }
 }

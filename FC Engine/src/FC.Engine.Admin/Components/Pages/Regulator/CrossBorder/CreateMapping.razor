@@ -5,7 +5,7 @@
 @inject ToastService Toast
 @using FC.Engine.Domain.Entities
 @using FC.Engine.Infrastructure.Metadata
-@inject MetadataDbContext Db
+@inject IServiceScopeFactory ScopeFactory
 @using Microsoft.EntityFrameworkCore
 
 <PageTitle>Create Equivalence Mapping — RegOS</PageTitle>
@@ -216,7 +216,9 @@
 
     protected override async Task OnInitializedAsync()
     {
-        _jurisdictions = await Db.RegulatoryJurisdictions
+        using var scope = ScopeFactory.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<MetadataDbContext>();
+        _jurisdictions = await db.RegulatoryJurisdictions
             .AsNoTracking()
             .Where(j => j.IsActive)
             .OrderBy(j => j.CountryName)

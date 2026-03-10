@@ -1,3 +1,4 @@
+@page "/regulator/cross-border/consolidation/{RunId:long}"
 @page "/cross-border/consolidation/{RunId:long}"
 @attribute [Authorize(Policy = "RegulatorOnly")]
 @inject IConsolidationEngine ConsolidationEngine
@@ -5,7 +6,7 @@
 @inject ToastService Toast
 @using FC.Engine.Domain.Entities
 @using FC.Engine.Infrastructure.Metadata
-@inject MetadataDbContext Db
+@inject IServiceScopeFactory ScopeFactory
 @using Microsoft.EntityFrameworkCore
 
 <PageTitle>Consolidation Run — RegOS</PageTitle>
@@ -232,12 +233,14 @@
 
         try
         {
-            foreach (var gid in await Db.FinancialGroups.AsNoTracking().Select(g => g.Id).ToListAsync())
+            using var scope = ScopeFactory.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<MetadataDbContext>();
+            foreach (var gid in await db.FinancialGroups.AsNoTracking().Select(g => g.Id).ToListAsync())
             {
                 _run = await ConsolidationEngine.GetRunResultAsync(RunId, gid);
                 if (_run is not null)
                 {
-                    _group = await Db.FinancialGroups.AsNoTracking().FirstOrDefaultAsync(g => g.Id == gid);
+                    _group = await db.FinancialGroups.AsNoTracking().FirstOrDefaultAsync(g => g.Id == gid);
                     _subsidiaries = (await ConsolidationEngine.GetSubsidiarySnapshotsAsync(RunId, gid)).ToList();
                     _adjustments = (await ConsolidationEngine.GetAdjustmentsAsync(RunId, gid)).ToList();
                     break;

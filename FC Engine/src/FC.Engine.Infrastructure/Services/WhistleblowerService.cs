@@ -4,6 +4,7 @@ using System.Text.Json;
 using Dapper;
 using FC.Engine.Domain.Abstractions;
 using FC.Engine.Domain.Models;
+using FC.Engine.Infrastructure;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 
@@ -157,25 +158,32 @@ public sealed class WhistleblowerService : IWhistleblowerService
     {
         var context = await _tenantResolver.ResolveAsync(regulatorCode, ct);
         using var conn = await _db.CreateConnectionAsync(context.TenantId, ct);
-        return (await conn.QueryAsync<WhistleblowerCaseSummary>(
-            """
-            SELECT r.Id AS ReportId,
-                   r.CaseReference,
-                   r.Category,
-                   COALESCE(r.AllegedInstitutionName, i.InstitutionName) AS AllegedInstitutionName,
-                   r.Status,
-                   r.PriorityScore,
-                   u.DisplayName AS AssignedToUserName,
-                   r.ReceivedAt
-            FROM dbo.WhistleblowerReports r
-            LEFT JOIN dbo.institutions i ON i.Id = r.AllegedInstitutionId
-            LEFT JOIN meta.portal_users u ON u.Id = r.AssignedToUserId
-            WHERE r.TenantId = @TenantId
-              AND r.RegulatorCode = @RegulatorCode
-              AND r.Status NOT IN ('CONCLUDED', 'CLOSED')
-            ORDER BY r.PriorityScore DESC, r.ReceivedAt ASC
-            """,
-            new { TenantId = context.TenantId, RegulatorCode = context.RegulatorCode })).ToList();
+        try
+        {
+            return (await conn.QueryAsync<WhistleblowerCaseSummary>(
+                """
+                SELECT r.Id AS ReportId,
+                       r.CaseReference,
+                       r.Category,
+                       COALESCE(r.AllegedInstitutionName, i.InstitutionName) AS AllegedInstitutionName,
+                       r.Status,
+                       r.PriorityScore,
+                       u.DisplayName AS AssignedToUserName,
+                       r.ReceivedAt
+                FROM dbo.WhistleblowerReports r
+                LEFT JOIN dbo.institutions i ON i.Id = r.AllegedInstitutionId
+                LEFT JOIN meta.portal_users u ON u.Id = r.AssignedToUserId
+                WHERE r.TenantId = @TenantId
+                  AND r.RegulatorCode = @RegulatorCode
+                  AND r.Status NOT IN ('CONCLUDED', 'CLOSED')
+                ORDER BY r.PriorityScore DESC, r.ReceivedAt ASC
+                """,
+                new { TenantId = context.TenantId, RegulatorCode = context.RegulatorCode })).ToList();
+        }
+        catch (Exception ex) when (ex.IsMissingSchemaObject())
+        {
+            return [];
+        }
     }
 
     public async Task AssignCaseAsync(

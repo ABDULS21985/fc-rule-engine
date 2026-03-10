@@ -1,6 +1,5 @@
 @page "/logout"
 @using Microsoft.AspNetCore.Authentication
-@using Microsoft.AspNetCore.Authentication.Cookies
 @inject IHttpContextAccessor HttpContextAccessor
 @inject NavigationManager Nav
 
@@ -10,7 +9,7 @@
         var httpContext = HttpContextAccessor.HttpContext;
         if (httpContext is not null)
         {
-            await httpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+            await httpContext.SignOutAsync("FC.Admin.Auth");
         }
         Nav.NavigateTo("/login", forceLoad: true);
     }

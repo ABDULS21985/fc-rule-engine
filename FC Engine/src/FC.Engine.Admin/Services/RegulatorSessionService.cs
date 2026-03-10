@@ -18,16 +18,19 @@ public sealed class RegulatorSessionService
     private readonly AuthenticationStateProvider _authStateProvider;
     private readonly ITenantContext _tenantContext;
     private readonly ITenantAccessContextResolver _tenantAccessContextResolver;
+    private readonly IPlatformRegulatorTenantResolver _platformRegulatorTenantResolver;
     private RegulatorSessionContext? _cached;
 
     public RegulatorSessionService(
         AuthenticationStateProvider authStateProvider,
         ITenantContext tenantContext,
-        ITenantAccessContextResolver tenantAccessContextResolver)
+        ITenantAccessContextResolver tenantAccessContextResolver,
+        IPlatformRegulatorTenantResolver platformRegulatorTenantResolver)
     {
         _authStateProvider = authStateProvider;
         _tenantContext = tenantContext;
         _tenantAccessContextResolver = tenantAccessContextResolver;
+        _platformRegulatorTenantResolver = platformRegulatorTenantResolver;
     }
 
     public async Task<RegulatorSessionContext> GetRequiredAsync(CancellationToken ct = default)
@@ -50,7 +53,12 @@ public sealed class RegulatorSessionService
             throw new InvalidOperationException("Regulator user identifier is unavailable for this session.");
         }
 
-        var tenantId = ResolveTenantId(principal);
+        var tenantId = ResolveTenantId(principal) ?? _tenantContext.CurrentTenantId;
+        if (!tenantId.HasValue && IsPlatformAdmin(principal))
+        {
+            tenantId = (await _platformRegulatorTenantResolver.TryResolveAsync(ct))?.TenantId;
+        }
+
         if (!tenantId.HasValue)
         {
             throw new InvalidOperationException("Regulator tenant context is unavailable for this session.");
@@ -98,5 +106,11 @@ public sealed class RegulatorSessionService
         }
 
         return _tenantContext.CurrentTenantId;
+    }
+
+    private static bool IsPlatformAdmin(ClaimsPrincipal principal)
+    {
+        return principal.IsInRole("PlatformAdmin")
+            || principal.HasClaim("IsPlatformAdmin", "true");
     }
 }

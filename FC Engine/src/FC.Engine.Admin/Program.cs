@@ -7,9 +7,11 @@ using FC.Engine.Infrastructure.Auth;
 using FC.Engine.Infrastructure.Middleware;
 using FC.Engine.Infrastructure.MultiTenancy;
 using FC.Engine.Infrastructure.Metadata;
+using FC.Engine.Infrastructure.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Authorization;
 using System.Security.Claims;
 using Serilog;
 
@@ -52,6 +54,7 @@ builder.Services.AddScoped<FC.Engine.Admin.Services.KeyboardShortcutService>();
 builder.Services.AddScoped<FC.Engine.Admin.Services.HealthAlertService>();
 builder.Services.AddScoped<FC.Engine.Admin.Services.RegulatorSessionService>();
 builder.Services.AddScoped<FC.Engine.Infrastructure.Charts.ChartJsInterop>();
+builder.Services.AddScoped<IAuthorizationHandler, RegulatorTenantAccessHandler>();
 
 // Scenario simulation engine
 builder.Services.AddSingleton<FC.Engine.Admin.Services.Scenarios.IScenarioEngine,
@@ -71,7 +74,7 @@ builder.Services.AddAuthentication(AdminAuthScheme)
     {
         options.LoginPath = "/login";
         options.LogoutPath = "/logout";
-        options.AccessDeniedPath = "/login";
+        options.AccessDeniedPath = "/access-denied";
         options.ExpireTimeSpan = TimeSpan.FromHours(8);
         options.SlidingExpiration = true;
         options.Cookie.HttpOnly = true;
@@ -89,7 +92,7 @@ builder.Services.AddAuthorization(options =>
     options.AddPolicy("PlatformAdmin", policy => policy.RequireRole("PlatformAdmin"));
     options.AddPolicy("RegulatorOnly", policy =>
         policy.RequireAuthenticatedUser()
-            .RequireClaim("TenantType", TenantType.Regulator.ToString()));
+            .AddRequirements(new RegulatorTenantAccessRequirement()));
 });
 
 builder.Services.AddHttpContextAccessor();
@@ -213,7 +216,7 @@ app.MapPost("/account/login", async (
     {
         var setupPrincipal = await authService.BuildClaimsPrincipalWithPermissions(user, context.RequestAborted);
         await context.SignInAsync(
-            CookieAuthenticationDefaults.AuthenticationScheme,
+            AdminAuthScheme,
             setupPrincipal,
             new AuthenticationProperties
             {
@@ -497,17 +500,21 @@ app.MapGet("/regulator/workspace/{projectId:int}/report", async (
     int projectId,
     HttpContext context,
     ITenantContext tenantContext,
+    ITenantAccessContextResolver tenantAccessContextResolver,
     IExaminationWorkspaceService workspaceService) =>
 {
     if (!tenantContext.CurrentTenantId.HasValue)
         return Results.Unauthorized();
 
-    var regulatorCode = context.User.FindFirst("RegulatorCode")?.Value;
-    if (string.IsNullOrWhiteSpace(regulatorCode))
+    var accessContext = await tenantAccessContextResolver.TryResolveAsync(
+        tenantContext.CurrentTenantId.Value,
+        context.User,
+        context.RequestAborted);
+    if (accessContext?.TenantType != TenantType.Regulator || string.IsNullOrWhiteSpace(accessContext.RegulatorCode))
         return Results.BadRequest(new { error = "Missing regulator context." });
 
     var pdf = await workspaceService.GenerateReportPdf(
-        tenantContext.CurrentTenantId.Value, regulatorCode, projectId, context.RequestAborted);
+        tenantContext.CurrentTenantId.Value, accessContext.RegulatorCode, projectId, context.RequestAborted);
     var fileName = $"examination-report-{projectId}-{DateTime.UtcNow:yyyyMMddHHmmss}.pdf";
     return Results.File(pdf, "application/pdf", fileName);
 }).RequireAuthorization("RegulatorOnly");
@@ -516,17 +523,21 @@ app.MapGet("/regulator/workspace/{projectId:int}/intelligence-pack", async (
     int projectId,
     HttpContext context,
     ITenantContext tenantContext,
+    ITenantAccessContextResolver tenantAccessContextResolver,
     IExaminationWorkspaceService workspaceService) =>
 {
     if (!tenantContext.CurrentTenantId.HasValue)
         return Results.Unauthorized();
 
-    var regulatorCode = context.User.FindFirst("RegulatorCode")?.Value;
-    if (string.IsNullOrWhiteSpace(regulatorCode))
+    var accessContext = await tenantAccessContextResolver.TryResolveAsync(
+        tenantContext.CurrentTenantId.Value,
+        context.User,
+        context.RequestAborted);
+    if (accessContext?.TenantType != TenantType.Regulator || string.IsNullOrWhiteSpace(accessContext.RegulatorCode))
         return Results.BadRequest(new { error = "Missing regulator context." });
 
     var pdf = await workspaceService.GenerateIntelligencePackPdf(
-        tenantContext.CurrentTenantId.Value, regulatorCode, projectId, context.RequestAborted);
+        tenantContext.CurrentTenantId.Value, accessContext.RegulatorCode, projectId, context.RequestAborted);
     var fileName = $"intelligence-pack-{projectId}-{DateTime.UtcNow:yyyyMMddHHmmss}.pdf";
     return Results.File(pdf, "application/pdf", fileName);
 }).RequireAuthorization("RegulatorOnly");
@@ -550,10 +561,18 @@ app.MapGet("/regulator/workspace/{projectId:int}/evidence/{evidenceId:int}", asy
 
 app.MapGet("/regulator/stress-test/report/pdf", async (
     HttpContext context,
+    ITenantContext tenantContext,
+    ITenantAccessContextResolver tenantAccessContextResolver,
     IStressTestService stressTestService) =>
 {
-    var regulatorCode = context.User.FindFirst("RegulatorCode")?.Value;
-    if (string.IsNullOrWhiteSpace(regulatorCode))
+    if (!tenantContext.CurrentTenantId.HasValue)
+        return Results.Unauthorized();
+
+    var accessContext = await tenantAccessContextResolver.TryResolveAsync(
+        tenantContext.CurrentTenantId.Value,
+        context.User,
+        context.RequestAborted);
+    if (accessContext?.TenantType != TenantType.Regulator || string.IsNullOrWhiteSpace(accessContext.RegulatorCode))
         return Results.BadRequest(new { error = "Missing regulator context." });
 
     var scenarioParam = context.Request.Query["scenario"].FirstOrDefault() ?? "NgfsOrderly";
@@ -561,10 +580,10 @@ app.MapGet("/regulator/stress-test/report/pdf", async (
         scenarioType = StressScenarioType.NgfsOrderly;
 
     var report = await stressTestService.RunStressTestAsync(
-        regulatorCode,
+        accessContext.RegulatorCode,
         new StressTestRequest { ScenarioType = scenarioType },
         context.RequestAborted);
-    var pdf = await stressTestService.GenerateReportPdfAsync(regulatorCode, report, context.RequestAborted);
+    var pdf = await stressTestService.GenerateReportPdfAsync(accessContext.RegulatorCode, report, context.RequestAborted);
     var fileName = $"stress-test-{scenarioType}-{DateTime.UtcNow:yyyyMMddHHmmss}.pdf";
     return Results.File(pdf, "application/pdf", fileName);
 }).RequireAuthorization("RegulatorOnly");

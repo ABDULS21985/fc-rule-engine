@@ -2,6 +2,7 @@ using FC.Engine.Domain.Abstractions;
 using FC.Engine.Domain.Entities;
 using FC.Engine.Domain.Enums;
 using FC.Engine.Domain.Models;
+using FC.Engine.Infrastructure;
 using FC.Engine.Infrastructure.Metadata;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -230,25 +231,37 @@ public sealed class PolicyScenarioService : IPolicyScenarioService
         if (status.HasValue)
             query = query.Where(s => s.Status == status.Value);
 
-        var totalCount = await query.CountAsync(ct);
+        try
+        {
+            var totalCount = await query.CountAsync(ct);
 
-        var items = await query
-            .OrderByDescending(s => s.CreatedAt)
-            .Skip((page - 1) * pageSize)
-            .Take(pageSize)
-            .Select(s => new PolicyScenarioSummary(
-                s.Id,
-                s.Title,
-                s.PolicyDomain,
-                s.Status,
-                s.TargetEntityTypes,
-                s.BaselineDate,
-                s.Parameters.Count,
-                s.ImpactRuns.Count,
-                s.CreatedAt))
-            .ToListAsync(ct);
+            var items = await query
+                .OrderByDescending(s => s.CreatedAt)
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .Select(s => new PolicyScenarioSummary(
+                    s.Id,
+                    s.Title,
+                    s.PolicyDomain,
+                    s.Status,
+                    s.TargetEntityTypes,
+                    s.BaselineDate,
+                    s.Parameters.Count,
+                    s.ImpactRuns.Count,
+                    s.CreatedAt))
+                .ToListAsync(ct);
 
-        return new PagedResult<PolicyScenarioSummary>(items, totalCount, page, pageSize);
+            return new PagedResult<PolicyScenarioSummary>(items, totalCount, page, pageSize);
+        }
+        catch (Exception ex) when (ex.IsMissingSchemaObject())
+        {
+            _log.LogWarning(
+                ex,
+                "Policy simulation schema is unavailable while listing scenarios for regulator {RegulatorId}. Returning an empty result set.",
+                regulatorId);
+
+            return new PagedResult<PolicyScenarioSummary>([], 0, page, pageSize);
+        }
     }
 
     // ── Clone ─────────────────────────────────────────────────────────

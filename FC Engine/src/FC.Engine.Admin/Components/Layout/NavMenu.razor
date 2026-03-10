@@ -1,9 +1,12 @@
 @using Microsoft.AspNetCore.Components.Authorization
 @using Microsoft.AspNetCore.Components.Routing
 @using FC.Engine.Domain.Abstractions
+@using FC.Engine.Domain.Enums
+@using FC.Engine.Infrastructure.Services
 @using FC.Engine.Admin.Services
 @inject IEntitlementService EntitlementSvc
 @inject ITenantContext TenantContext
+@inject ITenantAccessContextResolver TenantAccessContextResolver
 @inject SidebarStateService SidebarState
 @inject NavigationManager Navigation
 @inject ToastService Toast
@@ -257,6 +260,7 @@
 
     // ── State ────────────────────────────────────────────────────────
     private bool _isPlatformAdmin;
+    private bool _hasRegulatorPortalAccess;
     private HashSet<string> _activeModules = new(StringComparer.OrdinalIgnoreCase);
     private string _searchQuery = string.Empty;
 
@@ -265,6 +269,7 @@
     protected override async Task OnInitializedAsync()
     {
         _isPlatformAdmin = TenantContext.IsPlatformAdmin;
+        await ResolveRegulatorPortalAccessAsync();
 
         if (!_isPlatformAdmin && TenantContext.CurrentTenantId is { } tenantId)
         {
@@ -283,6 +288,26 @@
 
         SidebarState.OnStateChanged += OnSidebarStateChanged;
         Navigation.LocationChanged  += OnLocationChanged;
+    }
+
+    private async Task ResolveRegulatorPortalAccessAsync()
+    {
+        _hasRegulatorPortalAccess = false;
+
+        if (!TenantContext.CurrentTenantId.HasValue)
+        {
+            return;
+        }
+
+        try
+        {
+            var accessContext = await TenantAccessContextResolver.TryResolveAsync(TenantContext.CurrentTenantId.Value);
+            _hasRegulatorPortalAccess = accessContext?.TenantType == TenantType.Regulator;
+        }
+        catch
+        {
+            _hasRegulatorPortalAccess = false;
+        }
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -437,92 +462,104 @@
         }));
 
         // ── Regulator ────────────────────────────────────────────────────
-        groups.Add(new NavGroup("regulator", "Regulator", new List<NavItemModel>
+        if (_hasRegulatorPortalAccess)
         {
-            new("Regulator Dashboard", "/regulator",
-                """<line x1="12" y1="20" x2="12" y2="10"/><line x1="18" y1="20" x2="18" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>""",
-                0, false, [], "regulator"),
+            groups.Add(new NavGroup("regulator", "Regulator", new List<NavItemModel>
+            {
+                new("Regulator Dashboard", "/regulator",
+                    """<line x1="12" y1="20" x2="12" y2="10"/><line x1="18" y1="20" x2="18" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>""",
+                    0, false, [], "regulator"),
 
-            new("Submissions Inbox", "/regulator/inbox",
-                """<polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11L2 12v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.45-6.89A2 2 0 0016.76 4H7.24a2 2 0 00-1.79 1.11z"/>""",
-                0, false, [], "regulator"),
+                new("Submissions Inbox", "/regulator/inbox",
+                    """<polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11L2 12v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.45-6.89A2 2 0 0016.76 4H7.24a2 2 0 00-1.79 1.11z"/>""",
+                    0, false, [], "regulator"),
 
-            new("Early Warnings", "/regulator/warnings",
-                """<path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>""",
-                0, false, [], "regulator"),
+                new("Early Warnings", "/regulator/warnings",
+                    """<path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>""",
+                    0, false, [], "regulator"),
 
-            new("Sector Analytics", "/regulator/analytics",
-                """<line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>""",
-                0, false, [], "regulator"),
+                new("Sector Analytics", "/regulator/analytics",
+                    """<line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>""",
+                    0, false, [], "regulator"),
 
-            new("Systemic Risk", "/regulator/systemic-risk",
-                """<path d="M22 12h-4l-3 9L9 3l-3 9H2"/>""",
-                0, false, [], "regulator"),
+                new("Systemic Risk", "/regulator/systemic-risk",
+                    """<path d="M22 12h-4l-3 9L9 3l-3 9H2"/>""",
+                    0, false, [], "regulator"),
 
-            new("Compliance Health", "/regulator/sector-health",
-                """<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>""",
-                0, false, [], "regulator"),
+                new("Compliance Health", "/regulator/sector-health",
+                    """<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>""",
+                    0, false, [], "regulator"),
 
-            new("Conduct Surveillance", "/regulator/surveillance",
-                """<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>""",
-                0, false, [], "regulator"),
+                new("Conduct Surveillance", "/regulator/surveillance",
+                    """<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>""",
+                    0, false, [], "regulator"),
 
-            new("Risk Heatmap", "/regulator/heatmap",
-                """<rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/>""",
-                0, false, [], "regulator"),
+                new("Risk Heatmap", "/regulator/heatmap",
+                    """<rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/>""",
+                    0, false, [], "regulator"),
 
-            new("Contagion Network", "/regulator/contagion",
-                """<circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M13 6h3a2 2 0 012 2v7"/><path d="M11 18H8a2 2 0 01-2-2V9"/>""",
-                0, false, [], "regulator"),
+                new("Contagion Network", "/regulator/contagion",
+                    """<circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M13 6h3a2 2 0 012 2v7"/><path d="M11 18H8a2 2 0 01-2-2V9"/>""",
+                    0, false, [], "regulator"),
 
-            new("Examination Workspace", "/regulator/workspace",
-                """<rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/>""",
-                0, false, [], "regulator"),
+                new("Examination Workspace", "/regulator/workspace",
+                    """<rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/>""",
+                    0, false, [], "regulator"),
 
-            new("Stress Testing", "/regulator/stress-test",
-                """<path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>""",
-                0, false, [], "regulator"),
+                new("Stress Testing", "/regulator/stress-test",
+                    """<path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>""",
+                    0, false, [], "regulator"),
 
-            new("Policy Simulation", "/regulator/policies",
-                """<path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>""",
-                0, false, [], "regulator"),
+                new("Policy Simulation", "/regulator/policies",
+                    """<path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>""",
+                    0, false, [], "regulator"),
 
-            new("Cross-Border Dashboard", "/regulator/cross-border",
-                """<circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/>""",
-                0, false, [], "regulator"),
+                new("Cross-Border Dashboard", "/regulator/cross-border",
+                    """<circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/>""",
+                    0, false, [], "regulator"),
 
-            new("Equivalence Mappings", "/regulator/cross-border/mappings",
-                """<polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/>""",
-                0, false, [], "regulator"),
+                new("Equivalence Mappings", "/regulator/cross-border/mappings",
+                    """<polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/>""",
+                    0, false, [], "regulator"),
 
-            new("Consolidation", "/regulator/cross-border/consolidation",
-                """<rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 3H8l-2 4h12l-2-4z"/>""",
-                0, false, [], "regulator"),
+                new("Consolidation", "/regulator/cross-border/consolidation",
+                    """<rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 3H8l-2 4h12l-2-4z"/>""",
+                    0, false, [], "regulator"),
 
-            new("Data Flows", "/regulator/cross-border/dataflows",
-                """<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>""",
-                0, false, [], "regulator"),
+                new("Data Flows", "/regulator/cross-border/dataflows",
+                    """<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>""",
+                    0, false, [], "regulator"),
 
-            new("Divergence Alerts", "/regulator/cross-border/divergences",
-                """<path d="M18 6L6 18"/><path d="M6 6l12 12"/>""",
-                0, false, [], "regulator"),
+                new("Divergence Alerts", "/regulator/cross-border/divergences",
+                    """<path d="M18 6L6 18"/><path d="M6 6l12 12"/>""",
+                    0, false, [], "regulator"),
 
-            new("FX Rates", "/regulator/cross-border/fx-rates",
-                """<line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/>""",
-                0, false, [], "regulator"),
+                new("FX Rates", "/regulator/cross-border/fx-rates",
+                    """<line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/>""",
+                    0, false, [], "regulator"),
 
-            new("Deadline Calendar", "/regulator/cross-border/deadlines",
-                """<rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>""",
-                0, false, [], "regulator"),
+                new("Deadline Calendar", "/regulator/cross-border/deadlines",
+                    """<rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>""",
+                    0, false, [], "regulator"),
 
-            new("AfCFTA Tracker", "/regulator/cross-border/afcfta",
-                """<circle cx="12" cy="12" r="10"/><path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/><line x1="2" y1="12" x2="22" y2="12"/>""",
-                0, false, [], "regulator"),
+                new("AfCFTA Tracker", "/regulator/cross-border/afcfta",
+                    """<circle cx="12" cy="12" r="10"/><path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/><line x1="2" y1="12" x2="22" y2="12"/>""",
+                    0, false, [], "regulator"),
 
-            new("Whistleblower Portal", "/regulator/whistleblower/report",
-                """<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>""",
-                0, false, [], "regulator"),
-        }));
+                new("Whistleblower Portal", "/regulator/whistleblower/report",
+                    """<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>""",
+                    0, false, [], "regulator"),
+            }));
+        }
+        else if (_isPlatformAdmin)
+        {
+            groups.Add(new NavGroup("regulator", "Regulator", new List<NavItemModel>
+            {
+                new("Impersonate Regulator Tenant", "/platform/tenants",
+                    """<path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>""",
+                    0, false, [], "regulator")
+            }));
+        }
 
         // ── Platform (PlatformAdmin only) ─────────────────────────────
         if (_isPlatformAdmin)

@@ -51,6 +51,7 @@ public static class DependencyInjection
         // ── Multi-Tenancy ──
         services.AddScoped<ITenantContext, HttpTenantContext>();
         services.AddScoped<ITenantAccessContextResolver, TenantAccessContextResolver>();
+        services.AddScoped<IPlatformRegulatorTenantResolver, PlatformRegulatorTenantResolver>();
         services.AddScoped<IDataResidencyRouter, DataResidencyRouter>();
         services.AddScoped<IDbConnectionFactory, TenantAwareConnectionFactory>();
         services.AddScoped<TenantSessionContextInterceptor>();

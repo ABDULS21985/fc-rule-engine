@@ -4,6 +4,7 @@ using System.Security.Cryptography;
 using FC.Engine.Domain.Enums;
 using FC.Engine.Infrastructure.Metadata;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace FC.Engine.Infrastructure.Services;
 
@@ -25,9 +26,16 @@ public interface ITenantAccessContextResolver
 
 public sealed class TenantAccessContextResolver : ITenantAccessContextResolver
 {
-    private readonly MetadataDbContext _db;
+    private readonly MetadataDbContext? _db;
+    private readonly IServiceScopeFactory? _scopeFactory;
 
-    public TenantAccessContextResolver(MetadataDbContext db)
+    [ActivatorUtilitiesConstructor]
+    public TenantAccessContextResolver(IServiceScopeFactory scopeFactory)
+    {
+        _scopeFactory = scopeFactory;
+    }
+
+    internal TenantAccessContextResolver(MetadataDbContext db)
     {
         _db = db;
     }
@@ -37,7 +45,11 @@ public sealed class TenantAccessContextResolver : ITenantAccessContextResolver
         ClaimsPrincipal? principal = null,
         CancellationToken ct = default)
     {
-        var tenant = await _db.Tenants
+        await using var scope = _scopeFactory?.CreateAsyncScope();
+        var db = _db ?? scope?.ServiceProvider.GetRequiredService<MetadataDbContext>()
+            ?? throw new InvalidOperationException("Metadata database context is unavailable.");
+
+        var tenant = await db.Tenants
             .AsNoTracking()
             .Where(x => x.TenantId == tenantId)
             .Select(x => new

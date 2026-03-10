@@ -8,6 +8,7 @@
 @inject IStressTestOrchestrator Orchestrator
 @inject IStressTestReportGenerator ReportGenerator
 @inject IDbConnectionFactory Db
+@inject RegulatorSessionService RegulatorSession
 @inject FC.Engine.Infrastructure.Charts.ChartJsInterop Charts
 @inject IJSRuntime JS
 
@@ -489,13 +490,22 @@ else
 
     protected override async Task OnInitializedAsync()
     {
-        if (AuthState is not null)
+        try
         {
-            var state = await AuthState;
-            _regulatorCode = state.User.FindFirst("RegulatorCode")?.Value?.Trim() ?? _regulatorCode;
+            var session = await RegulatorSession.GetRequiredAsync();
+            _regulatorCode = session.RegulatorCode;
+            _currentUserId = session.UserId;
+        }
+        catch
+        {
+            if (AuthState is not null)
+            {
+                var state = await AuthState;
+                _regulatorCode = state.User.FindFirst("RegulatorCode")?.Value?.Trim() ?? _regulatorCode;
 
-            if (int.TryParse(state.User.FindFirstValue(ClaimTypes.NameIdentifier), out var userId))
-                _currentUserId = userId;
+                if (int.TryParse(state.User.FindFirstValue(ClaimTypes.NameIdentifier), out var userId))
+                    _currentUserId = userId;
+            }
         }
 
         await LoadWorkspaceAsync();

@@ -251,32 +251,39 @@
             _openWhistleblowerCount = (await WhistleblowerService.GetOpenCasesAsync(_regulatorCode)).Count;
 
             using var conn = await Db.CreateConnectionAsync(_tenantId);
-            _scores = (await conn.QueryAsync<ScoreChipRow>(
-                """
-                WITH LatestScores AS (
-                    SELECT crs.InstitutionId,
-                           crs.CompositeScore,
-                           crs.RiskBand,
-                           crs.ActiveAlertCount,
-                           ROW_NUMBER() OVER (
-                               PARTITION BY crs.InstitutionId
-                               ORDER BY crs.ComputedAt DESC, crs.ScoreVersion DESC
-                           ) AS rn
-                    FROM dbo.ConductRiskScores crs
-                    WHERE crs.RegulatorCode = @RegulatorCode
-                      AND crs.PeriodCode = @PeriodCode
-                )
-                SELECT ls.InstitutionId,
-                       COALESCE(i.InstitutionName, CONCAT('Institution ', ls.InstitutionId)) AS InstitutionName,
-                       ls.CompositeScore,
-                       ls.RiskBand,
-                       ls.ActiveAlertCount
-                FROM LatestScores ls
-                LEFT JOIN dbo.institutions i ON i.Id = ls.InstitutionId
-                WHERE ls.rn = 1
-                ORDER BY ls.CompositeScore DESC
-                """,
-                new { RegulatorCode = _regulatorCode, PeriodCode = _periodCode })).ToList();
+            try
+            {
+                _scores = (await conn.QueryAsync<ScoreChipRow>(
+                    """
+                    WITH LatestScores AS (
+                        SELECT crs.InstitutionId,
+                               crs.CompositeScore,
+                               crs.RiskBand,
+                               crs.ActiveAlertCount,
+                               ROW_NUMBER() OVER (
+                                   PARTITION BY crs.InstitutionId
+                                   ORDER BY crs.ComputedAt DESC, crs.ScoreVersion DESC
+                               ) AS rn
+                        FROM dbo.ConductRiskScores crs
+                        WHERE crs.RegulatorCode = @RegulatorCode
+                          AND crs.PeriodCode = @PeriodCode
+                    )
+                    SELECT ls.InstitutionId,
+                           COALESCE(i.InstitutionName, CONCAT('Institution ', ls.InstitutionId)) AS InstitutionName,
+                           ls.CompositeScore,
+                           ls.RiskBand,
+                           ls.ActiveAlertCount
+                    FROM LatestScores ls
+                    LEFT JOIN dbo.institutions i ON i.Id = ls.InstitutionId
+                    WHERE ls.rn = 1
+                    ORDER BY ls.CompositeScore DESC
+                    """,
+                    new { RegulatorCode = _regulatorCode, PeriodCode = _periodCode })).ToList();
+            }
+            catch (Exception ex) when (ex.IsMissingSchemaObject())
+            {
+                _scores = [];
+            }
         }
         catch (Exception ex)
         {

@@ -5,7 +5,7 @@
 @inject ToastService Toast
 @using FC.Engine.Domain.Entities
 @using FC.Engine.Infrastructure.Metadata
-@inject MetadataDbContext Db
+@inject IServiceScopeFactory ScopeFactory
 @using Microsoft.EntityFrameworkCore
 
 <PageTitle>Define Data Flow — RegOS</PageTitle>
@@ -150,8 +150,10 @@
         _loadException = null;
         try
         {
-            _groups = await Db.FinancialGroups.AsNoTracking().Where(g => g.IsActive).OrderBy(g => g.GroupName).ToListAsync();
-            _jurisdictions = await Db.RegulatoryJurisdictions.AsNoTracking().Where(j => j.IsActive).OrderBy(j => j.CountryName).ToListAsync();
+            using var scope = ScopeFactory.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<MetadataDbContext>();
+            _groups = await db.FinancialGroups.AsNoTracking().Where(g => g.IsActive).OrderBy(g => g.GroupName).ToListAsync();
+            _jurisdictions = await db.RegulatoryJurisdictions.AsNoTracking().Where(j => j.IsActive).OrderBy(j => j.CountryName).ToListAsync();
         }
         catch (Exception ex)
         {

@@ -1,5 +1,6 @@
 @page "/onboarding/wizard"
 @layout LoginLayout
+@using System.Globalization
 @inject OnboardingWizardService WizardService
 @inject NavigationManager Navigation
 @inject IJSRuntime JS
@@ -10,40 +11,78 @@
 {
     <div class="portal-wiz-completion" id="wiz-completion">
         <canvas id="wiz-confetti" class="portal-wiz-confetti-canvas"></canvas>
-        <div class="portal-wiz-completion-card">
-            <div class="portal-wiz-completion-ring">
-                <svg viewBox="0 0 80 80" fill="none" width="80" height="80" aria-hidden="true">
-                    <circle cx="40" cy="40" r="38" stroke="var(--cbn-green-light,#D1FAE5)" stroke-width="4"/>
-                    <circle cx="40" cy="40" r="28" fill="var(--cbn-green-deep,#006B3F)" fill-opacity=".12"/>
-                    <polyline points="24,40 34,51 56,29"
-                              stroke="var(--cbn-green-deep,#006B3F)" stroke-width="4"
-                              stroke-linecap="round" stroke-linejoin="round"/>
-                </svg>
+        <div class="portal-wiz-completion-grid">
+            <div class="portal-wiz-completion-lead">
+                <span class="portal-wiz-overline">Workspace ready</span>
+                <h1 class="portal-wiz-completion-title">@CompletionTitle</h1>
+                <p class="portal-wiz-completion-subtitle">Provisioning is complete. Your institution workspace, team access, and regulatory reporting footprint are ready to use.</p>
+
+                <div class="portal-wiz-completion-stats">
+                    <div class="portal-wiz-completion-stat">
+                        <span>Modules</span>
+                        <strong>@CompletionModuleCount</strong>
+                        <small>activated for launch</small>
+                    </div>
+                    <div class="portal-wiz-completion-stat">
+                        <span>Team</span>
+                        <strong>@ConfiguredUserCount</strong>
+                        <small>users prepared</small>
+                    </div>
+                    <div class="portal-wiz-completion-stat">
+                        <span>Provisioning</span>
+                        <strong>@CompletionDurationLabel</strong>
+                        <small>end-to-end setup time</small>
+                    </div>
+                </div>
             </div>
-            <h1 class="portal-wiz-completion-title">Welcome to FCEngine!</h1>
-            <p class="portal-wiz-completion-subtitle">Your account is ready. Here's how to get started.</p>
-            <div class="portal-wiz-completion-actions">
-                <a href="/submissions/new" class="portal-btn portal-btn-primary portal-wiz-cta">
-                    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" width="18" height="18" aria-hidden="true">
-                        <polyline points="10,3 10,13"/><polyline points="6,7 10,3 14,7"/>
-                        <path d="M3 17h14"/>
+
+            <div class="portal-wiz-completion-card">
+                <div class="portal-wiz-completion-ring">
+                    <svg viewBox="0 0 80 80" fill="none" width="80" height="80" aria-hidden="true">
+                        <circle cx="40" cy="40" r="38" stroke="var(--cbn-green-light,#D1FAE5)" stroke-width="4"/>
+                        <circle cx="40" cy="40" r="28" fill="var(--cbn-green-deep,#006B3F)" fill-opacity=".12"/>
+                        <polyline points="24,40 34,51 56,29"
+                                  stroke="var(--cbn-green-deep,#006B3F)" stroke-width="4"
+                                  stroke-linecap="round" stroke-linejoin="round"/>
                     </svg>
-                    Make Your First Submission
-                </a>
-                <a href="/" class="portal-btn portal-btn-outline portal-wiz-cta">
-                    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" width="18" height="18" aria-hidden="true">
-                        <rect x="2" y="2" width="7" height="7" rx="1.5"/><rect x="11" y="2" width="7" height="7" rx="1.5"/>
-                        <rect x="2" y="11" width="7" height="7" rx="1.5"/><rect x="11" y="11" width="7" height="7" rx="1.5"/>
-                    </svg>
-                    Explore the Dashboard
-                </a>
-                <button class="portal-btn portal-btn-ghost portal-wiz-cta" @onclick="WatchVideo" type="button">
-                    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" width="18" height="18" aria-hidden="true">
-                        <circle cx="10" cy="10" r="8"/>
-                        <polygon points="8,7 8,13 14,10" fill="currentColor" stroke="none"/>
-                    </svg>
-                    Watch Getting Started Video
-                </button>
+                </div>
+                <div class="portal-wiz-completion-panel">
+                    <div class="portal-wiz-completion-row">
+                        <span>Institution</span>
+                        <strong>@(string.IsNullOrWhiteSpace(_request.Profile.InstitutionName) ? "Configured workspace" : _request.Profile.InstitutionName)</strong>
+                    </div>
+                    <div class="portal-wiz-completion-row">
+                        <span>Plan</span>
+                        <strong>@SelectedPlanName</strong>
+                    </div>
+                    <div class="portal-wiz-completion-row">
+                        <span>Primary admin</span>
+                        <strong>@(string.IsNullOrWhiteSpace(_request.AdminUser.Email) ? "Provisioned" : _request.AdminUser.Email)</strong>
+                    </div>
+                </div>
+                <div class="portal-wiz-completion-actions">
+                    <a href="/submissions/new" class="portal-btn portal-btn-primary portal-wiz-cta">
+                        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" width="18" height="18" aria-hidden="true">
+                            <polyline points="10,3 10,13"/><polyline points="6,7 10,3 14,7"/>
+                            <path d="M3 17h14"/>
+                        </svg>
+                        Make Your First Submission
+                    </a>
+                    <a href="/" class="portal-btn portal-btn-outline portal-wiz-cta">
+                        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" width="18" height="18" aria-hidden="true">
+                            <rect x="2" y="2" width="7" height="7" rx="1.5"/><rect x="11" y="2" width="7" height="7" rx="1.5"/>
+                            <rect x="2" y="11" width="7" height="7" rx="1.5"/><rect x="11" y="11" width="7" height="7" rx="1.5"/>
+                        </svg>
+                        Explore the Dashboard
+                    </a>
+                    <button class="portal-btn portal-btn-ghost portal-wiz-cta" @onclick="WatchVideo" type="button">
+                        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" width="18" height="18" aria-hidden="true">
+                            <circle cx="10" cy="10" r="8"/>
+                            <polygon points="8,7 8,13 14,10" fill="currentColor" stroke="none"/>
+                        </svg>
+                        Watch Getting Started Video
+                    </button>
+                </div>
             </div>
         </div>
     </div>
@@ -51,96 +90,170 @@
 else
 {
     <div class="portal-wiz-shell">
+        <div class="portal-wiz-orb portal-wiz-orb--emerald" aria-hidden="true"></div>
+        <div class="portal-wiz-orb portal-wiz-orb--gold" aria-hidden="true"></div>
 
-        <div class="portal-wiz-header">
-            <div class="portal-wiz-logo-mark" aria-hidden="true">
-                <svg viewBox="0 0 36 36" width="36" height="36">
-                    <rect width="36" height="36" rx="9" fill="var(--cbn-green-deep,#006B3F)"/>
-                    <text x="18" y="24" text-anchor="middle" fill="white" font-size="14" font-weight="700" font-family="sans-serif">FC</text>
-                </svg>
-                <span class="portal-wiz-logo-name">FCEngine</span>
-            </div>
-            <p class="portal-wiz-tagline">Set up your institution in 4 simple steps</p>
-        </div>
-
-        @if (!string.IsNullOrWhiteSpace(_error))
-        {
-            <div class="portal-alert portal-alert-danger portal-wiz-error-banner">@_error</div>
-        }
-
-        @* ── Step indicator ──────────────────────────────── *@
-        <div class="portal-wiz-stepper-wrap">
-            <nav class="portal-wiz-stepper" role="list" aria-label="Onboarding progress">
-                @for (int i = 0; i < _steps.Length; i++)
-                {
-                    var stepNum = i + 1;
-                    var info    = _steps[i];
-                    var isActive   = stepNum == _step;
-                    var isComplete = _completedSteps.Contains(stepNum);
-                    var isAnim     = _animatingStep == stepNum;
-                    var stateClass = isComplete ? "portal-wiz-step--complete"
-                                   : isActive   ? "portal-wiz-step--active"
-                                                : "";
-
-                    <div class="portal-wiz-step @stateClass @(isAnim ? "portal-wiz-step--animating" : "")"
-                         role="listitem"
-                         aria-current="@(isActive ? "step" : null)">
-
-                        <button class="portal-wiz-step-node"
-                                @onclick="() => JumpToStep(stepNum)"
-                                disabled="@(!isComplete && !isActive)"
-                                aria-label="Step @stepNum: @info.Label @(isComplete ? "(completed)" : isActive ? "(current)" : "(upcoming)")">
-                            @if (isComplete)
-                            {
-                                <svg class="portal-wiz-check-svg" viewBox="0 0 16 16" fill="none"
-                                     stroke="currentColor" stroke-width="2.5"
-                                     stroke-linecap="round" stroke-linejoin="round"
-                                     width="16" height="16" aria-hidden="true">
-                                    <polyline points="2,8 6,13 14,3"/>
-                                </svg>
-                            }
-                            else
-                            {
-                                @((MarkupString)info.IconSvg)
-                            }
-                        </button>
-
-                        <div class="portal-wiz-step-text">
-                            <span class="portal-wiz-step-num">Step @stepNum</span>
-                            <span class="portal-wiz-step-name">@info.Label</span>
+        <div class="portal-wiz-frame">
+            <aside class="portal-wiz-rail">
+                <div class="portal-wiz-header">
+                    <div class="portal-wiz-logo-mark" aria-hidden="true">
+                        <svg viewBox="0 0 36 36" width="36" height="36">
+                            <rect width="36" height="36" rx="9" fill="var(--cbn-green-deep,#006B3F)"/>
+                            <text x="18" y="24" text-anchor="middle" fill="white" font-size="14" font-weight="700" font-family="sans-serif">FC</text>
+                        </svg>
+                        <div class="portal-wiz-logo-copy">
+                            <span class="portal-wiz-logo-name">FCEngine</span>
+                            <span class="portal-wiz-tagline">Onboarding Studio</span>
                         </div>
+                    </div>
+                </div>
 
+                <section class="portal-wiz-rail-hero">
+                    <span class="portal-wiz-overline">Institution onboarding</span>
+                    <h1 class="portal-wiz-rail-title">Launch your reporting workspace with confidence.</h1>
+                    <p class="portal-wiz-rail-desc">Verify your institution, activate the right regulatory modules, and prepare your operating team in one guided flow.</p>
+
+                    <div class="portal-wiz-progress-cluster">
+                        <div class="portal-wiz-progress-ring" style="@ProgressRingStyle" aria-hidden="true">
+                            <div class="portal-wiz-progress-ring-inner">
+                                <strong>@ProgressPct%</strong>
+                                <span>@CompletedStepLabel</span>
+                            </div>
+                        </div>
+                        <div class="portal-wiz-progress-copy">
+                            <span class="portal-wiz-progress-chip">Step @_step of @_steps.Length</span>
+                            <strong>@CurrentStep.Title</strong>
+                            <p>@CurrentStep.Description</p>
+                        </div>
+                    </div>
+                </section>
+
+                <nav class="portal-wiz-rail-nav" role="list" aria-label="Onboarding progress">
+                    @for (int i = 0; i < _steps.Length; i++)
+                    {
+                        var stepNum = i + 1;
+                        var info = _steps[i];
+                        var isActive = stepNum == _step;
+                        var isComplete = _completedSteps.Contains(stepNum);
+                        var isAnim = _animatingStep == stepNum;
+                        var stateClass = isComplete ? "portal-wiz-rail-step--complete"
+                                       : isActive ? "portal-wiz-rail-step--active"
+                                       : "portal-wiz-rail-step--pending";
+
+                        <div class="portal-wiz-rail-step @stateClass @(isAnim ? "portal-wiz-step--animating" : "")" role="listitem">
+                            <button class="portal-wiz-rail-step-btn"
+                                    @onclick="() => JumpToStep(stepNum)"
+                                    disabled="@(!CanNavigateToStep(stepNum))"
+                                    aria-current="@(isActive ? "step" : null)"
+                                    aria-label="Step @stepNum: @info.Label @(isComplete ? "(completed)" : isActive ? "(current)" : "(upcoming)")">
+                                <span class="portal-wiz-rail-step-marker" aria-hidden="true">
+                                    @if (isComplete)
+                                    {
+                                        <svg class="portal-wiz-check-svg" viewBox="0 0 16 16" fill="none"
+                                             stroke="currentColor" stroke-width="2.5"
+                                             stroke-linecap="round" stroke-linejoin="round"
+                                             width="16" height="16" aria-hidden="true">
+                                            <polyline points="2,8 6,13 14,3"/>
+                                        </svg>
+                                    }
+                                    else
+                                    {
+                                        @((MarkupString)info.IconSvg)
+                                    }
+                                </span>
+                                <span class="portal-wiz-rail-step-copy">
+                                    <span class="portal-wiz-rail-step-num">Step @stepNum</span>
+                                    <strong>@info.Label</strong>
+                                    <span>@info.SupportingText</span>
+                                </span>
+                            </button>
+                        </div>
+                    }
+                </nav>
+
+                <section class="portal-wiz-rail-card portal-wiz-rail-card--snapshot">
+                    <div class="portal-wiz-rail-card-head">
+                        <span>Live workspace snapshot</span>
+                        <strong>@SnapshotHeadline</strong>
                     </div>
 
-                    @if (i < _steps.Length - 1)
-                    {
-                        <div class="portal-wiz-connector @(isComplete ? "portal-wiz-connector--done" : "")"
-                             aria-hidden="true"></div>
-                    }
+                    <div class="portal-wiz-rail-metrics">
+                        <div class="portal-wiz-rail-metric">
+                            <span>Institution</span>
+                            <strong>@(string.IsNullOrWhiteSpace(_request.Profile.InstitutionName) ? "Awaiting confirmation" : _request.Profile.InstitutionName)</strong>
+                            @if (!string.IsNullOrWhiteSpace(SelectedCategoryLabel))
+                            {
+                                <small>@SelectedCategoryLabel</small>
+                            }
+                        </div>
+                        <div class="portal-wiz-rail-metric">
+                            <span>Plan</span>
+                            <strong>@SelectedPlanName</strong>
+                            <small>@FormatMoney(_estimate.Total)/month incl. VAT</small>
+                        </div>
+                        <div class="portal-wiz-rail-metric">
+                            <span>Coverage</span>
+                            <strong>@SelectedModuleCount module@(SelectedModuleCount == 1 ? "" : "s")</strong>
+                            <small>@RequiredModuleCount required, @OptionalModuleCount optional</small>
+                        </div>
+                        <div class="portal-wiz-rail-metric">
+                            <span>Operators</span>
+                            <strong>@ConfiguredUserCount user@(ConfiguredUserCount == 1 ? "" : "s") configured</strong>
+                            <small>@ActiveInviteCount invited collaborator@(ActiveInviteCount == 1 ? "" : "s")</small>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="portal-wiz-rail-card portal-wiz-rail-card--trust">
+                    <div class="portal-wiz-rail-card-head">
+                        <span>Current focus</span>
+                        <strong>@CurrentStep.Label outcomes</strong>
+                    </div>
+
+                    <ul class="portal-wiz-mini-list">
+                        @foreach (var item in CurrentStepHighlights)
+                        {
+                            <li>
+                                <span class="portal-wiz-mini-list-dot" aria-hidden="true"></span>
+                                <span>@item</span>
+                            </li>
+                        }
+                    </ul>
+                </section>
+            </aside>
+
+            <main class="portal-wiz-main">
+                @if (!string.IsNullOrWhiteSpace(_error))
+                {
+                    <div class="portal-alert portal-alert-danger portal-wiz-error-banner">@_error</div>
                 }
-            </nav>
 
-            @* ── Progress bar ──────────────────────────────── *@
-            <div class="portal-wiz-progress-track"
-                 role="progressbar"
-                 aria-valuenow="@ProgressPct" aria-valuemin="0" aria-valuemax="100"
-                 aria-label="Onboarding @ProgressPct% complete">
-                <div class="portal-wiz-progress-fill" style="width:@(ProgressPct)%"></div>
-            </div>
-        </div>
+                <section class="portal-wiz-main-head">
+                    <div class="portal-wiz-main-copy">
+                        <span class="portal-wiz-overline">@CurrentStep.Label</span>
+                        <h2>@CurrentStep.Title</h2>
+                        <p>@CurrentStep.Description</p>
+                    </div>
+                    <div class="portal-wiz-main-badges">
+                        <span class="portal-wiz-main-badge">Directory-backed onboarding</span>
+                        <span class="portal-wiz-main-badge">Provisioning target under 60 seconds</span>
+                    </div>
+                </section>
 
-        @if (_loading)
-        {
-            <div class="portal-wiz-card portal-wiz-card--active portal-wiz-loading">
-                <svg class="portal-spinner" viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="var(--cbn-green-deep,#006B3F)" stroke-width="2">
-                    <circle cx="12" cy="12" r="10" stroke-opacity="0.2"/>
-                    <path d="M12 2a10 10 0 0 1 10 10"/>
-                </svg>
-                <span>Loading onboarding options…</span>
-            </div>
-        }
-        else
-        {
+                <div class="portal-wiz-workspace">
+                    <div class="portal-wiz-stage">
+                        @if (_loading)
+                        {
+                            <div class="portal-wiz-card portal-wiz-card--active portal-wiz-loading">
+                                <svg class="portal-spinner" viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="var(--cbn-green-deep,#006B3F)" stroke-width="2">
+                                    <circle cx="12" cy="12" r="10" stroke-opacity="0.2"/>
+                                    <path d="M12 2a10 10 0 0 1 10 10"/>
+                                </svg>
+                                <span>Loading onboarding options…</span>
+                            </div>
+                        }
+                        else
+                        {
             @* ════════════════════════════════════════════════
                STEP 1 — Institution Profile
                ════════════════════════════════════════════════ *@
@@ -152,43 +265,204 @@ else
                         @((MarkupString)_steps[0].IconSvg)
                     </div>
                     <div>
-                        <h2 class="portal-wiz-card-title">Institution Profile</h2>
-                        <p class="portal-wiz-card-desc">Tell us about your organisation. This information will appear on all regulatory submissions.</p>
+                        <h2 class="portal-wiz-card-title">Institution identity</h2>
+                        <p class="portal-wiz-card-desc">Start with the licensed institution, then capture the compliance contacts and profile fields your workspace will inherit.</p>
                     </div>
                 </div>
 
                 <div class="portal-wiz-fields">
+
+                    @* ── CBN regulatory source banner ── *@
+                    <div class="portal-wiz-inst-source">
+                        <svg viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M2.166 4.999A11.954 11.954 0 0010 1.944 11.954 11.954 0 0017.834 5c.11.65.166 1.32.166 2.001 0 5.225-3.34 9.67-8 11.317C5.34 16.67 2 12.225 2 7c0-.682.057-1.35.166-2.001z"/><polyline points="9 12 11 14 15 10"/></svg>
+                        <span>Verified directory of <strong>@CbnInstitutionDirectory.All.Count</strong> CBN-licensed institutions</span>
+                    </div>
+
+                    @* ── Category pill selector ── *@
+                    <div class="portal-form-row">
+                        <label class="portal-label">
+                            Institution Category <span class="portal-wiz-required" aria-label="required">*</span>
+                        </label>
+                        <div class="portal-wiz-inst-cats">
+                            <button type="button"
+                                    class="portal-wiz-inst-cat @(string.IsNullOrWhiteSpace(_selectedCategory) ? "portal-wiz-inst-cat--on" : "")"
+                                    @onclick='() => OnCategoryPillClick("")'>
+                                All
+                                <span class="portal-wiz-inst-cat-count">@CbnInstitutionDirectory.All.Count</span>
+                            </button>
+                            @foreach (var cat in CbnInstitutionDirectory.Categories)
+                            {
+                                var catCount = CbnInstitutionDirectory.GetByCategory(cat.Code).Count;
+                                <button type="button"
+                                        class="portal-wiz-inst-cat @(_selectedCategory == cat.Code ? "portal-wiz-inst-cat--on" : "")"
+                                        @onclick="() => OnCategoryPillClick(cat.Code)"
+                                        title="@cat.Label">
+                                    @cat.Code
+                                    <span class="portal-wiz-inst-cat-count">@catCount</span>
+                                </button>
+                            }
+                        </div>
+                        @if (!string.IsNullOrWhiteSpace(_selectedCategory))
+                        {
+                            var catInfo = CbnInstitutionDirectory.Categories.FirstOrDefault(c => c.Code == _selectedCategory);
+                            <div class="portal-wiz-inst-cat-label">
+                                <svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><polyline points="6,3 11,8 6,13"/></svg>
+                                @catInfo.Label
+                                <span class="portal-wiz-inst-cat-label-count">@_totalMatches institution@(_totalMatches != 1 ? "s" : "")</span>
+                            </div>
+                        }
+                    </div>
+
+                    @* ── Searchable institution picker ── *@
                     <div class="portal-form-row">
                         <label class="portal-label" for="wiz-inst-name">
                             Institution Name <span class="portal-wiz-required" aria-label="required">*</span>
                         </label>
-                        <input id="wiz-inst-name"
-                               class="portal-input @(_v1Name ? "portal-input--error" : "")"
-                               placeholder="e.g. First Continental Bank"
-                               @bind="_request.Profile.InstitutionName"
-                               @oninput="() => _v1Name = false" />
-                        @if (_v1Name) { <span class="portal-field-error" role="alert">Institution name is required</span> }
+                        @if (_institutionConfirmed)
+                        {
+                            <div class="portal-wiz-inst-selected">
+                                <div class="portal-wiz-inst-selected-check">
+                                    <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="2,8 6,13 14,3"/></svg>
+                                </div>
+                                <div class="portal-wiz-inst-selected-info">
+                                    <span class="portal-wiz-inst-selected-name">@_request.Profile.InstitutionName</span>
+                                    @if (!string.IsNullOrWhiteSpace(_request.Profile.InstitutionCategory))
+                                    {
+                                        var catLabel = CbnInstitutionDirectory.Categories.FirstOrDefault(c => c.Code == _request.Profile.InstitutionCategory).Label;
+                                        <span class="portal-wiz-inst-selected-cat">@catLabel</span>
+                                    }
+                                </div>
+                                <button type="button" class="portal-wiz-inst-clear" @onclick="ClearInstitution" aria-label="Clear selection and search again">
+                                    <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="12" y1="4" x2="4" y2="12"/><line x1="4" y1="4" x2="12" y2="12"/></svg>
+                                    Change
+                                </button>
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="portal-wiz-inst-picker">
+                                <div class="portal-wiz-inst-search-wrap">
+                                    <svg class="portal-wiz-inst-search-icon" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="#9ca3af" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="7" cy="7" r="4.5"/><line x1="10.5" y1="10.5" x2="14" y2="14"/></svg>
+                                    <input id="wiz-inst-name"
+                                           class="portal-input portal-wiz-inst-search @(_v1Name ? "portal-input--error" : "")"
+                                           placeholder="@(_selectedCategory != "" ? $"Search within {_selectedCategory}…" : "Type to search all institutions…")"
+                                           autocomplete="off"
+                                           value="@_institutionSearch"
+                                           @oninput="OnInstitutionSearch"
+                                           @onkeydown="OnInstitutionKeyDown"
+                                           @onfocusin="OnInstitutionFocus"
+                                           @onfocusout="OnInstitutionBlur" />
+                                    @if (_institutionSearch.Length > 0)
+                                    {
+                                        <button type="button" class="portal-wiz-inst-search-clear" @onmousedown="() => { _institutionSearch = string.Empty; RunInstitutionSearch(); }" aria-label="Clear search">
+                                            <svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="12" y1="4" x2="4" y2="12"/><line x1="4" y1="4" x2="12" y2="12"/></svg>
+                                        </button>
+                                    }
+                                </div>
+                                @if (_showDropdown && _filteredInstitutions.Count > 0)
+                                {
+                                    <div class="portal-wiz-inst-dropdown" role="listbox" aria-label="Institution search results">
+                                        @if (_totalMatches > 0)
+                                        {
+                                            <div class="portal-wiz-inst-dropdown-header">
+                                                <span>@_totalMatches result@(_totalMatches != 1 ? "s" : "")</span>
+                                                @if (_institutionSearch.Length > 0)
+                                                {
+                                                    <span>for "@_institutionSearch"</span>
+                                                }
+                                            </div>
+                                        }
+                                        @for (var idx = 0; idx < Math.Min(_filteredInstitutions.Count, 15); idx++)
+                                        {
+                                            var inst = _filteredInstitutions[idx];
+                                            var isActive = idx == _highlightedIndex;
+                                            var capturedIdx = idx;
+                                            <button type="button"
+                                                    class="portal-wiz-inst-item @(isActive ? "portal-wiz-inst-item--active" : "")"
+                                                    role="option"
+                                                    aria-selected="@isActive"
+                                                    @onmousedown="() => SelectInstitution(inst)"
+                                                    @onmouseenter="() => _highlightedIndex = capturedIdx">
+                                                <span class="portal-wiz-inst-item-name">@inst.Name</span>
+                                                <span class="portal-wiz-inst-badge">@inst.CategoryCode</span>
+                                            </button>
+                                        }
+                                        @if (_totalMatches > 15)
+                                        {
+                                            <div class="portal-wiz-inst-more">
+                                                <svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><polyline points="4,6 8,10 12,6"/></svg>
+                                                @(_totalMatches - 15) more — refine your search
+                                            </div>
+                                        }
+                                    </div>
+                                }
+                                else if (_showDropdown && (_institutionSearch.Length >= 2 || !string.IsNullOrWhiteSpace(_selectedCategory)) && _filteredInstitutions.Count == 0)
+                                {
+                                    <div class="portal-wiz-inst-dropdown">
+                                        <div class="portal-wiz-inst-empty">
+                                            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#9ca3af" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><line x1="16" y1="16" x2="21" y2="21"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+                                            No institutions found matching "<strong>@_institutionSearch</strong>"
+                                        </div>
+                                    </div>
+                                }
+                            </div>
+                        }
+                        @if (_v1Name) { <span class="portal-field-error" role="alert">Please select a CBN-licensed institution</span> }
                     </div>
-                    <div class="portal-form-row">
-                        <label class="portal-label" for="wiz-contact-email">
-                            Contact Email <span class="portal-wiz-required" aria-label="required">*</span>
-                        </label>
-                        <input id="wiz-contact-email"
-                               class="portal-input @(_v1Email ? "portal-input--error" : "")"
-                               type="email"
-                               placeholder="compliance@institution.com"
-                               @bind="_request.Profile.ContactEmail"
-                               @oninput="() => _v1Email = false" />
-                        @if (_v1Email) { <span class="portal-field-error" role="alert">A valid contact email is required</span> }
+
+                    <div class="portal-wiz-field-grid">
+                        <div class="portal-form-row">
+                            <label class="portal-label" for="wiz-contact-email">
+                                Contact Email <span class="portal-wiz-required" aria-label="required">*</span>
+                            </label>
+                            <input id="wiz-contact-email"
+                                   class="portal-input @(_v1Email ? "portal-input--error" : "")"
+                                   type="email"
+                                   placeholder="compliance@institution.com"
+                                   @bind="_request.Profile.ContactEmail"
+                                   @oninput="() => _v1Email = false" />
+                            @if (_v1Email) { <span class="portal-field-error" role="alert">A valid contact email is required</span> }
+                        </div>
+                        <div class="portal-form-row">
+                            <label class="portal-label" for="wiz-contact-phone">
+                                Contact Phone <span class="portal-wiz-optional">(optional)</span>
+                            </label>
+                            <input id="wiz-contact-phone"
+                                   class="portal-input"
+                                   placeholder="+234 800 000 0000"
+                                   @bind="_request.Profile.ContactPhone" />
+                        </div>
                     </div>
+
+                    <div class="portal-wiz-field-grid">
+                        <div class="portal-form-row">
+                            <label class="portal-label" for="wiz-rc-number">
+                                RC Number <span class="portal-wiz-optional">(optional)</span>
+                            </label>
+                            <input id="wiz-rc-number"
+                                   class="portal-input"
+                                   placeholder="RC 123456"
+                                   @bind="_request.Profile.RcNumber" />
+                        </div>
+                        <div class="portal-form-row">
+                            <label class="portal-label" for="wiz-tin">
+                                Tax Identification Number <span class="portal-wiz-optional">(optional)</span>
+                            </label>
+                            <input id="wiz-tin"
+                                   class="portal-input"
+                                   placeholder="TIN 12345678-0001"
+                                   @bind="_request.Profile.Tin" />
+                        </div>
+                    </div>
+
                     <div class="portal-form-row">
-                        <label class="portal-label" for="wiz-contact-phone">
-                            Contact Phone <span class="portal-wiz-optional">(optional)</span>
+                        <label class="portal-label" for="wiz-address">
+                            Registered Address <span class="portal-wiz-optional">(optional)</span>
                         </label>
-                        <input id="wiz-contact-phone"
+                        <input id="wiz-address"
                                class="portal-input"
-                               placeholder="+234 800 000 0000"
-                               @bind="_request.Profile.ContactPhone" />
+                               placeholder="Head office address"
+                               @bind="_request.Profile.Address" />
                     </div>
                 </div>
 
@@ -213,12 +487,38 @@ else
                         @((MarkupString)_steps[1].IconSvg)
                     </div>
                     <div>
-                        <h2 class="portal-wiz-card-title">Regulatory Modules</h2>
-                        <p class="portal-wiz-card-desc">Select your licence type(s) and the reporting modules you need. We'll configure eligibility automatically.</p>
+                        <h2 class="portal-wiz-card-title">Compliance footprint</h2>
+                        <p class="portal-wiz-card-desc">Shape the workspace by choosing a plan, mapping the right licence types, and activating the reporting modules your institution needs.</p>
                     </div>
                 </div>
 
                 <div class="portal-wiz-fields">
+                    @if (_lookup.Plans.Count > 0)
+                    {
+                        <div class="portal-wiz-group-label">
+                            Workspace Plan
+                        </div>
+                        <div class="portal-wiz-plan-grid">
+                            @foreach (var plan in _lookup.Plans)
+                            {
+                                var isSelectedPlan = string.Equals(_request.PlanCode, plan.PlanCode, StringComparison.OrdinalIgnoreCase);
+                                <button type="button"
+                                        class="portal-wiz-plan-card @(isSelectedPlan ? "portal-wiz-plan-card--active" : "")"
+                                        @onclick="() => SelectPlan(plan.PlanCode)">
+                                    <span class="portal-wiz-plan-code">@plan.PlanCode</span>
+                                    <strong>@plan.PlanName</strong>
+                                    <div class="portal-wiz-plan-price">@FormatMoney(plan.BasePriceMonthly)<span>/month</span></div>
+                                    <p>@(string.IsNullOrWhiteSpace(plan.Description) ? "Core platform coverage for this onboarding path." : plan.Description)</p>
+                                    <div class="portal-wiz-plan-meta">
+                                        <span>@plan.MaxModules modules</span>
+                                        <span>@plan.MaxUsersPerEntity users</span>
+                                        <span>@plan.MaxEntities entity</span>
+                                    </div>
+                                </button>
+                            }
+                        </div>
+                    }
+
                     <div class="portal-wiz-group-label">
                         Licence Type(s) <span class="portal-wiz-required" aria-label="required">*</span>
                     </div>
@@ -226,7 +526,7 @@ else
                     {
                         <span class="portal-field-error portal-wiz-group-error" role="alert">Select at least one licence type to continue</span>
                     }
-                    <div class="portal-wiz-check-group">
+                    <div class="portal-wiz-check-group portal-wiz-check-group--grid">
                         @foreach (var licence in _lookup.LicenceTypes)
                         {
                             var sel = _request.LicenceTypeCodes.Contains(licence.Code, StringComparer.OrdinalIgnoreCase);
@@ -252,8 +552,13 @@ else
                         <div class="portal-wiz-group-label portal-wiz-group-label--spaced">
                             Reporting Modules
                         </div>
-                        <div class="portal-wiz-check-group">
-                            @foreach (var module in _eligibleModules.Take(8))
+                        <div class="portal-wiz-selection-strip">
+                            <span>@RequiredModuleCount required</span>
+                            <span>@OptionalModuleCount optional selected</span>
+                            <span>@SelectedModuleCount total active</span>
+                        </div>
+                        <div class="portal-wiz-check-group portal-wiz-check-group--grid">
+                            @foreach (var module in _eligibleModules)
                             {
                                 var msel = _request.ModuleCodes.Contains(module.ModuleCode, StringComparer.OrdinalIgnoreCase);
                                 var on   = module.IsRequired || msel;
@@ -268,6 +573,10 @@ else
                                             @module.ModuleCode
                                             @if (module.IsRequired) { <span class="portal-wiz-badge">Required</span> }
                                             @if (!module.IsAvailableOnPlan) { <span class="portal-wiz-badge portal-wiz-badge--locked">Not on plan</span> }
+                                            @if (module.IsAvailableOnPlan && !module.IsRequired)
+                                            {
+                                                <span class="portal-wiz-badge portal-wiz-badge--price">@FormatMoney(module.PriceMonthly)</span>
+                                            }
                                         </small>
                                     </div>
                                     <div class="portal-wiz-checkmark" aria-hidden="true">
@@ -278,6 +587,13 @@ else
                                     </div>
                                 </label>
                             }
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="portal-wiz-empty-card">
+                            <strong>Choose at least one licence type to reveal eligible reporting modules.</strong>
+                            <span>We match your licence footprint to the modules and commercial plan limits automatically.</span>
                         </div>
                     }
                 </div>
@@ -307,8 +623,8 @@ else
                         @((MarkupString)_steps[2].IconSvg)
                     </div>
                     <div>
-                        <h2 class="portal-wiz-card-title">Your Team</h2>
-                        <p class="portal-wiz-card-desc">Set up the primary administrator account and optionally invite colleagues to collaborate.</p>
+                        <h2 class="portal-wiz-card-title">Operating team</h2>
+                        <p class="portal-wiz-card-desc">Nominate the first administrator now, then add the makers, checkers, and approvers who will run the filing workflow.</p>
                     </div>
                 </div>
 
@@ -336,12 +652,24 @@ else
                                    @oninput="() => _v3Email = false" />
                             @if (_v3Email) { <span class="portal-field-error" role="alert">Administrator email is required</span> }
                         </div>
+                        <div class="portal-form-row">
+                            <label class="portal-label" for="wiz-admin-phone">Phone <span class="portal-wiz-optional">(optional)</span></label>
+                            <input id="wiz-admin-phone"
+                                   class="portal-input"
+                                   type="tel"
+                                   placeholder="+234 800 000 0000"
+                                   @bind="_request.AdminUser.Phone" />
+                        </div>
                     </div>
 
                     @if (_showInviteMore || _request.AdditionalUsers.Count > 0)
                     {
                         <div class="portal-wiz-group-label portal-wiz-group-label--spaced">
                             Additional Team Members <span class="portal-wiz-optional">(optional)</span>
+                        </div>
+                        <div class="portal-wiz-selection-strip">
+                            <span>@ActiveInviteCount invited collaborator@(ActiveInviteCount == 1 ? "" : "s")</span>
+                            <span>Roles can be adjusted after launch</span>
                         </div>
                         @foreach (var invite in _request.AdditionalUsers.ToList())
                         {
@@ -404,8 +732,8 @@ else
                         @((MarkupString)_steps[3].IconSvg)
                     </div>
                     <div>
-                        <h2 class="portal-wiz-card-title">Review &amp; Activate</h2>
-                        <p class="portal-wiz-card-desc">Confirm your details before we provision your workspace. Everything can be updated after activation.</p>
+                        <h2 class="portal-wiz-card-title">Launch review</h2>
+                        <p class="portal-wiz-card-desc">Sanity-check the institution profile, compliance configuration, and operating team before we provision the live workspace.</p>
                     </div>
                 </div>
 
@@ -423,7 +751,20 @@ else
                         <div class="portal-wiz-summary-rows">
                             <div class="portal-wiz-summary-row">
                                 <span>Institution</span>
-                                <strong>@(string.IsNullOrWhiteSpace(_request.Profile.InstitutionName) ? "—" : _request.Profile.InstitutionName)</strong>
+                                <strong>
+                                    @if (string.IsNullOrWhiteSpace(_request.Profile.InstitutionName))
+                                    {
+                                        <text>—</text>
+                                    }
+                                    else
+                                    {
+                                        @_request.Profile.InstitutionName
+                                        @if (!string.IsNullOrWhiteSpace(_request.Profile.InstitutionCategory))
+                                        {
+                                            <span class="portal-wiz-inst-badge" style="margin-left:6px">@_request.Profile.InstitutionCategory</span>
+                                        }
+                                    }
+                                </strong>
                             </div>
                             <div class="portal-wiz-summary-row">
                                 <span>Email</span>
@@ -434,6 +775,27 @@ else
                                 <div class="portal-wiz-summary-row">
                                     <span>Phone</span>
                                     <strong>@_request.Profile.ContactPhone</strong>
+                                </div>
+                            }
+                            @if (!string.IsNullOrWhiteSpace(_request.Profile.RcNumber))
+                            {
+                                <div class="portal-wiz-summary-row">
+                                    <span>RC Number</span>
+                                    <strong>@_request.Profile.RcNumber</strong>
+                                </div>
+                            }
+                            @if (!string.IsNullOrWhiteSpace(_request.Profile.Tin))
+                            {
+                                <div class="portal-wiz-summary-row">
+                                    <span>TIN</span>
+                                    <strong>@_request.Profile.Tin</strong>
+                                </div>
+                            }
+                            @if (!string.IsNullOrWhiteSpace(_request.Profile.Address))
+                            {
+                                <div class="portal-wiz-summary-row">
+                                    <span>Address</span>
+                                    <strong>@_request.Profile.Address</strong>
                                 </div>
                             }
                         </div>
@@ -504,6 +866,30 @@ else
                         </div>
                     </div>
 
+                    <div class="portal-wiz-summary-section">
+                        <div class="portal-wiz-summary-head">
+                            <div class="portal-wiz-summary-label">
+                                <span class="portal-wiz-summary-icon">@((MarkupString)_steps[1].IconSvg)</span>
+                                Commercials
+                            </div>
+                            <button class="portal-wiz-edit-link" @onclick="() => JumpToStep(2)" type="button">Edit</button>
+                        </div>
+                        <div class="portal-wiz-summary-rows">
+                            <div class="portal-wiz-summary-row">
+                                <span>Plan</span>
+                                <strong>@SelectedPlanName</strong>
+                            </div>
+                            <div class="portal-wiz-summary-row">
+                                <span>Monthly total</span>
+                                <strong>@FormatMoney(_estimate.Total)</strong>
+                            </div>
+                            <div class="portal-wiz-summary-row">
+                                <span>VAT</span>
+                                <strong>@FormatMoney(_estimate.VatAmount)</strong>
+                            </div>
+                        </div>
+                    </div>
+
                 </div>
 
                 <div class="portal-wiz-actions">
@@ -528,28 +914,118 @@ else
                         }
                     </button>
                 </div>
-            </div>
-        }
+                        }
+                    </div>
 
+                    <aside class="portal-wiz-context">
+                        <section class="portal-wiz-context-card">
+                            <div class="portal-wiz-context-head">
+                                <span>Readiness</span>
+                                <strong>@CurrentStep.Label checklist</strong>
+                            </div>
+                            <ul class="portal-wiz-mini-list">
+                                @foreach (var item in CurrentStepHighlights)
+                                {
+                                    <li>
+                                        <span class="portal-wiz-mini-list-dot" aria-hidden="true"></span>
+                                        <span>@item</span>
+                                    </li>
+                                }
+                            </ul>
+                        </section>
+
+                        <section class="portal-wiz-context-card portal-wiz-context-card--cost">
+                            <div class="portal-wiz-context-head">
+                                <span>Commercial snapshot</span>
+                                <strong>@SelectedPlanName</strong>
+                            </div>
+                            <div class="portal-wiz-context-total">
+                                <span>Total monthly commitment</span>
+                                <strong>@FormatMoney(_estimate.Total)</strong>
+                            </div>
+                            <div class="portal-wiz-context-rows">
+                                <div class="portal-wiz-context-row">
+                                    <span>Base plan</span>
+                                    <strong>@FormatMoney(_estimate.BasePriceMonthly)</strong>
+                                </div>
+                                <div class="portal-wiz-context-row">
+                                    <span>Selected modules</span>
+                                    <strong>@FormatMoney(_estimate.ModuleLines.Sum(x => x.Amount))</strong>
+                                </div>
+                                <div class="portal-wiz-context-row">
+                                    <span>VAT</span>
+                                    <strong>@FormatMoney(_estimate.VatAmount)</strong>
+                                </div>
+                            </div>
+                        </section>
+
+                        @if (_step == 4)
+                        {
+                            <section class="portal-wiz-context-card portal-wiz-context-card--launch">
+                                <div class="portal-wiz-context-head">
+                                    <span>What happens next</span>
+                                    <strong>Workspace launch sequence</strong>
+                                </div>
+                                <ul class="portal-wiz-mini-list">
+                                    <li>
+                                        <span class="portal-wiz-mini-list-dot" aria-hidden="true"></span>
+                                        <span>Your tenant and default regulatory periods are provisioned automatically.</span>
+                                    </li>
+                                    <li>
+                                        <span class="portal-wiz-mini-list-dot" aria-hidden="true"></span>
+                                        <span>The primary administrator receives login instructions and invited teammates are queued.</span>
+                                    </li>
+                                    <li>
+                                        <span class="portal-wiz-mini-list-dot" aria-hidden="true"></span>
+                                        <span>You can adjust branding, users, and modules later from the workspace settings.</span>
+                                    </li>
+                                </ul>
+                            </section>
+                        }
+                    </aside>
+                </div>
+            </main>
+        </div>
     </div>
 }
 
 @code {
     // ── Step definitions ──────────────────────────────────────────────────────
-    private sealed record WizardStepDef(string Label, string IconSvg);
+    private sealed record WizardStepDef(
+        string Label,
+        string Title,
+        string Description,
+        string SupportingText,
+        string IconSvg);
 
     private static readonly WizardStepDef[] _steps =
     [
-        new("Profile",
+        new(
+            "Profile",
+            "Anchor the institution identity",
+            "Confirm the licensed institution and capture the operating profile that should appear across the workspace.",
+            "Verified institution and compliance contacts",
             """<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" width="20" height="20" aria-hidden="true"><path d="M2 19v-1a8 8 0 0 1 16 0v1"/><path d="M10 3a4 4 0 1 1 0 8 4 4 0 0 1 0-8"/></svg>"""),
 
-        new("Modules",
+        new(
+            "Modules",
+            "Define the reporting stack",
+            "Choose the plan, licence footprint, and modules that the institution needs on day one.",
+            "Plan, licences, and reporting coverage",
             """<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" width="20" height="20" aria-hidden="true"><rect x="2" y="2" width="7" height="7" rx="1.5"/><rect x="11" y="2" width="7" height="7" rx="1.5"/><rect x="2" y="11" width="7" height="7" rx="1.5"/><rect x="11" y="11" width="7" height="7" rx="1.5"/></svg>"""),
 
-        new("Team",
+        new(
+            "Team",
+            "Prepare the operating team",
+            "Set the primary administrator and sketch the collaborators who will support submissions and approvals.",
+            "Admin ownership and collaborator roles",
             """<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" width="20" height="20" aria-hidden="true"><circle cx="7" cy="7" r="3"/><path d="M1 18v-1a6 6 0 0 1 9.26-5.04"/><circle cx="15" cy="13" r="3"/><path d="M11 19v-1a4 4 0 0 1 8 0v1"/></svg>"""),
 
-        new("Review",
+        new(
+            "Review",
+            "Review the launch configuration",
+            "Validate the institution, team, and commercial setup before provisioning the live workspace.",
+            "Launch checks and provisioning readiness",
             """<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" width="20" height="20" aria-hidden="true"><polyline points="4,10 10,4 16,10"/><line x1="10" y1="4" x2="10" y2="16"/></svg>"""),
     ];
 
@@ -564,6 +1040,7 @@ else
     private OnboardingLookupData _lookup = new();
     private List<OnboardingModuleOption> _eligibleModules = new();
     private OnboardingCostEstimate _estimate = new();
+    private OnboardingProvisionResult? _provisionResult;
 
     private int _step = 1;
     private bool _loading = true;
@@ -580,7 +1057,71 @@ else
     private bool _v2Licence;
     private bool _v3Name, _v3Email;
 
+    // Institution picker state
+    private string _selectedCategory = string.Empty;
+    private string _institutionSearch = string.Empty;
+    private IReadOnlyList<CbnInstitutionEntry> _filteredInstitutions = Array.Empty<CbnInstitutionEntry>();
+    private int _totalMatches;
+    private bool _showDropdown;
+    private int _highlightedIndex = -1;
+    private bool _institutionConfirmed;
+    private CancellationTokenSource? _blurCts;
+
     private int ProgressPct => (int)Math.Round(_completedSteps.Count * 100.0 / _steps.Length);
+    private WizardStepDef CurrentStep => _steps[_step - 1];
+    private string ProgressRingStyle => $"--wiz-progress:{ProgressPct};";
+    private string CompletedStepLabel => $"{_completedSteps.Count} of {_steps.Length} complete";
+    private OnboardingPlanOption? SelectedPlan => _lookup.Plans.FirstOrDefault(x => string.Equals(x.PlanCode, _request.PlanCode, StringComparison.OrdinalIgnoreCase));
+    private string SelectedPlanName => SelectedPlan?.PlanName ?? _request.PlanCode;
+    private int RequiredModuleCount => _eligibleModules.Count(x => x.IsRequired && x.IsAvailableOnPlan);
+    private int SelectedModuleCount => _request.ModuleCodes.Count;
+    private int OptionalModuleCount => _request.ModuleCodes.Count(code => _eligibleModules.Any(m =>
+        string.Equals(m.ModuleCode, code, StringComparison.OrdinalIgnoreCase) && !m.IsRequired));
+    private int ActiveInviteCount => _request.AdditionalUsers.Count(x =>
+        !string.IsNullOrWhiteSpace(x.Email) || !string.IsNullOrWhiteSpace(x.FullName));
+    private int ConfiguredUserCount => ActiveInviteCount + (string.IsNullOrWhiteSpace(_request.AdminUser.Email) && string.IsNullOrWhiteSpace(_request.AdminUser.FullName) ? 0 : 1);
+    private string SnapshotHeadline => string.IsNullOrWhiteSpace(_request.Profile.InstitutionName)
+        ? "Start with the institution identity"
+        : "Configuration is taking shape";
+    private string? SelectedCategoryLabel => string.IsNullOrWhiteSpace(_request.Profile.InstitutionCategory)
+        ? null
+        : CbnInstitutionDirectory.Categories.FirstOrDefault(c => c.Code == _request.Profile.InstitutionCategory)?.Label;
+    private IReadOnlyList<string> CurrentStepHighlights => _step switch
+    {
+        1 =>
+        [
+            "Use the CBN directory match to reduce institution identity drift from the start.",
+            "Capture the right contact channels so first notifications land in the right place.",
+            "Optional RC, TIN, and address fields give the workspace a cleaner operating baseline."
+        ],
+        2 =>
+        [
+            "Plan selection immediately updates module eligibility and monthly commercials.",
+            "Required reporting modules are auto-selected so you do not miss mandatory coverage.",
+            "Optional modules can be layered in now and tuned later from subscription settings."
+        ],
+        3 =>
+        [
+            "The first administrator becomes the operating owner for launch and follow-up setup.",
+            "Invite collaborators now if you already know the maker, checker, or approver structure.",
+            "Every team role can still be refined after provisioning without repeating onboarding."
+        ],
+        _ =>
+        [
+            "Review the institution profile, plan, and team before provisioning begins.",
+            "Provisioning creates the tenant, user access, and initial return periods in one pass.",
+            "After launch, branding, teams, and modules remain editable from workspace settings."
+        ]
+    };
+    private int CompletionModuleCount => _provisionResult?.ActivatedModules.Count > 0
+        ? _provisionResult.ActivatedModules.Count
+        : SelectedModuleCount;
+    private string CompletionTitle => string.IsNullOrWhiteSpace(_request.Profile.InstitutionName)
+        ? "Welcome to FCEngine!"
+        : $"{_request.Profile.InstitutionName} is ready";
+    private string CompletionDurationLabel => _provisionResult is null
+        ? "Under 60s"
+        : $"{Math.Max(1d, _provisionResult.ProvisioningDurationMs / 1000d):0.#}s";
 
     // ── Lifecycle ─────────────────────────────────────────────────────────────
     protected override async Task OnInitializedAsync()
@@ -615,8 +1156,8 @@ else
     // ── Step navigation ───────────────────────────────────────────────────────
     private async Task Step1Next()
     {
-        _v1Name  = string.IsNullOrWhiteSpace(_request.Profile.InstitutionName);
-        _v1Email = string.IsNullOrWhiteSpace(_request.Profile.ContactEmail);
+        _v1Name = !_institutionConfirmed || string.IsNullOrWhiteSpace(_request.Profile.InstitutionName);
+        _v1Email = !LooksLikeEmail(_request.Profile.ContactEmail);
         if (_v1Name || _v1Email) return;
         await CompleteStep(1);
         _step = 2;
@@ -638,8 +1179,8 @@ else
 
     private async Task Step3Next()
     {
-        _v3Name  = string.IsNullOrWhiteSpace(_request.AdminUser.FullName);
-        _v3Email = string.IsNullOrWhiteSpace(_request.AdminUser.Email);
+        _v3Name = string.IsNullOrWhiteSpace(_request.AdminUser.FullName);
+        _v3Email = !LooksLikeEmail(_request.AdminUser.Email);
         if (_v3Name || _v3Email) return;
         await CompleteStep(3);
         _step = 4;
@@ -664,14 +1205,171 @@ else
 
     private void JumpToStep(int target)
     {
-        if (_completedSteps.Contains(target) || target == _step) return;
+        if (!CanNavigateToStep(target)) return;
+        _error = null;
         _step = target;
     }
+
+    private bool CanNavigateToStep(int target) => target == _step || _completedSteps.Contains(target);
 
     private void ShowInviteMore()
     {
         _showInviteMore = true;
         AddInvite();
+    }
+
+    // ── Institution picker ──────────────────────────────────────────────────────
+    private void OnCategoryPillClick(string code)
+    {
+        _blurCts?.Cancel();
+        OnCategoryChanged(new ChangeEventArgs { Value = code });
+    }
+
+    private void OnCategoryChanged(ChangeEventArgs e)
+    {
+        _selectedCategory = e.Value?.ToString() ?? string.Empty;
+        if (!string.IsNullOrWhiteSpace(_selectedCategory))
+        {
+            // Show all institutions in the selected category immediately
+            _filteredInstitutions = CbnInstitutionDirectory.GetByCategory(_selectedCategory);
+            _totalMatches = _filteredInstitutions.Count;
+            _showDropdown = true;
+            _highlightedIndex = -1;
+        }
+        else if (_institutionSearch.Length >= 2)
+        {
+            RunInstitutionSearch();
+        }
+        else
+        {
+            _showDropdown = false;
+        }
+    }
+
+    private void OnInstitutionSearch(ChangeEventArgs e)
+    {
+        _blurCts?.Cancel();
+        _institutionSearch = e.Value?.ToString() ?? string.Empty;
+        _v1Name = false;
+        _highlightedIndex = -1;
+        RunInstitutionSearch();
+        _showDropdown = true;
+    }
+
+    private void RunInstitutionSearch()
+    {
+        var cat = string.IsNullOrWhiteSpace(_selectedCategory) ? null : _selectedCategory;
+        if (_institutionSearch.Length >= 2)
+        {
+            // Full search across all or within category
+            _filteredInstitutions = CbnInstitutionDirectory.Search(_institutionSearch, cat);
+            _totalMatches = CbnInstitutionDirectory.CountMatches(_institutionSearch, cat);
+        }
+        else if (cat is not null)
+        {
+            var all = CbnInstitutionDirectory.GetByCategory(cat);
+            if (_institutionSearch.Length >= 1)
+            {
+                // Filter within category even with 1 character
+                var q = _institutionSearch;
+                var filtered = all.Where(x => x.Name.Contains(q, StringComparison.OrdinalIgnoreCase)).ToList();
+                _filteredInstitutions = filtered;
+                _totalMatches = filtered.Count;
+            }
+            else
+            {
+                _filteredInstitutions = all;
+                _totalMatches = all.Count;
+            }
+        }
+        else
+        {
+            _filteredInstitutions = Array.Empty<CbnInstitutionEntry>();
+            _totalMatches = 0;
+        }
+    }
+
+    private void OnInstitutionKeyDown(KeyboardEventArgs e)
+    {
+        if (!_showDropdown || _filteredInstitutions.Count == 0)
+        {
+            if (e.Key == "ArrowDown" && _institutionSearch.Length >= 2)
+            {
+                _showDropdown = true;
+                _highlightedIndex = 0;
+            }
+            return;
+        }
+
+        var maxIdx = Math.Min(_filteredInstitutions.Count, 15) - 1;
+        switch (e.Key)
+        {
+            case "ArrowDown":
+                _highlightedIndex = _highlightedIndex < maxIdx ? _highlightedIndex + 1 : 0;
+                break;
+            case "ArrowUp":
+                _highlightedIndex = _highlightedIndex > 0 ? _highlightedIndex - 1 : maxIdx;
+                break;
+            case "Enter":
+                if (_highlightedIndex >= 0 && _highlightedIndex <= maxIdx)
+                    SelectInstitution(_filteredInstitutions[_highlightedIndex]);
+                break;
+            case "Escape":
+                _showDropdown = false;
+                _highlightedIndex = -1;
+                break;
+        }
+    }
+
+    private void OnInstitutionFocus()
+    {
+        _blurCts?.Cancel();
+        if (_institutionSearch.Length >= 2)
+        {
+            _showDropdown = true;
+        }
+        else if (!string.IsNullOrWhiteSpace(_selectedCategory))
+        {
+            _filteredInstitutions = CbnInstitutionDirectory.GetByCategory(_selectedCategory);
+            _totalMatches = _filteredInstitutions.Count;
+            _showDropdown = true;
+        }
+    }
+
+    private void OnInstitutionBlur()
+    {
+        _blurCts?.Cancel();
+        _blurCts = new CancellationTokenSource();
+        var token = _blurCts.Token;
+        _ = Task.Delay(200, token).ContinueWith(_ => InvokeAsync(() =>
+        {
+            if (!token.IsCancellationRequested)
+            {
+                _showDropdown = false;
+                StateHasChanged();
+            }
+        }), TaskContinuationOptions.OnlyOnRanToCompletion);
+    }
+
+    private void SelectInstitution(CbnInstitutionEntry entry)
+    {
+        _request.Profile.InstitutionName = entry.Name;
+        _request.Profile.InstitutionCategory = entry.CategoryCode;
+        _selectedCategory = entry.CategoryCode;
+        _institutionSearch = string.Empty;
+        _institutionConfirmed = true;
+        _showDropdown = false;
+        _highlightedIndex = -1;
+        _v1Name = false;
+    }
+
+    private void ClearInstitution()
+    {
+        _request.Profile.InstitutionName = string.Empty;
+        _request.Profile.InstitutionCategory = null;
+        _institutionConfirmed = false;
+        _institutionSearch = string.Empty;
+        _filteredInstitutions = Array.Empty<CbnInstitutionEntry>();
     }
 
     // ── Service calls ─────────────────────────────────────────────────────────
@@ -732,6 +1430,17 @@ else
         await RefreshEligibilityAndCost();
     }
 
+    private async Task SelectPlan(string planCode)
+    {
+        if (string.Equals(_request.PlanCode, planCode, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        _request.PlanCode = planCode;
+        await RefreshEligibilityAndCost();
+    }
+
     private void AddInvite()
     {
         _request.AdditionalUsers.Add(new AdditionalUserInvite { Role = nameof(InstitutionRole.Maker) });
@@ -758,6 +1467,7 @@ else
                 return;
             }
 
+            _provisionResult = result;
             await CompleteStep(4);
             _complete = true;
             await InvokeAsync(StateHasChanged);
@@ -777,4 +1487,10 @@ else
     {
         await JS.InvokeVoidAsync("portalWizard.openVideo");
     }
+
+    private static bool LooksLikeEmail(string? value) =>
+        !string.IsNullOrWhiteSpace(value) && value.Contains('@', StringComparison.Ordinal);
+
+    private static string FormatMoney(decimal amount) =>
+        $"NGN {amount.ToString("N0", CultureInfo.InvariantCulture)}";
 }

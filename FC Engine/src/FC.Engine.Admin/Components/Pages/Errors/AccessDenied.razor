@@ -1,6 +1,8 @@
 @page "/access-denied"
 @layout FC.Engine.Admin.Components.Layout.MainLayout
+@using FC.Engine.Domain.Abstractions
 @inject NavigationManager Navigation
+@inject ITenantContext TenantContext
 
 <PageTitle>Access Denied | RegOS</PageTitle>
 
@@ -28,7 +30,23 @@
     </p>
 
     @* ── Permission info box ──────────────────────────── *@
-    @if (!string.IsNullOrEmpty(RequiredRole))
+    @if (TenantContext.IsPlatformAdmin)
+    {
+        <div class="fc-error-page__info-box">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"
+                 stroke-linecap="round" stroke-linejoin="round" width="14" height="14" aria-hidden="true">
+                <circle cx="8" cy="8" r="7"/>
+                <line x1="8" y1="6" x2="8" y2="8"/>
+                <line x1="8" y1="11" x2="8" y2="11"/>
+            </svg>
+            <span>
+                @(TenantContext.ImpersonatingTenantId.HasValue
+                    ? "Your current impersonated tenant cannot access this page. Switch to a regulator tenant from Tenant List."
+                    : "Platform admin sessions must impersonate a regulator tenant before opening regulator pages.")
+            </span>
+        </div>
+    }
+    else if (!string.IsNullOrEmpty(RequiredRole))
     {
         <div class="fc-error-page__info-box">
             <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"
@@ -62,6 +80,10 @@
     @* ── Actions ─────────────────────────────────────── *@
     <div class="fc-error-page__actions">
         <a href="/" class="fc-btn fc-btn--gold">Go to dashboard</a>
+        @if (TenantContext.IsPlatformAdmin)
+        {
+            <a href="/platform/tenants" class="fc-btn fc-btn--ghost">Open tenant list</a>
+        }
         <button class="fc-btn fc-btn--ghost" @onclick="GoBack">
             <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"
                  stroke-linecap="round" stroke-linejoin="round" width="14" height="14" aria-hidden="true">

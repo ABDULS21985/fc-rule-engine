@@ -5,7 +5,7 @@
 @inject ToastService Toast
 @using FC.Engine.Domain.Entities
 @using FC.Engine.Infrastructure.Metadata
-@inject MetadataDbContext Db
+@inject IServiceScopeFactory ScopeFactory
 @using Microsoft.EntityFrameworkCore
 
 <PageTitle>Deadline Calendar — RegOS</PageTitle>
@@ -173,7 +173,9 @@
 
     protected override async Task OnInitializedAsync()
     {
-        _groups = await Db.FinancialGroups
+        using var scope = ScopeFactory.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<MetadataDbContext>();
+        _groups = await db.FinancialGroups
             .AsNoTracking()
             .Where(g => g.IsActive)
             .OrderBy(g => g.GroupName)

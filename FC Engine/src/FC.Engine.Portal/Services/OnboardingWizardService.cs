@@ -945,6 +945,7 @@ public class OnboardingWizardRequest
 public class InstitutionProfileStep
 {
     public string InstitutionName { get; set; } = string.Empty;
+    public string? InstitutionCategory { get; set; }
     public string? TenantSlug { get; set; }
     public string ContactEmail { get; set; } = string.Empty;
     public string? ContactPhone { get; set; }

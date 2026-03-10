@@ -1,6 +1,7 @@
 using Dapper;
 using FC.Engine.Domain.Abstractions;
 using FC.Engine.Domain.Models;
+using FC.Engine.Infrastructure;
 
 namespace FC.Engine.Infrastructure.Services;
 
@@ -72,46 +73,53 @@ public sealed class AlertManagementService : IAlertManagementService
             _ => new[] { "CRITICAL", "HIGH", "MEDIUM", "LOW" }
         };
 
-        return (await conn.QueryAsync<SurveillanceAlertRow>(
-            """
-            SELECT sa.Id AS AlertId,
-                   sa.AlertCode,
-                   sa.Category,
-                   sa.Severity,
-                   sa.Title,
-                   sa.Detail,
-                   sa.EvidenceJson,
-                   sa.InstitutionId,
-                   i.InstitutionName,
-                   sa.DetectedAt,
-                   CAST(CASE WHEN sr.AlertId IS NULL THEN 0 ELSE 1 END AS bit) AS IsResolved
-            FROM dbo.SurveillanceAlerts sa
-            LEFT JOIN dbo.institutions i ON i.Id = sa.InstitutionId
-            LEFT JOIN (
-                SELECT AlertId, MAX(ResolvedAt) AS ResolvedAt
-                FROM dbo.SurveillanceAlertResolutions
-                GROUP BY AlertId
-            ) sr ON sr.AlertId = sa.Id
-            WHERE sa.TenantId = @TenantId
-              AND sa.RegulatorCode = @RegulatorCode
-              AND sr.AlertId IS NULL
-              AND (@Category IS NULL OR sa.Category = @Category)
-              AND sa.Severity IN @Severities
-            ORDER BY CASE sa.Severity
-                        WHEN 'CRITICAL' THEN 1
-                        WHEN 'HIGH' THEN 2
-                        WHEN 'MEDIUM' THEN 3
-                        ELSE 4
-                     END,
-                     sa.DetectedAt DESC
-            """,
-            new
-            {
-                TenantId = context.TenantId,
-                RegulatorCode = context.RegulatorCode,
-                Category = category is null ? null : SurveillanceSqlMapping.ToDbValue(category.Value),
-                Severities = severities
-            })).ToList();
+        try
+        {
+            return (await conn.QueryAsync<SurveillanceAlertRow>(
+                """
+                SELECT sa.Id AS AlertId,
+                       sa.AlertCode,
+                       sa.Category,
+                       sa.Severity,
+                       sa.Title,
+                       sa.Detail,
+                       sa.EvidenceJson,
+                       sa.InstitutionId,
+                       i.InstitutionName,
+                       sa.DetectedAt,
+                       CAST(CASE WHEN sr.AlertId IS NULL THEN 0 ELSE 1 END AS bit) AS IsResolved
+                FROM dbo.SurveillanceAlerts sa
+                LEFT JOIN dbo.institutions i ON i.Id = sa.InstitutionId
+                LEFT JOIN (
+                    SELECT AlertId, MAX(ResolvedAt) AS ResolvedAt
+                    FROM dbo.SurveillanceAlertResolutions
+                    GROUP BY AlertId
+                ) sr ON sr.AlertId = sa.Id
+                WHERE sa.TenantId = @TenantId
+                  AND sa.RegulatorCode = @RegulatorCode
+                  AND sr.AlertId IS NULL
+                  AND (@Category IS NULL OR sa.Category = @Category)
+                  AND sa.Severity IN @Severities
+                ORDER BY CASE sa.Severity
+                            WHEN 'CRITICAL' THEN 1
+                            WHEN 'HIGH' THEN 2
+                            WHEN 'MEDIUM' THEN 3
+                            ELSE 4
+                         END,
+                         sa.DetectedAt DESC
+                """,
+                new
+                {
+                    TenantId = context.TenantId,
+                    RegulatorCode = context.RegulatorCode,
+                    Category = category is null ? null : SurveillanceSqlMapping.ToDbValue(category.Value),
+                    Severities = severities
+                })).ToList();
+        }
+        catch (Exception ex) when (ex.IsMissingSchemaObject())
+        {
+            return [];
+        }
     }
 
     private sealed record AlertContextRow(long Id, Guid TenantId, string RegulatorCode);
