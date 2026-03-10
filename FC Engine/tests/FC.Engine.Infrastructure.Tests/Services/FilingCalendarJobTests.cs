@@ -245,6 +245,53 @@ public class FilingCalendarJobTests
     }
 
     [Fact]
+    public void SelectAutoCreateInstitutionId_Prefers_Primary_HeadOffice()
+    {
+        var institutions = new[]
+        {
+            new Institution
+            {
+                Id = 7,
+                IsActive = true,
+                InstitutionName = "Branch Office",
+                EntityType = EntityType.Branch,
+                ParentInstitutionId = 4
+            },
+            new Institution
+            {
+                Id = 4,
+                IsActive = true,
+                InstitutionName = "Head Office",
+                EntityType = EntityType.HeadOffice,
+                ParentInstitutionId = null
+            }
+        };
+
+        var selectedInstitutionId = FilingCalendarJob.SelectAutoCreateInstitutionId(institutions);
+
+        selectedInstitutionId.Should().Be(4);
+    }
+
+    [Fact]
+    public void SelectAutoCreateInstitutionId_Returns_Null_When_No_Active_Institution_Exists()
+    {
+        var institutions = new[]
+        {
+            new Institution
+            {
+                Id = 4,
+                IsActive = false,
+                InstitutionName = "Dormant Institution",
+                EntityType = EntityType.HeadOffice
+            }
+        };
+
+        var selectedInstitutionId = FilingCalendarJob.SelectAutoCreateInstitutionId(institutions);
+
+        selectedInstitutionId.Should().BeNull();
+    }
+
+    [Fact]
     public void T30_Sends_Email_To_Makers()
     {
         var roles = GetRolesForLevel(1); // T-30 = level 1

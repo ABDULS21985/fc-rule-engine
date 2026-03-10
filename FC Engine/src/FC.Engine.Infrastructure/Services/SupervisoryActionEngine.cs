@@ -142,13 +142,21 @@ public sealed class SupervisoryActionEngine : ISupervisoryActionEngine
         if (row is null)
             throw new KeyNotFoundException($"Supervisory action {supervisoryActionId} not found.");
 
-        var trigger = new NewTriggerRow(
-            TriggerId: row.EWITriggerId, InstitutionId: row.InstitutionId,
-            EWICode: row.EWICode, Severity: row.Severity, PeriodCode: row.PeriodCode,
-            RegulatorCode: row.RegulatorCode, IsSystemic: false,
-            EWIName: row.EWIName, RemediationGuidance: row.RemediationGuidance,
-            InstitutionName: row.InstitutionName,
-            TriggerValue: row.TriggerValue, ThresholdValue: row.ThresholdValue);
+        var trigger = new NewTriggerRow
+        {
+            TriggerId = row.EWITriggerId,
+            InstitutionId = row.InstitutionId,
+            EWICode = row.EWICode,
+            Severity = row.Severity,
+            PeriodCode = row.PeriodCode,
+            RegulatorCode = row.RegulatorCode,
+            IsSystemic = false,
+            EWIName = row.EWIName,
+            RemediationGuidance = row.RemediationGuidance,
+            InstitutionName = row.InstitutionName,
+            TriggerValue = row.TriggerValue,
+            ThresholdValue = row.ThresholdValue
+        };
 
         var letter = BuildLetterContent(trigger, row.ActionType);
 
@@ -374,19 +382,45 @@ cc: Board Chairman
     }
 
     // Row types
-    private sealed record NewTriggerRow(
-        long TriggerId, int InstitutionId, string EWICode, string Severity,
-        string PeriodCode, string RegulatorCode, bool IsSystemic,
-        string EWIName, string? RemediationGuidance, string? InstitutionName,
-        decimal? TriggerValue = null, decimal? ThresholdValue = null);
+    private sealed class NewTriggerRow
+    {
+        public long TriggerId { get; set; }
+        public int InstitutionId { get; set; }
+        public string EWICode { get; set; } = string.Empty;
+        public string Severity { get; set; } = string.Empty;
+        public string PeriodCode { get; set; } = string.Empty;
+        public string RegulatorCode { get; set; } = string.Empty;
+        public bool IsSystemic { get; set; }
+        public decimal? TriggerValue { get; set; }
+        public decimal? ThresholdValue { get; set; }
+        public string EWIName { get; set; } = string.Empty;
+        public string? RemediationGuidance { get; set; }
+        public string? InstitutionName { get; set; }
+    }
 
-    private sealed record ActionDetailRow(
-        long Id, int InstitutionId, string RegulatorCode, long EWITriggerId,
-        string ActionType, string Severity, string Title,
-        string EWICode, decimal? TriggerValue, decimal? ThresholdValue,
-        string PeriodCode, string EWIName, string? RemediationGuidance,
-        string? InstitutionName, string? InstitutionType);
+    private sealed class ActionDetailRow
+    {
+        public long Id { get; set; }
+        public int InstitutionId { get; set; }
+        public string RegulatorCode { get; set; } = string.Empty;
+        public long EWITriggerId { get; set; }
+        public string ActionType { get; set; } = string.Empty;
+        public string Severity { get; set; } = string.Empty;
+        public string Title { get; set; } = string.Empty;
+        public string EWICode { get; set; } = string.Empty;
+        public decimal? TriggerValue { get; set; }
+        public decimal? ThresholdValue { get; set; }
+        public string PeriodCode { get; set; } = string.Empty;
+        public string EWIName { get; set; } = string.Empty;
+        public string? RemediationGuidance { get; set; }
+        public string? InstitutionName { get; set; }
+        public string? InstitutionType { get; set; }
+    }
 
-    private sealed record EscalationRow(
-        int EscalationLevel, int InstitutionId, string RegulatorCode);
+    private sealed class EscalationRow
+    {
+        public int EscalationLevel { get; set; }
+        public int InstitutionId { get; set; }
+        public string RegulatorCode { get; set; } = string.Empty;
+    }
 }

@@ -352,9 +352,39 @@ public class FilingCalendarJob : BackgroundService
             .Where(rp => (rp.EffectiveDeadline.Date - today).Days <= 60)
             .ToList();
 
+        var tenantIds = eligiblePeriods
+            .Select(rp => rp.TenantId)
+            .Distinct()
+            .ToList();
+
+        var institutionsByTenant = await db.Set<Institution>()
+            .AsNoTracking()
+            .Where(i => tenantIds.Contains(i.TenantId) && i.IsActive)
+            .GroupBy(i => i.TenantId)
+            .ToDictionaryAsync(g => g.Key, g => g.ToList(), ct);
+
         foreach (var period in eligiblePeriods)
         {
             if (period.Module is null) continue;
+
+            if (!institutionsByTenant.TryGetValue(period.TenantId, out var tenantInstitutions))
+            {
+                _logger.LogWarning(
+                    "Skipping auto-created draft return for period {PeriodId} because tenant {TenantId} has no active institution",
+                    period.Id,
+                    period.TenantId);
+                continue;
+            }
+
+            var institutionId = SelectAutoCreateInstitutionId(tenantInstitutions);
+            if (!institutionId.HasValue)
+            {
+                _logger.LogWarning(
+                    "Skipping auto-created draft return for period {PeriodId} because tenant {TenantId} has no eligible institution for draft creation",
+                    period.Id,
+                    period.TenantId);
+                continue;
+            }
 
             var existingSubmissionId = await db.Submissions
                 .Where(s => s.TenantId == period.TenantId && s.ReturnPeriodId == period.Id)
@@ -396,7 +426,7 @@ public class FilingCalendarJob : BackgroundService
             var submission = new Submission
             {
                 TenantId = period.TenantId,
-                InstitutionId = 0, // Will be set when user opens the return
+                InstitutionId = institutionId.Value,
                 ReturnPeriodId = period.Id,
                 ReturnCode = returnCode,
                 TemplateVersionId = templateVersionId,
@@ -437,5 +467,17 @@ public class FilingCalendarJob : BackgroundService
 
         await db.SaveChangesAsync(ct);
         return count;
+    }
+
+    internal static int? SelectAutoCreateInstitutionId(IEnumerable<Institution> institutions)
+    {
+        return institutions
+            .Where(i => i.IsActive)
+            .OrderBy(i => i.ParentInstitutionId.HasValue ? 1 : 0)
+            .ThenBy(i => i.EntityType == EntityType.HeadOffice ? 0 : 1)
+            .ThenBy(i => i.InstitutionName)
+            .ThenBy(i => i.Id)
+            .Select(i => (int?)i.Id)
+            .FirstOrDefault();
     }
 }

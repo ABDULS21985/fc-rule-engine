@@ -28,7 +28,32 @@ public sealed class CAMELSScorer : ICAMELSScorer
         using var conn = await _db.CreateConnectionAsync(null, ct);
 
         var m = await conn.QuerySingleOrDefaultAsync<PrudentialMetricRow>(
-            "SELECT * FROM meta.prudential_metrics WHERE InstitutionId=@Id AND PeriodCode=@Period",
+            """
+            SELECT InstitutionId,
+                   InstitutionType,
+                   PeriodCode,
+                   AsOfDate,
+                   CAR,
+                   Tier1Ratio,
+                   NPLRatio,
+                   ProvisioningCoverage,
+                   ROA,
+                   NIM,
+                   CIR,
+                   LCR,
+                   NSFR,
+                   DepositConcentration,
+                   FXExposureRatio,
+                   InterestRateSensitivity,
+                   RelatedPartyLendingRatio,
+                   ComplianceScore,
+                   LateFilingCount,
+                   AuditOpinionCode,
+                   TotalAssets
+            FROM meta.prudential_metrics
+            WHERE InstitutionId = @Id
+              AND PeriodCode = @Period
+            """,
             new { Id = institutionId, Period = periodCode });
 
         if (m is null)
@@ -203,12 +228,28 @@ public sealed class CAMELSScorer : ICAMELSScorer
         return results;
     }
 
-    private sealed record PrudentialMetricRow(
-        int InstitutionId, string InstitutionType, string PeriodCode, DateTime AsOfDate,
-        decimal? CAR, decimal? Tier1Ratio, decimal? NPLRatio,
-        decimal? ProvisioningCoverage, decimal? ROA, decimal? NIM, decimal? CIR,
-        decimal? LCR, decimal? NSFR, decimal? DepositConcentration,
-        decimal? FXExposureRatio, decimal? InterestRateSensitivity,
-        decimal? RelatedPartyLendingRatio, decimal? ComplianceScore,
-        int? LateFilingCount, string? AuditOpinionCode, decimal? TotalAssets);
+    private sealed class PrudentialMetricRow
+    {
+        public int InstitutionId { get; set; }
+        public string InstitutionType { get; set; } = string.Empty;
+        public string PeriodCode { get; set; } = string.Empty;
+        public DateTime AsOfDate { get; set; }
+        public decimal? CAR { get; set; }
+        public decimal? Tier1Ratio { get; set; }
+        public decimal? NPLRatio { get; set; }
+        public decimal? ProvisioningCoverage { get; set; }
+        public decimal? ROA { get; set; }
+        public decimal? NIM { get; set; }
+        public decimal? CIR { get; set; }
+        public decimal? LCR { get; set; }
+        public decimal? NSFR { get; set; }
+        public decimal? DepositConcentration { get; set; }
+        public decimal? FXExposureRatio { get; set; }
+        public decimal? InterestRateSensitivity { get; set; }
+        public decimal? RelatedPartyLendingRatio { get; set; }
+        public decimal? ComplianceScore { get; set; }
+        public int? LateFilingCount { get; set; }
+        public string? AuditOpinionCode { get; set; }
+        public decimal? TotalAssets { get; set; }
+    }
 }

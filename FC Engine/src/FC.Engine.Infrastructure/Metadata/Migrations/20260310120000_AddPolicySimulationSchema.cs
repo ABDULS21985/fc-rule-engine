@@ -1,3 +1,5 @@
+using FC.Engine.Infrastructure.Metadata;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
@@ -5,6 +7,8 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace FC.Engine.Infrastructure.Metadata.Migrations;
 
 /// <inheritdoc />
+[DbContext(typeof(MetadataDbContext))]
+[Migration("20260310120000_AddPolicySimulationSchema")]
 public partial class AddPolicySimulationSchema : Migration
 {
     /// <inheritdoc />
