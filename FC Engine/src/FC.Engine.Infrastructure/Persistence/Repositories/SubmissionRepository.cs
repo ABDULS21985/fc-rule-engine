@@ -30,10 +30,22 @@ public class SubmissionRepository : ISubmissionRepository
             .FirstOrDefaultAsync(s => s.Id == id, ct);
     }
 
+    public async Task<IReadOnlyList<Submission>> GetAll(CancellationToken ct = default)
+    {
+        return await _db.Submissions
+            .Include(s => s.Institution)
+            .Include(s => s.ReturnPeriod)
+            .Include(s => s.ValidationReport)
+                .ThenInclude(r => r!.Errors)
+            .OrderByDescending(s => s.SubmittedAt)
+            .ToListAsync(ct);
+    }
+
     public async Task<IReadOnlyList<Submission>> GetByInstitution(int institutionId, CancellationToken ct = default)
     {
         return await _db.Submissions
             .Where(s => s.InstitutionId == institutionId)
+            .Include(s => s.Institution)
             .Include(s => s.ReturnPeriod)
             .Include(s => s.ValidationReport)
                 .ThenInclude(r => r!.Errors)

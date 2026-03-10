@@ -1000,35 +1000,35 @@ else
         string IconSvg);
 
     private static readonly WizardStepDef[] _steps =
-    [
+    {
         new(
             "Profile",
             "Anchor the institution identity",
             "Confirm the licensed institution and capture the operating profile that should appear across the workspace.",
             "Verified institution and compliance contacts",
-            """<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" width="20" height="20" aria-hidden="true"><path d="M2 19v-1a8 8 0 0 1 16 0v1"/><path d="M10 3a4 4 0 1 1 0 8 4 4 0 0 1 0-8"/></svg>"""),
+            @"<svg viewBox='0 0 20 20' fill='none' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' width='20' height='20' aria-hidden='true'><path d='M2 19v-1a8 8 0 0 1 16 0v1'/><path d='M10 3a4 4 0 1 1 0 8 4 4 0 0 1 0-8'/></svg>"),
 
         new(
             "Modules",
             "Define the reporting stack",
             "Choose the plan, licence footprint, and modules that the institution needs on day one.",
             "Plan, licences, and reporting coverage",
-            """<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" width="20" height="20" aria-hidden="true"><rect x="2" y="2" width="7" height="7" rx="1.5"/><rect x="11" y="2" width="7" height="7" rx="1.5"/><rect x="2" y="11" width="7" height="7" rx="1.5"/><rect x="11" y="11" width="7" height="7" rx="1.5"/></svg>"""),
+            @"<svg viewBox='0 0 20 20' fill='none' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' width='20' height='20' aria-hidden='true'><rect x='2' y='2' width='7' height='7' rx='1.5'/><rect x='11' y='2' width='7' height='7' rx='1.5'/><rect x='2' y='11' width='7' height='7' rx='1.5'/><rect x='11' y='11' width='7' height='7' rx='1.5'/></svg>"),
 
         new(
             "Team",
             "Prepare the operating team",
             "Set the primary administrator and sketch the collaborators who will support submissions and approvals.",
             "Admin ownership and collaborator roles",
-            """<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" width="20" height="20" aria-hidden="true"><circle cx="7" cy="7" r="3"/><path d="M1 18v-1a6 6 0 0 1 9.26-5.04"/><circle cx="15" cy="13" r="3"/><path d="M11 19v-1a4 4 0 0 1 8 0v1"/></svg>"""),
+            @"<svg viewBox='0 0 20 20' fill='none' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' width='20' height='20' aria-hidden='true'><circle cx='7' cy='7' r='3'/><path d='M1 18v-1a6 6 0 0 1 9.26-5.04'/><circle cx='15' cy='13' r='3'/><path d='M11 19v-1a4 4 0 0 1 8 0v1'/></svg>"),
 
         new(
             "Review",
             "Review the launch configuration",
             "Validate the institution, team, and commercial setup before provisioning the live workspace.",
             "Launch checks and provisioning readiness",
-            """<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" width="20" height="20" aria-hidden="true"><polyline points="4,10 10,4 16,10"/><line x1="10" y1="4" x2="10" y2="16"/></svg>"""),
-    ];
+            @"<svg viewBox='0 0 20 20' fill='none' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' width='20' height='20' aria-hidden='true'><polyline points='4,10 10,4 16,10'/><line x1='10' y1='4' x2='10' y2='16'/></svg>"),
+    };
 
     // ── Data / state ──────────────────────────────────────────────────────────
     private readonly OnboardingWizardRequest _request = new()
@@ -1051,7 +1051,7 @@ else
     private bool _showInviteMore;
 
     private int? _animatingStep;
-    private readonly HashSet<int> _completedSteps = [];
+    private readonly HashSet<int> _completedSteps = new();
 
     // Validation flags
     private bool _v1Name, _v1Email;
@@ -1089,30 +1089,30 @@ else
         : CbnInstitutionDirectory.Categories.Where(c => c.Code == _request.Profile.InstitutionCategory).Select(c => c.Label).FirstOrDefault();
     private IReadOnlyList<string> CurrentStepHighlights => _step switch
     {
-        1 =>
-        [
+        1 => new[]
+        {
             "Use the CBN directory match to reduce institution identity drift from the start.",
             "Capture the right contact channels so first notifications land in the right place.",
             "Optional RC, TIN, and address fields give the workspace a cleaner operating baseline."
-        ],
-        2 =>
-        [
+        },
+        2 => new[]
+        {
             "Plan selection immediately updates module eligibility and monthly commercials.",
             "Required reporting modules are auto-selected so you do not miss mandatory coverage.",
             "Optional modules can be layered in now and tuned later from subscription settings."
-        ],
-        3 =>
-        [
+        },
+        3 => new[]
+        {
             "The first administrator becomes the operating owner for launch and follow-up setup.",
             "Invite collaborators now if you already know the maker, checker, or approver structure.",
             "Every team role can still be refined after provisioning without repeating onboarding."
-        ],
-        _ =>
-        [
+        },
+        _ => new[]
+        {
             "Review the institution profile, plan, and team before provisioning begins.",
             "Provisioning creates the tenant, user access, and initial return periods in one pass.",
             "After launch, branding, teams, and modules remain editable from workspace settings."
-        ]
+        }
     };
     private int CompletionModuleCount => _provisionResult?.ActivatedModules.Count > 0
         ? _provisionResult.ActivatedModules.Count

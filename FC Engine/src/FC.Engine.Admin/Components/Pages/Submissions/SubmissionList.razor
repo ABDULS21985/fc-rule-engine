@@ -41,6 +41,7 @@
                         }
                     </select>
                     <button class="fc-btn fc-btn--primary fc-btn--sm" @onclick="Search">Search</button>
+                    <button class="fc-btn fc-btn--outline fc-btn--sm" @onclick="ShowAllSubmissions">Show All</button>
                 </div>
             </div>
 
@@ -52,7 +53,7 @@
             <div class="fc-list-empty">
                 <svg class="fc-list-empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
                 <h3 class="fc-list-empty-title">Search for submissions</h3>
-                <p class="fc-list-empty-text">Enter an Institution ID and click Search to view submission records and validation results.</p>
+                <p class="fc-list-empty-text">Enter an Institution ID and click Search, or click Show All to view platform-wide submission records.</p>
             </div>
         </div>
     }
@@ -83,6 +84,7 @@
                     }
                 </select>
                 <button class="fc-btn fc-btn--primary fc-btn--sm" @onclick="Search">Search</button>
+                <button class="fc-btn fc-btn--outline fc-btn--sm" @onclick="ShowAllSubmissions">Show All</button>
                 @if (_submissions.Any())
                 {
                     <button class="fc-btn fc-btn--outline fc-btn--sm" @onclick="ClearResults">Clear</button>
@@ -147,6 +149,7 @@
     private string _searchTerm = "";
     private string _filterTerm = "";   // debounced version used for LINQ
     private bool _searchTyping;
+    private bool _showAll;
     private CancellationTokenSource? _searchCts;
     private string _statusFilter = "";
     private List<Submission> _submissions = new();
@@ -159,30 +162,52 @@
 
     private async Task Search()
     {
+        _showAll = false;
+        await LoadSubmissions();
+    }
+
+    private async Task ShowAllSubmissions()
+    {
+        _showAll = true;
+        await LoadSubmissions();
+    }
+
+    private async Task LoadSubmissions()
+    {
         _error = null;
         _searched = true;
         _loading = true;
         try
         {
+            if (_showAll)
+            {
+                _submissions = (await SubmissionRepo.GetAll()).ToList();
+                return;
+            }
+
             if (_institutionId <= 0)
             {
                 _error = "Please enter a valid Institution ID";
-                _loading = false;
                 return;
             }
+
             _submissions = (await SubmissionRepo.GetByInstitution(_institutionId)).ToList();
         }
         catch (Exception ex)
         {
             _error = ex.Message;
         }
-        _loading = false;
+        finally
+        {
+            _loading = false;
+        }
     }
 
     private void ClearResults()
     {
         _submissions.Clear();
         _searched = false;
+        _showAll = false;
         _error = null;
         _searchTerm = "";
         _filterTerm = "";

@@ -19,6 +19,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Xunit;
+using Xunit.Abstractions;
 
 namespace FC.Engine.Integration.Tests.Bdc;
 
@@ -29,10 +30,12 @@ public sealed class BdcLifecycleIntegrationCollection : ICollectionFixture<BdcLi
 public sealed class BdcLifecycleIntegrationTests : IClassFixture<BdcLifecycleFixture>
 {
     private readonly BdcLifecycleFixture _fixture;
+    private readonly ITestOutputHelper _output;
 
-    public BdcLifecycleIntegrationTests(BdcLifecycleFixture fixture)
+    public BdcLifecycleIntegrationTests(BdcLifecycleFixture fixture, ITestOutputHelper output)
     {
         _fixture = fixture;
+        _output = output;
     }
 
     [Fact]
@@ -40,6 +43,8 @@ public sealed class BdcLifecycleIntegrationTests : IClassFixture<BdcLifecycleFix
     {
         var sample = _fixture.LoadBdcSample();
         var onboarded = await _fixture.OnboardInstitutionAsync(sample, "full");
+        _output.WriteLine(
+            $"BDC retained data: InstitutionId={onboarded.InstitutionId}, TenantId={onboarded.TenantId}, InstitutionCode={onboarded.InstitutionCode}");
 
         onboarded.ActivatedModules.Should().Contain("BDC_CBN");
         onboarded.ActivatedModules.Should().Contain("NFIU_AML");
@@ -347,6 +352,8 @@ public sealed class BdcLifecycleIntegrationTests : IClassFixture<BdcLifecycleFix
     {
         var sample = _fixture.LoadBdcSample();
         var onboarded = await _fixture.OnboardInstitutionAsync(sample, "reject");
+        _output.WriteLine(
+            $"BDC retained data: InstitutionId={onboarded.InstitutionId}, TenantId={onboarded.TenantId}, InstitutionCode={onboarded.InstitutionCode}");
         await _fixture.EnableMakerCheckerAsync(onboarded.InstitutionId);
 
         var maker = await _fixture.CreateInstitutionUserAsync(
@@ -439,12 +446,14 @@ public sealed class BdcLifecycleFixture : IAsyncLifetime
 {
     public const string BdcModuleCode = "BDC_CBN";
     public const string BdcReturnCode = "BDC_FXV";
+    private static readonly bool RetainCreatedData = true;
 
     private WebApplication _application = null!;
     private string _connectionString = null!;
     private string _solutionRoot = null!;
     private string _samplePath = null!;
     private readonly List<Guid> _createdTenantIds = new();
+    private readonly List<int> _createdInstitutionIds = new();
 
     public int BdcModuleId { get; private set; }
 
@@ -452,7 +461,7 @@ public sealed class BdcLifecycleFixture : IAsyncLifetime
     {
         _solutionRoot = FindSolutionRoot();
         _samplePath = ResolveAssetPath("Templates", "BDC_DTR_Sample_v1.0.xml");
-        _connectionString = await TestSqlConnectionResolver.ResolveAsync();
+        _connectionString = await ResolveAdminDatabaseConnectionStringAsync();
 
         var builder = WebApplication.CreateBuilder(new WebApplicationOptions
         {
@@ -498,7 +507,15 @@ public sealed class BdcLifecycleFixture : IAsyncLifetime
 
     public async Task DisposeAsync()
     {
-        await CleanupCreatedTenantsAsync();
+        if (RetainCreatedData)
+        {
+            Console.WriteLine(
+                $"Retaining BDC integration data in FcEngine. InstitutionIds: {string.Join(", ", _createdInstitutionIds.Distinct().OrderBy(id => id))}");
+        }
+        else
+        {
+            await CleanupCreatedTenantsAsync();
+        }
 
         if (_application is not null)
         {
@@ -597,6 +614,9 @@ public sealed class BdcLifecycleFixture : IAsyncLifetime
 
         result.Success.Should().BeTrue(string.Join(" | ", result.Errors));
         _createdTenantIds.Add(result.TenantId);
+        _createdInstitutionIds.Add(result.InstitutionId);
+        Console.WriteLine(
+            $"BDC integration data created in FcEngine: InstitutionId={result.InstitutionId}, TenantId={result.TenantId}, InstitutionCode={request.InstitutionCode}");
 
         return new OnboardedInstitution(
             result.TenantId,
@@ -1150,6 +1170,54 @@ public sealed class BdcLifecycleFixture : IAsyncLifetime
 
         throw new FileNotFoundException(
             $"Unable to locate required test asset '{Path.Combine(relativeSegments)}'. Checked: {string.Join(" | ", candidates)}");
+    }
+
+    private async Task<string> ResolveAdminDatabaseConnectionStringAsync()
+    {
+        var adminAppSettingsPath = Path.Combine(_solutionRoot, "src", "FC.Engine.Admin", "appsettings.json");
+        var candidates = new List<string>();
+
+        if (File.Exists(adminAppSettingsPath))
+        {
+            var config = new ConfigurationBuilder()
+                .AddJsonFile(adminAppSettingsPath, optional: false)
+                .Build();
+
+            var adminConnectionString = config.GetConnectionString("FcEngine");
+            if (!string.IsNullOrWhiteSpace(adminConnectionString))
+            {
+                var builder = new SqlConnectionStringBuilder(adminConnectionString)
+                {
+                    TrustServerCertificate = true,
+                    ConnectTimeout = 3
+                };
+                candidates.Add(builder.ConnectionString);
+            }
+        }
+
+        candidates.Add("Server=localhost,1433;Database=FcEngine;User Id=sa;Password=YourStrong@Passw0rd;TrustServerCertificate=True;Connection Timeout=3");
+        candidates.Add("Server=localhost,1433;Database=FcEngine;User Id=sa;Password=YourStrong!Passw0rd;TrustServerCertificate=True;Connection Timeout=3");
+
+        foreach (var candidate in candidates.Distinct(StringComparer.Ordinal))
+        {
+            try
+            {
+                await using var connection = new SqlConnection(candidate);
+                await connection.OpenAsync();
+                var databaseName = await connection.ExecuteScalarAsync<string>("SELECT DB_NAME()");
+                if (string.Equals(databaseName, "FcEngine", StringComparison.OrdinalIgnoreCase))
+                {
+                    return candidate;
+                }
+            }
+            catch
+            {
+                // Try next candidate.
+            }
+        }
+
+        throw new InvalidOperationException(
+            "Unable to connect to the FcEngine database required for retained BDC lifecycle integration data.");
     }
 
     private static string BuildUniqueEmail(string baseEmail, string localPart)
