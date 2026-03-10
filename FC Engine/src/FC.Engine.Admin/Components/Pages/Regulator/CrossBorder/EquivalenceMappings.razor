@@ -1,0 +1,109 @@
+@page "/regulator/cross-border/mappings"
+@attribute [Authorize(Policy = "RegulatorOnly")]
+@inject IEquivalenceMappingService MappingService
+@inject NavigationManager Nav
+
+<PageTitle>Equivalence Mappings — RegOS™</PageTitle>
+
+<div class="rg-cb-hero">
+    <div class="rg-cb-hero-text">
+        <div class="rg-cb-kicker">Cross-Border Harmonisation</div>
+        <h1 class="rg-cb-hero-title">Equivalence Mappings</h1>
+        <p class="rg-cb-hero-sub">
+            Map regulatory parameters across jurisdictions to identify threshold divergences
+            and ensure consistent compliance treatment.
+        </p>
+    </div>
+    <div class="rg-cb-hero-actions">
+        <button class="rg-btn primary" @onclick='() => Nav.NavigateTo("/regulator/cross-border/mappings/new")'>Create Mapping</button>
+    </div>
+</div>
+
+<div class="rg-cb-filters">
+    <select class="rg-cb-filter-select" @bind="_domainFilter">
+        <option value="">All Domains</option>
+        <option value="CAPITAL_ADEQUACY">Capital Adequacy</option>
+        <option value="LIQUIDITY">Liquidity</option>
+        <option value="LEVERAGE">Leverage</option>
+        <option value="FX">FX</option>
+        <option value="RISK_MANAGEMENT">Risk Management</option>
+    </select>
+    <input class="rg-cb-filter-input" placeholder="Search mappings…" @bind="_searchQuery" @bind:event="oninput" />
+    <button class="rg-btn" @onclick="LoadMappings">Apply</button>
+</div>
+
+@if (_loading)
+{
+    <p class="rg-muted">Loading mappings…</p>
+}
+else if (_mappings.Count == 0)
+{
+    <div class="rg-cb-empty">
+        <div class="rg-cb-empty-icon">🗺</div>
+        <div class="rg-cb-empty-title">No Equivalence Mappings</div>
+        <div class="rg-cb-empty-desc">Create your first cross-border equivalence mapping to compare regulatory parameters across jurisdictions.</div>
+    </div>
+}
+else
+{
+    <div class="rg-table-wrap">
+        <table class="rg-table">
+            <thead>
+                <tr>
+                    <th>Code</th>
+                    <th>Name</th>
+                    <th>Domain</th>
+                    <th>Jurisdictions</th>
+                    <th>Version</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var m in FilteredMappings)
+                {
+                    <tr>
+                        <td><code style="font-size:0.78rem;">@m.MappingCode</code></td>
+                        <td><strong>@m.MappingName</strong></td>
+                        <td><StatusPill Label="@m.ConceptDomain.Replace("_", " ")" Variant="info" /></td>
+                        <td>@m.JurisdictionCount</td>
+                        <td>v@m.Version</td>
+                        <td>
+                            <button class="rg-btn" @onclick='() => Nav.NavigateTo($"/regulator/cross-border/mappings/{m.Id}")'>View</button>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+
+@code {
+    private bool _loading = true;
+    private string _domainFilter = "";
+    private string _searchQuery = "";
+    private List<EquivalenceMappingSummary> _mappings = [];
+
+    private IEnumerable<EquivalenceMappingSummary> FilteredMappings =>
+        string.IsNullOrWhiteSpace(_searchQuery)
+            ? _mappings
+            : _mappings.Where(m =>
+                m.MappingName.Contains(_searchQuery, StringComparison.OrdinalIgnoreCase) ||
+                m.MappingCode.Contains(_searchQuery, StringComparison.OrdinalIgnoreCase));
+
+    protected override async Task OnInitializedAsync() => await LoadMappings();
+
+    private async Task LoadMappings()
+    {
+        _loading = true;
+        StateHasChanged();
+
+        try
+        {
+            var domain = string.IsNullOrWhiteSpace(_domainFilter) ? null : _domainFilter;
+            var result = await MappingService.ListMappingsAsync(domain);
+            _mappings = result.ToList();
+        }
+        catch { _mappings = []; }
+        finally { _loading = false; StateHasChanged(); }
+    }
+}

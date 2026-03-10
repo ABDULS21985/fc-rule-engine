@@ -1,0 +1,25 @@
+@code {
+    [Parameter, EditorRequired] public PolicyDomain Domain { get; set; }
+
+    private string CssClass => Domain switch
+    {
+        PolicyDomain.CapitalAdequacy => "rg-ps-domain rg-ps-domain-capital",
+        PolicyDomain.Liquidity       => "rg-ps-domain rg-ps-domain-liquidity",
+        PolicyDomain.Leverage        => "rg-ps-domain rg-ps-domain-leverage",
+        PolicyDomain.FX              => "rg-ps-domain rg-ps-domain-fx",
+        PolicyDomain.RiskManagement  => "rg-ps-domain rg-ps-domain-risk",
+        _                            => "rg-ps-domain"
+    };
+
+    private string Label => Domain switch
+    {
+        PolicyDomain.CapitalAdequacy => "Capital Adequacy",
+        PolicyDomain.Liquidity       => "Liquidity",
+        PolicyDomain.Leverage        => "Leverage",
+        PolicyDomain.FX              => "FX",
+        PolicyDomain.RiskManagement  => "Risk Management",
+        _                            => Domain.ToString()
+    };
+}
+
+<span class="@CssClass">@Label</span>

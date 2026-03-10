@@ -1,0 +1,33 @@
+@code {
+    [Parameter, EditorRequired] public PolicyStatus Status { get; set; }
+
+    private string CssClass => Status switch
+    {
+        PolicyStatus.Draft          => "rg-ps-status rg-ps-status-draft",
+        PolicyStatus.ParametersSet  => "rg-ps-status rg-ps-status-params",
+        PolicyStatus.Simulated      => "rg-ps-status rg-ps-status-simulated",
+        PolicyStatus.Consultation   => "rg-ps-status rg-ps-status-consultation",
+        PolicyStatus.FeedbackClosed => "rg-ps-status rg-ps-status-feedback",
+        PolicyStatus.DecisionPending => "rg-ps-status rg-ps-status-decision",
+        PolicyStatus.Enacted        => "rg-ps-status rg-ps-status-enacted",
+        PolicyStatus.Archived       => "rg-ps-status rg-ps-status-archived",
+        PolicyStatus.Withdrawn      => "rg-ps-status rg-ps-status-withdrawn",
+        _                           => "rg-ps-status rg-ps-status-draft"
+    };
+
+    private string Label => Status switch
+    {
+        PolicyStatus.Draft          => "Draft",
+        PolicyStatus.ParametersSet  => "Parameters Set",
+        PolicyStatus.Simulated      => "Simulated",
+        PolicyStatus.Consultation   => "Consultation",
+        PolicyStatus.FeedbackClosed => "Feedback Closed",
+        PolicyStatus.DecisionPending => "Decision Pending",
+        PolicyStatus.Enacted        => "Enacted",
+        PolicyStatus.Archived       => "Archived",
+        PolicyStatus.Withdrawn      => "Withdrawn",
+        _                           => Status.ToString()
+    };
+}
+
+<span class="@CssClass">@Label</span>

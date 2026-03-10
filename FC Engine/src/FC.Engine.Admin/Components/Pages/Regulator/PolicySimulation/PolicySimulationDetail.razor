@@ -1,0 +1,1449 @@
+@page "/regulator/policies/{ScenarioId:long}"
+@attribute [Authorize(Policy = "RegulatorOnly")]
+@inject IPolicyScenarioService ScenarioService
+@inject IImpactAssessmentEngine ImpactEngine
+@inject ICostBenefitAnalyser CbaService
+@inject IConsultationService ConsultationService
+@inject IPolicyDecisionService DecisionService
+@inject IHistoricalImpactTracker Tracker
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+
+<PageTitle>@(_scenario?.Title ?? "Scenario") — Policy Simulation</PageTitle>
+
+<div class="rg-ps-page">
+    @if (_loading)
+    {
+        <div class="rg-spinner-center"><div class="rg-spinner"></div></div>
+    }
+    else if (!string.IsNullOrWhiteSpace(_error))
+    {
+        <div class="rg-card">
+            <p class="rg-danger-text">@_error</p>
+            <button class="rg-btn" @onclick="LoadAsync">Retry</button>
+        </div>
+    }
+    else if (_scenario is not null)
+    {
+        <!-- Hero -->
+        <section class="rg-ps-hero">
+            <div>
+                <div class="rg-surveillance-kicker">RG-40 · Scenario #@_scenario.Id</div>
+                <h1 class="rg-page-title rg-ps-hero-title">@_scenario.Title</h1>
+                @if (!string.IsNullOrWhiteSpace(_scenario.Description))
+                {
+                    <p class="rg-ps-hero-summary">@_scenario.Description</p>
+                }
+            </div>
+            <div class="rg-ps-hero-actions">
+                <div class="rg-ps-flex">
+                    <PolicyStatusBadge Status="@_scenario.Status" />
+                    <DomainBadge Domain="@_scenario.Domain" />
+                </div>
+                <div class="rg-ps-flex">
+                    <button class="rg-btn" @onclick="GoBack">Back</button>
+                    <button class="rg-btn" @onclick="CloneScenario">Clone</button>
+                    @if (_scenario.Status is PolicyStatus.ParametersSet or PolicyStatus.Simulated)
+                    {
+                        <button class="rg-btn primary" @onclick="RunSimulation" disabled="@_simulating">
+                            @(_simulating ? "Simulating..." : "Run Simulation")
+                        </button>
+                    }
+                </div>
+            </div>
+        </section>
+
+        @if (!string.IsNullOrWhiteSpace(_actionMessage))
+        {
+            <div class="rg-surveillance-banner">@_actionMessage</div>
+        }
+        @if (!string.IsNullOrWhiteSpace(_actionError))
+        {
+            <div class="rg-surveillance-banner rg-surveillance-banner-error">@_actionError</div>
+        }
+
+        <!-- Tabs -->
+        <div class="rg-ps-tabs">
+            <button class="rg-ps-tab @TabClass("overview")" @onclick="TabOverview">Overview</button>
+            <button class="rg-ps-tab @TabClass("impact")" @onclick="TabImpact">
+                Impact Assessment
+                @if (_scenario.Runs.Count > 0) { <span class="rg-ps-tab-badge">@_scenario.Runs.Count</span> }
+            </button>
+            <button class="rg-ps-tab @TabClass("cba")" @onclick="TabCba">Cost-Benefit</button>
+            <button class="rg-ps-tab @TabClass("consultation")" @onclick="TabConsultation">Consultation</button>
+            <button class="rg-ps-tab @TabClass("decision")" @onclick="TabDecision">Decision</button>
+            <button class="rg-ps-tab @TabClass("tracking")" @onclick="TabTracking">Tracking</button>
+        </div>
+
+        <!-- ═══════════════════════════════════════════════
+             TAB: OVERVIEW
+             ═══════════════════════════════════════════════ -->
+        @if (_tab == "overview")
+        {
+            <div class="rg-grid rg-grid-2">
+                <!-- Parameters Table -->
+                <div class="rg-card">
+                    <h3 class="rg-section-title">Parameter Adjustments (@_scenario.Parameters.Count)</h3>
+                    @if (_scenario.Parameters.Count == 0)
+                    {
+                        <p class="rg-muted">No parameters defined yet.</p>
+                    }
+                    else
+                    {
+                        <div class="rg-table-wrap">
+                            <table class="rg-table">
+                                <thead>
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Current</th>
+                                        <th></th>
+                                        <th>Proposed</th>
+                                        <th>Unit</th>
+                                        <th>Delta</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var p in _scenario.Parameters)
+                                    {
+                                        var delta = p.ProposedValue - p.CurrentValue;
+                                        <tr>
+                                            <td>
+                                                <strong>@p.ParameterName</strong>
+                                                <div class="rg-ps-param-code">@p.ParameterCode</div>
+                                            </td>
+                                            <td>@p.CurrentValue @FormatUnit(p.Unit)</td>
+                                            <td class="rg-ps-param-arrow">→</td>
+                                            <td><strong>@p.ProposedValue @FormatUnit(p.Unit)</strong></td>
+                                            <td class="rg-ps-text-xs">@p.Unit</td>
+                                            <td>
+                                                <span class="rg-ps-param-delta @(delta > 0 ? "rg-ps-param-delta-up" : delta < 0 ? "rg-ps-param-delta-down" : "")">
+                                                    @(delta > 0 ? "+" : "")@delta @FormatUnit(p.Unit)
+                                                </span>
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    }
+
+                    @if (_scenario.Status == PolicyStatus.Draft || _scenario.Status == PolicyStatus.ParametersSet)
+                    {
+                        <div class="rg-ps-mt">
+                            <h4>Add Parameter</h4>
+                            <div class="rg-controls">
+                                <input placeholder="Parameter code" @bind="_addParamCode" />
+                                <input type="number" step="0.01" placeholder="Proposed value" @bind="_addParamValue" />
+                                <button class="rg-btn primary" @onclick="AddParameter"
+                                        disabled="@(string.IsNullOrWhiteSpace(_addParamCode))">
+                                    Add
+                                </button>
+                            </div>
+                        </div>
+                    }
+                </div>
+
+                <!-- Scenario Timeline & Metadata -->
+                <div class="rg-card">
+                    <h3 class="rg-section-title">Scenario Details</h3>
+                    <div class="rg-ps-decision-summary">
+                        <div class="rg-ps-decision-summary-item">
+                            <span class="rg-ps-decision-summary-label">Domain</span>
+                            <span class="rg-ps-decision-summary-value"><DomainBadge Domain="@_scenario.Domain" /></span>
+                        </div>
+                        <div class="rg-ps-decision-summary-item">
+                            <span class="rg-ps-decision-summary-label">Baseline Date</span>
+                            <span class="rg-ps-decision-summary-value">@_scenario.BaselineDate.ToString("dd MMM yyyy")</span>
+                        </div>
+                        <div class="rg-ps-decision-summary-item">
+                            <span class="rg-ps-decision-summary-label">Target Entities</span>
+                            <span class="rg-ps-decision-summary-value">@_scenario.TargetEntityTypes</span>
+                        </div>
+                        <div class="rg-ps-decision-summary-item">
+                            <span class="rg-ps-decision-summary-label">Version</span>
+                            <span class="rg-ps-decision-summary-value">v@_scenario.Version</span>
+                        </div>
+                        <div class="rg-ps-decision-summary-item">
+                            <span class="rg-ps-decision-summary-label">Assessment Runs</span>
+                            <span class="rg-ps-decision-summary-value">@_scenario.Runs.Count</span>
+                        </div>
+                    </div>
+
+                    @if (_scenario.Runs.Count > 0)
+                    {
+                        <h4 class="rg-ps-mt">Run History</h4>
+                        <div class="rg-ps-timeline">
+                            @foreach (var run in _scenario.Runs.OrderByDescending(r => r.RunNumber))
+                            {
+                                var isDone = run.Status == ImpactRunStatus.Completed;
+                                <div class="rg-ps-timeline-item">
+                                    <div class="rg-ps-timeline-dot @(isDone ? "done" : "")"></div>
+                                    <div class="rg-ps-timeline-label">
+                                        Run #@run.RunNumber — @run.Status
+                                        @if (isDone)
+                                        {
+                                            <span class="rg-ps-text-xs rg-ps-text-muted">
+                                                (@run.TotalEntities entities, @run.WouldBreach breaches)
+                                            </span>
+                                        }
+                                    </div>
+                                    @if (run.CompletedAt.HasValue)
+                                    {
+                                        <div class="rg-ps-timeline-time">@run.CompletedAt.Value.ToString("dd MMM yyyy HH:mm")</div>
+                                    }
+                                </div>
+                            }
+                        </div>
+                    }
+
+                    <!-- Quick Actions -->
+                    <div class="rg-ps-mt">
+                        <h4>Actions</h4>
+                        <div class="rg-ps-flex" style="flex-wrap:wrap;">
+                            @if (_scenario.Status == PolicyStatus.Draft && _scenario.Parameters.Count > 0)
+                            {
+                                <button class="rg-btn primary" @onclick="RunSimulation" disabled="@_simulating">
+                                    Run Simulation
+                                </button>
+                            }
+                            @if (_scenario.Status is PolicyStatus.ParametersSet or PolicyStatus.Simulated)
+                            {
+                                <button class="rg-btn primary" @onclick="RunSimulation" disabled="@_simulating">
+                                    @(_simulating ? "Running..." : "Run / Re-run Simulation")
+                                </button>
+                            }
+                            @if (_scenario.Status != PolicyStatus.Withdrawn && _scenario.Status != PolicyStatus.Enacted)
+                            {
+                                <button class="rg-btn danger" @onclick="WithdrawScenario">Withdraw</button>
+                            }
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
+
+        <!-- ═══════════════════════════════════════════════
+             TAB: IMPACT ASSESSMENT
+             ═══════════════════════════════════════════════ -->
+        @if (_tab == "impact")
+        {
+            @if (_latestRun is null)
+            {
+                <div class="rg-card" style="text-align:center;padding:2rem;">
+                    <p class="rg-muted">No simulation has been run yet.</p>
+                    @if (_scenario.Parameters.Count > 0)
+                    {
+                        <button class="rg-btn primary rg-ps-mt" @onclick="RunSimulation" disabled="@_simulating">
+                            Run Impact Assessment
+                        </button>
+                    }
+                    else
+                    {
+                        <p class="rg-ps-text-sm rg-ps-text-muted">Add parameters first, then run the simulation.</p>
+                    }
+                </div>
+            }
+            else
+            {
+                <!-- Impact Summary Cards -->
+                <div class="rg-ps-impact-cards">
+                    <div class="rg-ps-impact-card rg-ps-impact-card-compliant">
+                        <div class="rg-ps-impact-card-label">Currently Compliant</div>
+                        <div class="rg-ps-impact-card-value rg-ps-text-success">@_latestRun.EntitiesCurrentlyCompliant</div>
+                        <div class="rg-ps-impact-card-pct">@Pct(_latestRun.EntitiesCurrentlyCompliant, _latestRun.TotalEntitiesEvaluated)% of total</div>
+                        <div class="rg-ps-impact-card-desc">Meet both current and proposed thresholds</div>
+                    </div>
+                    <div class="rg-ps-impact-card rg-ps-impact-card-breach">
+                        <div class="rg-ps-impact-card-label">Would Breach</div>
+                        <div class="rg-ps-impact-card-value rg-ps-text-warning">@_latestRun.EntitiesWouldBreach</div>
+                        <div class="rg-ps-impact-card-pct">@Pct(_latestRun.EntitiesWouldBreach, _latestRun.TotalEntitiesEvaluated)% of total</div>
+                        <div class="rg-ps-impact-card-desc">Compliant now but would fail under proposed policy</div>
+                    </div>
+                    <div class="rg-ps-impact-card rg-ps-impact-card-already">
+                        <div class="rg-ps-impact-card-label">Already Breaching</div>
+                        <div class="rg-ps-impact-card-value rg-ps-text-danger">@_latestRun.EntitiesAlreadyBreaching</div>
+                        <div class="rg-ps-impact-card-pct">@Pct(_latestRun.EntitiesAlreadyBreaching, _latestRun.TotalEntitiesEvaluated)% of total</div>
+                        <div class="rg-ps-impact-card-desc">Currently failing existing thresholds</div>
+                    </div>
+                    <div class="rg-ps-impact-card rg-ps-impact-card-na">
+                        <div class="rg-ps-impact-card-label">Not Affected</div>
+                        <div class="rg-ps-impact-card-value">@_latestRun.EntitiesNotAffected</div>
+                        <div class="rg-ps-impact-card-pct">@Pct(_latestRun.EntitiesNotAffected, _latestRun.TotalEntitiesEvaluated)% of total</div>
+                        <div class="rg-ps-impact-card-desc">Parameter does not apply to this entity type</div>
+                    </div>
+                </div>
+
+                <!-- Aggregate Metrics -->
+                <div class="rg-grid rg-grid-3">
+                    <div class="rg-ps-kpi">
+                        <span class="rg-ps-kpi-value">@_latestRun.TotalEntitiesEvaluated</span>
+                        <span class="rg-ps-kpi-label">Entities Evaluated</span>
+                    </div>
+                    <div class="rg-ps-kpi">
+                        <span class="rg-ps-kpi-value rg-ps-text-danger">@FormatCurrency(_latestRun.AggregateCapitalShortfall)</span>
+                        <span class="rg-ps-kpi-label">Capital Shortfall</span>
+                    </div>
+                    <div class="rg-ps-kpi">
+                        <span class="rg-ps-kpi-value rg-ps-text-warning">@FormatCurrency(_latestRun.AggregateComplianceCost)</span>
+                        <span class="rg-ps-kpi-label">Est. Compliance Cost</span>
+                    </div>
+                </div>
+
+                <!-- Charts -->
+                <div class="rg-grid rg-grid-2">
+                    <div class="rg-card">
+                        <h3 class="rg-section-title">Sector Impact Distribution</h3>
+                        <div class="rg-chart"><canvas id="impactDonutChart"></canvas></div>
+                    </div>
+                    <div class="rg-card">
+                        <h3 class="rg-section-title">Run History Trend</h3>
+                        @if (_scenario.Runs.Count >= 2)
+                        {
+                            <div class="rg-chart"><canvas id="runTrendChart"></canvas></div>
+                        }
+                        else
+                        {
+                            <p class="rg-muted">Run multiple simulations to see a trend.</p>
+                        }
+                    </div>
+                </div>
+
+                <!-- Entity Results Table -->
+                <div class="rg-card">
+                    <div class="rg-ps-flex-between rg-ps-mb">
+                        <h3 class="rg-section-title" style="margin:0;">Entity Impact Results</h3>
+                        <div class="rg-ps-flex">
+                            <select class="rg-ps-select" @bind="_entityCategoryFilter" @bind:after="LoadEntityResults">
+                                <option value="">All Categories</option>
+                                @foreach (var c in Enum.GetValues<ImpactCategory>())
+                                {
+                                    <option value="@c">@c</option>
+                                }
+                            </select>
+                            <select class="rg-ps-select" @bind="_entityTypeFilter" @bind:after="LoadEntityResults">
+                                <option value="">All Types</option>
+                                <option value="DMB">DMB</option>
+                                <option value="MFB">MFB</option>
+                                <option value="PMB">PMB</option>
+                                <option value="MERC">MERC</option>
+                            </select>
+                            <button class="rg-btn" @onclick="GoToCompare">
+                                Compare Runs
+                            </button>
+                        </div>
+                    </div>
+
+                    @if (_entityResults is not null)
+                    {
+                        <div class="rg-table-wrap">
+                            <table class="rg-table">
+                                <thead>
+                                    <tr>
+                                        <th>Institution</th>
+                                        <th>Type</th>
+                                        <th>Category</th>
+                                        <th>Current Value</th>
+                                        <th>Proposed Threshold</th>
+                                        <th>Gap</th>
+                                        <th>Est. Cost</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var e in _entityResults.Items)
+                                    {
+                                        <tr>
+                                            <td>
+                                                <strong>@e.InstitutionCode</strong>
+                                                <div class="rg-ps-text-xs rg-ps-text-muted">@e.InstitutionName</div>
+                                            </td>
+                                            <td>@e.EntityType</td>
+                                            <td><ImpactCategoryBadge Category="@e.Category" /></td>
+                                            <td>@(e.CurrentMetricValue?.ToString("N2") ?? "-")</td>
+                                            <td>@(e.ProposedThreshold?.ToString("N2") ?? "-")</td>
+                                            <td>
+                                                @if (e.GapToCompliance.HasValue)
+                                                {
+                                                    var gap = e.GapToCompliance.Value;
+                                                    <div class="rg-ps-gap-bar">
+                                                        <span class="rg-ps-gap-fill @(gap >= 0 ? "rg-ps-gap-positive" : "rg-ps-gap-negative")"
+                                                              style="width:@(Math.Min(Math.Abs((double)gap) * 4, 80))px;"></span>
+                                                        <span class="rg-ps-gap-value @(gap < 0 ? "rg-ps-text-danger" : "rg-ps-text-success")">
+                                                            @(gap > 0 ? "+" : "")@gap.ToString("N2")
+                                                        </span>
+                                                    </div>
+                                                }
+                                                else { <span class="rg-muted">-</span> }
+                                            </td>
+                                            <td>@FormatCurrency(e.EstimatedComplianceCost)</td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+
+                        @if (_entityResults.TotalCount > _entityPageSize)
+                        {
+                            <div class="rg-ps-flex-between rg-ps-mt">
+                                <span class="rg-ps-text-sm rg-ps-text-muted">
+                                    Page @_entityPage / @_entityResults.TotalPages (@_entityResults.TotalCount entities)
+                                </span>
+                                <div class="rg-ps-flex">
+                                    <button class="rg-btn sm" disabled="@(_entityPage <= 1)" @onclick="PrevEntityPage">Prev</button>
+                                    <button class="rg-btn sm" disabled="@(!_entityResults.HasNextPage)" @onclick="NextEntityPage">Next</button>
+                                </div>
+                            </div>
+                        }
+                    }
+                    else
+                    {
+                        <div class="rg-spinner-center"><div class="rg-spinner"></div></div>
+                    }
+                </div>
+
+                <div class="rg-ps-flex-end">
+                    <span class="rg-ps-text-xs rg-ps-text-muted">
+                        Run #@_latestRun.RunNumber · @_latestRun.ExecutionTimeMs ms · @_latestRun.CorrelationId.ToString()[..8]
+                    </span>
+                </div>
+            }
+        }
+
+        <!-- ═══════════════════════════════════════════════
+             TAB: COST-BENEFIT ANALYSIS
+             ═══════════════════════════════════════════════ -->
+        @if (_tab == "cba")
+        {
+            @if (_cba is null)
+            {
+                <div class="rg-card" style="text-align:center;padding:2rem;">
+                    @if (_latestRun is null)
+                    {
+                        <p class="rg-muted">Run an impact assessment first, then generate a CBA.</p>
+                    }
+                    else
+                    {
+                        <p class="rg-muted">No cost-benefit analysis has been generated yet.</p>
+                        <button class="rg-btn primary rg-ps-mt" @onclick="GenerateCBA" disabled="@_generatingCba">
+                            @(_generatingCba ? "Generating..." : "Generate Cost-Benefit Analysis")
+                        </button>
+                    }
+                </div>
+            }
+            else
+            {
+                <!-- Cost Breakdown -->
+                <div class="rg-ps-cba-grid">
+                    <div class="rg-ps-cba-card">
+                        <div class="rg-ps-cba-card-title">Total Industry Cost</div>
+                        <div class="rg-ps-cba-card-value rg-ps-text-danger">@FormatCurrency(_cba.TotalIndustryComplianceCost)</div>
+                    </div>
+                    <div class="rg-ps-cba-card">
+                        <div class="rg-ps-cba-card-title">Small Entities Cost</div>
+                        <div class="rg-ps-cba-card-value">@FormatCurrency(_cba.CostToSmallEntities)</div>
+                    </div>
+                    <div class="rg-ps-cba-card">
+                        <div class="rg-ps-cba-card-title">Medium Entities Cost</div>
+                        <div class="rg-ps-cba-card-value">@FormatCurrency(_cba.CostToMediumEntities)</div>
+                    </div>
+                </div>
+
+                <div class="rg-ps-cba-grid rg-ps-mt">
+                    <div class="rg-ps-cba-card">
+                        <div class="rg-ps-cba-card-title">Large Entities Cost</div>
+                        <div class="rg-ps-cba-card-value">@FormatCurrency(_cba.CostToLargeEntities)</div>
+                    </div>
+                    <div class="rg-ps-cba-card">
+                        <div class="rg-ps-cba-card-title">Sector CAR Improvement</div>
+                        <div class="rg-ps-cba-card-value rg-ps-text-success">@(_cba.SectorCARImprovement?.ToString("N2") ?? "-")%</div>
+                    </div>
+                    <div class="rg-ps-cba-card">
+                        <div class="rg-ps-cba-card-title">Est. Risk Reduction</div>
+                        <div class="rg-ps-cba-card-value rg-ps-text-success">@(_cba.EstimatedRiskReduction?.ToString("N2") ?? "-")%</div>
+                    </div>
+                </div>
+
+                <!-- Net Benefit Score -->
+                @if (_cba.NetBenefitScore.HasValue)
+                {
+                    <div class="rg-grid rg-grid-2 rg-ps-mt">
+                        <div class="rg-card" style="text-align:center;">
+                            <h3 class="rg-section-title">Net Benefit Score</h3>
+                            <div class="rg-ps-gauge">
+                                <svg viewBox="0 0 100 100">
+                                    <circle cx="50" cy="50" r="40" fill="none" stroke="#e2e8f0" stroke-width="8"/>
+                                    <circle cx="50" cy="50" r="40" fill="none"
+                                            stroke="@GaugeColor(_cba.NetBenefitScore.Value)"
+                                            stroke-width="8"
+                                            stroke-dasharray="@(251.2 * Math.Min(Math.Abs((double)_cba.NetBenefitScore.Value / 100), 1)) 251.2"
+                                            stroke-linecap="round"
+                                            transform="rotate(-90 50 50)"/>
+                                </svg>
+                                <div class="rg-ps-gauge-value">
+                                    <span class="rg-ps-gauge-num">@_cba.NetBenefitScore.Value.ToString("N0")</span>
+                                    <span class="rg-ps-gauge-label">Net Benefit</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="rg-card">
+                            <h3 class="rg-section-title">Recommendation</h3>
+                            @if (!string.IsNullOrWhiteSpace(_cba.Recommendation))
+                            {
+                                <div class="rg-ps-recommendation">@_cba.Recommendation</div>
+                            }
+                            else
+                            {
+                                <p class="rg-muted">No recommendation generated.</p>
+                            }
+                        </div>
+                    </div>
+                }
+
+                <!-- Charts -->
+                <div class="rg-grid rg-grid-2 rg-ps-mt">
+                    <div class="rg-card">
+                        <h3 class="rg-section-title">Cost Breakdown by Entity Size</h3>
+                        <div class="rg-chart"><canvas id="cbaCostChart"></canvas></div>
+                    </div>
+                    <div class="rg-card">
+                        <h3 class="rg-section-title">Benefits Overview</h3>
+                        <div class="rg-chart"><canvas id="cbaBenefitChart"></canvas></div>
+                    </div>
+                </div>
+
+                <!-- Phase-In Scenarios -->
+                @if (_cba.PhaseInScenarios.Count > 0)
+                {
+                    <div class="rg-card rg-ps-mt">
+                        <h3 class="rg-section-title">Phase-In Scenarios</h3>
+                        <div class="rg-table-wrap">
+                            <table class="rg-ps-phasein-table">
+                                <thead>
+                                    <tr>
+                                        <th>Scenario</th>
+                                        <th>Transition</th>
+                                        <th>Interim Threshold</th>
+                                        <th>Entities in Breach</th>
+                                        <th>Capital Shortfall</th>
+                                        <th>Compliance Cost</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var phase in _cba.PhaseInScenarios)
+                                    {
+                                        <tr>
+                                            <td><strong>@phase.Label</strong></td>
+                                            <td>@phase.TransitionMonths months</td>
+                                            <td>@phase.InterimThreshold</td>
+                                            <td>
+                                                <span class="@(phase.EntitiesInBreach > 0 ? "rg-ps-text-warning" : "")">
+                                                    @phase.EntitiesInBreach
+                                                </span>
+                                            </td>
+                                            <td class="rg-ps-text-danger">@FormatCurrency(phase.CapitalShortfall)</td>
+                                            <td>@FormatCurrency(phase.EstimatedComplianceCost)</td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                }
+            }
+        }
+
+        <!-- ═══════════════════════════════════════════════
+             TAB: CONSULTATION
+             ═══════════════════════════════════════════════ -->
+        @if (_tab == "consultation")
+        {
+            @if (_consultation is null && !_showCreateConsultation)
+            {
+                <div class="rg-card" style="text-align:center;padding:2rem;">
+                    <p class="rg-muted">No consultation has been created for this scenario.</p>
+                    @if (_scenario.Status is PolicyStatus.Simulated or PolicyStatus.ParametersSet)
+                    {
+                        <button class="rg-btn primary rg-ps-mt" @onclick="() => _showCreateConsultation = true">
+                            Create Consultation
+                        </button>
+                    }
+                </div>
+            }
+            else if (_showCreateConsultation)
+            {
+                <!-- Create Consultation Form -->
+                <div class="rg-card">
+                    <h3 class="rg-section-title">Create Consultation</h3>
+                    <div class="rg-ps-form-section">
+                        <div class="rg-ps-form-group">
+                            <label class="rg-ps-form-label">Title *</label>
+                            <input class="rg-ps-input" placeholder="Consultation title" @bind="_consultTitle" />
+                        </div>
+                        <div class="rg-ps-form-group">
+                            <label class="rg-ps-form-label">Cover Note</label>
+                            <textarea class="rg-ps-textarea" placeholder="Optional cover note..." @bind="_consultCoverNote"></textarea>
+                        </div>
+                        <div class="rg-ps-form-group">
+                            <label class="rg-ps-form-label">Deadline *</label>
+                            <input type="date" class="rg-ps-input" @bind="_consultDeadline" />
+                        </div>
+
+                        <h4>Provisions</h4>
+                        @for (int i = 0; i < _consultProvisions.Count; i++)
+                        {
+                            var idx = i;
+                            <div class="rg-ps-provision">
+                                <div class="rg-ps-provision-head">
+                                    <div class="rg-ps-flex">
+                                        <span class="rg-ps-provision-num">@(idx + 1)</span>
+                                        <input class="rg-ps-input" placeholder="Provision title"
+                                               @bind="_consultProvisions[idx].Title" style="max-width:300px;" />
+                                    </div>
+                                    <button class="rg-btn sm danger" @onclick="() => _consultProvisions.RemoveAt(idx)">Remove</button>
+                                </div>
+                                <textarea class="rg-ps-textarea" placeholder="Provision text..."
+                                          @bind="_consultProvisions[idx].Text" style="margin-top:0.35rem;"></textarea>
+                                <input class="rg-ps-input" placeholder="Related parameter code (optional)"
+                                       @bind="_consultProvisions[idx].RelatedParam" style="margin-top:0.35rem;" />
+                            </div>
+                        }
+                        <button class="rg-btn" @onclick="() => _consultProvisions.Add(new ProvisionDraft())">
+                            + Add Provision
+                        </button>
+
+                        <div class="rg-ps-flex-between rg-ps-mt">
+                            <button class="rg-btn" @onclick="() => _showCreateConsultation = false">Cancel</button>
+                            <button class="rg-btn primary" @onclick="CreateConsultation"
+                                    disabled="@(string.IsNullOrWhiteSpace(_consultTitle) || _consultProvisions.Count == 0 || _creatingConsult)">
+                                @(_creatingConsult ? "Creating..." : "Create Consultation")
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            }
+            else if (_consultation is not null)
+            {
+                <!-- Consultation Detail -->
+                <div class="rg-card">
+                    <div class="rg-ps-flex-between">
+                        <div>
+                            <h3 class="rg-section-title" style="margin:0;">@_consultation.Title</h3>
+                            <div class="rg-ps-flex rg-ps-mt">
+                                <span class="rg-ps-status @ConsultationStatusClass(_consultation.Status)">
+                                    @_consultation.Status
+                                </span>
+                                <span class="rg-ps-text-sm rg-ps-text-muted">
+                                    Deadline: @_consultation.Deadline.ToString("dd MMM yyyy")
+                                </span>
+                                <span class="rg-ps-text-sm rg-ps-text-muted">
+                                    @_consultation.TotalFeedbackReceived feedback received
+                                </span>
+                            </div>
+                        </div>
+                        <div class="rg-ps-flex">
+                            @if (_consultation.Status == ConsultationStatus.Draft)
+                            {
+                                <button class="rg-btn primary" @onclick="PublishConsultation">Publish</button>
+                            }
+                            @if (_consultation.Status is ConsultationStatus.Published or ConsultationStatus.Open)
+                            {
+                                <button class="rg-btn warning" @onclick="CloseConsultation">Close</button>
+                            }
+                            @if (_consultation.Status == ConsultationStatus.Closed)
+                            {
+                                <button class="rg-btn primary" @onclick="AggregateFeedback">Aggregate Feedback</button>
+                            }
+                        </div>
+                    </div>
+
+                    @if (!string.IsNullOrWhiteSpace(_consultation.CoverNote))
+                    {
+                        <div class="rg-ps-recommendation rg-ps-mt">@_consultation.CoverNote</div>
+                    }
+                </div>
+
+                <!-- Provisions with Aggregation -->
+                @foreach (var prov in _consultation.Provisions)
+                {
+                    <div class="rg-ps-provision">
+                        <div class="rg-ps-provision-head">
+                            <div class="rg-ps-flex">
+                                <span class="rg-ps-provision-num">@prov.ProvisionNumber</span>
+                                <span class="rg-ps-provision-title">@prov.Title</span>
+                            </div>
+                        </div>
+                        <div class="rg-ps-provision-text">@prov.Text</div>
+
+                        @if (prov.Aggregation is not null)
+                        {
+                            var agg = prov.Aggregation;
+                            <div class="rg-ps-mt">
+                                <div class="rg-ps-feedback-bar">
+                                    @if (agg.TotalResponses > 0)
+                                    {
+                                        <div class="rg-ps-fb-support" style="width:@((double)agg.SupportCount / agg.TotalResponses * 100)%"></div>
+                                        <div class="rg-ps-fb-oppose" style="width:@((double)agg.OpposeCount / agg.TotalResponses * 100)%"></div>
+                                        <div class="rg-ps-fb-neutral" style="width:@((double)agg.NeutralCount / agg.TotalResponses * 100)%"></div>
+                                        <div class="rg-ps-fb-amend" style="width:@((double)agg.AmendCount / agg.TotalResponses * 100)%"></div>
+                                    }
+                                </div>
+                                <div class="rg-ps-feedback-legend">
+                                    <span><span class="rg-ps-feedback-legend-dot" style="background:#15803d;"></span>Support @agg.SupportCount (@agg.SupportPercentage%)</span>
+                                    <span><span class="rg-ps-feedback-legend-dot" style="background:#b91c1c;"></span>Oppose @agg.OpposeCount (@agg.OpposePercentage%)</span>
+                                    <span><span class="rg-ps-feedback-legend-dot" style="background:#64748b;"></span>Neutral @agg.NeutralCount</span>
+                                    <span><span class="rg-ps-feedback-legend-dot" style="background:#a16207;"></span>Amend @agg.AmendCount</span>
+                                </div>
+
+                                @if (agg.TopConcerns.Count > 0)
+                                {
+                                    <div class="rg-ps-mt">
+                                        <strong class="rg-ps-text-sm">Top Concerns:</strong>
+                                        <ul class="rg-plain-list">
+                                            @foreach (var c in agg.TopConcerns.Take(3))
+                                            {
+                                                <li class="rg-ps-text-sm">@c</li>
+                                            }
+                                        </ul>
+                                    </div>
+                                }
+
+                                @if (agg.TopSuggestedAmendments.Count > 0)
+                                {
+                                    <div class="rg-ps-mt">
+                                        <strong class="rg-ps-text-sm">Suggested Amendments:</strong>
+                                        <ul class="rg-plain-list">
+                                            @foreach (var a in agg.TopSuggestedAmendments.Take(3))
+                                            {
+                                                <li class="rg-ps-text-sm">@a</li>
+                                            }
+                                        </ul>
+                                    </div>
+                                }
+                            </div>
+                        }
+                    </div>
+                }
+            }
+        }
+
+        <!-- ═══════════════════════════════════════════════
+             TAB: DECISION
+             ═══════════════════════════════════════════════ -->
+        @if (_tab == "decision")
+        {
+            @if (_decisionRecorded)
+            {
+                <div class="rg-surveillance-banner">Decision recorded successfully.</div>
+            }
+
+            <div class="rg-ps-decision-panel">
+                <div class="rg-card">
+                    <h3 class="rg-section-title">Record Policy Decision</h3>
+                    <div class="rg-ps-form-section">
+                        <div class="rg-ps-form-group">
+                            <label class="rg-ps-form-label">Decision *</label>
+                            <select class="rg-ps-select" @bind="_decisionType">
+                                @foreach (var dt in Enum.GetValues<DecisionType>())
+                                {
+                                    <option value="@dt">@FormatDecision(dt)</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="rg-ps-form-group">
+                            <label class="rg-ps-form-label">Summary *</label>
+                            <textarea class="rg-ps-textarea" placeholder="Describe the rationale..."
+                                      @bind="_decisionSummary"></textarea>
+                        </div>
+                        <div class="rg-ps-form-row">
+                            <div class="rg-ps-form-group">
+                                <label class="rg-ps-form-label">Effective Date</label>
+                                <input type="date" class="rg-ps-input" @bind="_decisionEffectiveDate" />
+                            </div>
+                            <div class="rg-ps-form-group">
+                                <label class="rg-ps-form-label">Phase-In Months</label>
+                                <input type="number" class="rg-ps-input" @bind="_decisionPhaseInMonths" />
+                            </div>
+                        </div>
+                        <div class="rg-ps-form-group">
+                            <label class="rg-ps-form-label">Circular Reference</label>
+                            <input class="rg-ps-input" placeholder="e.g. BSD/DIR/GEN/CIR/08/001" @bind="_decisionCircular" />
+                        </div>
+                        <div class="rg-ps-flex-end">
+                            <button class="rg-btn primary" @onclick="RecordDecision"
+                                    disabled="@(string.IsNullOrWhiteSpace(_decisionSummary) || _recordingDecision)">
+                                @(_recordingDecision ? "Recording..." : "Record Decision")
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Summary Sidebar -->
+                <div>
+                    <div class="rg-card rg-ps-mb">
+                        <h4>Scenario Summary</h4>
+                        <div class="rg-ps-decision-summary">
+                            <div class="rg-ps-decision-summary-item">
+                                <span class="rg-ps-decision-summary-label">Status</span>
+                                <span class="rg-ps-decision-summary-value"><PolicyStatusBadge Status="@_scenario.Status" /></span>
+                            </div>
+                            <div class="rg-ps-decision-summary-item">
+                                <span class="rg-ps-decision-summary-label">Domain</span>
+                                <span class="rg-ps-decision-summary-value"><DomainBadge Domain="@_scenario.Domain" /></span>
+                            </div>
+                            <div class="rg-ps-decision-summary-item">
+                                <span class="rg-ps-decision-summary-label">Simulation Runs</span>
+                                <span class="rg-ps-decision-summary-value">@_scenario.Runs.Count</span>
+                            </div>
+                            @if (_latestRun is not null)
+                            {
+                                <div class="rg-ps-decision-summary-item">
+                                    <span class="rg-ps-decision-summary-label">Would Breach</span>
+                                    <span class="rg-ps-decision-summary-value rg-ps-text-warning">@_latestRun.EntitiesWouldBreach</span>
+                                </div>
+                                <div class="rg-ps-decision-summary-item">
+                                    <span class="rg-ps-decision-summary-label">Capital Shortfall</span>
+                                    <span class="rg-ps-decision-summary-value rg-ps-text-danger">@FormatCurrency(_latestRun.AggregateCapitalShortfall)</span>
+                                </div>
+                            }
+                            @if (_consultation is not null)
+                            {
+                                <div class="rg-ps-decision-summary-item">
+                                    <span class="rg-ps-decision-summary-label">Feedback Received</span>
+                                    <span class="rg-ps-decision-summary-value">@_consultation.TotalFeedbackReceived</span>
+                                </div>
+                            }
+                        </div>
+                    </div>
+
+                    @if (_decisionId > 0)
+                    {
+                        <div class="rg-card">
+                            <h4>Generate Document</h4>
+                            <p class="rg-ps-text-sm rg-ps-text-muted">Download the formal policy document.</p>
+                            <button class="rg-btn primary rg-ps-mt" @onclick="DownloadDocument">
+                                Download Policy Document
+                            </button>
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+
+        <!-- ═══════════════════════════════════════════════
+             TAB: HISTORICAL TRACKING
+             ═══════════════════════════════════════════════ -->
+        @if (_tab == "tracking")
+        {
+            @if (_scenario.Status != PolicyStatus.Enacted)
+            {
+                <div class="rg-card" style="text-align:center;padding:2rem;">
+                    <p class="rg-muted">Historical tracking is available after the policy has been enacted.</p>
+                </div>
+            }
+            else if (_trackingHistory is null || _trackingHistory.Count == 0)
+            {
+                <div class="rg-card" style="text-align:center;padding:2rem;">
+                    <p class="rg-muted">No tracking data available yet. Data is collected on a monthly cycle.</p>
+                </div>
+            }
+            else
+            {
+                <!-- Accuracy Score -->
+                @if (_accuracyScore > 0)
+                {
+                    <div class="rg-ps-kpis" style="grid-template-columns:repeat(3,1fr);">
+                        <div class="rg-ps-kpi">
+                            <span class="rg-ps-kpi-value rg-ps-text-success">@_accuracyScore.ToString("N1")%</span>
+                            <span class="rg-ps-kpi-label">Accuracy Score</span>
+                        </div>
+                        <div class="rg-ps-kpi">
+                            <span class="rg-ps-kpi-value">@_trackingHistory.Count</span>
+                            <span class="rg-ps-kpi-label">Tracking Points</span>
+                        </div>
+                        <div class="rg-ps-kpi">
+                            <span class="rg-ps-kpi-value">@_trackingHistory.Max(t => t.MonthsSinceEnactment)</span>
+                            <span class="rg-ps-kpi-label">Months Since Enactment</span>
+                        </div>
+                    </div>
+                }
+
+                <!-- Charts -->
+                <div class="rg-ps-tracking-grid">
+                    <div class="rg-card">
+                        <h3 class="rg-section-title">Predicted vs Actual Breach Count</h3>
+                        <div class="rg-chart"><canvas id="trackingBreachChart"></canvas></div>
+                    </div>
+                    <div class="rg-card">
+                        <h3 class="rg-section-title">Capital Shortfall Comparison</h3>
+                        <div class="rg-chart"><canvas id="trackingShortfallChart"></canvas></div>
+                    </div>
+                </div>
+
+                <!-- Data Table -->
+                <div class="rg-card rg-ps-mt">
+                    <h3 class="rg-section-title">Tracking Data</h3>
+                    <div class="rg-table-wrap">
+                        <table class="rg-table">
+                            <thead>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Months</th>
+                                    <th>Predicted Breaches</th>
+                                    <th>Actual Breaches</th>
+                                    <th>Predicted Shortfall</th>
+                                    <th>Actual Shortfall</th>
+                                    <th>Accuracy</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var t in _trackingHistory.OrderByDescending(x => x.MonthsSinceEnactment))
+                                {
+                                    <tr>
+                                        <td>@t.TrackingDate.ToString("MMM yyyy")</td>
+                                        <td>@t.MonthsSinceEnactment</td>
+                                        <td>@t.PredictedBreachCount</td>
+                                        <td class="@(t.ActualBreachCount > t.PredictedBreachCount ? "rg-ps-text-danger" : "rg-ps-text-success")">
+                                            @t.ActualBreachCount
+                                        </td>
+                                        <td>@FormatCurrency(t.PredictedShortfall)</td>
+                                        <td>@FormatCurrency(t.ActualShortfall)</td>
+                                        <td>
+                                            @if (t.AccuracyScore.HasValue)
+                                            {
+                                                <span class="@(t.AccuracyScore.Value >= 80 ? "rg-ps-text-success" : t.AccuracyScore.Value >= 60 ? "rg-ps-text-warning" : "rg-ps-text-danger")">
+                                                    @t.AccuracyScore.Value.ToString("N1")%
+                                                </span>
+                                            }
+                                            else { <span class="rg-muted">-</span> }
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            }
+        }
+    }
+</div>
+
+@code {
+    [Parameter] public long ScenarioId { get; set; }
+    [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
+
+    private int _regulatorId;
+    private int _userId;
+    private bool _loading = true;
+    private string? _error;
+    private string? _actionMessage;
+    private string? _actionError;
+    private string _tab = "overview";
+
+    // Data
+    private PolicyScenarioDetail? _scenario;
+    private ImpactAssessmentResult? _latestRun;
+    private PagedResult<EntityImpactSummary>? _entityResults;
+    private CostBenefitResult? _cba;
+    private ConsultationDetail? _consultation;
+    private IReadOnlyList<PredictedVsActual>? _trackingHistory;
+    private decimal _accuracyScore;
+
+    // UI State
+    private bool _simulating;
+    private bool _generatingCba;
+    private bool _showCreateConsultation;
+    private bool _creatingConsult;
+    private bool _recordingDecision;
+    private bool _decisionRecorded;
+    private long _decisionId;
+
+    // Add Parameter
+    private string _addParamCode = string.Empty;
+    private decimal _addParamValue;
+
+    // Entity filter
+    private string _entityCategoryFilter = string.Empty;
+    private string _entityTypeFilter = string.Empty;
+    private int _entityPage = 1;
+    private const int _entityPageSize = 20;
+
+    // Consultation creation
+    private string _consultTitle = string.Empty;
+    private string? _consultCoverNote;
+    private DateOnly _consultDeadline = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(30));
+    private readonly List<ProvisionDraft> _consultProvisions = new() { new() };
+
+    // Decision
+    private DecisionType _decisionType = DecisionType.Enact;
+    private string _decisionSummary = string.Empty;
+    private DateOnly _decisionEffectiveDate = DateOnly.FromDateTime(DateTime.UtcNow.AddMonths(3));
+    private int? _decisionPhaseInMonths;
+    private string? _decisionCircular;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var state = await AuthState!;
+        _regulatorId = int.Parse(state.User.FindFirst("RegulatorId")?.Value
+            ?? state.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? "1");
+        _userId = int.Parse(state.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? "1");
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _error = null;
+        try
+        {
+            _scenario = await ScenarioService.GetScenarioAsync(ScenarioId, _regulatorId);
+
+            // Load latest run
+            var latestRunSummary = _scenario.Runs.OrderByDescending(r => r.RunNumber).FirstOrDefault();
+            if (latestRunSummary is not null && latestRunSummary.Status == ImpactRunStatus.Completed)
+            {
+                _latestRun = await ImpactEngine.GetRunResultAsync(latestRunSummary.RunId, _regulatorId);
+                await LoadEntityResults();
+            }
+
+            // Try load CBA
+            try { _cba = await CbaService.GetAnalysisAsync(ScenarioId, _regulatorId); } catch { /* not generated yet */ }
+
+            // Try load consultation
+            try
+            {
+                // Search for consultation via scenario (consultation is linked to scenario)
+                // We need to find the consultation. The detail page doesn't have consultationId directly,
+                // so we check if there's a consultation round. If we have a run, try consultation.
+                // For now, we'll rely on the scenario status to determine if consultation exists.
+                if (_scenario.Status >= PolicyStatus.Consultation)
+                {
+                    // Note: Direct consultation lookup may require querying by scenario.
+                    // This is a simplified approach — in production, the ScenarioDetail model
+                    // would include consultation info or we'd have a method to look up by scenario.
+                }
+            }
+            catch { /* no consultation */ }
+
+            // Load tracking
+            if (_scenario.Status == PolicyStatus.Enacted && _decisionId > 0)
+            {
+                try
+                {
+                    _trackingHistory = await Tracker.GetTrackingHistoryAsync(_decisionId, _regulatorId);
+                    _accuracyScore = await Tracker.GetAccuracyScoreAsync(_decisionId, _regulatorId);
+                }
+                catch { /* no tracking yet */ }
+            }
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task LoadEntityResults()
+    {
+        if (_latestRun is null) return;
+        try
+        {
+            ImpactCategory? category = string.IsNullOrEmpty(_entityCategoryFilter) ? null : Enum.Parse<ImpactCategory>(_entityCategoryFilter);
+            var entityType = string.IsNullOrEmpty(_entityTypeFilter) ? null : _entityTypeFilter;
+            _entityResults = await ImpactEngine.GetEntityResultsAsync(_latestRun.RunId, _regulatorId, category, entityType, _entityPage, _entityPageSize);
+        }
+        catch { /* handled by displaying no results */ }
+    }
+
+    private async Task PrevEntityPage() { _entityPage = Math.Max(1, _entityPage - 1); await LoadEntityResults(); }
+    private async Task NextEntityPage() { _entityPage++; await LoadEntityResults(); }
+
+    private void SetTab(string tab)
+    {
+        _tab = tab;
+        _actionMessage = null;
+        _actionError = null;
+    }
+
+    private async Task RunSimulation()
+    {
+        _simulating = true;
+        _actionError = null;
+        _actionMessage = null;
+        StateHasChanged();
+        try
+        {
+            _latestRun = await ImpactEngine.RunAssessmentAsync(ScenarioId, _regulatorId, _userId);
+            _actionMessage = $"Simulation completed: {_latestRun.TotalEntitiesEvaluated} entities evaluated, {_latestRun.EntitiesWouldBreach} would breach.";
+            await LoadAsync();
+            _tab = "impact";
+        }
+        catch (Exception ex)
+        {
+            _actionError = $"Simulation failed: {ex.Message}";
+        }
+        finally
+        {
+            _simulating = false;
+        }
+    }
+
+    private async Task GenerateCBA()
+    {
+        if (_latestRun is null) return;
+        _generatingCba = true;
+        _actionError = null;
+        try
+        {
+            _cba = await CbaService.GenerateAnalysisAsync(_latestRun.RunId, _regulatorId, _userId);
+            _actionMessage = "Cost-benefit analysis generated successfully.";
+        }
+        catch (Exception ex)
+        {
+            _actionError = $"CBA generation failed: {ex.Message}";
+        }
+        finally
+        {
+            _generatingCba = false;
+        }
+    }
+
+    private async Task AddParameter()
+    {
+        if (string.IsNullOrWhiteSpace(_addParamCode)) return;
+        _actionError = null;
+        try
+        {
+            await ScenarioService.AddParameterAsync(ScenarioId, _regulatorId, _addParamCode, _addParamValue, null, _userId);
+            _addParamCode = string.Empty;
+            _addParamValue = 0;
+            _actionMessage = "Parameter added.";
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            _actionError = $"Failed to add parameter: {ex.Message}";
+        }
+    }
+
+    private async Task CloneScenario()
+    {
+        _actionError = null;
+        try
+        {
+            var newId = await ScenarioService.CloneScenarioAsync(ScenarioId, _regulatorId, $"{_scenario!.Title} (Clone)", _userId);
+            Nav.NavigateTo($"/regulator/policies/{newId}");
+        }
+        catch (Exception ex)
+        {
+            _actionError = $"Clone failed: {ex.Message}";
+        }
+    }
+
+    private async Task WithdrawScenario()
+    {
+        _actionError = null;
+        try
+        {
+            await ScenarioService.TransitionStatusAsync(ScenarioId, _regulatorId, PolicyStatus.Withdrawn, _userId);
+            _actionMessage = "Scenario withdrawn.";
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            _actionError = $"Withdrawal failed: {ex.Message}";
+        }
+    }
+
+    private async Task CreateConsultation()
+    {
+        _creatingConsult = true;
+        _actionError = null;
+        try
+        {
+            var provisions = _consultProvisions.Select((p, i) => new ConsultationProvisionInput(
+                i + 1, p.Title, p.Text, p.RelatedParam)).ToList();
+            var consultId = await ConsultationService.CreateConsultationAsync(
+                ScenarioId, _regulatorId, _consultTitle, _consultCoverNote,
+                _consultDeadline, provisions, _userId);
+            _consultation = await ConsultationService.GetConsultationAsync(consultId, _regulatorId);
+            _showCreateConsultation = false;
+            _actionMessage = "Consultation created.";
+        }
+        catch (Exception ex)
+        {
+            _actionError = $"Create failed: {ex.Message}";
+        }
+        finally
+        {
+            _creatingConsult = false;
+        }
+    }
+
+    private async Task PublishConsultation()
+    {
+        if (_consultation is null) return;
+        _actionError = null;
+        try
+        {
+            await ConsultationService.PublishConsultationAsync(_consultation.Id, _regulatorId, _userId);
+            _consultation = await ConsultationService.GetConsultationAsync(_consultation.Id, _regulatorId);
+            _actionMessage = "Consultation published.";
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            _actionError = $"Publish failed: {ex.Message}";
+        }
+    }
+
+    private async Task CloseConsultation()
+    {
+        if (_consultation is null) return;
+        _actionError = null;
+        try
+        {
+            await ConsultationService.CloseConsultationAsync(_consultation.Id, _regulatorId, _userId);
+            _consultation = await ConsultationService.GetConsultationAsync(_consultation.Id, _regulatorId);
+            _actionMessage = "Consultation closed.";
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            _actionError = $"Close failed: {ex.Message}";
+        }
+    }
+
+    private async Task AggregateFeedback()
+    {
+        if (_consultation is null) return;
+        _actionError = null;
+        try
+        {
+            await ConsultationService.AggregateFeedbackAsync(_consultation.Id, _regulatorId, _userId);
+            _consultation = await ConsultationService.GetConsultationAsync(_consultation.Id, _regulatorId);
+            _actionMessage = "Feedback aggregated.";
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            _actionError = $"Aggregation failed: {ex.Message}";
+        }
+    }
+
+    private async Task RecordDecision()
+    {
+        _recordingDecision = true;
+        _actionError = null;
+        try
+        {
+            _decisionId = await DecisionService.RecordDecisionAsync(
+                ScenarioId, _regulatorId, _decisionType, _decisionSummary,
+                _decisionEffectiveDate, _decisionPhaseInMonths, _decisionCircular, _userId);
+            _decisionRecorded = true;
+            _actionMessage = "Decision recorded.";
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            _actionError = $"Decision recording failed: {ex.Message}";
+        }
+        finally
+        {
+            _recordingDecision = false;
+        }
+    }
+
+    private async Task DownloadDocument()
+    {
+        if (_decisionId <= 0) return;
+        try
+        {
+            var docBytes = await DecisionService.GeneratePolicyDocumentAsync(_decisionId, _regulatorId);
+            var base64 = Convert.ToBase64String(docBytes);
+            await JS.InvokeVoidAsync("eval",
+                $"{{ var a=document.createElement('a');a.href='data:text/plain;base64,{base64}';a.download='policy-document-{_decisionId}.txt';a.click(); }}");
+        }
+        catch (Exception ex)
+        {
+            _actionError = $"Download failed: {ex.Message}";
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender || _latestRun is null) return;
+
+        try
+        {
+            // Impact Donut
+            await JS.InvokeVoidAsync("renderChart", "impactDonutChart", "doughnut", new
+            {
+                labels = new[] { "Compliant", "Would Breach", "Already Breaching", "Not Affected" },
+                datasets = new[]
+                {
+                    new
+                    {
+                        data = new[]
+                        {
+                            _latestRun.EntitiesCurrentlyCompliant,
+                            _latestRun.EntitiesWouldBreach,
+                            _latestRun.EntitiesAlreadyBreaching,
+                            _latestRun.EntitiesNotAffected
+                        },
+                        backgroundColor = new[] { "#009E73", "#E69F00", "#D55E00", "#999999" }
+                    }
+                }
+            });
+
+            // Run Trend
+            if (_scenario?.Runs.Count >= 2)
+            {
+                var sortedRuns = _scenario.Runs.OrderBy(r => r.RunNumber).ToList();
+                await JS.InvokeVoidAsync("renderChart", "runTrendChart", "line", new
+                {
+                    labels = sortedRuns.Select(r => $"Run #{r.RunNumber}").ToArray(),
+                    datasets = new[]
+                    {
+                        new
+                        {
+                            label = "Would Breach",
+                            data = sortedRuns.Select(r => r.WouldBreach).ToArray(),
+                            borderColor = "#E69F00"
+                        },
+                        new
+                        {
+                            label = "Already Breaching",
+                            data = sortedRuns.Select(r => r.AlreadyBreaching).ToArray(),
+                            borderColor = "#D55E00"
+                        }
+                    }
+                });
+            }
+
+            // CBA Charts
+            if (_cba is not null)
+            {
+                await JS.InvokeVoidAsync("renderChart", "cbaCostChart", "bar", new
+                {
+                    labels = new[] { "Small", "Medium", "Large" },
+                    datasets = new[]
+                    {
+                        new
+                        {
+                            label = "Compliance Cost (M)",
+                            data = new[] { _cba.CostToSmallEntities, _cba.CostToMediumEntities, _cba.CostToLargeEntities },
+                            backgroundColor = new[] { "#0ea5e9", "#7c3aed", "#0f766e" }
+                        }
+                    }
+                });
+
+                await JS.InvokeVoidAsync("renderChart", "cbaBenefitChart", "bar", new
+                {
+                    labels = new[] { "CAR Improvement", "LCR Improvement", "Risk Reduction", "Deposit Protection" },
+                    datasets = new[]
+                    {
+                        new
+                        {
+                            label = "Benefit (%)",
+                            data = new[]
+                            {
+                                _cba.SectorCARImprovement ?? 0,
+                                _cba.SectorLCRImprovement ?? 0,
+                                _cba.EstimatedRiskReduction ?? 0,
+                                _cba.EstimatedDepositProtection ?? 0
+                            },
+                            backgroundColor = "#15803d"
+                        }
+                    }
+                });
+            }
+
+            // Tracking Charts
+            if (_trackingHistory is not null && _trackingHistory.Count > 0)
+            {
+                var sorted = _trackingHistory.OrderBy(t => t.MonthsSinceEnactment).ToList();
+                await JS.InvokeVoidAsync("renderChart", "trackingBreachChart", "line", new
+                {
+                    labels = sorted.Select(t => $"M+{t.MonthsSinceEnactment}").ToArray(),
+                    datasets = new object[]
+                    {
+                        new { label = "Predicted", data = sorted.Select(t => t.PredictedBreachCount).ToArray(), borderColor = "#1d4ed8" },
+                        new { label = "Actual", data = sorted.Select(t => t.ActualBreachCount).ToArray(), borderColor = "#b91c1c" }
+                    }
+                });
+
+                await JS.InvokeVoidAsync("renderChart", "trackingShortfallChart", "line", new
+                {
+                    labels = sorted.Select(t => $"M+{t.MonthsSinceEnactment}").ToArray(),
+                    datasets = new object[]
+                    {
+                        new { label = "Predicted", data = sorted.Select(t => (double)(t.PredictedShortfall ?? 0)).ToArray(), borderColor = "#1d4ed8" },
+                        new { label = "Actual", data = sorted.Select(t => (double)(t.ActualShortfall ?? 0)).ToArray(), borderColor = "#b91c1c" }
+                    }
+                });
+            }
+        }
+        catch { /* charts may not be visible yet */ }
+    }
+
+    // ── Navigation ──
+
+    private void GoBack() => Nav.NavigateTo("/regulator/policies");
+    private void GoToCompare() => Nav.NavigateTo($"/regulator/policies/compare?runs={_latestRun?.RunId}");
+
+    private void TabOverview() => SetTab("overview");
+    private void TabImpact() => SetTab("impact");
+    private void TabCba() => SetTab("cba");
+    private void TabConsultation() => SetTab("consultation");
+    private void TabDecision() => SetTab("decision");
+    private void TabTracking() => SetTab("tracking");
+
+    private string TabClass(string tab) => _tab == tab ? "active" : "";
+
+    // ── Helpers ──
+
+    private static string Pct(int count, int total)
+        => total > 0 ? ((double)count / total * 100).ToString("N1") : "0.0";
+
+    private static string FormatCurrency(decimal? value)
+        => value.HasValue ? $"NGN {value.Value:N0}M" : "-";
+
+    private static string FormatUnit(ParameterUnit unit) => unit switch
+    {
+        ParameterUnit.Percentage => "%",
+        ParameterUnit.Bps => "bps",
+        ParameterUnit.Ratio => "x",
+        _ => ""
+    };
+
+    private static string FormatDecision(DecisionType dt) => dt switch
+    {
+        DecisionType.Enact => "Enact as proposed",
+        DecisionType.EnactAmended => "Enact with amendments",
+        DecisionType.Defer => "Defer decision",
+        DecisionType.Withdraw => "Withdraw proposal",
+        _ => dt.ToString()
+    };
+
+    private static string GaugeColor(decimal score) =>
+        score >= 60 ? "#15803d" : score >= 30 ? "#d97706" : "#b91c1c";
+
+    private static string ConsultationStatusClass(ConsultationStatus s) => s switch
+    {
+        ConsultationStatus.Draft => "rg-ps-status-draft",
+        ConsultationStatus.Published => "rg-ps-status-simulated",
+        ConsultationStatus.Open => "rg-ps-status-consultation",
+        ConsultationStatus.Closed => "rg-ps-status-feedback",
+        ConsultationStatus.Aggregated => "rg-ps-status-enacted",
+        _ => ""
+    };
+
+    private sealed class ProvisionDraft
+    {
+        public string Title { get; set; } = string.Empty;
+        public string Text { get; set; } = string.Empty;
+        public string? RelatedParam { get; set; }
+    }
+}

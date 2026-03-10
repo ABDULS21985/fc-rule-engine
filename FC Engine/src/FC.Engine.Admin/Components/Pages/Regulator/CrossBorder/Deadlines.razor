@@ -1,0 +1,243 @@
+@page "/regulator/cross-border/deadlines"
+@attribute [Authorize(Policy = "RegulatorOnly")]
+@inject IPanAfricanDashboardService DashboardService
+@inject NavigationManager Nav
+@using FC.Engine.Domain.Entities
+@using FC.Engine.Infrastructure.Metadata
+@inject MetadataDbContext Db
+@using Microsoft.EntityFrameworkCore
+
+<PageTitle>Deadline Calendar — RegOS™</PageTitle>
+
+<div class="rg-cb-hero">
+    <div class="rg-cb-hero-text">
+        <div class="rg-cb-kicker">Cross-Border Harmonisation</div>
+        <h1 class="rg-cb-hero-title">Regulatory Deadline Calendar</h1>
+        <p class="rg-cb-hero-sub">
+            Track submission deadlines across all jurisdictions with timezone-aware display.
+            Filter by jurisdiction and view in calendar or list format.
+        </p>
+    </div>
+</div>
+
+@* ── Group Selector ── *@
+<div class="rg-cb-filters">
+    <select class="rg-cb-filter-select" @bind="_selectedGroupId" @bind:after="LoadDeadlines">
+        <option value="0">— Select group —</option>
+        @foreach (var g in _groups)
+        {
+            <option value="@g.Id">@g.GroupName</option>
+        }
+    </select>
+</div>
+
+@* ── Tabs ── *@
+<div class="rg-cb-tabs">
+    <button class="rg-cb-tab @(_view == "calendar" ? "rg-cb-tab--active" : "")" @onclick='() => _view = "calendar"'>Calendar</button>
+    <button class="rg-cb-tab @(_view == "list" ? "rg-cb-tab--active" : "")" @onclick='() => _view = "list"'>List</button>
+</div>
+
+@if (_selectedGroupId == 0)
+{
+    <div class="rg-cb-empty">
+        <div class="rg-cb-empty-icon">📅</div>
+        <div class="rg-cb-empty-title">Select a Group</div>
+        <div class="rg-cb-empty-desc">Choose a financial group to view its regulatory deadlines.</div>
+    </div>
+}
+else if (_loading)
+{
+    <p class="rg-muted">Loading deadlines…</p>
+}
+else if (_view == "calendar")
+{
+    @* ── Calendar View ── *@
+    <div class="rg-card" style="padding:1rem;">
+        <div class="rg-cb-cal-header">
+            <div class="rg-cb-cal-nav">
+                <button @onclick="PrevMonth">‹</button>
+                <span class="rg-cb-cal-month">@_displayMonth.ToString("MMMM yyyy")</span>
+                <button @onclick="NextMonth">›</button>
+            </div>
+            <button class="rg-btn" @onclick="GoToToday">Today</button>
+        </div>
+
+        <div class="rg-cb-cal-grid">
+            @foreach (var day in new[] { "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun" })
+            {
+                <div class="rg-cb-cal-dayhead">@day</div>
+            }
+
+            @foreach (var date in GetCalendarDays())
+            {
+                var isCurrentMonth = date.Month == _displayMonth.Month;
+                var isToday = date == DateOnly.FromDateTime(DateTime.Today);
+                var dayDeadlines = _deadlines.Where(d => DateOnly.FromDateTime(d.DeadlineUtc.DateTime) == date).ToList();
+
+                <div class="rg-cb-cal-day @(isCurrentMonth ? "" : "rg-cb-cal-day--outside") @(isToday ? "rg-cb-cal-day--today" : "")">
+                    <div class="rg-cb-cal-day-num">@date.Day</div>
+                    <div class="rg-cb-cal-dots">
+                        @foreach (var dl in dayDeadlines.Take(3))
+                        {
+                            var dotClass = GetJurisdictionDotClass(dl.JurisdictionCode);
+                            <div class="rg-cb-cal-dot @dotClass" title="@dl.ReturnName — @dl.JurisdictionCode">
+                                @GetFlag(dl.JurisdictionCode) @dl.ReturnCode
+                            </div>
+                        }
+                        @if (dayDeadlines.Count > 3)
+                        {
+                            <div class="rg-cb-cal-dot rg-cb-cal-dot--default">+@(dayDeadlines.Count - 3) more</div>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+}
+else
+{
+    @* ── List View ── *@
+    <div class="rg-table-wrap">
+        <table class="rg-table">
+            <thead>
+                <tr>
+                    <th>Jurisdiction</th>
+                    <th>Return</th>
+                    <th>Period</th>
+                    <th>Deadline</th>
+                    <th>Time Zone</th>
+                    <th>Days Left</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var d in _deadlines.OrderBy(d => d.DeadlineUtc))
+                {
+                    <tr>
+                        <td>
+                            <FlagBadge Code="@d.JurisdictionCode" Label="@d.CountryName" />
+                            <div style="font-size:0.7rem;color:var(--rg-muted);margin-top:0.1rem;">@d.RegulatorCode</div>
+                        </td>
+                        <td>
+                            <div><strong>@d.ReturnName</strong></div>
+                            <div style="font-size:0.72rem;color:var(--rg-muted);font-family:monospace;">@d.ReturnCode</div>
+                        </td>
+                        <td>@d.ReportingPeriod</td>
+                        <td>@d.DeadlineUtc.ToString("dd MMM yyyy HH:mm")</td>
+                        <td style="font-size:0.78rem;">@d.LocalTimeZone</td>
+                        <td>
+                            @{
+                                var daysClass = d.DaysUntilDeadline <= 0 ? "urgent"
+                                    : d.DaysUntilDeadline <= 7 ? "urgent"
+                                    : d.DaysUntilDeadline <= 14 ? "soon"
+                                    : "ok";
+                            }
+                            <span class="rg-cb-days-left rg-cb-days-left--@daysClass">
+                                @if (d.DaysUntilDeadline <= 0)
+                                {
+                                    <span>OVERDUE</span>
+                                }
+                                else
+                                {
+                                    <span>@d.DaysUntilDeadline days</span>
+                                }
+                            </span>
+                        </td>
+                        <td>
+                            @{
+                                var statusVariant = d.Status switch
+                                {
+                                    DeadlineStatus.Overdue => "danger",
+                                    DeadlineStatus.DueSoon => "warning",
+                                    DeadlineStatus.Submitted or DeadlineStatus.Completed => "success",
+                                    _ => "default"
+                                };
+                            }
+                            <StatusPill Label="@d.Status.ToString()" Variant="@statusVariant" />
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+
+@code {
+    private bool _loading;
+    private int _selectedGroupId;
+    private string _view = "calendar";
+    private DateOnly _displayMonth = new(DateTime.Today.Year, DateTime.Today.Month, 1);
+
+    private List<RegulatoryDeadlineDto> _deadlines = [];
+    private List<FinancialGroup> _groups = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        _groups = await Db.FinancialGroups
+            .AsNoTracking()
+            .Where(g => g.IsActive)
+            .OrderBy(g => g.GroupName)
+            .ToListAsync();
+    }
+
+    private async Task LoadDeadlines()
+    {
+        if (_selectedGroupId == 0) { _deadlines = []; return; }
+        _loading = true;
+        StateHasChanged();
+
+        try
+        {
+            var from = new DateOnly(_displayMonth.Year, _displayMonth.Month, 1).AddMonths(-1);
+            var to = from.AddMonths(3);
+            var result = await DashboardService.GetDeadlineCalendarAsync(_selectedGroupId, from, to);
+            _deadlines = result.ToList();
+        }
+        catch { _deadlines = []; }
+        finally { _loading = false; StateHasChanged(); }
+    }
+
+    private void PrevMonth()
+    {
+        _displayMonth = _displayMonth.AddMonths(-1);
+        _ = LoadDeadlines();
+    }
+
+    private void NextMonth()
+    {
+        _displayMonth = _displayMonth.AddMonths(1);
+        _ = LoadDeadlines();
+    }
+
+    private void GoToToday()
+    {
+        _displayMonth = new DateOnly(DateTime.Today.Year, DateTime.Today.Month, 1);
+        _ = LoadDeadlines();
+    }
+
+    private IEnumerable<DateOnly> GetCalendarDays()
+    {
+        var firstOfMonth = new DateOnly(_displayMonth.Year, _displayMonth.Month, 1);
+        var dayOfWeek = ((int)firstOfMonth.DayOfWeek + 6) % 7; // Monday = 0
+        var start = firstOfMonth.AddDays(-dayOfWeek);
+        for (var i = 0; i < 42; i++)
+            yield return start.AddDays(i);
+    }
+
+    private static string GetJurisdictionDotClass(string code) => code.ToUpperInvariant() switch
+    {
+        "NG" => "rg-cb-cal-dot--ng",
+        "GH" => "rg-cb-cal-dot--gh",
+        "KE" => "rg-cb-cal-dot--ke",
+        "ZA" => "rg-cb-cal-dot--za",
+        "EG" => "rg-cb-cal-dot--eg",
+        _ => "rg-cb-cal-dot--default"
+    };
+
+    private static string GetFlag(string isoCode)
+    {
+        if (string.IsNullOrEmpty(isoCode) || isoCode.Length < 2) return "🏳";
+        var upper = isoCode[..2].ToUpperInvariant();
+        return string.Concat(upper.Select(c => char.ConvertFromUtf32(0x1F1E6 + c - 'A')));
+    }
+}

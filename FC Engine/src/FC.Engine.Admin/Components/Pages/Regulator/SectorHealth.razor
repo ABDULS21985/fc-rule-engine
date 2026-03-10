@@ -1,0 +1,284 @@
+@page "/regulator/sector-health"
+@attribute [Authorize(Policy = "RegulatorOnly")]
+@inject IComplianceHealthService ChsService
+@inject FC.Engine.Infrastructure.Charts.ChartJsInterop Charts
+
+<PageTitle>Sector Compliance Health</PageTitle>
+
+<h1 class="rg-page-title">Sector Compliance Health</h1>
+
+<div class="rg-card">
+    <div class="rg-controls">
+        <button class="rg-btn primary" @onclick="Load">Refresh</button>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(_error))
+    {
+        <p class="rg-danger-text">@_error</p>
+    }
+    else if (_loading)
+    {
+        <p class="rg-muted">Computing sector health scores...</p>
+    }
+    else if (_summary is not null)
+    {
+        <!-- ════════════════════════════════════════════════════
+             KPI CARDS
+             ════════════════════════════════════════════════════ -->
+        <div class="rg-chs-kpi-grid">
+            <div class="rg-chs-kpi-card">
+                <span class="rg-chs-kpi-value">@_summary.SectorAverage.ToString("F1")</span>
+                <span class="rg-chs-kpi-label">Sector Average CHS</span>
+            </div>
+            <div class="rg-chs-kpi-card">
+                <span class="rg-chs-kpi-value">@_summary.SectorMedian.ToString("F1")</span>
+                <span class="rg-chs-kpi-label">Sector Median</span>
+            </div>
+            <div class="rg-chs-kpi-card">
+                <span class="rg-chs-kpi-value rg-chs-kpi-value--success">@GetABRatedCount()</span>
+                <span class="rg-chs-kpi-label">A / A+ Rated</span>
+            </div>
+            <div class="rg-chs-kpi-card">
+                <span class="rg-chs-kpi-value rg-chs-kpi-value--danger">@_watchList.Count</span>
+                <span class="rg-chs-kpi-label">Watch List</span>
+            </div>
+        </div>
+
+        <!-- ════════════════════════════════════════════════════
+             CHARTS ROW
+             ════════════════════════════════════════════════════ -->
+        <div class="rg-grid rg-grid-2" style="margin-top:1rem;">
+            <div class="rg-card">
+                <h3 class="rg-chs-card-title">Rating Distribution</h3>
+                <div class="rg-chart">
+                    <canvas id="rg-rating-dist-chart"></canvas>
+                </div>
+            </div>
+            <div class="rg-card">
+                <h3 class="rg-chs-card-title">Sector CHS Trend (12 weeks)</h3>
+                <div class="rg-chart">
+                    <canvas id="rg-sector-trend-chart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- ════════════════════════════════════════════════════
+             CHS HEATMAP TABLE
+             ════════════════════════════════════════════════════ -->
+        <div style="margin-top:1rem;">
+            <h3 class="rg-chs-card-title">Institution CHS Heatmap</h3>
+            <div class="rg-table-wrap">
+                <table class="rg-table">
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>Institution</th>
+                            <th>Type</th>
+                            <th>Overall</th>
+                            <th>Rating</th>
+                            <th>Filing</th>
+                            <th>Data Quality</th>
+                            <th>Capital</th>
+                            <th>Governance</th>
+                            <th>Engagement</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @{ var rank = 0; }
+                        @foreach (var item in _heatmap)
+                        {
+                            rank++;
+                            <tr>
+                                <td>@rank</td>
+                                <td><strong>@item.InstitutionName</strong></td>
+                                <td><span class="rg-badge recd">@item.LicenceType</span></td>
+                                <td><span class="rg-chs-heat-cell @HeatClass(item.OverallScore)">@item.OverallScore.ToString("F0")</span></td>
+                                <td><span class="rg-badge @RatingBadgeClass(item.Rating)">@RatingLabel(item.Rating)</span></td>
+                                <td><span class="rg-chs-heat-cell @HeatClass(item.FilingTimeliness)">@item.FilingTimeliness.ToString("F0")</span></td>
+                                <td><span class="rg-chs-heat-cell @HeatClass(item.DataQuality)">@item.DataQuality.ToString("F0")</span></td>
+                                <td><span class="rg-chs-heat-cell @HeatClass(item.RegulatoryCapital)">@item.RegulatoryCapital.ToString("F0")</span></td>
+                                <td><span class="rg-chs-heat-cell @HeatClass(item.AuditGovernance)">@item.AuditGovernance.ToString("F0")</span></td>
+                                <td><span class="rg-chs-heat-cell @HeatClass(item.Engagement)">@item.Engagement.ToString("F0")</span></td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- ════════════════════════════════════════════════════
+             WATCH LIST
+             ════════════════════════════════════════════════════ -->
+        @if (_watchList.Count > 0)
+        {
+            <div style="margin-top:1rem;">
+                <h3 class="rg-chs-card-title">
+                    Watch List
+                    <span class="rg-badge open" style="margin-left:0.5rem;">@_watchList.Count</span>
+                </h3>
+                <div class="rg-table-wrap">
+                    <table class="rg-table">
+                        <thead>
+                            <tr>
+                                <th>Institution</th>
+                                <th>Type</th>
+                                <th>CHS</th>
+                                <th>Rating</th>
+                                <th>Trend</th>
+                                <th>Consecutive Declines</th>
+                                <th>4-Week Change</th>
+                                <th>Reason</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var item in _watchList)
+                            {
+                                <tr class="rg-chs-watch-row @(item.CurrentScore < 50 ? "rg-chs-watch-row--critical" : "rg-chs-watch-row--warning")">
+                                    <td><strong>@item.InstitutionName</strong></td>
+                                    <td><span class="rg-badge recd">@item.LicenceType</span></td>
+                                    <td><span class="rg-chs-heat-cell @HeatClass(item.CurrentScore)">@item.CurrentScore.ToString("F0")</span></td>
+                                    <td><span class="rg-badge @RatingBadgeClass(item.Rating)">@RatingLabel(item.Rating)</span></td>
+                                    <td>@TrendArrow(item.Trend) @item.Trend</td>
+                                    <td>@item.ConsecutiveDeclines</td>
+                                    <td>
+                                        <span class="@(item.ScoreChange >= 0 ? "" : "rg-danger-text")">
+                                            @(item.ScoreChange >= 0 ? "+" : "")@item.ScoreChange.ToString("F1")
+                                        </span>
+                                    </td>
+                                    <td>@item.WatchReason</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        }
+    }
+</div>
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
+
+    private string _regulatorCode = string.Empty;
+    private bool _loading = true;
+    private string? _error;
+    private bool _chartsRendered;
+
+    private SectorChsSummary? _summary;
+    private List<ChsWatchListItem> _watchList = new();
+    private List<ChsHeatmapItem> _heatmap = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        var state = await AuthState!;
+        _regulatorCode = state.User.FindFirst("RegulatorCode")?.Value?.Trim() ?? "CBN";
+        await Load();
+    }
+
+    private async Task Load()
+    {
+        if (string.IsNullOrWhiteSpace(_regulatorCode))
+        {
+            _error = "Regulator code claim is missing.";
+            return;
+        }
+
+        _loading = true;
+        _error = null;
+        _chartsRendered = false;
+
+        try
+        {
+            var summaryTask = ChsService.GetSectorSummary(_regulatorCode);
+            var watchTask = ChsService.GetWatchList(_regulatorCode);
+            var heatmapTask = ChsService.GetSectorHeatmap(_regulatorCode);
+
+            await Task.WhenAll(summaryTask, watchTask, heatmapTask);
+
+            _summary = summaryTask.Result;
+            _watchList = watchTask.Result;
+            _heatmap = heatmapTask.Result;
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _loading = false;
+            StateHasChanged();
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_summary is null || _chartsRendered) return;
+        _chartsRendered = true;
+
+        try
+        {
+            await RenderRatingDistChart();
+            await RenderSectorTrendChart();
+        }
+        catch { /* chart rendering is non-critical */ }
+    }
+
+    private async Task RenderRatingDistChart()
+    {
+        var ratings = new[] { ChsRating.APlus, ChsRating.A, ChsRating.B, ChsRating.C, ChsRating.D, ChsRating.F };
+        var labels = ratings.Select(r => RatingLabel(r)).ToArray();
+        var values = ratings.Select(r => (decimal)(_summary!.RatingDistribution.GetValueOrDefault(r, 0))).ToList();
+        var colors = new[] { "#006B3F", "#15803d", "#0891B2", "#C8A415", "#EA580C", "#DC2626" };
+
+        await Charts.RenderDonutWithColors("rg-rating-dist-chart", labels, values.ToArray(), colors);
+    }
+
+    private async Task RenderSectorTrendChart()
+    {
+        var trend = _summary!.SectorTrend;
+        var data = new TrendData
+        {
+            Title = "Sector Average CHS",
+            Labels = trend.Select(t => t.PeriodLabel).ToList(),
+            Datasets = new()
+            {
+                new TrendDataset
+                {
+                    Label = "Sector Average",
+                    Data = trend.Select(t => t.OverallScore).ToList(),
+                    BorderColor = "#0f766e",
+                    BackgroundColor = "#0f766e"
+                }
+            }
+        };
+
+        await Charts.RenderLineChart("rg-sector-trend-chart", data);
+    }
+
+    // ── Helpers ──
+
+    private int GetABRatedCount()
+    {
+        return _summary!.RatingDistribution.GetValueOrDefault(ChsRating.APlus, 0)
+             + _summary.RatingDistribution.GetValueOrDefault(ChsRating.A, 0);
+    }
+
+    private static string RatingLabel(ChsRating r) => FC.Engine.Infrastructure.Services.ComplianceHealthService.RatingLabel(r);
+    private static string TrendArrow(ChsTrend t) => FC.Engine.Infrastructure.Services.ComplianceHealthService.TrendArrow(t);
+
+    private static string HeatClass(decimal score) => score switch
+    {
+        >= 80 => "rg-chs-heat-cell--green",
+        >= 60 => "rg-chs-heat-cell--yellow",
+        _ => "rg-chs-heat-cell--red"
+    };
+
+    private static string RatingBadgeClass(ChsRating rating) => rating switch
+    {
+        ChsRating.APlus or ChsRating.A => "accept",
+        ChsRating.B => "final",
+        ChsRating.C => "query",
+        ChsRating.D => "response",
+        _ => "open"
+    };
+}

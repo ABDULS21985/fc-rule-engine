@@ -86,6 +86,9 @@ builder.Services.AddAuthorization(options =>
     options.AddPolicy("ApproverOrAdmin", policy => policy.RequireRole("Approver", "Admin"));
     options.AddPolicy("Authenticated", policy => policy.RequireAuthenticatedUser());
     options.AddPolicy("PlatformAdmin", policy => policy.RequireRole("PlatformAdmin"));
+    options.AddPolicy("RegulatorOnly", policy =>
+        policy.RequireAuthenticatedUser()
+            .RequireClaim("TenantType", TenantType.Regulator.ToString()));
 });
 
 builder.Services.AddHttpContextAccessor();
@@ -488,8 +491,85 @@ app.MapPost("/api/session/ping", (HttpContext ctx) =>
         : Results.Unauthorized())
     .RequireAuthorization();
 
+// ── Regulator API Endpoints ──────────────────────────────────────────────────
+
+app.MapGet("/regulator/workspace/{projectId:int}/report", async (
+    int projectId,
+    HttpContext context,
+    ITenantContext tenantContext,
+    IExaminationWorkspaceService workspaceService) =>
+{
+    if (!tenantContext.CurrentTenantId.HasValue)
+        return Results.Unauthorized();
+
+    var regulatorCode = context.User.FindFirst("RegulatorCode")?.Value;
+    if (string.IsNullOrWhiteSpace(regulatorCode))
+        return Results.BadRequest(new { error = "Missing regulator context." });
+
+    var pdf = await workspaceService.GenerateReportPdf(
+        tenantContext.CurrentTenantId.Value, regulatorCode, projectId, context.RequestAborted);
+    var fileName = $"examination-report-{projectId}-{DateTime.UtcNow:yyyyMMddHHmmss}.pdf";
+    return Results.File(pdf, "application/pdf", fileName);
+}).RequireAuthorization("RegulatorOnly");
+
+app.MapGet("/regulator/workspace/{projectId:int}/intelligence-pack", async (
+    int projectId,
+    HttpContext context,
+    ITenantContext tenantContext,
+    IExaminationWorkspaceService workspaceService) =>
+{
+    if (!tenantContext.CurrentTenantId.HasValue)
+        return Results.Unauthorized();
+
+    var regulatorCode = context.User.FindFirst("RegulatorCode")?.Value;
+    if (string.IsNullOrWhiteSpace(regulatorCode))
+        return Results.BadRequest(new { error = "Missing regulator context." });
+
+    var pdf = await workspaceService.GenerateIntelligencePackPdf(
+        tenantContext.CurrentTenantId.Value, regulatorCode, projectId, context.RequestAborted);
+    var fileName = $"intelligence-pack-{projectId}-{DateTime.UtcNow:yyyyMMddHHmmss}.pdf";
+    return Results.File(pdf, "application/pdf", fileName);
+}).RequireAuthorization("RegulatorOnly");
+
+app.MapGet("/regulator/workspace/{projectId:int}/evidence/{evidenceId:int}", async (
+    int projectId,
+    int evidenceId,
+    ITenantContext tenantContext,
+    IExaminationWorkspaceService workspaceService,
+    HttpContext context) =>
+{
+    if (!tenantContext.CurrentTenantId.HasValue)
+        return Results.Unauthorized();
+
+    var file = await workspaceService.DownloadEvidence(
+        tenantContext.CurrentTenantId.Value, projectId, evidenceId, context.RequestAborted);
+    return file is null
+        ? Results.NotFound()
+        : Results.File(file.Content, file.ContentType, file.FileName);
+}).RequireAuthorization("RegulatorOnly");
+
+app.MapGet("/regulator/stress-test/report/pdf", async (
+    HttpContext context,
+    IStressTestService stressTestService) =>
+{
+    var regulatorCode = context.User.FindFirst("RegulatorCode")?.Value;
+    if (string.IsNullOrWhiteSpace(regulatorCode))
+        return Results.BadRequest(new { error = "Missing regulator context." });
+
+    var scenarioParam = context.Request.Query["scenario"].FirstOrDefault() ?? "NgfsOrderly";
+    if (!Enum.TryParse<StressScenarioType>(scenarioParam, out var scenarioType))
+        scenarioType = StressScenarioType.NgfsOrderly;
+
+    var report = await stressTestService.RunStressTestAsync(
+        regulatorCode,
+        new StressTestRequest { ScenarioType = scenarioType },
+        context.RequestAborted);
+    var pdf = await stressTestService.GenerateReportPdfAsync(regulatorCode, report, context.RequestAborted);
+    var fileName = $"stress-test-{scenarioType}-{DateTime.UtcNow:yyyyMMddHHmmss}.pdf";
+    return Results.File(pdf, "application/pdf", fileName);
+}).RequireAuthorization("RegulatorOnly");
+
 app.MapRazorComponents<FC.Engine.Admin.Components.App>()
-    .AddInteractiveServerRenderMode()
-    .WithStaticAssets();
+    .AddInteractiveServerRenderMode();
 
 app.Run();

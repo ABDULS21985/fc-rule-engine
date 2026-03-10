@@ -1,0 +1,131 @@
+@page "/regulator/whistleblower/report"
+@layout FC.Engine.Admin.Components.Layout.LoginLayout
+@inject IWhistleblowerService WhistleblowerService
+@inject IDbConnectionFactory Db
+
+<PageTitle>Confidential Report Submission</PageTitle>
+
+<div class="rg-public-shell">
+    <div class="rg-public-card rg-wb-card">
+        <div class="rg-surveillance-kicker">Protected Channel</div>
+        <h1 class="rg-page-title">Confidential Report Submission</h1>
+        <p class="rg-muted">
+            This channel is anonymous by design. No reporter name, email address, phone number, or IP address is captured. You will receive a one-way status token once your case is accepted.
+        </p>
+
+        @if (_receipt is not null)
+        {
+            <div class="rg-wb-receipt">
+                <h2>Report submitted</h2>
+                <p><strong>Case reference:</strong> @_receipt.CaseReference</p>
+                <p><strong>Status link:</strong> @_receipt.StatusCheckUrl</p>
+                <p class="rg-muted">Store the anonymous token safely. It cannot be recovered once you leave this page.</p>
+            </div>
+        }
+        else
+        {
+            @if (!string.IsNullOrWhiteSpace(_error))
+            {
+                <div class="rg-surveillance-banner rg-surveillance-banner-error">@_error</div>
+            }
+
+            <div class="rg-controls rg-wb-form">
+                <label>
+                    Regulator
+                    <select @bind="_regulatorCode">
+                        <option value="CBN">CBN - Central Bank of Nigeria</option>
+                        <option value="SEC">SEC - Securities and Exchange Commission</option>
+                        <option value="NAICOM">NAICOM - National Insurance Commission</option>
+                        <option value="NFIU">NFIU - Nigerian Financial Intelligence Unit</option>
+                    </select>
+                </label>
+
+                <label>
+                    Category of concern
+                    <select @bind="_category">
+                        @foreach (var category in Enum.GetValues<WhistleblowerCategory>())
+                        {
+                            <option value="@category">@category</option>
+                        }
+                    </select>
+                </label>
+
+                <label>
+                    Alleged institution (optional)
+                    <input @bind="_institutionName" placeholder="Institution name if known" />
+                </label>
+
+                <label>
+                    Summary of concern
+                    <textarea rows="8" maxlength="2000" @bind="_summary" placeholder="Describe the conduct, dates, amounts, parties, and methods involved."></textarea>
+                </label>
+
+                <label>
+                    Evidence description (optional)
+                    <textarea rows="3" @bind="_evidenceDescription" placeholder="Describe any records, screenshots, or transaction evidence available."></textarea>
+                </label>
+
+                <button class="rg-btn primary" @onclick="SubmitAsync" disabled="@_submitting">
+                    @(_submitting ? "Submitting..." : "Submit confidentially")
+                </button>
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    private string _regulatorCode = "CBN";
+    private WhistleblowerCategory _category = WhistleblowerCategory.Other;
+    private string _institutionName = string.Empty;
+    private string _summary = string.Empty;
+    private string _evidenceDescription = string.Empty;
+    private bool _submitting;
+    private string? _error;
+    private WhistleblowerSubmissionReceipt? _receipt;
+
+    private async Task SubmitAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_summary) || _summary.Trim().Length < 50)
+        {
+            _error = "Provide at least 50 characters of detail so the report can be assessed.";
+            return;
+        }
+
+        try
+        {
+            _submitting = true;
+            _error = null;
+
+            int? institutionId = null;
+            if (!string.IsNullOrWhiteSpace(_institutionName))
+            {
+                using var conn = await Db.CreateConnectionAsync(null);
+                institutionId = await conn.ExecuteScalarAsync<int?>(
+                    """
+                    SELECT TOP 1 Id
+                    FROM dbo.institutions
+                    WHERE InstitutionName LIKE @InstitutionName
+                    ORDER BY InstitutionName
+                    """,
+                    new { InstitutionName = $"%{_institutionName.Trim()}%" });
+            }
+
+            _receipt = await WhistleblowerService.SubmitAsync(new WhistleblowerSubmission(
+                _regulatorCode,
+                institutionId,
+                string.IsNullOrWhiteSpace(_institutionName) ? null : _institutionName.Trim(),
+                _category,
+                _summary.Trim(),
+                string.IsNullOrWhiteSpace(_evidenceDescription) ? null : _evidenceDescription.Trim(),
+                Array.Empty<string>()));
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _submitting = false;
+        }
+    }
+}

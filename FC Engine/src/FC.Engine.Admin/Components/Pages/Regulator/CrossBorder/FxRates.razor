@@ -1,0 +1,334 @@
+@page "/regulator/cross-border/fx-rates"
+@attribute [Authorize(Policy = "RegulatorOnly")]
+@inject ICurrencyConversionEngine FxEngine
+@inject NavigationManager Nav
+
+<PageTitle>FX Rates — RegOS™</PageTitle>
+
+<div class="rg-cb-hero">
+    <div class="rg-cb-hero-text">
+        <div class="rg-cb-kicker">Cross-Border Harmonisation</div>
+        <h1 class="rg-cb-hero-title">FX Rate Management</h1>
+        <p class="rg-cb-hero-sub">
+            Manage exchange rates for cross-border consolidation and data flow currency conversion.
+            View cross-rate matrices and rate history.
+        </p>
+    </div>
+</div>
+
+@* ── Tabs ── *@
+<div class="rg-cb-tabs">
+    <button class="rg-cb-tab @(_tab == "matrix" ? "rg-cb-tab--active" : "")" @onclick='() => _tab = "matrix"'>Cross-Rate Matrix</button>
+    <button class="rg-cb-tab @(_tab == "convert" ? "rg-cb-tab--active" : "")" @onclick='() => _tab = "convert"'>Convert</button>
+    <button class="rg-cb-tab @(_tab == "add" ? "rg-cb-tab--active" : "")" @onclick='() => _tab = "add"'>Add Rate</button>
+    <button class="rg-cb-tab @(_tab == "history" ? "rg-cb-tab--active" : "")" @onclick='() => _tab = "history"'>History</button>
+</div>
+
+@if (_tab == "matrix")
+{
+    @* ── Cross-Rate Matrix ── *@
+    <div class="rg-card" style="padding:1rem;">
+        <div class="rg-cb-section-head">
+            <h3 class="rg-cb-section-title">Cross-Rate Matrix</h3>
+            <div class="rg-cb-filters" style="margin-bottom:0;">
+                <label style="font-size:0.78rem;color:var(--rg-muted);">Date:</label>
+                <input type="date" class="rg-cb-filter-input" style="width:140px;" @bind="_matrixDate" />
+                <button class="rg-btn" @onclick="LoadMatrix">Load</button>
+            </div>
+        </div>
+
+        @if (_matrixLoading)
+        {
+            <p class="rg-muted">Loading rates…</p>
+        }
+        else
+        {
+            <div class="rg-cb-matrix-wrap">
+                <table class="rg-cb-matrix">
+                    <thead>
+                        <tr>
+                            <th></th>
+                            @foreach (var c in _currencies)
+                            {
+                                <th>@c</th>
+                            }
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var baseCur in _currencies)
+                        {
+                            <tr>
+                                <th>@baseCur</th>
+                                @foreach (var quoteCur in _currencies)
+                                {
+                                    if (baseCur == quoteCur)
+                                    {
+                                        <td class="rg-cb-matrix-diag">1.0000</td>
+                                    }
+                                    else
+                                    {
+                                        var key = $"{baseCur}/{quoteCur}";
+                                        var rate = _matrixRates.GetValueOrDefault(key);
+                                        <td>@(rate > 0 ? rate.ToString("F4") : "—")</td>
+                                    }
+                                }
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </div>
+}
+else if (_tab == "convert")
+{
+    @* ── Converter ── *@
+    <div class="rg-card" style="padding:1rem;">
+        <h3 class="rg-section-title">Currency Converter</h3>
+        <div class="rg-cb-form-row">
+            <div class="rg-cb-field">
+                <label>From</label>
+                <select @bind="_convertFrom">
+                    @foreach (var c in _currencies) { <option value="@c">@c</option> }
+                </select>
+            </div>
+            <div class="rg-cb-field">
+                <label>To</label>
+                <select @bind="_convertTo">
+                    @foreach (var c in _currencies) { <option value="@c">@c</option> }
+                </select>
+            </div>
+            <div class="rg-cb-field">
+                <label>Amount</label>
+                <input type="number" step="0.01" @bind="_convertAmount" />
+            </div>
+            <div class="rg-cb-field" style="justify-content:flex-end;">
+                <button class="rg-btn primary" @onclick="ConvertCurrency">Convert</button>
+            </div>
+        </div>
+
+        @if (_convertResult is not null)
+        {
+            <div style="margin-top:1rem;padding:1rem;border-radius:10px;background:#f0fdfa;border:1px solid #99f6e4;text-align:center;">
+                <div style="font-size:0.78rem;color:var(--rg-muted);">@_convertResult.SourceAmount.ToString("N2") @_convertResult.SourceCurrency =</div>
+                <div style="font-size:1.65rem;font-weight:800;color:var(--rg-primary);">@_convertResult.ConvertedValue.ToString("N2") @_convertResult.TargetCurrency</div>
+                <div style="font-size:0.74rem;color:var(--rg-muted);">
+                    Rate: @_convertResult.FxRate.ToString("F6") · @_convertResult.RateSource · @_convertResult.RateDate.ToString("dd MMM yyyy")
+                </div>
+            </div>
+        }
+    </div>
+}
+else if (_tab == "add")
+{
+    @* ── Add Rate ── *@
+    <div class="rg-card" style="padding:1rem;">
+        <h3 class="rg-section-title">Insert / Update FX Rate</h3>
+        <div class="rg-cb-form-row">
+            <div class="rg-cb-field">
+                <label>Base Currency</label>
+                <select @bind="_addBase">
+                    @foreach (var c in _currencies) { <option value="@c">@c</option> }
+                </select>
+            </div>
+            <div class="rg-cb-field">
+                <label>Quote Currency</label>
+                <select @bind="_addQuote">
+                    @foreach (var c in _currencies) { <option value="@c">@c</option> }
+                </select>
+            </div>
+            <div class="rg-cb-field">
+                <label>Rate Date</label>
+                <input type="date" @bind="_addDate" />
+            </div>
+        </div>
+        <div class="rg-cb-form-row">
+            <div class="rg-cb-field">
+                <label>Rate</label>
+                <input type="number" step="0.000001" @bind="_addRate" />
+            </div>
+            <div class="rg-cb-field">
+                <label>Source</label>
+                <input @bind="_addSource" placeholder="CBN_OFFICIAL" />
+            </div>
+            <div class="rg-cb-field">
+                <label>Rate Type</label>
+                <select @bind="_addType">
+                    <option value="@FxRateType.PeriodEnd">Period End</option>
+                    <option value="@FxRateType.Average">Average</option>
+                    <option value="@FxRateType.Spot">Spot</option>
+                </select>
+            </div>
+        </div>
+        <div class="rg-controls" style="margin-top:0.5rem;">
+            <button class="rg-btn primary" @onclick="AddRate" disabled="@_addSaving">
+                @(_addSaving ? "Saving…" : "Save Rate")
+            </button>
+        </div>
+        @if (!string.IsNullOrWhiteSpace(_addMessage))
+        {
+            <p style="margin-top:0.5rem;font-size:0.82rem;color:@(_addError ? "var(--rg-danger)" : "#15803d");">@_addMessage</p>
+        }
+    </div>
+}
+else if (_tab == "history")
+{
+    @* ── Rate History ── *@
+    <div class="rg-card" style="padding:1rem;">
+        <h3 class="rg-section-title">Rate History</h3>
+        <div class="rg-cb-form-row">
+            <div class="rg-cb-field">
+                <label>Base</label>
+                <select @bind="_histBase">
+                    @foreach (var c in _currencies) { <option value="@c">@c</option> }
+                </select>
+            </div>
+            <div class="rg-cb-field">
+                <label>Quote</label>
+                <select @bind="_histQuote">
+                    @foreach (var c in _currencies) { <option value="@c">@c</option> }
+                </select>
+            </div>
+            <div class="rg-cb-field">
+                <label>From</label>
+                <input type="date" @bind="_histFrom" />
+            </div>
+            <div class="rg-cb-field">
+                <label>To</label>
+                <input type="date" @bind="_histTo" />
+            </div>
+            <div class="rg-cb-field" style="justify-content:flex-end;">
+                <button class="rg-btn primary" @onclick="LoadHistory">Load</button>
+            </div>
+        </div>
+
+        @if (_historyRates.Count > 0)
+        {
+            <div class="rg-table-wrap" style="margin-top:0.75rem;">
+                <table class="rg-table">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Rate</th>
+                            <th>Inverse</th>
+                            <th>Source</th>
+                            <th>Type</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var r in _historyRates)
+                        {
+                            <tr>
+                                <td>@r.RateDate.ToString("dd MMM yyyy")</td>
+                                <td style="font-family:monospace;font-weight:600;">@r.Rate.ToString("F6")</td>
+                                <td style="font-family:monospace;">@r.InverseRate.ToString("F6")</td>
+                                <td>@r.RateSource</td>
+                                <td><StatusPill Label="@r.RateType" Variant="info" /></td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </div>
+}
+
+@code {
+    private string _tab = "matrix";
+    private readonly string[] _currencies = ["NGN", "GHS", "KES", "ZAR", "EGP", "USD"];
+
+    // Matrix
+    private DateOnly _matrixDate = DateOnly.FromDateTime(DateTime.UtcNow);
+    private bool _matrixLoading;
+    private Dictionary<string, decimal> _matrixRates = new();
+
+    // Convert
+    private string _convertFrom = "NGN";
+    private string _convertTo = "USD";
+    private decimal _convertAmount = 1000;
+    private ConvertedAmount? _convertResult;
+
+    // Add Rate
+    private string _addBase = "NGN";
+    private string _addQuote = "USD";
+    private DateOnly _addDate = DateOnly.FromDateTime(DateTime.UtcNow);
+    private decimal _addRate;
+    private string _addSource = "CBN_OFFICIAL";
+    private FxRateType _addType = FxRateType.Spot;
+    private bool _addSaving;
+    private string? _addMessage;
+    private bool _addError;
+
+    // History
+    private string _histBase = "NGN";
+    private string _histQuote = "USD";
+    private DateOnly _histFrom = DateOnly.FromDateTime(DateTime.UtcNow.AddMonths(-3));
+    private DateOnly _histTo = DateOnly.FromDateTime(DateTime.UtcNow);
+    private List<FxRateDto> _historyRates = [];
+
+    protected override async Task OnInitializedAsync() => await LoadMatrix();
+
+    private async Task LoadMatrix()
+    {
+        _matrixLoading = true;
+        StateHasChanged();
+
+        _matrixRates.Clear();
+        foreach (var baseCur in _currencies)
+        {
+            foreach (var quoteCur in _currencies)
+            {
+                if (baseCur == quoteCur) continue;
+                try
+                {
+                    var rate = await FxEngine.GetRateAsync(baseCur, quoteCur, _matrixDate);
+                    _matrixRates[$"{baseCur}/{quoteCur}"] = rate;
+                }
+                catch { /* No rate available */ }
+            }
+        }
+
+        _matrixLoading = false;
+        StateHasChanged();
+    }
+
+    private async Task ConvertCurrency()
+    {
+        try
+        {
+            _convertResult = await FxEngine.ConvertAsync(_convertAmount, _convertFrom, _convertTo, _matrixDate);
+        }
+        catch { _convertResult = null; }
+        StateHasChanged();
+    }
+
+    private async Task AddRate()
+    {
+        _addSaving = true;
+        _addMessage = null;
+        _addError = false;
+        StateHasChanged();
+
+        try
+        {
+            await FxEngine.UpsertRateAsync(_addBase, _addQuote, _addDate, _addRate, _addSource, _addType, 1);
+            _addMessage = "Rate saved successfully.";
+        }
+        catch (Exception ex)
+        {
+            _addMessage = ex.Message;
+            _addError = true;
+        }
+        finally { _addSaving = false; StateHasChanged(); }
+    }
+
+    private async Task LoadHistory()
+    {
+        try
+        {
+            _historyRates = (await FxEngine.GetRateHistoryAsync(_histBase, _histQuote, _histFrom, _histTo)).ToList();
+        }
+        catch { _historyRates = []; }
+        StateHasChanged();
+    }
+}

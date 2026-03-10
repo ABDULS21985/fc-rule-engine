@@ -1,0 +1,267 @@
+@page "/regulator/inbox/{SubmissionId:int}"
+@attribute [Authorize(Policy = "RegulatorOnly")]
+@inject IRegulatorInboxService InboxService
+@inject IEntityBenchmarkingService BenchmarkingService
+
+<PageTitle>Submission Review</PageTitle>
+
+@if (_loading)
+{
+    <p class="rg-muted">Loading submission...</p>
+}
+else if (_detail is null)
+{
+    <div class="rg-card">
+        <h1 class="rg-page-title">Submission Review</h1>
+        <p class="rg-danger-text">Submission not found in your jurisdiction.</p>
+        <a class="rg-btn" href="/regulator/inbox">Back to Inbox</a>
+    </div>
+}
+else
+{
+    <h1 class="rg-page-title">Review Submission #@SubmissionId</h1>
+
+    <div class="rg-grid rg-grid-2">
+        <section class="rg-card">
+            <h3 style="margin-top:0;">Overview</h3>
+            <p><strong>Institution:</strong> @_detail.Header.InstitutionName</p>
+            <p><strong>Licence:</strong> @_detail.Header.LicenceType</p>
+            <p><strong>Module:</strong> @_detail.Header.ModuleCode</p>
+            <p><strong>Period:</strong> @_detail.Header.PeriodLabel</p>
+            <p><strong>Submitted:</strong> @_detail.Header.SubmittedAt.ToString("dd MMM yyyy HH:mm")</p>
+            <p><strong>Receipt Status:</strong> <span class="rg-badge @ReceiptCss(_detail.Header.ReceiptStatus)">@_detail.Header.ReceiptStatus</span></p>
+
+            <div class="rg-controls">
+                <button class="rg-btn" @onclick='() => SetReceiptStatus(RegulatorReceiptStatus.UnderReview)'>Set Under Review</button>
+                <button class="rg-btn" @onclick='() => SetReceiptStatus(RegulatorReceiptStatus.Accepted)'>Set Accepted</button>
+                <button class="rg-btn primary" @onclick='() => SetReceiptStatus(RegulatorReceiptStatus.FinalAccepted)'>Set Final Accepted</button>
+                <button class="rg-btn" @onclick='() => SetReceiptStatus(RegulatorReceiptStatus.ResponseReceived)'>Mark Response Received</button>
+            </div>
+
+            @if (!string.IsNullOrWhiteSpace(_statusMessage))
+            {
+                <p class="rg-muted">@_statusMessage</p>
+            }
+        </section>
+
+        <section class="rg-card">
+            <h3 style="margin-top:0;">Top Validation Errors</h3>
+            @if (_detail.TopValidationErrors.Count == 0)
+            {
+                <p class="rg-muted">No validation errors found.</p>
+            }
+            else
+            {
+                <div class="rg-table-wrap">
+                    <table class="rg-table">
+                        <thead>
+                            <tr><th>Rule</th><th>Field</th><th>Count</th></tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var row in _detail.TopValidationErrors)
+                            {
+                                <tr>
+                                    <td>@row.RuleId</td>
+                                    <td>@row.Field</td>
+                                    <td>@row.Count</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </section>
+    </div>
+
+    @if (_benchmark is not null)
+    {
+        <section class="rg-card" style="margin-top:0.8rem;">
+            <h3 style="margin-top:0;">Entity Benchmarking</h3>
+            <div class="rg-grid rg-grid-3">
+                <div><strong>CAR</strong><br />@_benchmark.CarValue.ToString("0.##")% (peer avg @_benchmark.CarPeerAverage.ToString("0.##")%)</div>
+                <div><strong>NPL</strong><br />@_benchmark.NplValue.ToString("0.##")% (peer avg @_benchmark.NplPeerAverage.ToString("0.##")%)</div>
+                <div><strong>Timeliness</strong><br />@_benchmark.TimelinessScore.ToString("0.##")% (peer avg @_benchmark.TimelinessPeerAverage.ToString("0.##")%)</div>
+            </div>
+            <div class="rg-grid rg-grid-2" style="margin-top:0.55rem;">
+                <div><strong>CAR P25/P50/P75:</strong> @_benchmark.CarPeerP25.ToString("0.##") / @_benchmark.CarPeerMedian.ToString("0.##") / @_benchmark.CarPeerP75.ToString("0.##")</div>
+                <div><strong>Data Quality:</strong> @_benchmark.DataQualityScore.ToString("0.##")% (peer avg @_benchmark.DataQualityPeerAverage.ToString("0.##")%)</div>
+            </div>
+        </section>
+    }
+
+    <section class="rg-card" style="margin-top:0.8rem;">
+        <h3 style="margin-top:0;">Raise Query</h3>
+        <div class="rg-controls">
+            <input placeholder="Field code (optional)" @bind="_queryFieldCode" />
+            <select @bind="_queryPriority">
+                <option value="Normal">Normal</option>
+                <option value="High">High</option>
+                <option value="Critical">Critical</option>
+                <option value="Low">Low</option>
+            </select>
+        </div>
+        <div class="rg-controls">
+            <textarea placeholder="Describe your query" @bind="_queryText"></textarea>
+            <button class="rg-btn danger" @onclick="RaiseQuery">Raise Query</button>
+        </div>
+    </section>
+
+    <section class="rg-card" style="margin-top:0.8rem;">
+        <h3 style="margin-top:0;">Query History</h3>
+        @if (_detail.Queries.Count == 0)
+        {
+            <p class="rg-muted">No queries raised yet.</p>
+        }
+        else
+        {
+            <div class="rg-table-wrap">
+                <table class="rg-table">
+                    <thead>
+                        <tr>
+                            <th>Raised At</th>
+                            <th>Field</th>
+                            <th>Priority</th>
+                            <th>Status</th>
+                            <th>Query</th>
+                            <th>Response</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var query in _detail.Queries)
+                        {
+                            <tr>
+                                <td>@query.RaisedAt.ToString("dd MMM yyyy HH:mm")</td>
+                                <td>@(query.FieldCode ?? "General")</td>
+                                <td>@query.Priority</td>
+                                <td>@query.Status</td>
+                                <td>@query.QueryText</td>
+                                <td>@(string.IsNullOrWhiteSpace(query.ResponseText) ? "-" : query.ResponseText)</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </section>
+}
+
+@code {
+    [Parameter] public int SubmissionId { get; set; }
+    [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
+
+    private Guid _tenantId;
+    private int _userId;
+    private string _regulatorCode = string.Empty;
+
+    private bool _loading = true;
+    private string? _statusMessage;
+    private RegulatorSubmissionDetail? _detail;
+    private EntityBenchmarkResult? _benchmark;
+
+    private string _queryFieldCode = string.Empty;
+    private string _queryText = string.Empty;
+    private ExaminerQueryPriority _queryPriority = ExaminerQueryPriority.Normal;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await ResolveContext();
+        await LoadDetail();
+    }
+
+    private async Task ResolveContext()
+    {
+        var state = await AuthState!;
+
+        var tenantClaim = state.User.FindFirst("TenantId")?.Value;
+        var regulatorClaim = state.User.FindFirst("RegulatorCode")?.Value;
+        var userClaim = state.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+        if (!Guid.TryParse(tenantClaim, out _tenantId)
+            || !int.TryParse(userClaim, out _userId)
+            || string.IsNullOrWhiteSpace(regulatorClaim))
+        {
+            throw new InvalidOperationException("Regulator identity claims are incomplete for this session.");
+        }
+
+        _regulatorCode = regulatorClaim.Trim();
+    }
+
+    private async Task LoadDetail()
+    {
+        _loading = true;
+        _benchmark = null;
+
+        try
+        {
+            _detail = await InboxService.GetSubmissionDetail(_tenantId, _regulatorCode, SubmissionId);
+            if (_detail is not null)
+            {
+                _benchmark = await BenchmarkingService.GetEntityBenchmark(
+                    _regulatorCode,
+                    _detail.Header.InstitutionId);
+            }
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task SetReceiptStatus(RegulatorReceiptStatus status)
+    {
+        try
+        {
+            await InboxService.UpdateReceiptStatus(_tenantId, SubmissionId, status, _userId, null);
+            _statusMessage = $"Receipt status updated to {status}.";
+            await LoadDetail();
+        }
+        catch (Exception ex)
+        {
+            _statusMessage = ex.Message;
+        }
+    }
+
+    private async Task RaiseQuery()
+    {
+        if (string.IsNullOrWhiteSpace(_queryText))
+        {
+            _statusMessage = "Query text is required.";
+            return;
+        }
+
+        try
+        {
+            await InboxService.RaiseQuery(
+                _tenantId,
+                SubmissionId,
+                string.IsNullOrWhiteSpace(_queryFieldCode) ? null : _queryFieldCode,
+                _queryText,
+                _userId,
+                _queryPriority);
+
+            _queryFieldCode = string.Empty;
+            _queryText = string.Empty;
+            _queryPriority = ExaminerQueryPriority.Normal;
+            _statusMessage = "Query raised successfully.";
+            await LoadDetail();
+        }
+        catch (Exception ex)
+        {
+            _statusMessage = ex.Message;
+        }
+    }
+
+    private static string ReceiptCss(RegulatorReceiptStatus status)
+    {
+        return status switch
+        {
+            RegulatorReceiptStatus.Received => "recd",
+            RegulatorReceiptStatus.UnderReview => "review",
+            RegulatorReceiptStatus.Accepted => "accept",
+            RegulatorReceiptStatus.FinalAccepted => "final",
+            RegulatorReceiptStatus.QueriesRaised => "query",
+            RegulatorReceiptStatus.ResponseReceived => "response",
+            _ => "recd"
+        };
+    }
+}

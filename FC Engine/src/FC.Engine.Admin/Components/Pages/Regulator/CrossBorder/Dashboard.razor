@@ -1,0 +1,305 @@
+@page "/regulator/cross-border"
+@attribute [Authorize(Policy = "RegulatorOnly")]
+@inject IPanAfricanDashboardService DashboardService
+@inject IDivergenceDetectionService DivergenceService
+@inject NavigationManager Nav
+@using FC.Engine.Domain.Entities
+@using FC.Engine.Infrastructure.Metadata
+@inject MetadataDbContext Db
+@using Microsoft.EntityFrameworkCore
+
+<PageTitle>Pan-African Dashboard — RegOS™</PageTitle>
+
+<div class="rg-cb-hero">
+    <div class="rg-cb-hero-text">
+        <div class="rg-cb-kicker">RG-41 · Cross-Border Harmonisation</div>
+        <h1 class="rg-cb-hero-title">Pan-African Regulatory Dashboard</h1>
+        <p class="rg-cb-hero-sub">
+            Consolidated compliance view across all jurisdictions. Monitor regulatory divergences,
+            FX exposure, and upcoming deadlines for multinational financial groups.
+        </p>
+    </div>
+    <div class="rg-cb-hero-actions">
+        @if (_selectedGroupId > 0)
+        {
+            <button class="rg-btn primary" @onclick="RefreshData">Refresh</button>
+        }
+    </div>
+</div>
+
+@* ── Group Selector ── *@
+<div class="rg-cb-group-strip">
+    <span style="font-size:1.3rem;" aria-hidden="true">🏛</span>
+    <div>
+        <div class="rg-cb-group-name">Financial Group</div>
+        <div class="rg-cb-group-detail">Select a group to view cross-border compliance</div>
+    </div>
+    <select class="rg-cb-group-select" @onchange="OnGroupChanged">
+        <option value="0">— Select group —</option>
+        @foreach (var g in _groups)
+        {
+            <option value="@g.Id" selected="@(g.Id == _selectedGroupId)">@g.GroupName (@g.GroupCode)</option>
+        }
+    </select>
+</div>
+
+@if (_loading)
+{
+    <p class="rg-muted">Loading dashboard…</p>
+}
+else if (_overview is null && _selectedGroupId > 0)
+{
+    <div class="rg-cb-empty">
+        <div class="rg-cb-empty-icon">📊</div>
+        <div class="rg-cb-empty-title">No Data Available</div>
+        <div class="rg-cb-empty-desc">No compliance data found for this group. Ensure subsidiaries and jurisdictions are configured.</div>
+    </div>
+}
+else if (_overview is not null)
+{
+    @* ── KPI Cards ── *@
+    <div class="rg-cb-kpis">
+        <div class="rg-card rg-cb-kpi rg-cb-kpi--success">
+            <div class="rg-cb-kpi-value rg-cb-kpi-value--success">@_overview.SubsidiariesCompliant</div>
+            <div class="rg-cb-kpi-label">Compliant Subsidiaries</div>
+        </div>
+        <div class="rg-card rg-cb-kpi rg-cb-kpi--danger">
+            <div class="rg-cb-kpi-value rg-cb-kpi-value--danger">@_overview.SubsidiariesInBreach</div>
+            <div class="rg-cb-kpi-label">In Breach</div>
+        </div>
+        <div class="rg-card rg-cb-kpi rg-cb-kpi--warning">
+            <div class="rg-cb-kpi-value rg-cb-kpi-value--warning">@_overview.OpenDivergences</div>
+            <div class="rg-cb-kpi-label">Open Divergences</div>
+        </div>
+        <div class="rg-card rg-cb-kpi rg-cb-kpi--info">
+            <div class="rg-cb-kpi-value rg-cb-kpi-value--info">@_overview.UpcomingDeadlines</div>
+            <div class="rg-cb-kpi-label">Upcoming Deadlines</div>
+        </div>
+    </div>
+
+    @* ── Consolidated Metrics ── *@
+    <div class="rg-cb-metrics-panel">
+        <div class="rg-card rg-cb-metric-card">
+            <div class="rg-cb-metric-title">Consolidated CAR</div>
+            <div class="rg-cb-gauge">
+                @{ var carPct = (double)(_overview.ConsolidatedCAR ?? 0); }
+                <svg viewBox="0 0 120 120">
+                    <circle cx="60" cy="60" r="50" fill="none" stroke="#e2e8f0" stroke-width="10" />
+                    <circle cx="60" cy="60" r="50" fill="none"
+                            stroke="@(carPct >= 15 ? "#15803d" : carPct >= 10 ? "#b45309" : "#b91c1c")"
+                            stroke-width="10"
+                            stroke-dasharray="@((carPct / 30.0 * 314).ToString("F0")) 314"
+                            stroke-linecap="round"
+                            transform="rotate(-90 60 60)" />
+                </svg>
+                <div class="rg-cb-gauge-value">
+                    <span class="rg-cb-gauge-number">@((_overview.ConsolidatedCAR ?? 0).ToString("F1"))%</span>
+                    <span class="rg-cb-gauge-label">Target 15%</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="rg-card rg-cb-metric-card">
+            <div class="rg-cb-metric-title">Total Subsidiaries</div>
+            <div style="font-size:2rem;font-weight:800;color:var(--rg-primary);margin:0.5rem 0;">@_overview.TotalSubsidiaries</div>
+            <div style="font-size:0.78rem;color:var(--rg-muted);">Across @_overview.TotalJurisdictions jurisdictions</div>
+        </div>
+
+        <div class="rg-card rg-cb-metric-card">
+            <div class="rg-cb-metric-title">Base Currency</div>
+            <div style="font-size:1.5rem;font-weight:800;color:var(--rg-text);margin:0.5rem 0;">@_overview.BaseCurrency</div>
+            <div style="font-size:0.78rem;color:var(--rg-muted);">@_overview.GroupCode · @_overview.GroupName</div>
+        </div>
+    </div>
+
+    @* ── Jurisdiction Compliance Grid ── *@
+    <div class="rg-cb-section-head">
+        <h2 class="rg-cb-section-title">Jurisdiction Compliance</h2>
+        <button class="rg-btn" @onclick='() => Nav.NavigateTo("/regulator/cross-border/divergences")'>View Divergences →</button>
+    </div>
+
+    <div class="rg-cb-jurisdiction-grid">
+        @foreach (var j in _overview.ByJurisdiction)
+        {
+            var cardClass = j.AllCompliant ? "rg-cb-jcard--compliant"
+                : j.OpenDivergences > 0 ? "rg-cb-jcard--divergence"
+                : "rg-cb-jcard--breach";
+
+            <div class="rg-card rg-cb-jcard @cardClass" @onclick='() => Nav.NavigateTo($"/regulator/cross-border/mappings?jurisdiction={j.JurisdictionCode}")'>
+                <div class="rg-cb-jcard-head">
+                    <span class="rg-cb-jcard-flag" aria-hidden="true">@GetFlag(j.JurisdictionCode)</span>
+                    <span class="rg-cb-jcard-country">@j.CountryName</span>
+                    <span class="rg-cb-jcard-regulator">@j.RegulatorCode</span>
+                </div>
+                <div class="rg-cb-jcard-stats">
+                    <span class="rg-cb-jcard-stat-label">Subsidiaries</span>
+                    <span class="rg-cb-jcard-stat-value">@j.SubsidiaryCount</span>
+                    <span class="rg-cb-jcard-stat-label">CAR</span>
+                    <span class="rg-cb-jcard-stat-value">@((j.AggregateCAR ?? 0).ToString("F2"))%</span>
+                    <span class="rg-cb-jcard-stat-label">Divergences</span>
+                    <span class="rg-cb-jcard-stat-value">@j.OpenDivergences</span>
+                    <span class="rg-cb-jcard-stat-label">Status</span>
+                    <span class="rg-cb-jcard-stat-value">
+                        <span class="rg-cb-compliance rg-cb-compliance--@(j.AllCompliant ? "pass" : "fail")">
+                            <span class="rg-cb-compliance-dot"></span>
+                            @(j.AllCompliant ? "Compliant" : "Breach")
+                        </span>
+                    </span>
+                </div>
+            </div>
+        }
+    </div>
+
+    @* ── Top Divergence Alerts ── *@
+    @if (_topDivergences.Count > 0)
+    {
+        <div class="rg-cb-section-head">
+            <h2 class="rg-cb-section-title">Critical & High Divergences</h2>
+            <button class="rg-btn" @onclick='() => Nav.NavigateTo("/regulator/cross-border/divergences")'>View All →</button>
+        </div>
+
+        @foreach (var d in _topDivergences.Take(3))
+        {
+            <div class="rg-cb-divergence-card rg-cb-divergence-card--@d.Severity.ToString().ToLowerInvariant()">
+                <div class="rg-cb-divergence-head">
+                    <div class="rg-cb-divergence-badges">
+                        <SeverityBadge Severity="d.Severity" />
+                        <StatusPill Label="@FormatDivergenceType(d.Type)" Variant="default" />
+                    </div>
+                    <span style="font-size:0.74rem;color:var(--rg-muted);">@d.DetectedAt.ToString("dd MMM yyyy")</span>
+                </div>
+                <div class="rg-cb-divergence-desc">@d.Description</div>
+                <div class="rg-cb-divergence-flow">
+                    <span class="rg-cb-divergence-flow-chip">
+                        <FlagBadge Code="@d.SourceJurisdiction" />
+                        <span style="font-size:0.72rem;color:var(--rg-muted);">changed</span>
+                    </span>
+                    <span class="rg-cb-divergence-flow-arrow">→</span>
+                    @foreach (var aff in d.AffectedJurisdictions)
+                    {
+                        <span class="rg-cb-divergence-flow-chip">
+                            <FlagBadge Code="@aff" />
+                        </span>
+                    }
+                </div>
+            </div>
+        }
+    }
+
+    @* ── Accessible Jurisdiction Data Table ── *@
+    <details style="margin-top:0.75rem;">
+        <summary style="font-size:0.78rem;color:var(--rg-primary);cursor:pointer;">View jurisdiction data as table</summary>
+        <div class="rg-table-wrap" style="margin-top:0.5rem;">
+            <table class="rg-table">
+                <thead>
+                    <tr>
+                        <th>Country</th>
+                        <th>Regulator</th>
+                        <th>Subsidiaries</th>
+                        <th>CAR</th>
+                        <th>Divergences</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var j in _overview.ByJurisdiction)
+                    {
+                        <tr>
+                            <td><FlagBadge Code="@j.JurisdictionCode" Label="@j.CountryName" /></td>
+                            <td>@j.RegulatorCode</td>
+                            <td>@j.SubsidiaryCount</td>
+                            <td>@((j.AggregateCAR ?? 0).ToString("F2"))%</td>
+                            <td>@j.OpenDivergences</td>
+                            <td>
+                                <span class="rg-cb-compliance rg-cb-compliance--@(j.AllCompliant ? "pass" : "fail")">
+                                    <span class="rg-cb-compliance-dot"></span>
+                                    @(j.AllCompliant ? "Compliant" : "Breach")
+                                </span>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </details>
+}
+
+@code {
+    private bool _loading;
+    private int _selectedGroupId;
+    private GroupComplianceOverview? _overview;
+    private List<DivergenceAlert> _topDivergences = [];
+    private List<FinancialGroup> _groups = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        _groups = await Db.FinancialGroups
+            .AsNoTracking()
+            .Where(g => g.IsActive)
+            .OrderBy(g => g.GroupName)
+            .ToListAsync();
+
+        if (_groups.Count > 0)
+        {
+            _selectedGroupId = _groups[0].Id;
+            await LoadDashboard();
+        }
+    }
+
+    private async Task OnGroupChanged(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out var gid) && gid > 0)
+        {
+            _selectedGroupId = gid;
+            await LoadDashboard();
+        }
+    }
+
+    private async Task RefreshData() => await LoadDashboard();
+
+    private async Task LoadDashboard()
+    {
+        _loading = true;
+        StateHasChanged();
+
+        try
+        {
+            _overview = await DashboardService.GetGroupOverviewAsync(_selectedGroupId);
+
+            var divergences = await DivergenceService.GetGroupDivergencesAsync(_selectedGroupId);
+            _topDivergences = divergences
+                .Where(d => d.Severity >= DivergenceSeverity.High)
+                .OrderByDescending(d => d.Severity)
+                .ThenByDescending(d => d.DetectedAt)
+                .Take(5)
+                .ToList();
+        }
+        catch (Exception ex)
+        {
+            _overview = null;
+            _topDivergences = [];
+        }
+        finally
+        {
+            _loading = false;
+            StateHasChanged();
+        }
+    }
+
+    private static string FormatDivergenceType(DivergenceType t) => t switch
+    {
+        DivergenceType.ThresholdChange => "Threshold Change",
+        DivergenceType.FrameworkUpgrade => "Framework Upgrade",
+        DivergenceType.NewRequirement => "New Requirement",
+        DivergenceType.CalculationMethodChange => "Calculation Method",
+        DivergenceType.ReportingFrequencyChange => "Reporting Frequency",
+        _ => t.ToString()
+    };
+
+    private static string GetFlag(string isoCode)
+    {
+        if (string.IsNullOrEmpty(isoCode) || isoCode.Length < 2) return "🏳";
+        var upper = isoCode[..2].ToUpperInvariant();
+        return string.Concat(upper.Select(c => char.ConvertFromUtf32(0x1F1E6 + c - 'A')));
+    }
+}

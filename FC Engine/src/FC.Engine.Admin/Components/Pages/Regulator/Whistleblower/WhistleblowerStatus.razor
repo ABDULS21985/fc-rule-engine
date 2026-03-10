@@ -1,0 +1,72 @@
+@page "/regulator/whistleblower/status/{AnonymousToken}"
+@layout FC.Engine.Admin.Components.Layout.LoginLayout
+@inject IWhistleblowerService WhistleblowerService
+
+<PageTitle>Whistleblower Case Status</PageTitle>
+
+<div class="rg-public-shell">
+    <div class="rg-public-card rg-wb-card">
+        <div class="rg-surveillance-kicker">Anonymous Tracking</div>
+        <h1 class="rg-page-title">Whistleblower Case Status</h1>
+
+        @if (_loading)
+        {
+            <p class="rg-muted">Loading case status...</p>
+        }
+        else if (!string.IsNullOrWhiteSpace(_error))
+        {
+            <div class="rg-surveillance-banner rg-surveillance-banner-error">@_error</div>
+        }
+        else if (_status is null)
+        {
+            <div class="rg-surveillance-banner rg-surveillance-banner-error">No whistleblower case matched that token.</div>
+        }
+        else
+        {
+            <div class="rg-wb-status-grid">
+                <div class="rg-wb-status-item">
+                    <span class="rg-wb-status-label">Case reference</span>
+                    <strong>@_status.CaseReference</strong>
+                </div>
+                <div class="rg-wb-status-item">
+                    <span class="rg-wb-status-label">Status</span>
+                    <strong>@_status.Status</strong>
+                </div>
+                <div class="rg-wb-status-item">
+                    <span class="rg-wb-status-label">Received</span>
+                    <strong>@_status.ReceivedAt.ToString("dd MMM yyyy HH:mm")</strong>
+                </div>
+                <div class="rg-wb-status-item">
+                    <span class="rg-wb-status-label">Updated</span>
+                    <strong>@_status.UpdatedAt.ToString("dd MMM yyyy HH:mm")</strong>
+                </div>
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter] public string AnonymousToken { get; set; } = string.Empty;
+
+    private bool _loading = true;
+    private string? _error;
+    private WhistleblowerStatusView? _status;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        try
+        {
+            _loading = true;
+            _error = null;
+            _status = await WhistleblowerService.CheckStatusAsync(AnonymousToken);
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+}

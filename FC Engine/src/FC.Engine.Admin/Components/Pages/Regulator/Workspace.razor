@@ -1,0 +1,1247 @@
+@page "/regulator/workspace"
+@attribute [Authorize(Policy = "RegulatorOnly")]
+@inject IExaminationWorkspaceService WorkspaceService
+@using FC.Engine.Domain.Entities
+
+<PageTitle>Examination Workspace</PageTitle>
+
+<div class="rg-workspace-page">
+    <section class="rg-workspace-hero">
+        <div>
+            <div class="rg-surveillance-kicker">RG-39 Toolkit</div>
+            <h1 class="rg-page-title rg-workspace-title">Digital Examination & On-Site Inspection Toolkit</h1>
+            <p class="rg-workspace-summary">
+                Pre-exam intelligence, kanban workflow, evidence collection, structured findings, report generation, and remediation tracking
+                live in one regulator workspace.
+            </p>
+        </div>
+        <div class="rg-workspace-actions">
+            <span class="rg-workspace-meta">Tenant @_tenantId.ToString()[..8] | Regulator @_regulatorCode</span>
+            @if (_workspace is not null)
+            {
+                <a class="rg-btn primary" href="/regulator/workspace/@_workspace.Project.Id/intelligence-pack" target="_blank">Download Intelligence Pack</a>
+                <a class="rg-btn" href="/regulator/workspace/@_workspace.Project.Id/report" target="_blank">Download Examination Report</a>
+            }
+        </div>
+    </section>
+
+    <div class="rg-grid rg-grid-2">
+        <section class="rg-card">
+            <h3 class="rg-section-title">Create Examination Project</h3>
+            <div class="rg-controls">
+                <input placeholder="Project name" @bind="_newName" />
+                <input placeholder="Scope" @bind="_newScope" />
+            </div>
+            <div class="rg-controls">
+                <input placeholder="Institution IDs (comma)" @bind="_newEntityIds" />
+                <input placeholder="Module codes (comma)" @bind="_newModuleCodes" />
+            </div>
+            <div class="rg-controls">
+                <label>From <input type="date" @bind="_newPeriodFrom" /></label>
+                <label>To <input type="date" @bind="_newPeriodTo" /></label>
+            </div>
+            <div class="rg-controls">
+                <textarea placeholder="Team assignments: userId|display name|role per line" @bind="_teamAssignmentsText"></textarea>
+            </div>
+            <div class="rg-controls">
+                <textarea placeholder="Milestones: title|owner|yyyy-mm-dd per line" @bind="_milestonesText"></textarea>
+            </div>
+            <div class="rg-controls">
+                <button class="rg-btn primary" @onclick="CreateProject">Create Project</button>
+            </div>
+        </section>
+
+        <section class="rg-card">
+            <h3 class="rg-section-title">Projects</h3>
+            @if (_projects.Count == 0)
+            {
+                <p class="rg-muted">No projects yet.</p>
+            }
+            else
+            {
+                <div class="rg-table-wrap">
+                    <table class="rg-table">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Status</th>
+                                <th>Created</th>
+                                <th>Pack</th>
+                                <th>Report</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var project in _projects)
+                            {
+                                <tr>
+                                    <td>@project.Name</td>
+                                    <td><span class="rg-badge @ProjectStatusClass(project.Status)">@project.Status</span></td>
+                                    <td>@project.CreatedAt.ToString("dd MMM yyyy")</td>
+                                    <td>@(project.IntelligencePackGeneratedAt?.ToString("dd MMM HH:mm") ?? "-")</td>
+                                    <td>@(project.LastReportGeneratedAt?.ToString("dd MMM HH:mm") ?? "-")</td>
+                                    <td><button class="rg-btn" @onclick="() => SelectProject(project.Id)">Open</button></td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </section>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(_message))
+    {
+        <p class="rg-workspace-message">@_message</p>
+    }
+
+    @if (_workspace is not null)
+    {
+        <div class="rg-grid rg-grid-4 rg-workspace-kpis">
+            <section class="rg-card rg-workspace-kpi">
+                <span class="rg-workspace-kpi-label">Institutions</span>
+                <strong>@(_workspace.IntelligencePack?.TotalInstitutions ?? 0)</strong>
+                <small class="rg-muted">In current scope</small>
+            </section>
+            <section class="rg-card rg-workspace-kpi">
+                <span class="rg-workspace-kpi-label">Active EWIs</span>
+                <strong>@(_workspace.IntelligencePack?.TotalActiveEwis ?? 0)</strong>
+                <small class="rg-muted">Risk triggers</small>
+            </section>
+            <section class="rg-card rg-workspace-kpi">
+                <span class="rg-workspace-kpi-label">Findings</span>
+                <strong>@_workspace.Findings.Count</strong>
+                <small class="rg-muted">@_workspace.Findings.Count(x => x.RiskRating == ExaminationRiskRating.High) high risk</small>
+            </section>
+            <section class="rg-card rg-workspace-kpi">
+                <span class="rg-workspace-kpi-label">Remediation</span>
+                <strong>@_workspace.Findings.Count(x => x.RemediationStatus == ExaminationRemediationStatus.Escalated)</strong>
+                <small class="rg-muted">Escalated items</small>
+            </section>
+        </div>
+
+        <section class="rg-card">
+            <div class="rg-workspace-section-head">
+                <div>
+                    <h3 class="rg-section-title">@_workspace.Project.Name</h3>
+                    <p class="rg-muted">@_workspace.Project.Scope</p>
+                </div>
+                <div class="rg-workspace-actions">
+                    <span class="rg-badge @ProjectStatusClass(_workspace.Project.Status)">@_workspace.Project.Status</span>
+                </div>
+            </div>
+
+            <div class="rg-grid rg-grid-2">
+                <div>
+                    <h4 class="rg-subsection-title">Team</h4>
+                    @if (_workspace.TeamAssignments.Count == 0)
+                    {
+                        <p class="rg-muted">No team assignments recorded.</p>
+                    }
+                    else
+                    {
+                        <ul class="rg-plain-list">
+                            @foreach (var assignment in _workspace.TeamAssignments)
+                            {
+                                <li>@assignment.DisplayName (@assignment.Role)</li>
+                            }
+                        </ul>
+                    }
+                </div>
+                <div>
+                    <h4 class="rg-subsection-title">Milestones</h4>
+                    @if (_workspace.Milestones.Count == 0)
+                    {
+                        <p class="rg-muted">No milestones recorded.</p>
+                    }
+                    else
+                    {
+                        <ul class="rg-plain-list">
+                            @foreach (var milestone in _workspace.Milestones)
+                            {
+                                <li>@milestone.Title @(milestone.DueAt.HasValue ? $"({milestone.DueAt.Value:dd MMM yyyy})" : string.Empty)</li>
+                            }
+                        </ul>
+                    }
+                </div>
+            </div>
+        </section>
+
+        <section class="rg-card">
+            <div class="rg-workspace-section-head">
+                <div>
+                    <h3 class="rg-section-title">Pre-Examination Intelligence Pack</h3>
+                    <p class="rg-muted">4-quarter CHS trends, EWI triggers, peer positioning, and carried-forward remediation items.</p>
+                </div>
+            </div>
+
+            @if (_workspace.IntelligencePack is null || _workspace.IntelligencePack.Institutions.Count == 0)
+            {
+                <p class="rg-muted">No scoped institutions available for intelligence generation.</p>
+            }
+            else
+            {
+                <div class="rg-grid rg-grid-2">
+                    @foreach (var institution in _workspace.IntelligencePack.Institutions)
+                    {
+                        <article class="rg-workspace-intel-card">
+                            <div class="rg-workspace-intel-head">
+                                <div>
+                                    <strong>@institution.InstitutionName</strong>
+                                    <div class="rg-muted">@institution.LicenceType</div>
+                                </div>
+                                <MiniSparkline DataJson="@institution.ChsTrendJson" Width="72" Height="24" />
+                            </div>
+
+                            <div class="rg-workspace-intel-grid">
+                                <div>
+                                    <span class="rg-workspace-mini-label">4Q CHS</span>
+                                    @if (institution.ChsTrend.Count == 0)
+                                    {
+                                        <p class="rg-muted">No CHS history yet.</p>
+                                    }
+                                    else
+                                    {
+                                        <ul class="rg-plain-list">
+                                            @foreach (var point in institution.ChsTrend)
+                                            {
+                                                <li>@point.QuarterLabel: @point.Score.ToString("F1")</li>
+                                            }
+                                        </ul>
+                                    }
+                                </div>
+                                <div>
+                                    <span class="rg-workspace-mini-label">Peer Comparison</span>
+                                    @if (institution.PeerComparison is null)
+                                    {
+                                        <p class="rg-muted">No benchmark available.</p>
+                                    }
+                                    else
+                                    {
+                                        <ul class="rg-plain-list">
+                                            <li>CAR: @institution.PeerComparison.CarValue.ToString("F2") vs @institution.PeerComparison.CarPeerAverage.ToString("F2")</li>
+                                            <li>NPL: @institution.PeerComparison.NplValue.ToString("F2") vs @institution.PeerComparison.NplPeerAverage.ToString("F2")</li>
+                                            <li>DQ: @institution.PeerComparison.DataQualityScore.ToString("F1") vs @institution.PeerComparison.DataQualityPeerAverage.ToString("F1")</li>
+                                        </ul>
+                                    }
+                                </div>
+                            </div>
+
+                            <div class="rg-workspace-intel-grid">
+                                <div>
+                                    <span class="rg-workspace-mini-label">Active EWIs</span>
+                                    @if (institution.ActiveWarnings.Count == 0)
+                                    {
+                                        <p class="rg-muted">No active triggers.</p>
+                                    }
+                                    else
+                                    {
+                                        <ul class="rg-plain-list">
+                                            @foreach (var warning in institution.ActiveWarnings.Take(4))
+                                            {
+                                                <li>[ @warning.Severity ] @warning.FlagCode</li>
+                                            }
+                                        </ul>
+                                    }
+                                </div>
+                                <div>
+                                    <span class="rg-workspace-mini-label">Outstanding From Prior Exam</span>
+                                    @if (institution.OutstandingPreviousFindings.Count == 0)
+                                    {
+                                        <p class="rg-muted">Nothing carried forward.</p>
+                                    }
+                                    else
+                                    {
+                                        <ul class="rg-plain-list">
+                                            @foreach (var finding in institution.OutstandingPreviousFindings.Take(3))
+                                            {
+                                                <li>@finding.Title</li>
+                                            }
+                                        </ul>
+                                    }
+                                </div>
+                            </div>
+                        </article>
+                    }
+                </div>
+            }
+        </section>
+
+        <section class="rg-card">
+            <div class="rg-workspace-section-head">
+                <div>
+                    <h3 class="rg-section-title">Examination Kanban</h3>
+                    <p class="rg-muted">Workflow stage tracked from review queue through management response and closure.</p>
+                </div>
+            </div>
+
+            <div class="rg-kanban">
+                @foreach (var status in _kanbanStatuses)
+                {
+                    <div class="rg-kanban-column">
+                        <div class="rg-kanban-column-head">
+                            <strong>@FormatWorkflowStatus(status)</strong>
+                            <span class="rg-badge review">@ColumnFindings(status).Count</span>
+                        </div>
+
+                        @if (ColumnFindings(status).Count == 0)
+                        {
+                            <p class="rg-muted">No items.</p>
+                        }
+                        else
+                        {
+                            @foreach (var finding in ColumnFindings(status))
+                            {
+                                <article class="rg-kanban-card">
+                                    <div class="rg-kanban-card-head">
+                                        <strong>@finding.Title</strong>
+                                        <span class="rg-badge @RiskClass(finding.RiskRating)">@finding.RiskRating</span>
+                                    </div>
+                                    <p class="rg-muted">@finding.RiskArea</p>
+                                    <p>@finding.Observation</p>
+                                    <div class="rg-kanban-meta">
+                                        <span>@finding.RemediationStatus</span>
+                                        <span>@(finding.ManagementResponseDeadline?.ToString("dd MMM") ?? "No deadline")</span>
+                                    </div>
+                                    <div class="rg-controls">
+                                        <select value="@finding.Status.ToString()" @onchange="e => ChangeFindingStatus(finding, e.Value?.ToString())">
+                                            @foreach (var option in _kanbanStatuses)
+                                            {
+                                                <option value="@option">@FormatWorkflowStatus(option)</option>
+                                            }
+                                        </select>
+                                        <button class="rg-btn" @onclick="() => SelectFindingForEdit(finding.Id)">Edit</button>
+                                    </div>
+                                </article>
+                            }
+                        }
+                    </div>
+                }
+            </div>
+        </section>
+
+        <div class="rg-grid rg-grid-2">
+            <section class="rg-card">
+                <h3 class="rg-section-title">Create Finding</h3>
+                <div class="rg-controls">
+                    <input placeholder="Title" @bind="_findingTitle" />
+                    <input placeholder="Risk area" @bind="_findingRiskArea" />
+                </div>
+                <div class="rg-controls">
+                    <input placeholder="Submission ID" @bind="_findingSubmissionId" />
+                    <input placeholder="Institution ID" @bind="_findingInstitutionId" />
+                    <input placeholder="Field code" @bind="_findingFieldCode" />
+                </div>
+                <div class="rg-controls">
+                    <select @bind="_findingRiskRating">
+                        @foreach (var option in Enum.GetValues<ExaminationRiskRating>())
+                        {
+                            <option value="@option">@option</option>
+                        }
+                    </select>
+                    <select @bind="_findingStatus">
+                        @foreach (var option in _kanbanStatuses)
+                        {
+                            <option value="@option">@FormatWorkflowStatus(option)</option>
+                        }
+                    </select>
+                    <select @bind="_findingRemediationStatus">
+                        @foreach (var option in Enum.GetValues<ExaminationRemediationStatus>())
+                        {
+                            <option value="@option">@option</option>
+                        }
+                    </select>
+                    <label>Mgmt Deadline <input type="date" @bind="_findingDeadline" /></label>
+                </div>
+                <div class="rg-controls">
+                    <textarea placeholder="Observation" @bind="_findingObservation"></textarea>
+                </div>
+                <div class="rg-controls">
+                    <textarea placeholder="Recommendation" @bind="_findingRecommendation"></textarea>
+                </div>
+                <div class="rg-controls">
+                    <textarea placeholder="Management response / action plan" @bind="_findingManagementResponse"></textarea>
+                </div>
+                <div class="rg-controls">
+                    <button class="rg-btn primary" @onclick="CreateFinding">Create Finding</button>
+                </div>
+            </section>
+
+            <section class="rg-card">
+                <h3 class="rg-section-title">Update Finding</h3>
+                @if (_selectedFinding is null)
+                {
+                    <p class="rg-muted">Select a finding from the kanban board or remediation table.</p>
+                }
+                else
+                {
+                    <div class="rg-controls">
+                        <input value="@_selectedFinding.Title" disabled />
+                        <input value="@_selectedFinding.RiskArea" disabled />
+                    </div>
+                    <div class="rg-controls">
+                        <select @bind="_updateRiskRating">
+                            @foreach (var option in Enum.GetValues<ExaminationRiskRating>())
+                            {
+                                <option value="@option">@option</option>
+                            }
+                        </select>
+                        <select @bind="_updateStatus">
+                            @foreach (var option in _kanbanStatuses)
+                            {
+                                <option value="@option">@FormatWorkflowStatus(option)</option>
+                            }
+                        </select>
+                        <select @bind="_updateRemediationStatus">
+                            @foreach (var option in Enum.GetValues<ExaminationRemediationStatus>())
+                            {
+                                <option value="@option">@option</option>
+                            }
+                        </select>
+                        <label>Deadline <input type="date" @bind="_updateDeadline" /></label>
+                    </div>
+                    <div class="rg-controls">
+                        <textarea placeholder="Observation" @bind="_updateObservation"></textarea>
+                    </div>
+                    <div class="rg-controls">
+                        <textarea placeholder="Recommendation" @bind="_updateRecommendation"></textarea>
+                    </div>
+                    <div class="rg-controls">
+                        <textarea placeholder="Management response" @bind="_updateManagementResponse"></textarea>
+                    </div>
+                    <div class="rg-controls">
+                        <textarea placeholder="Management action plan" @bind="_updateManagementActionPlan"></textarea>
+                    </div>
+                    <div class="rg-controls">
+                        <input placeholder="Evidence reference" @bind="_updateEvidenceReference" />
+                        <button class="rg-btn primary" @onclick="SaveFindingUpdate">Save Update</button>
+                    </div>
+                }
+            </section>
+        </div>
+
+        <div class="rg-grid rg-grid-2">
+            <section class="rg-card">
+                <h3 class="rg-section-title">Digital Evidence Requests</h3>
+                <div class="rg-controls">
+                    <select @bind="_requestFindingId">
+                        <option value="">Linked finding (optional)</option>
+                        @foreach (var finding in _workspace.Findings.OrderBy(x => x.Title))
+                        {
+                            <option value="@finding.Id">@finding.Title</option>
+                        }
+                    </select>
+                    <input placeholder="Title" @bind="_requestTitle" />
+                    <label>Due <input type="date" @bind="_requestDueAt" /></label>
+                </div>
+                <div class="rg-controls">
+                    <textarea placeholder="Request text" @bind="_requestText"></textarea>
+                </div>
+                <div class="rg-controls">
+                    <textarea placeholder="Requested items (comma separated)" @bind="_requestItemsText"></textarea>
+                </div>
+                <div class="rg-controls">
+                    <button class="rg-btn primary" @onclick="CreateEvidenceRequest">Create Request</button>
+                </div>
+
+                <div class="rg-table-wrap">
+                    <table class="rg-table">
+                        <thead>
+                            <tr><th>Requested</th><th>Title</th><th>Finding</th><th>Status</th><th>Due</th></tr>
+                        </thead>
+                        <tbody>
+                            @if (_workspace.EvidenceRequests.Count == 0)
+                            {
+                                <tr><td colspan="5" class="rg-muted">No evidence requests yet.</td></tr>
+                            }
+                            else
+                            {
+                                @foreach (var request in _workspace.EvidenceRequests.Take(50))
+                                {
+                                    <tr>
+                                        <td>@request.RequestedAt.ToString("dd MMM yyyy")</td>
+                                        <td>@request.Title</td>
+                                        <td>@LinkedFindingTitle(request.FindingId)</td>
+                                        <td>@request.Status</td>
+                                        <td>@(request.DueAt?.ToString("dd MMM yyyy") ?? "-")</td>
+                                    </tr>
+                                }
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <section class="rg-card">
+                <h3 class="rg-section-title">Evidence Uploads</h3>
+                <div class="rg-controls">
+                    <select @bind="_evidenceFindingId">
+                        <option value="">Link finding (optional)</option>
+                        @foreach (var finding in _workspace.Findings.OrderBy(x => x.Title))
+                        {
+                            <option value="@finding.Id">@finding.Title</option>
+                        }
+                    </select>
+                    <select @bind="_evidenceRequestId">
+                        <option value="">Link request (optional)</option>
+                        @foreach (var request in _workspace.EvidenceRequests.OrderByDescending(x => x.RequestedAt))
+                        {
+                            <option value="@request.Id">@request.Title</option>
+                        }
+                    </select>
+                </div>
+                <div class="rg-controls">
+                    <select @bind="_evidenceKind">
+                        @foreach (var option in Enum.GetValues<ExaminationEvidenceKind>())
+                        {
+                            <option value="@option">@option</option>
+                        }
+                    </select>
+                    <select @bind="_evidenceUploaderRole">
+                        @foreach (var option in Enum.GetValues<ExaminationEvidenceUploaderRole>())
+                        {
+                            <option value="@option">@option</option>
+                        }
+                    </select>
+                    <input placeholder="Notes" @bind="_evidenceNotes" />
+                </div>
+                <div class="rg-controls">
+                    <InputFile OnChange="HandleEvidenceSelected" />
+                </div>
+                <p class="rg-muted">Files are timestamped, hashed, stored immutably, and linked to the selected finding or request.</p>
+
+                <div class="rg-table-wrap">
+                    <table class="rg-table">
+                        <thead>
+                            <tr><th>Uploaded</th><th>File</th><th>Kind</th><th>Finding</th><th>Hash</th><th></th></tr>
+                        </thead>
+                        <tbody>
+                            @if (_workspace.EvidenceFiles.Count == 0)
+                            {
+                                <tr><td colspan="6" class="rg-muted">No evidence files uploaded.</td></tr>
+                            }
+                            else
+                            {
+                                @foreach (var evidence in _workspace.EvidenceFiles.Take(100))
+                                {
+                                    <tr>
+                                        <td>@evidence.UploadedAt.ToString("dd MMM yyyy HH:mm")</td>
+                                        <td>@evidence.FileName</td>
+                                        <td>@evidence.Kind</td>
+                                        <td>@LinkedFindingTitle(evidence.FindingId)</td>
+                                        <td><code>@ShortHash(evidence.FileHash)</code></td>
+                                        <td><a class="rg-btn" href="/regulator/workspace/@_workspace.Project.Id/evidence/@evidence.Id">Download</a></td>
+                                    </tr>
+                                }
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+        </div>
+
+        <section class="rg-card">
+            <h3 class="rg-section-title">Remediation Tracking</h3>
+            <div class="rg-table-wrap">
+                <table class="rg-table">
+                    <thead>
+                        <tr>
+                            <th>Finding</th>
+                            <th>Risk</th>
+                            <th>Workflow</th>
+                            <th>Remediation</th>
+                            <th>Due</th>
+                            <th>Carried Forward</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (_workspace.Findings.Count == 0)
+                        {
+                            <tr><td colspan="7" class="rg-muted">No findings yet.</td></tr>
+                        }
+                        else
+                        {
+                            @foreach (var finding in _workspace.Findings.OrderBy(x => x.ManagementResponseDeadline ?? DateTime.MaxValue).ThenByDescending(x => x.RiskRating))
+                            {
+                                <tr>
+                                    <td>@finding.Title</td>
+                                    <td><span class="rg-badge @RiskClass(finding.RiskRating)">@finding.RiskRating</span></td>
+                                    <td>@finding.Status</td>
+                                    <td><span class="rg-badge @RemediationClass(finding.RemediationStatus)">@finding.RemediationStatus</span></td>
+                                    <td>@(finding.ManagementResponseDeadline?.ToString("dd MMM yyyy") ?? "-")</td>
+                                    <td>@(finding.IsCarriedForward ? "Yes" : "No")</td>
+                                    <td><button class="rg-btn" @onclick="() => SelectFindingForEdit(finding.Id)">Manage</button></td>
+                                </tr>
+                            }
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <div class="rg-grid rg-grid-2">
+            <section class="rg-card">
+                <h3 class="rg-section-title">Scoped Submissions</h3>
+                <div class="rg-table-wrap">
+                    <table class="rg-table">
+                        <thead>
+                            <tr>
+                                <th>Submission</th>
+                                <th>Institution</th>
+                                <th>Module</th>
+                                <th>Period</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @if (_workspace.Submissions.Count == 0)
+                            {
+                                <tr><td colspan="5" class="rg-muted">No submissions in scope.</td></tr>
+                            }
+                            else
+                            {
+                                @foreach (var row in _workspace.Submissions.Take(200))
+                                {
+                                    <tr>
+                                        <td>#@row.SubmissionId</td>
+                                        <td>@row.InstitutionName</td>
+                                        <td>@row.ModuleCode</td>
+                                        <td>@row.PeriodLabel</td>
+                                        <td>@row.SubmissionStatus</td>
+                                    </tr>
+                                }
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <section class="rg-card">
+                <h3 class="rg-section-title">Annotations</h3>
+                <div class="rg-controls">
+                    <input placeholder="Submission ID" @bind="_annotationSubmissionId" />
+                    <input placeholder="Institution ID (optional)" @bind="_annotationInstitutionId" />
+                    <input placeholder="Field code (optional)" @bind="_annotationFieldCode" />
+                </div>
+                <div class="rg-controls">
+                    <textarea placeholder="Annotation note" @bind="_annotationNote"></textarea>
+                    <button class="rg-btn" @onclick="AddAnnotation">Save Annotation</button>
+                </div>
+
+                <div class="rg-table-wrap">
+                    <table class="rg-table">
+                        <thead>
+                            <tr><th>When</th><th>Submission</th><th>Field</th><th>Note</th></tr>
+                        </thead>
+                        <tbody>
+                            @if (_workspace.Annotations.Count == 0)
+                            {
+                                <tr><td colspan="4" class="rg-muted">No annotations yet.</td></tr>
+                            }
+                            else
+                            {
+                                @foreach (var note in _workspace.Annotations.Take(100))
+                                {
+                                    <tr>
+                                        <td>@note.CreatedAt.ToString("dd MMM yyyy HH:mm")</td>
+                                        <td>#@note.SubmissionId</td>
+                                        <td>@(note.FieldCode ?? "-")</td>
+                                        <td>@note.Note</td>
+                                    </tr>
+                                }
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+        </div>
+    }
+</div>
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
+
+    private readonly ExaminationWorkflowStatus[] _kanbanStatuses =
+    {
+        ExaminationWorkflowStatus.ToReview,
+        ExaminationWorkflowStatus.InProgress,
+        ExaminationWorkflowStatus.FindingDocumented,
+        ExaminationWorkflowStatus.ManagementResponseRequired,
+        ExaminationWorkflowStatus.Closed
+    };
+
+    private Guid _tenantId;
+    private int _userId;
+    private string _regulatorCode = string.Empty;
+
+    private List<ExaminationProject> _projects = new();
+    private ExaminationWorkspaceData? _workspace;
+
+    private string _newName = string.Empty;
+    private string _newScope = string.Empty;
+    private string _newEntityIds = string.Empty;
+    private string _newModuleCodes = string.Empty;
+    private DateTime? _newPeriodFrom;
+    private DateTime? _newPeriodTo;
+    private string _teamAssignmentsText = string.Empty;
+    private string _milestonesText = string.Empty;
+
+    private string _annotationSubmissionId = string.Empty;
+    private string _annotationInstitutionId = string.Empty;
+    private string _annotationFieldCode = string.Empty;
+    private string _annotationNote = string.Empty;
+
+    private string _findingTitle = string.Empty;
+    private string _findingRiskArea = string.Empty;
+    private string _findingSubmissionId = string.Empty;
+    private string _findingInstitutionId = string.Empty;
+    private string _findingFieldCode = string.Empty;
+    private ExaminationRiskRating _findingRiskRating = ExaminationRiskRating.Medium;
+    private ExaminationWorkflowStatus _findingStatus = ExaminationWorkflowStatus.ToReview;
+    private ExaminationRemediationStatus _findingRemediationStatus = ExaminationRemediationStatus.Open;
+    private DateTime? _findingDeadline;
+    private string _findingObservation = string.Empty;
+    private string _findingRecommendation = string.Empty;
+    private string _findingManagementResponse = string.Empty;
+
+    private ExaminationFinding? _selectedFinding;
+    private ExaminationRiskRating _updateRiskRating = ExaminationRiskRating.Medium;
+    private ExaminationWorkflowStatus _updateStatus = ExaminationWorkflowStatus.ToReview;
+    private ExaminationRemediationStatus _updateRemediationStatus = ExaminationRemediationStatus.Open;
+    private DateTime? _updateDeadline;
+    private string _updateObservation = string.Empty;
+    private string _updateRecommendation = string.Empty;
+    private string _updateManagementResponse = string.Empty;
+    private string _updateManagementActionPlan = string.Empty;
+    private string _updateEvidenceReference = string.Empty;
+
+    private int? _requestFindingId;
+    private string _requestTitle = string.Empty;
+    private string _requestText = string.Empty;
+    private string _requestItemsText = string.Empty;
+    private DateTime? _requestDueAt;
+
+    private int? _evidenceFindingId;
+    private int? _evidenceRequestId;
+    private ExaminationEvidenceKind _evidenceKind = ExaminationEvidenceKind.SupportingDocument;
+    private ExaminationEvidenceUploaderRole _evidenceUploaderRole = ExaminationEvidenceUploaderRole.Examiner;
+    private string _evidenceNotes = string.Empty;
+
+    private string? _message;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await ResolveContext();
+        await LoadProjects();
+    }
+
+    private async Task ResolveContext()
+    {
+        var state = await AuthState!;
+
+        var tenantClaim = state.User.FindFirst("TenantId")?.Value;
+        var regulatorClaim = state.User.FindFirst("RegulatorCode")?.Value;
+        var userClaim = state.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+        if (!Guid.TryParse(tenantClaim, out _tenantId)
+            || !int.TryParse(userClaim, out _userId)
+            || string.IsNullOrWhiteSpace(regulatorClaim))
+        {
+            throw new InvalidOperationException("Regulator identity claims are incomplete for this session.");
+        }
+
+        _regulatorCode = regulatorClaim.Trim();
+    }
+
+    private async Task LoadProjects()
+    {
+        _projects = (await WorkspaceService.ListProjects(_tenantId)).ToList();
+    }
+
+    private async Task CreateProject()
+    {
+        try
+        {
+            var request = new ExaminationProjectCreateRequest
+            {
+                Name = _newName,
+                Scope = _newScope,
+                InstitutionIds = ParseIntList(_newEntityIds),
+                ModuleCodes = ParseStringList(_newModuleCodes),
+                PeriodFrom = _newPeriodFrom,
+                PeriodTo = _newPeriodTo,
+                TeamAssignments = ParseTeamAssignments(_teamAssignmentsText),
+                Milestones = ParseMilestones(_milestonesText)
+            };
+
+            var project = await WorkspaceService.CreateProject(_tenantId, _userId, request);
+            _message = $"Project {project.Name} created.";
+
+            _newName = string.Empty;
+            _newScope = string.Empty;
+            _newEntityIds = string.Empty;
+            _newModuleCodes = string.Empty;
+            _newPeriodFrom = null;
+            _newPeriodTo = null;
+            _teamAssignmentsText = string.Empty;
+            _milestonesText = string.Empty;
+
+            await LoadProjects();
+            await SelectProject(project.Id);
+        }
+        catch (Exception ex)
+        {
+            _message = ex.Message;
+        }
+    }
+
+    private async Task SelectProject(int projectId)
+    {
+        _workspace = await WorkspaceService.GetWorkspace(_tenantId, _regulatorCode, projectId);
+        if (_workspace is null)
+        {
+            _message = "Project not found.";
+            return;
+        }
+
+        _selectedFinding = null;
+        _message = $"Loaded {_workspace.Project.Name}.";
+    }
+
+    private async Task AddAnnotation()
+    {
+        if (_workspace is null)
+        {
+            return;
+        }
+
+        if (!int.TryParse(_annotationSubmissionId, out var submissionId))
+        {
+            _message = "Submission ID is required and must be numeric.";
+            return;
+        }
+
+        int? institutionId = null;
+        if (int.TryParse(_annotationInstitutionId, out var parsedInstitutionId))
+        {
+            institutionId = parsedInstitutionId;
+        }
+
+        try
+        {
+            await WorkspaceService.AddAnnotation(
+                _tenantId,
+                _workspace.Project.Id,
+                submissionId,
+                institutionId,
+                string.IsNullOrWhiteSpace(_annotationFieldCode) ? null : _annotationFieldCode,
+                _annotationNote,
+                _userId);
+
+            _annotationSubmissionId = string.Empty;
+            _annotationInstitutionId = string.Empty;
+            _annotationFieldCode = string.Empty;
+            _annotationNote = string.Empty;
+            _message = "Annotation saved.";
+
+            await RefreshWorkspace();
+        }
+        catch (Exception ex)
+        {
+            _message = ex.Message;
+        }
+    }
+
+    private async Task CreateFinding()
+    {
+        if (_workspace is null)
+        {
+            return;
+        }
+
+        try
+        {
+            var request = new ExaminationFindingCreateRequest
+            {
+                SubmissionId = ParseNullableInt(_findingSubmissionId),
+                InstitutionId = ParseNullableInt(_findingInstitutionId),
+                Title = _findingTitle,
+                RiskArea = _findingRiskArea,
+                Observation = _findingObservation,
+                RiskRating = _findingRiskRating,
+                Recommendation = _findingRecommendation,
+                Status = _findingStatus,
+                RemediationStatus = _findingRemediationStatus,
+                FieldCode = _findingFieldCode,
+                ManagementResponseDeadline = _findingDeadline,
+                ManagementResponse = _findingManagementResponse,
+                ManagementActionPlan = _findingManagementResponse
+            };
+
+            var finding = await WorkspaceService.CreateFinding(
+                _tenantId,
+                _regulatorCode,
+                _workspace.Project.Id,
+                request,
+                _userId);
+
+            ResetFindingCreateForm();
+            _message = $"Finding {finding.Title} created.";
+
+            await RefreshWorkspace();
+            SelectFindingForEdit(finding.Id);
+        }
+        catch (Exception ex)
+        {
+            _message = ex.Message;
+        }
+    }
+
+    private async Task SaveFindingUpdate()
+    {
+        if (_workspace is null || _selectedFinding is null)
+        {
+            return;
+        }
+
+        try
+        {
+            var result = await WorkspaceService.UpdateFinding(
+                _tenantId,
+                _workspace.Project.Id,
+                _selectedFinding.Id,
+                new ExaminationFindingUpdateRequest
+                {
+                    Status = _updateStatus,
+                    RemediationStatus = _updateRemediationStatus,
+                    RiskRating = _updateRiskRating,
+                    Observation = _updateObservation,
+                    Recommendation = _updateRecommendation,
+                    ManagementResponseDeadline = _updateDeadline,
+                    ManagementResponse = _updateManagementResponse,
+                    ManagementActionPlan = _updateManagementActionPlan,
+                    EvidenceReference = _updateEvidenceReference
+                },
+                _userId);
+
+            if (result is null)
+            {
+                _message = "Finding no longer exists.";
+                return;
+            }
+
+            _message = $"Updated {result.Title}.";
+            await RefreshWorkspace();
+            SelectFindingForEdit(result.Id);
+        }
+        catch (Exception ex)
+        {
+            _message = ex.Message;
+        }
+    }
+
+    private async Task ChangeFindingStatus(ExaminationFinding finding, string? value)
+    {
+        if (_workspace is null || string.IsNullOrWhiteSpace(value) || !Enum.TryParse<ExaminationWorkflowStatus>(value, out var status))
+        {
+            return;
+        }
+
+        var remediation = status == ExaminationWorkflowStatus.Closed
+            ? ExaminationRemediationStatus.Closed
+            : finding.RemediationStatus;
+
+        try
+        {
+            await WorkspaceService.UpdateFinding(
+                _tenantId,
+                _workspace.Project.Id,
+                finding.Id,
+                new ExaminationFindingUpdateRequest
+                {
+                    Status = status,
+                    RemediationStatus = remediation,
+                    RiskRating = finding.RiskRating,
+                    Observation = finding.Observation,
+                    Recommendation = finding.Recommendation,
+                    ManagementResponseDeadline = finding.ManagementResponseDeadline,
+                    ManagementResponse = finding.ManagementResponse,
+                    ManagementActionPlan = finding.ManagementActionPlan,
+                    EvidenceReference = finding.EvidenceReference
+                },
+                _userId);
+
+            _message = $"Moved {finding.Title} to {FormatWorkflowStatus(status)}.";
+            await RefreshWorkspace();
+            SelectFindingForEdit(finding.Id);
+        }
+        catch (Exception ex)
+        {
+            _message = ex.Message;
+        }
+    }
+
+    private void SelectFindingForEdit(int findingId)
+    {
+        _selectedFinding = _workspace?.Findings.FirstOrDefault(x => x.Id == findingId);
+        if (_selectedFinding is null)
+        {
+            return;
+        }
+
+        _updateRiskRating = _selectedFinding.RiskRating;
+        _updateStatus = _selectedFinding.Status;
+        _updateRemediationStatus = _selectedFinding.RemediationStatus;
+        _updateDeadline = _selectedFinding.ManagementResponseDeadline;
+        _updateObservation = _selectedFinding.Observation;
+        _updateRecommendation = _selectedFinding.Recommendation;
+        _updateManagementResponse = _selectedFinding.ManagementResponse ?? string.Empty;
+        _updateManagementActionPlan = _selectedFinding.ManagementActionPlan ?? string.Empty;
+        _updateEvidenceReference = _selectedFinding.EvidenceReference ?? string.Empty;
+    }
+
+    private async Task CreateEvidenceRequest()
+    {
+        if (_workspace is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await WorkspaceService.CreateEvidenceRequest(
+                _tenantId,
+                _workspace.Project.Id,
+                new ExaminationEvidenceRequestCreateRequest
+                {
+                    FindingId = _requestFindingId,
+                    Title = _requestTitle,
+                    RequestText = _requestText,
+                    RequestedItems = _requestItemsText
+                        .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                        .Where(x => !string.IsNullOrWhiteSpace(x))
+                        .ToList(),
+                    DueAt = _requestDueAt
+                },
+                _userId);
+
+            _requestFindingId = null;
+            _requestTitle = string.Empty;
+            _requestText = string.Empty;
+            _requestItemsText = string.Empty;
+            _requestDueAt = null;
+            _message = "Evidence request created.";
+
+            await RefreshWorkspace();
+        }
+        catch (Exception ex)
+        {
+            _message = ex.Message;
+        }
+    }
+
+    private async Task HandleEvidenceSelected(InputFileChangeEventArgs args)
+    {
+        if (_workspace is null)
+        {
+            return;
+        }
+
+        try
+        {
+            var file = args.File;
+            await using var stream = file.OpenReadStream(maxAllowedSize: 25 * 1024 * 1024);
+
+            var evidence = await WorkspaceService.UploadEvidence(
+                _tenantId,
+                _workspace.Project.Id,
+                _evidenceFindingId,
+                _evidenceRequestId,
+                null,
+                null,
+                file.Name,
+                file.ContentType,
+                file.Size,
+                stream,
+                _evidenceKind,
+                _evidenceUploaderRole,
+                _evidenceNotes,
+                _userId);
+
+            _evidenceNotes = string.Empty;
+            _message = $"Evidence {evidence.FileName} uploaded.";
+
+            await RefreshWorkspace();
+        }
+        catch (Exception ex)
+        {
+            _message = ex.Message;
+        }
+    }
+
+    private async Task RefreshWorkspace()
+    {
+        if (_workspace is null)
+        {
+            return;
+        }
+
+        await SelectProject(_workspace.Project.Id);
+    }
+
+    private List<ExaminationFinding> ColumnFindings(ExaminationWorkflowStatus status)
+        => _workspace?.Findings.Where(x => x.Status == status).OrderByDescending(x => x.RiskRating).ThenBy(x => x.Title).ToList()
+           ?? new List<ExaminationFinding>();
+
+    private static string FormatWorkflowStatus(ExaminationWorkflowStatus status) => status switch
+    {
+        ExaminationWorkflowStatus.ToReview => "To Review",
+        ExaminationWorkflowStatus.InProgress => "In Progress",
+        ExaminationWorkflowStatus.FindingDocumented => "Finding Documented",
+        ExaminationWorkflowStatus.ManagementResponseRequired => "Management Response Required",
+        ExaminationWorkflowStatus.Closed => "Closed",
+        _ => status.ToString()
+    };
+
+    private static string RiskClass(ExaminationRiskRating rating) => rating switch
+    {
+        ExaminationRiskRating.High => "open",
+        ExaminationRiskRating.Medium => "query",
+        _ => "accept"
+    };
+
+    private static string RemediationClass(ExaminationRemediationStatus status) => status switch
+    {
+        ExaminationRemediationStatus.Escalated => "open",
+        ExaminationRemediationStatus.Overdue => "query",
+        ExaminationRemediationStatus.Closed => "accept",
+        ExaminationRemediationStatus.PendingVerification => "review",
+        _ => "recd"
+    };
+
+    private static string ProjectStatusClass(ExaminationProjectStatus status) => status switch
+    {
+        ExaminationProjectStatus.Completed => "accept",
+        ExaminationProjectStatus.Archived => "recd",
+        _ => "review"
+    };
+
+    private string LinkedFindingTitle(int? findingId)
+        => findingId.HasValue
+            ? _workspace?.Findings.FirstOrDefault(x => x.Id == findingId.Value)?.Title ?? $"Finding #{findingId.Value}"
+            : "-";
+
+    private static string ShortHash(string hash)
+        => string.IsNullOrWhiteSpace(hash) || hash.Length < 12 ? hash : $"{hash[..12]}...";
+
+    private void ResetFindingCreateForm()
+    {
+        _findingTitle = string.Empty;
+        _findingRiskArea = string.Empty;
+        _findingSubmissionId = string.Empty;
+        _findingInstitutionId = string.Empty;
+        _findingFieldCode = string.Empty;
+        _findingRiskRating = ExaminationRiskRating.Medium;
+        _findingStatus = ExaminationWorkflowStatus.ToReview;
+        _findingRemediationStatus = ExaminationRemediationStatus.Open;
+        _findingDeadline = null;
+        _findingObservation = string.Empty;
+        _findingRecommendation = string.Empty;
+        _findingManagementResponse = string.Empty;
+    }
+
+    private static int? ParseNullableInt(string value)
+        => int.TryParse(value, out var number) ? number : null;
+
+    private static List<int> ParseIntList(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return new List<int>();
+        }
+
+        return value
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(x => int.TryParse(x, out var n) ? n : 0)
+            .Where(x => x > 0)
+            .Distinct()
+            .ToList();
+    }
+
+    private static List<string> ParseStringList(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return new List<string>();
+        }
+
+        return value
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Select(x => x.Trim().ToUpperInvariant())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    private static List<ExaminationTeamAssignment> ParseTeamAssignments(string value)
+    {
+        var results = new List<ExaminationTeamAssignment>();
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return results;
+        }
+
+        foreach (var line in value.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            var parts = line.Split('|', StringSplitOptions.TrimEntries);
+            if (parts.Length == 0 || string.IsNullOrWhiteSpace(parts[0]))
+            {
+                continue;
+            }
+
+            _ = int.TryParse(parts[0], out var userId);
+            results.Add(new ExaminationTeamAssignment
+            {
+                UserId = userId,
+                DisplayName = parts.Length > 1 ? parts[1] : parts[0],
+                Role = parts.Length > 2 ? parts[2] : "Examiner"
+            });
+        }
+
+        return results;
+    }
+
+    private static List<ExaminationMilestone> ParseMilestones(string value)
+    {
+        var results = new List<ExaminationMilestone>();
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return results;
+        }
+
+        foreach (var line in value.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            var parts = line.Split('|', StringSplitOptions.TrimEntries);
+            if (parts.Length == 0 || string.IsNullOrWhiteSpace(parts[0]))
+            {
+                continue;
+            }
+
+            DateTime? dueAt = null;
+            if (parts.Length > 2 && DateTime.TryParse(parts[2], out var parsed))
+            {
+                dueAt = parsed;
+            }
+
+            results.Add(new ExaminationMilestone
+            {
+                Title = parts[0],
+                Owner = parts.Length > 1 ? parts[1] : string.Empty,
+                DueAt = dueAt
+            });
+        }
+
+        return results;
+    }
+}

@@ -1,0 +1,98 @@
+@page "/regulator/warnings"
+@attribute [Authorize(Policy = "RegulatorOnly")]
+@inject IEarlyWarningService WarningService
+
+<PageTitle>Early Warnings</PageTitle>
+
+<h1 class="rg-page-title">Early Warning Flags</h1>
+
+<div class="rg-card">
+    <div class="rg-controls">
+        <button class="rg-btn" @onclick="Load">Refresh Flags</button>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(_error))
+    {
+        <p class="rg-danger-text">@_error</p>
+    }
+    else if (_loading)
+    {
+        <p class="rg-muted">Computing flags...</p>
+    }
+    else if (_flags.Count == 0)
+    {
+        <p class="rg-muted">No early-warning flags for this jurisdiction.</p>
+    }
+    else
+    {
+        <div class="rg-table-wrap">
+            <table class="rg-table">
+                <thead>
+                    <tr>
+                        <th>Severity</th>
+                        <th>Institution</th>
+                        <th>Flag</th>
+                        <th>Message</th>
+                        <th>Triggered</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var flag in _flags)
+                    {
+                        <tr>
+                            <td>
+                                <span class="rg-badge @(flag.Severity == EarlyWarningSeverity.Red ? "open" : "query")">@flag.Severity</span>
+                            </td>
+                            <td>@flag.InstitutionName</td>
+                            <td>@flag.FlagCode</td>
+                            <td>@flag.Message</td>
+                            <td>@flag.TriggeredAt.ToString("dd MMM yyyy HH:mm")</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
+
+    private string _regulatorCode = string.Empty;
+    private bool _loading = true;
+    private string? _error;
+    private List<EarlyWarningFlag> _flags = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        var state = await AuthState!;
+        _regulatorCode = state.User.FindFirst("RegulatorCode")?.Value?.Trim() ?? string.Empty;
+        await Load();
+    }
+
+    private async Task Load()
+    {
+        if (string.IsNullOrWhiteSpace(_regulatorCode))
+        {
+            _error = "Regulator code claim is missing.";
+            return;
+        }
+
+        _loading = true;
+        _error = null;
+
+        try
+        {
+            _flags = await WarningService.ComputeFlags(_regulatorCode);
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _loading = false;
+            StateHasChanged();
+        }
+    }
+}

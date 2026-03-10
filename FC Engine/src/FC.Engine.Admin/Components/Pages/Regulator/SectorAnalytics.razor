@@ -1,0 +1,210 @@
+@page "/regulator/analytics"
+@attribute [Authorize(Policy = "RegulatorOnly")]
+@inject ISectorAnalyticsService Analytics
+@inject FC.Engine.Infrastructure.Charts.ChartJsInterop Charts
+
+<PageTitle>Sector Analytics</PageTitle>
+
+<h1 class="rg-page-title">Sector Analytics</h1>
+
+<div class="rg-card">
+    <div class="rg-controls">
+        <input placeholder="Period code (YYYY-QN or YYYY-MM)" @bind="_periodCode" />
+        <button class="rg-btn" @onclick="LoadData">Refresh</button>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(_error))
+    {
+        <p class="rg-danger-text">@_error</p>
+    }
+    else if (_loading)
+    {
+        <p class="rg-muted">Loading analytics...</p>
+    }
+    else
+    {
+        <div class="rg-grid rg-grid-2">
+            <div class="rg-card">
+                <h3 style="margin-top:0;">CAR Distribution</h3>
+                <div class="rg-chart"><canvas id="carDistributionChart"></canvas></div>
+            </div>
+            <div class="rg-card">
+                <h3 style="margin-top:0;">NPL Trend</h3>
+                <div class="rg-chart"><canvas id="nplTrendChart"></canvas></div>
+            </div>
+            <div class="rg-card">
+                <h3 style="margin-top:0;">Deposit Structure</h3>
+                <div class="rg-chart"><canvas id="depositStructureChart"></canvas></div>
+            </div>
+            <div class="rg-card">
+                <h3 style="margin-top:0;">Submission Timeliness</h3>
+                <div class="rg-chart"><canvas id="timelinessChart"></canvas></div>
+            </div>
+        </div>
+
+        <div class="rg-card" style="margin-top:0.8rem;">
+            <h3 style="margin-top:0;">Module Filing Heatmap (@_heatmap.PeriodCode)</h3>
+            <div class="rg-table-wrap">
+                <table class="rg-table">
+                    <thead>
+                        <tr>
+                            <th>Institution</th>
+                            @foreach (var module in _heatmap.Modules)
+                            {
+                                <th>@module</th>
+                            }
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var institution in _heatmap.Institutions)
+                        {
+                            <tr>
+                                <td>@institution</td>
+                                @foreach (var module in _heatmap.Modules)
+                                {
+                                    var filed = _heatmap.Cells.Any(c => c.Institution == institution && c.Module == module && c.Filed);
+                                    <td>@(filed ? "Filed" : "Pending")</td>
+                                }
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
+
+    private string _regulatorCode = string.Empty;
+    private string _periodCode = $"{DateTime.UtcNow.Year}-Q{((DateTime.UtcNow.Month - 1) / 3) + 1}";
+
+    private bool _loading = true;
+    private bool _chartsRendered;
+    private string? _error;
+
+    private SectorCarDistribution _car = new();
+    private SectorNplTrend _npl = new();
+    private SectorDepositStructure _deposit = new();
+    private FilingTimeliness _timeliness = new();
+    private FilingHeatmap _heatmap = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await ResolveContext();
+        await LoadData();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_loading || _chartsRendered || !string.IsNullOrWhiteSpace(_error))
+        {
+            return;
+        }
+
+        await Charts.RenderBarChart("carDistributionChart", new TrendData
+        {
+            Labels = _car.Buckets.Select(x => x.Label).ToList(),
+            Datasets =
+            {
+                new TrendDataset
+                {
+                    Label = "Institutions",
+                    Data = _car.Buckets.Select(x => (decimal)x.Count).ToList(),
+                    BackgroundColor = "#0f766e",
+                    BorderColor = "#0f766e"
+                }
+            }
+        });
+
+        await Charts.RenderLineChart("nplTrendChart", new TrendData
+        {
+            Labels = _npl.PeriodLabels,
+            Datasets =
+            {
+                new TrendDataset
+                {
+                    Label = "Average NPL %",
+                    Data = _npl.AverageNplRatios,
+                    BackgroundColor = "#b45309",
+                    BorderColor = "#b45309"
+                }
+            }
+        });
+
+        await Charts.RenderDoughnutChart("depositStructureChart", new TrendData
+        {
+            Labels = _deposit.Slices.Select(x => x.Label).ToList(),
+            Datasets =
+            {
+                new TrendDataset
+                {
+                    Label = "Amount",
+                    Data = _deposit.Slices.Select(x => x.Value).ToList(),
+                    BackgroundColor = "#1d4ed8",
+                    BorderColor = "#1d4ed8"
+                }
+            }
+        });
+
+        await Charts.RenderBarChart("timelinessChart", new TrendData
+        {
+            Labels = new List<string> { "On-time", "Late" },
+            Datasets =
+            {
+                new TrendDataset
+                {
+                    Label = "Submissions",
+                    Data = new List<decimal> { _timeliness.OnTimeCount, _timeliness.LateCount },
+                    BackgroundColor = "#2563eb",
+                    BorderColor = "#2563eb"
+                }
+            }
+        });
+
+        _chartsRendered = true;
+    }
+
+    private async Task ResolveContext()
+    {
+        var state = await AuthState!;
+        var regulatorClaim = state.User.FindFirst("RegulatorCode")?.Value;
+        if (string.IsNullOrWhiteSpace(regulatorClaim))
+        {
+            throw new InvalidOperationException("Regulator code claim is missing.");
+        }
+
+        _regulatorCode = regulatorClaim.Trim();
+    }
+
+    private async Task LoadData()
+    {
+        if (string.IsNullOrWhiteSpace(_regulatorCode))
+        {
+            return;
+        }
+
+        _loading = true;
+        _chartsRendered = false;
+        _error = null;
+
+        try
+        {
+            _car = await Analytics.GetCarDistribution(_regulatorCode, _periodCode);
+            _npl = await Analytics.GetNplTrend(_regulatorCode, 8);
+            _deposit = await Analytics.GetDepositStructure(_regulatorCode, _periodCode);
+            _timeliness = await Analytics.GetFilingTimeliness(_regulatorCode, _periodCode);
+            _heatmap = await Analytics.GetFilingHeatmap(_regulatorCode, _periodCode);
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _loading = false;
+            StateHasChanged();
+        }
+    }
+}

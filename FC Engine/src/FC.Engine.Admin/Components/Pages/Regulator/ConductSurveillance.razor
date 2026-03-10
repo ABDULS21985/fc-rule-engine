@@ -1,0 +1,368 @@
+@page "/regulator/surveillance"
+@attribute [Authorize(Policy = "RegulatorOnly")]
+@inject IAlertManagementService AlertService
+@inject ISurveillanceOrchestrator Orchestrator
+@inject IWhistleblowerService WhistleblowerService
+@inject IDbConnectionFactory Db
+
+<PageTitle>Conduct Risk Surveillance</PageTitle>
+
+<div class="rg-surveillance-page">
+    <div class="rg-surveillance-hero">
+        <div>
+            <div class="rg-surveillance-kicker">SupTech Command</div>
+            <h1 class="rg-page-title rg-surveillance-title">Conduct Risk &amp; Market Abuse Surveillance</h1>
+            <p class="rg-muted rg-surveillance-summary">
+                Sector-wide market abuse detection, AML conduct monitoring, insurance misconduct surveillance, and anonymous whistleblower intake for @(_regulatorCode ?? "regulator") supervision.
+            </p>
+        </div>
+        <div class="rg-surveillance-actions">
+            <span class="rg-surveillance-period">@_periodCode</span>
+            <button class="rg-btn primary" @onclick="RunSurveillanceCycleAsync" disabled="@_running">
+                @(_running ? "Running..." : "Run Surveillance Cycle")
+            </button>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(_error))
+    {
+        <div class="rg-surveillance-banner rg-surveillance-banner-error">@_error</div>
+    }
+    else if (_lastRunResult is not null)
+    {
+        <div class="rg-surveillance-banner">
+            Last cycle raised <strong>@_lastRunResult.AlertsRaised alerts</strong> across <strong>@_lastRunResult.EntitiesScored entities</strong> in @_lastRunResult.Duration.TotalSeconds.ToString("F1")s.
+        </div>
+    }
+
+    <div class="rg-surveillance-kpis">
+        <div class="rg-surveillance-kpi rg-surveillance-kpi-critical">
+            <span class="rg-surveillance-kpi-value">@_criticalCount</span>
+            <span class="rg-surveillance-kpi-label">Critical alerts</span>
+        </div>
+        <div class="rg-surveillance-kpi rg-surveillance-kpi-high">
+            <span class="rg-surveillance-kpi-value">@_highCount</span>
+            <span class="rg-surveillance-kpi-label">High alerts</span>
+        </div>
+        <div class="rg-surveillance-kpi rg-surveillance-kpi-medium">
+            <span class="rg-surveillance-kpi-value">@_mediumCount</span>
+            <span class="rg-surveillance-kpi-label">Medium alerts</span>
+        </div>
+        <div class="rg-surveillance-kpi rg-surveillance-kpi-wb">
+            <span class="rg-surveillance-kpi-value">@_openWhistleblowerCount</span>
+            <span class="rg-surveillance-kpi-label">Open whistleblower cases</span>
+        </div>
+    </div>
+
+    <div class="rg-card rg-surveillance-panel">
+        <div class="rg-surveillance-toolbar">
+            <select @bind="_categoryFilter">
+                <option value="">All categories</option>
+                @foreach (var category in Enum.GetValues<AlertCategory>())
+                {
+                    <option value="@category">@GetCategoryLabel(category)</option>
+                }
+            </select>
+            <select @bind="_severityFilter">
+                <option value="">All severities</option>
+                @foreach (var severity in Enum.GetValues<AlertSeverity>())
+                {
+                    <option value="@severity">@severity</option>
+                }
+            </select>
+            <button class="rg-btn" @onclick="ApplyFiltersAsync">Apply filters</button>
+        </div>
+
+        <div class="rg-table-wrap">
+            <table class="rg-table">
+                <thead>
+                    <tr>
+                        <th>Severity</th>
+                        <th>Category</th>
+                        <th>Alert</th>
+                        <th>Institution</th>
+                        <th>Detected</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (_alerts.Count == 0)
+                    {
+                        <tr>
+                            <td colspan="6" class="rg-muted">No open surveillance alerts for the selected view.</td>
+                        </tr>
+                    }
+                    else
+                    {
+                        @foreach (var alert in _alerts)
+                        {
+                            <tr>
+                                <td>
+                                    <span class="rg-surveillance-badge rg-surveillance-badge-@alert.Severity.ToLowerInvariant()">@alert.Severity</span>
+                                </td>
+                                <td>@alert.Category</td>
+                                <td>
+                                    <div class="rg-surveillance-alert-title">@alert.Title</div>
+                                    @if (!string.IsNullOrWhiteSpace(alert.Detail))
+                                    {
+                                        <div class="rg-muted">@alert.Detail</div>
+                                    }
+                                </td>
+                                <td>@(alert.InstitutionName ?? "Sector-wide")</td>
+                                <td>@alert.DetectedAt.ToString("dd MMM yyyy HH:mm")</td>
+                                <td class="rg-surveillance-actions-cell">
+                                    <button class="rg-btn" @onclick="() => OpenEvidence(alert)">Evidence</button>
+                                    <button class="rg-btn" @onclick="() => OpenResolveModal(alert)">Resolve</button>
+                                </td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="rg-card rg-surveillance-panel">
+        <div class="rg-surveillance-section-header">
+            <div>
+                <div class="rg-surveillance-kicker">Risk Strip</div>
+                <h2>Conduct Risk Scores</h2>
+            </div>
+            <span class="rg-muted">@_periodCode snapshot</span>
+        </div>
+        <div class="rg-surveillance-score-strip">
+            @if (_scores.Count == 0)
+            {
+                <div class="rg-muted">No conduct risk scores have been computed for this period yet.</div>
+            }
+            else
+            {
+                @foreach (var score in _scores)
+                {
+                    <div class="rg-surveillance-score-chip rg-surveillance-score-chip-@score.RiskBand.ToLowerInvariant()"
+                         title="@($"{score.InstitutionName}: {score.CompositeScore:F1}/100 ({score.RiskBand})")">
+                        <span class="rg-surveillance-score-name">@score.InstitutionName</span>
+                        <span class="rg-surveillance-score-value">@score.CompositeScore.ToString("F0")</span>
+                        <span class="rg-surveillance-score-band">@score.RiskBand</span>
+                    </div>
+                }
+            }
+        </div>
+    </div>
+
+    @if (_selectedEvidence is not null)
+    {
+        <div class="rg-modal-overlay" @onclick="CloseEvidence">
+            <div class="rg-modal-card rg-modal-card-wide" @onclick:stopPropagation="true">
+                <h3>@_selectedEvidence.Title</h3>
+                <pre class="rg-surveillance-evidence">@(string.IsNullOrWhiteSpace(_selectedEvidence.EvidenceJson) ? _selectedEvidence.Detail ?? "No evidence payload captured." : _selectedEvidence.EvidenceJson)</pre>
+                <div class="rg-modal-actions">
+                    <button class="rg-btn" @onclick="CloseEvidence">Close</button>
+                </div>
+            </div>
+        </div>
+    }
+
+    @if (_resolveAlert is not null)
+    {
+        <div class="rg-modal-overlay" @onclick="CloseResolveModal">
+            <div class="rg-modal-card" @onclick:stopPropagation="true">
+                <h3>Resolve alert</h3>
+                <p class="rg-muted">@_resolveAlert.Title</p>
+                <div class="rg-controls" style="display:grid;gap:.75rem;margin-top:1rem;">
+                    <label>
+                        Outcome
+                        <select @bind="_resolveOutcome">
+                            <option value="FALSE_POSITIVE">False positive</option>
+                            <option value="MONITORING">Continue monitoring</option>
+                            <option value="REFERRED">Refer for investigation</option>
+                            <option value="ACTIONED">Actioned</option>
+                        </select>
+                    </label>
+                    <label>
+                        Resolution note
+                        <textarea rows="4" @bind="_resolveNote"></textarea>
+                    </label>
+                </div>
+                <div class="rg-modal-actions">
+                    <button class="rg-btn" @onclick="CloseResolveModal">Cancel</button>
+                    <button class="rg-btn primary" @onclick="ConfirmResolveAsync" disabled="@string.IsNullOrWhiteSpace(_resolveNote)">Confirm resolution</button>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
+
+    private string _regulatorCode = string.Empty;
+    private Guid? _tenantId;
+    private string _periodCode = $"{DateTime.UtcNow.Year}-Q{((DateTime.UtcNow.Month - 1) / 3) + 1}";
+    private int _currentUserId;
+    private bool _running;
+    private string? _error;
+
+    private int _criticalCount;
+    private int _highCount;
+    private int _mediumCount;
+    private int _openWhistleblowerCount;
+
+    private List<SurveillanceAlertRow> _alerts = new();
+    private List<ScoreChipRow> _scores = new();
+    private SurveillanceRunResult? _lastRunResult;
+    private SurveillanceAlertRow? _selectedEvidence;
+    private SurveillanceAlertRow? _resolveAlert;
+    private string _resolveOutcome = "FALSE_POSITIVE";
+    private string _resolveNote = string.Empty;
+    private string _categoryFilter = string.Empty;
+    private string _severityFilter = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var state = await AuthState!;
+        _regulatorCode = state.User.FindFirst("RegulatorCode")?.Value?.Trim() ?? string.Empty;
+        _tenantId = Guid.TryParse(state.User.FindFirst("TenantId")?.Value, out var tenantId) ? tenantId : null;
+        _currentUserId = int.TryParse(state.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value, out var id) ? id : 0;
+        await LoadDataAsync();
+    }
+
+    private async Task LoadDataAsync()
+    {
+        try
+        {
+            _error = null;
+            _alerts = (await AlertService.GetOpenAlertsAsync(_regulatorCode, null, AlertSeverity.Low)).ToList();
+            _criticalCount = _alerts.Count(a => a.Severity == "CRITICAL");
+            _highCount = _alerts.Count(a => a.Severity == "HIGH");
+            _mediumCount = _alerts.Count(a => a.Severity == "MEDIUM");
+
+            _openWhistleblowerCount = (await WhistleblowerService.GetOpenCasesAsync(_regulatorCode)).Count;
+
+            using var conn = await Db.CreateConnectionAsync(_tenantId);
+            _scores = (await conn.QueryAsync<ScoreChipRow>(
+                """
+                WITH LatestScores AS (
+                    SELECT crs.InstitutionId,
+                           crs.CompositeScore,
+                           crs.RiskBand,
+                           crs.ActiveAlertCount,
+                           ROW_NUMBER() OVER (
+                               PARTITION BY crs.InstitutionId
+                               ORDER BY crs.ComputedAt DESC, crs.ScoreVersion DESC
+                           ) AS rn
+                    FROM dbo.ConductRiskScores crs
+                    WHERE crs.RegulatorCode = @RegulatorCode
+                      AND crs.PeriodCode = @PeriodCode
+                )
+                SELECT ls.InstitutionId,
+                       COALESCE(i.InstitutionName, CONCAT('Institution ', ls.InstitutionId)) AS InstitutionName,
+                       ls.CompositeScore,
+                       ls.RiskBand,
+                       ls.ActiveAlertCount
+                FROM LatestScores ls
+                LEFT JOIN dbo.institutions i ON i.Id = ls.InstitutionId
+                WHERE ls.rn = 1
+                ORDER BY ls.CompositeScore DESC
+                """,
+                new { RegulatorCode = _regulatorCode, PeriodCode = _periodCode })).ToList();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+    }
+
+    private async Task ApplyFiltersAsync()
+    {
+        try
+        {
+            _error = null;
+            AlertCategory? category = string.IsNullOrWhiteSpace(_categoryFilter)
+                ? null
+                : Enum.Parse<AlertCategory>(_categoryFilter, true);
+            var severity = string.IsNullOrWhiteSpace(_severityFilter)
+                ? (AlertSeverity?)null
+                : Enum.Parse<AlertSeverity>(_severityFilter, true);
+
+            _alerts = (await AlertService.GetOpenAlertsAsync(_regulatorCode, category, severity)).ToList();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+    }
+
+    private async Task RunSurveillanceCycleAsync()
+    {
+        _running = true;
+        try
+        {
+            _lastRunResult = await Orchestrator.RunCycleAsync(_regulatorCode, _periodCode);
+            await LoadDataAsync();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _running = false;
+        }
+    }
+
+    private void OpenEvidence(SurveillanceAlertRow alert) => _selectedEvidence = alert;
+
+    private void CloseEvidence() => _selectedEvidence = null;
+
+    private void OpenResolveModal(SurveillanceAlertRow alert)
+    {
+        _resolveAlert = alert;
+        _resolveOutcome = "FALSE_POSITIVE";
+        _resolveNote = string.Empty;
+    }
+
+    private void CloseResolveModal() => _resolveAlert = null;
+
+    private async Task ConfirmResolveAsync()
+    {
+        if (_resolveAlert is null || _currentUserId <= 0)
+        {
+            return;
+        }
+
+        try
+        {
+            _error = null;
+            await AlertService.ResolveAlertAsync(new AlertResolution(
+                _resolveAlert.AlertId,
+                _currentUserId,
+                _resolveOutcome,
+                _resolveNote));
+            _resolveAlert = null;
+            await LoadDataAsync();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+    }
+
+    private static string GetCategoryLabel(AlertCategory category) => category switch
+    {
+        AlertCategory.BdcFx => "BDC FX",
+        AlertCategory.Cmo => "CMO",
+        AlertCategory.Aml => "AML",
+        AlertCategory.Conduct => "Conduct",
+        AlertCategory.Insurance => "Insurance",
+        _ => category.ToString()
+    };
+
+    private sealed record ScoreChipRow(
+        int InstitutionId,
+        string InstitutionName,
+        decimal CompositeScore,
+        string RiskBand,
+        int ActiveAlertCount
+    );
+}

@@ -1,0 +1,180 @@
+@page "/regulator/inbox"
+@attribute [Authorize(Policy = "RegulatorOnly")]
+@implements IDisposable
+@inject IRegulatorInboxService InboxService
+
+<PageTitle>Submissions Inbox</PageTitle>
+
+<h1 class="rg-page-title">Submissions Inbox</h1>
+
+<div class="rg-card">
+    <div class="rg-controls">
+        <input placeholder="Institution" @bind="_filter.InstitutionName" @bind:event="oninput" />
+        <input placeholder="Licence type" @bind="_filter.LicenceType" @bind:event="oninput" />
+        <input placeholder="Module code" @bind="_filter.ModuleCode" @bind:event="oninput" />
+        <input placeholder="Period (YYYY-QN / YYYY-MM)" @bind="_filter.PeriodCode" @bind:event="oninput" />
+        <select @bind="_filter.Status">
+            <option value="">All statuses</option>
+            <option value="Received">Received</option>
+            <option value="UnderReview">Under Review</option>
+            <option value="Accepted">Accepted</option>
+            <option value="FinalAccepted">Final Accepted</option>
+            <option value="QueriesRaised">Queries Raised</option>
+            <option value="ResponseReceived">Response Received</option>
+        </select>
+        <button class="rg-btn" @onclick="LoadInbox">Apply</button>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(_error))
+    {
+        <p class="rg-danger-text">@_error</p>
+    }
+    else if (_loading)
+    {
+        <p class="rg-muted">Loading inbox...</p>
+    }
+    else
+    {
+        <div class="rg-table-wrap">
+            <table class="rg-table">
+                <thead>
+                    <tr>
+                        <th>Institution</th>
+                        <th>Licence</th>
+                        <th>Module</th>
+                        <th>Period</th>
+                        <th>Submitted</th>
+                        <th>Submission</th>
+                        <th>Receipt</th>
+                        <th>Queries</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (_items.Count == 0)
+                    {
+                        <tr><td colspan="9" class="rg-muted">No submissions found for this filter.</td></tr>
+                    }
+                    else
+                    {
+                        @foreach (var item in _items)
+                        {
+                            <tr>
+                                <td>@item.InstitutionName</td>
+                                <td>@item.LicenceType</td>
+                                <td>@item.ModuleCode</td>
+                                <td>@item.PeriodLabel</td>
+                                <td>@item.SubmittedAt.ToString("dd MMM yyyy HH:mm")</td>
+                                <td>@item.SubmissionStatus</td>
+                                <td>
+                                    <span class="rg-badge @ReceiptCss(item.ReceiptStatus)">@item.ReceiptStatus</span>
+                                </td>
+                                <td>
+                                    @if (item.OpenQueryCount > 0)
+                                    {
+                                        <span class="rg-badge open">@item.OpenQueryCount open</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="rg-muted">0</span>
+                                    }
+                                </td>
+                                <td><a class="rg-btn" href="/regulator/inbox/@item.SubmissionId">Review</a></td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
+
+    private readonly RegulatorInboxFilter _filter = new();
+    private readonly List<RegulatorSubmissionInboxItem> _items = new();
+
+    private Guid _tenantId;
+    private string _regulatorCode = string.Empty;
+    private bool _loading = true;
+    private string? _error;
+    private Timer? _timer;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await ResolveContext();
+        await LoadInbox();
+
+        _timer = new Timer(_ => _ = InvokeAsync(RefreshTick), null, TimeSpan.FromSeconds(20), TimeSpan.FromSeconds(20));
+    }
+
+    private async Task ResolveContext()
+    {
+        var state = await AuthState!;
+        var tenantClaim = state.User.FindFirst("TenantId")?.Value;
+        var regulatorClaim = state.User.FindFirst("RegulatorCode")?.Value;
+
+        if (!Guid.TryParse(tenantClaim, out _tenantId) || string.IsNullOrWhiteSpace(regulatorClaim))
+        {
+            _error = "Regulator tenant context is unavailable for this session.";
+            return;
+        }
+
+        _regulatorCode = regulatorClaim.Trim();
+    }
+
+    private async Task RefreshTick()
+    {
+        if (!_loading)
+        {
+            await LoadInbox();
+        }
+    }
+
+    private async Task LoadInbox()
+    {
+        if (_tenantId == Guid.Empty || string.IsNullOrWhiteSpace(_regulatorCode))
+        {
+            return;
+        }
+
+        _loading = true;
+        _error = null;
+
+        try
+        {
+            var list = await InboxService.GetInbox(_tenantId, _regulatorCode, _filter);
+            _items.Clear();
+            _items.AddRange(list.OrderByDescending(x => x.SubmittedAt));
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _loading = false;
+            StateHasChanged();
+        }
+    }
+
+    private static string ReceiptCss(RegulatorReceiptStatus status)
+    {
+        return status switch
+        {
+            RegulatorReceiptStatus.Received => "recd",
+            RegulatorReceiptStatus.UnderReview => "review",
+            RegulatorReceiptStatus.Accepted => "accept",
+            RegulatorReceiptStatus.FinalAccepted => "final",
+            RegulatorReceiptStatus.QueriesRaised => "query",
+            RegulatorReceiptStatus.ResponseReceived => "response",
+            _ => "recd"
+        };
+    }
+
+    public void Dispose()
+    {
+        _timer?.Dispose();
+    }
+}

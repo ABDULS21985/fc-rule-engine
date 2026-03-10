@@ -1,0 +1,175 @@
+@page "/regulator/cross-border/dataflows/new"
+@attribute [Authorize(Policy = "RegulatorOnly")]
+@inject ICrossBorderDataFlowEngine FlowEngine
+@inject NavigationManager Nav
+@using FC.Engine.Domain.Entities
+@using FC.Engine.Infrastructure.Metadata
+@inject MetadataDbContext Db
+@using Microsoft.EntityFrameworkCore
+
+<PageTitle>Define Data Flow — RegOS™</PageTitle>
+
+<div class="rg-cb-hero">
+    <div class="rg-cb-hero-text">
+        <div class="rg-cb-kicker">New Data Flow</div>
+        <h1 class="rg-cb-hero-title">Define Cross-Border Data Flow</h1>
+        <p class="rg-cb-hero-sub">Create an automated data transformation between source and target jurisdictions.</p>
+    </div>
+    <div class="rg-cb-hero-actions">
+        <button class="rg-btn" @onclick='() => Nav.NavigateTo("/regulator/cross-border/dataflows")'>← Cancel</button>
+    </div>
+</div>
+
+<div class="rg-card" style="padding:1.25rem;">
+    <div class="rg-cb-form-row">
+        <div class="rg-cb-field">
+            <label>Financial Group</label>
+            <select @bind="_selectedGroupId">
+                <option value="0">— Select group —</option>
+                @foreach (var g in _groups)
+                {
+                    <option value="@g.Id">@g.GroupName (@g.GroupCode)</option>
+                }
+            </select>
+        </div>
+        <div class="rg-cb-field">
+            <label>Flow Code</label>
+            <input @bind="_def.FlowCode" placeholder="e.g. NG_GH_CAR" />
+        </div>
+        <div class="rg-cb-field">
+            <label>Flow Name</label>
+            <input @bind="_def.FlowName" placeholder="Nigeria → Ghana CAR Transfer" />
+        </div>
+    </div>
+
+    <h4 class="rg-section-title" style="margin:1rem 0 0.5rem;">Source</h4>
+    <div class="rg-cb-form-row">
+        <div class="rg-cb-field">
+            <label>Source Jurisdiction</label>
+            <select @bind="_def.SourceJurisdiction">
+                <option value="">— Select —</option>
+                @foreach (var j in _jurisdictions)
+                {
+                    <option value="@j.JurisdictionCode">@j.CountryName (@j.JurisdictionCode)</option>
+                }
+            </select>
+        </div>
+        <div class="rg-cb-field">
+            <label>Source Return Code</label>
+            <input @bind="_def.SourceReturnCode" placeholder="CBN_1000" />
+        </div>
+        <div class="rg-cb-field">
+            <label>Source Line Code</label>
+            <input @bind="_def.SourceLineCode" placeholder="L001" />
+        </div>
+    </div>
+
+    <h4 class="rg-section-title" style="margin:1rem 0 0.5rem;">Target</h4>
+    <div class="rg-cb-form-row">
+        <div class="rg-cb-field">
+            <label>Target Jurisdiction</label>
+            <select @bind="_def.TargetJurisdiction">
+                <option value="">— Select —</option>
+                @foreach (var j in _jurisdictions)
+                {
+                    <option value="@j.JurisdictionCode">@j.CountryName (@j.JurisdictionCode)</option>
+                }
+            </select>
+        </div>
+        <div class="rg-cb-field">
+            <label>Target Return Code</label>
+            <input @bind="_def.TargetReturnCode" placeholder="BOG_2000" />
+        </div>
+        <div class="rg-cb-field">
+            <label>Target Line Code</label>
+            <input @bind="_def.TargetLineCode" placeholder="L001" />
+        </div>
+    </div>
+
+    <h4 class="rg-section-title" style="margin:1rem 0 0.5rem;">Transformation</h4>
+    <div class="rg-cb-form-row">
+        <div class="rg-cb-field">
+            <label>Transformation Type</label>
+            <select @bind="_def.Transformation">
+                <option value="@DataFlowTransformation.Direct">Direct</option>
+                <option value="@DataFlowTransformation.CurrencyConvert">Currency Convert</option>
+                <option value="@DataFlowTransformation.Formula">Formula</option>
+                <option value="@DataFlowTransformation.Proportional">Proportional</option>
+            </select>
+        </div>
+        <div class="rg-cb-field">
+            <label>Requires Currency Conversion</label>
+            <select @bind="_def.RequiresCurrencyConversion">
+                <option value="true">Yes</option>
+                <option value="false">No</option>
+            </select>
+        </div>
+        @if (_def.Transformation == DataFlowTransformation.Formula)
+        {
+            <div class="rg-cb-field">
+                <label>Formula</label>
+                <input @bind="_def.TransformationFormula" placeholder="e.g. SOURCE * 0.85" />
+            </div>
+        }
+    </div>
+
+    @* ── Preview ── *@
+    <div style="margin-top:1rem;padding:0.75rem;border-radius:8px;background:#f8fafc;border:1px solid var(--rg-border);">
+        <div class="rg-cb-flow-row" style="border:none;background:transparent;">
+            <FlagBadge Code="@_def.SourceJurisdiction" Label="@_def.SourceReturnCode" />
+            <span class="rg-cb-flow-arrow">→</span>
+            <span class="rg-cb-flow-transform">@_def.Transformation</span>
+            @if (_def.RequiresCurrencyConversion)
+            {
+                <span class="rg-cb-flow-fx">FX</span>
+            }
+            <span class="rg-cb-flow-arrow">→</span>
+            <FlagBadge Code="@_def.TargetJurisdiction" Label="@_def.TargetReturnCode" />
+        </div>
+    </div>
+
+    <div class="rg-controls" style="margin-top:1rem;">
+        <button class="rg-btn primary" @onclick="CreateFlow" disabled="@(_saving || _selectedGroupId == 0)">
+            @(_saving ? "Creating…" : "Create Flow")
+        </button>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(_error))
+    {
+        <p class="rg-danger-text" style="margin-top:0.5rem;">@_error</p>
+    }
+</div>
+
+@code {
+    private int _selectedGroupId;
+    private bool _saving;
+    private string? _error;
+    private DataFlowDefinition _def = new() { Transformation = DataFlowTransformation.Direct };
+    private List<FinancialGroup> _groups = [];
+    private List<RegulatoryJurisdiction> _jurisdictions = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        _groups = await Db.FinancialGroups.AsNoTracking().Where(g => g.IsActive).OrderBy(g => g.GroupName).ToListAsync();
+        _jurisdictions = await Db.RegulatoryJurisdictions.AsNoTracking().Where(j => j.IsActive).OrderBy(j => j.CountryName).ToListAsync();
+    }
+
+    private async Task CreateFlow()
+    {
+        _saving = true;
+        _error = null;
+        StateHasChanged();
+
+        try
+        {
+            await FlowEngine.DefineFlowAsync(_selectedGroupId, _def, 1);
+            Nav.NavigateTo("/regulator/cross-border/dataflows");
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+            _saving = false;
+            StateHasChanged();
+        }
+    }
+}
