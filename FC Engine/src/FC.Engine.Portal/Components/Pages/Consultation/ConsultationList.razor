@@ -1,0 +1,167 @@
+@page "/consultations"
+@attribute [Authorize(Policy = "InstitutionUser")]
+@inject IConsultationService ConsultationService
+@inject NavigationManager Nav
+
+<PageTitle>Policy Consultations — RegOS™ Portal</PageTitle>
+
+<div class="portal-page">
+    <PortalPageHeader Title="Policy Consultations"
+                      Subtitle="Review proposed regulatory changes and submit your institution's feedback"
+                      Breadcrumb="@_breadcrumb">
+    </PortalPageHeader>
+
+    @if (_loading)
+    {
+        <div class="portal-card">
+            @for (int i = 0; i < 4; i++)
+            {
+                <div class="portal-skeleton portal-skeleton-row"></div>
+            }
+        </div>
+    }
+    else if (!string.IsNullOrWhiteSpace(_error))
+    {
+        <div class="portal-card">
+            <div class="portal-card-body" style="text-align:center;">
+                <p class="portal-text-danger">@_error</p>
+                <button class="portal-btn portal-btn-outline portal-btn-sm" @onclick="LoadAsync">Retry</button>
+            </div>
+        </div>
+    }
+    else if (_consultations.Count == 0)
+    {
+        <PortalEmptyState Variant="consultations" HasFilter="false">
+            <Actions>
+                <p class="portal-text-muted">
+                    There are no open consultations at this time. Check back later when your regulator publishes new policy proposals.
+                </p>
+            </Actions>
+        </PortalEmptyState>
+    }
+    else
+    {
+        <div class="portal-consult-grid">
+            @foreach (var c in _consultations)
+            {
+                var daysLeft = (c.Deadline.ToDateTime(TimeOnly.MinValue) - DateTime.UtcNow).Days;
+                var urgent = daysLeft <= 7 && daysLeft >= 0;
+
+                <div class="portal-card portal-consult-card" role="article" aria-label="@c.Title consultation">
+                    <div class="portal-card-body">
+                        <!-- Header -->
+                        <div class="portal-consult-card-header">
+                            <div>
+                                <h3 class="portal-card-title" style="margin:0;">@c.Title</h3>
+                                <div class="portal-consult-card-meta">
+                                    <span class="portal-badge @ConsultStatusClass(c.Status)">@c.Status</span>
+                                    @if (c.HasSubmittedFeedback)
+                                    {
+                                        <span class="portal-badge portal-badge-success">
+                                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
+                                                <polyline points="20 6 9 17 4 12"/>
+                                            </svg>
+                                            Submitted
+                                        </span>
+                                    }
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Deadline -->
+                        <div class="portal-consult-card-deadline @(urgent ? "portal-consult-card-deadline--urgent" : "")">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                                <circle cx="12" cy="12" r="10"/>
+                                <polyline points="12 6 12 12 16 14"/>
+                            </svg>
+                            @if (daysLeft < 0)
+                            {
+                                <span>Deadline passed (@c.Deadline.ToString("d MMM yyyy"))</span>
+                            }
+                            else if (daysLeft == 0)
+                            {
+                                <span><strong>Due today</strong> — @c.Deadline.ToString("d MMM yyyy")</span>
+                            }
+                            else
+                            {
+                                <span>@daysLeft @(daysLeft == 1 ? "day" : "days") remaining — @c.Deadline.ToString("d MMM yyyy")</span>
+                            }
+                        </div>
+
+                        <!-- Actions -->
+                        <div class="portal-consult-card-actions">
+                            @if (c.HasSubmittedFeedback)
+                            {
+                                <span class="portal-text-muted portal-text-sm">
+                                    Your feedback has been submitted.
+                                </span>
+                            }
+                            else
+                            {
+                                <a href="/consultations/@c.Id/feedback" class="portal-btn portal-btn-primary portal-btn-sm">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                                        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                                    </svg>
+                                    Give Feedback
+                                </a>
+                            }
+                            <a href="/consultations/@c.Id/feedback" class="portal-btn portal-btn-ghost portal-btn-sm">
+                                View Details
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    private static readonly IReadOnlyList<BreadcrumbItem> _breadcrumb =
+    [
+        new BreadcrumbItem("Home", "/"),
+        new BreadcrumbItem("Consultations", IsCurrent: true)
+    ];
+
+    [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
+
+    private bool _loading = true;
+    private string? _error;
+    private IReadOnlyList<ConsultationSummary> _consultations = Array.Empty<ConsultationSummary>();
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _error = null;
+        StateHasChanged();
+
+        try
+        {
+            var state = await AuthState!;
+            var institutionId = int.Parse(
+                state.User.FindFirst("InstitutionId")?.Value
+                ?? state.User.FindFirst("institution_id")?.Value
+                ?? state.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? "1");
+
+            _consultations = await ConsultationService.GetOpenConsultationsAsync(institutionId);
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private static string ConsultStatusClass(ConsultationStatus status) => status switch
+    {
+        ConsultationStatus.Published => "portal-badge-info",
+        ConsultationStatus.Open => "portal-badge-success",
+        ConsultationStatus.Closed => "portal-badge-neutral",
+        _ => "portal-badge-neutral"
+    };
+}

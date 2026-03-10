@@ -1,0 +1,387 @@
+@page "/consultations/{ConsultationId:long}/feedback"
+@attribute [Authorize(Policy = "InstitutionUser")]
+@inject IConsultationService ConsultationService
+@inject NavigationManager Nav
+
+<PageTitle>@(_consultation?.Title ?? "Consultation") — Feedback — RegOS™ Portal</PageTitle>
+
+<div class="portal-page">
+    <PortalPageHeader Title="@(_consultation?.Title ?? "Consultation Feedback")"
+                      Subtitle="Review the proposed provisions and submit your institution's feedback"
+                      Breadcrumb="@_breadcrumb">
+    </PortalPageHeader>
+
+    @if (_loading)
+    {
+        <div class="portal-card">
+            @for (int i = 0; i < 6; i++)
+            {
+                <div class="portal-skeleton portal-skeleton-row"></div>
+            }
+        </div>
+    }
+    else if (!string.IsNullOrWhiteSpace(_error))
+    {
+        <div class="portal-card">
+            <div class="portal-card-body" style="text-align:center;">
+                <p class="portal-text-danger">@_error</p>
+                <button class="portal-btn portal-btn-outline portal-btn-sm" @onclick="LoadAsync">Retry</button>
+            </div>
+        </div>
+    }
+    else if (_submitted)
+    {
+        <!-- Success State -->
+        <div class="portal-card">
+            <div class="portal-card-body" style="text-align:center;padding:var(--space-12) var(--space-6);">
+                <div style="margin-bottom:var(--space-4);">
+                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--cbn-success)" stroke-width="1.5" aria-hidden="true">
+                        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                        <polyline points="22 4 12 14.01 9 11.01"/>
+                    </svg>
+                </div>
+                <h2 class="portal-card-title" style="color:var(--cbn-success);">Feedback Submitted</h2>
+                <p class="portal-text-muted" style="max-width:500px;margin:var(--space-2) auto var(--space-6);">
+                    Your institution's feedback has been recorded. The regulator will consider all responses when finalising the policy decision.
+                </p>
+                <a href="/consultations" class="portal-btn portal-btn-primary">
+                    Back to Consultations
+                </a>
+            </div>
+        </div>
+    }
+    else if (_consultation is not null)
+    {
+        <!-- Consultation Info Banner -->
+        <div class="portal-card">
+            <div class="portal-card-body">
+                <div class="portal-consult-info-grid">
+                    <div class="portal-consult-info-item">
+                        <span class="portal-text-label">Status</span>
+                        <span class="portal-badge @ConsultStatusClass(_consultation.Status)">@_consultation.Status</span>
+                    </div>
+                    <div class="portal-consult-info-item">
+                        <span class="portal-text-label">Deadline</span>
+                        <span class="portal-text-value">@_consultation.Deadline.ToString("d MMM yyyy")</span>
+                    </div>
+                    <div class="portal-consult-info-item">
+                        <span class="portal-text-label">Provisions</span>
+                        <span class="portal-text-value">@_consultation.Provisions.Count</span>
+                    </div>
+                    <div class="portal-consult-info-item">
+                        <span class="portal-text-label">Responses Received</span>
+                        <span class="portal-text-value">@_consultation.TotalFeedbackReceived</span>
+                    </div>
+                </div>
+                @if (!string.IsNullOrWhiteSpace(_consultation.CoverNote))
+                {
+                    <div class="portal-consult-cover-note">
+                        <strong>Cover Note</strong>
+                        <p>@_consultation.CoverNote</p>
+                    </div>
+                }
+            </div>
+        </div>
+
+        @if (_alreadySubmitted)
+        {
+            <div class="portal-card">
+                <div class="portal-card-body" style="text-align:center;padding:var(--space-8);">
+                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--cbn-info)" stroke-width="1.5" aria-hidden="true">
+                        <circle cx="12" cy="12" r="10"/>
+                        <line x1="12" y1="16" x2="12" y2="12"/>
+                        <line x1="12" y1="8" x2="12.01" y2="8"/>
+                    </svg>
+                    <h3 class="portal-card-title" style="margin-top:var(--space-3);">Feedback Already Submitted</h3>
+                    <p class="portal-text-muted">Your institution has already submitted feedback for this consultation.</p>
+                    <a href="/consultations" class="portal-btn portal-btn-outline portal-btn-sm" style="margin-top:var(--space-4);">
+                        Back to Consultations
+                    </a>
+                </div>
+            </div>
+        }
+        else
+        {
+            <!-- Provision-by-provision feedback -->
+            <div class="portal-consult-provisions">
+                @for (int i = 0; i < _consultation.Provisions.Count; i++)
+                {
+                    var idx = i;
+                    var prov = _consultation.Provisions[idx];
+
+                    <div class="portal-card portal-consult-provision" id="provision-@prov.Id">
+                        <div class="portal-card-body">
+                            <div class="portal-consult-provision-header">
+                                <span class="portal-consult-provision-num">@prov.ProvisionNumber</span>
+                                <h3 class="portal-card-title" style="margin:0;">@prov.Title</h3>
+                            </div>
+                            <div class="portal-consult-provision-text">
+                                @prov.Text
+                            </div>
+
+                            <div class="portal-consult-provision-form">
+                                <div class="portal-form-group">
+                                    <label class="portal-form-label" for="pos-@prov.Id">Your Position *</label>
+                                    <select id="pos-@prov.Id" class="portal-form-select"
+                                            @bind="_provisionFeedback[idx].Position">
+                                        @foreach (var pos in Enum.GetValues<ProvisionPosition>())
+                                        {
+                                            <option value="@pos">@FormatPosition(pos)</option>
+                                        }
+                                    </select>
+                                </div>
+
+                                <div class="portal-form-group">
+                                    <label class="portal-form-label" for="reason-@prov.Id">Reasoning</label>
+                                    <textarea id="reason-@prov.Id" class="portal-form-textarea"
+                                              placeholder="Explain your position on this provision..."
+                                              rows="3"
+                                              @bind="_provisionFeedback[idx].Reasoning"></textarea>
+                                </div>
+
+                                @if (_provisionFeedback[idx].Position == ProvisionPosition.Amend)
+                                {
+                                    <div class="portal-form-group">
+                                        <label class="portal-form-label" for="amend-@prov.Id">Suggested Amendment</label>
+                                        <textarea id="amend-@prov.Id" class="portal-form-textarea"
+                                                  placeholder="Describe the changes you would suggest..."
+                                                  rows="3"
+                                                  @bind="_provisionFeedback[idx].SuggestedAmendment"></textarea>
+                                    </div>
+                                }
+
+                                <div class="portal-form-group">
+                                    <label class="portal-form-label" for="impact-@prov.Id">Impact Assessment</label>
+                                    <textarea id="impact-@prov.Id" class="portal-form-textarea"
+                                              placeholder="How would this provision impact your institution? (optional)"
+                                              rows="2"
+                                              @bind="_provisionFeedback[idx].ImpactAssessment"></textarea>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                }
+            </div>
+
+            <!-- Overall Feedback -->
+            <div class="portal-card">
+                <div class="portal-card-body">
+                    <h3 class="portal-card-title">Overall Position</h3>
+
+                    <div class="portal-form-group">
+                        <label class="portal-form-label" for="overallPosition">Your institution's overall position on this consultation *</label>
+                        <select id="overallPosition" class="portal-form-select" @bind="_overallPosition" style="max-width:300px;">
+                            @foreach (var fp in Enum.GetValues<FeedbackPosition>())
+                            {
+                                <option value="@fp">@FormatOverallPosition(fp)</option>
+                            }
+                        </select>
+                    </div>
+
+                    <div class="portal-form-group">
+                        <label class="portal-form-label" for="generalComments">General Comments</label>
+                        <textarea id="generalComments" class="portal-form-textarea"
+                                  placeholder="Any additional comments on the consultation as a whole..."
+                                  rows="4"
+                                  @bind="_generalComments"></textarea>
+                    </div>
+
+                    @if (!string.IsNullOrWhiteSpace(_submitError))
+                    {
+                        <div class="portal-alert portal-alert-danger" role="alert" style="margin-top:var(--space-3);">
+                            @_submitError
+                        </div>
+                    }
+
+                    <div class="portal-consult-submit-bar">
+                        <a href="/consultations" class="portal-btn portal-btn-outline">Cancel</a>
+                        <button class="portal-btn portal-btn-primary" @onclick="ShowConfirmDialog"
+                                disabled="@_submitting">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                                <line x1="22" y1="2" x2="11" y2="13"/>
+                                <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+                            </svg>
+                            Submit Feedback
+                        </button>
+                    </div>
+                </div>
+            </div>
+        }
+    }
+
+    <!-- Confirmation Dialog -->
+    @if (_showConfirm)
+    {
+        <div class="portal-dialog-overlay" @onclick="() => _showConfirm = false"
+             role="dialog" aria-modal="true" aria-labelledby="confirm-dialog-title">
+            <div class="portal-dialog" @onclick:stopPropagation>
+                <h3 id="confirm-dialog-title" class="portal-dialog-title">
+                    Confirm Feedback Submission
+                </h3>
+                <p class="portal-dialog-body">
+                    Once submitted, your feedback cannot be changed. Are you sure you want to submit your institution's
+                    response to this consultation?
+                </p>
+                <div class="portal-consult-confirm-summary">
+                    <div><strong>Overall Position:</strong> @FormatOverallPosition(_overallPosition)</div>
+                    <div><strong>Provisions Responded:</strong> @_consultation!.Provisions.Count</div>
+                </div>
+                <div class="portal-dialog-actions">
+                    <button class="portal-btn portal-btn-outline" @onclick="() => _showConfirm = false">Cancel</button>
+                    <button class="portal-btn portal-btn-primary" @onclick="SubmitFeedback" disabled="@_submitting">
+                        @(_submitting ? "Submitting..." : "Confirm & Submit")
+                    </button>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public long ConsultationId { get; set; }
+    [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
+
+    private static readonly IReadOnlyList<BreadcrumbItem> _breadcrumb =
+    [
+        new BreadcrumbItem("Home", "/"),
+        new BreadcrumbItem("Consultations", "/consultations"),
+        new BreadcrumbItem("Feedback", IsCurrent: true)
+    ];
+
+    private bool _loading = true;
+    private string? _error;
+    private string? _submitError;
+    private bool _submitting;
+    private bool _submitted;
+    private bool _showConfirm;
+    private bool _alreadySubmitted;
+
+    private ConsultationDetail? _consultation;
+    private List<ProvisionFeedbackDraft> _provisionFeedback = new();
+    private FeedbackPosition _overallPosition = FeedbackPosition.Support;
+    private string? _generalComments;
+
+    private int _institutionId;
+    private int _userId;
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _error = null;
+        StateHasChanged();
+
+        try
+        {
+            var state = await AuthState!;
+            _institutionId = int.Parse(
+                state.User.FindFirst("InstitutionId")?.Value
+                ?? state.User.FindFirst("institution_id")?.Value
+                ?? state.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? "1");
+            _userId = int.Parse(
+                state.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? "1");
+
+            // Check if already submitted — use list endpoint to check HasSubmittedFeedback
+            var open = await ConsultationService.GetOpenConsultationsAsync(_institutionId);
+            var match = open.FirstOrDefault(c => c.Id == ConsultationId);
+            if (match is not null && match.HasSubmittedFeedback)
+            {
+                _alreadySubmitted = true;
+            }
+
+            // Load full consultation detail (regulator-scoped, pass 0 as regulatorId for institution access)
+            // The service uses the consultation ID directly
+            _consultation = await ConsultationService.GetConsultationAsync(ConsultationId, 0);
+
+            // Initialize provision feedback drafts
+            _provisionFeedback = _consultation.Provisions
+                .Select(p => new ProvisionFeedbackDraft
+                {
+                    ProvisionId = p.Id,
+                    Position = ProvisionPosition.Neutral
+                }).ToList();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private void ShowConfirmDialog() => _showConfirm = true;
+
+    private async Task SubmitFeedback()
+    {
+        _submitting = true;
+        _submitError = null;
+        _showConfirm = false;
+        StateHasChanged();
+
+        try
+        {
+            var provisionInputs = _provisionFeedback.Select(pf => new ProvisionFeedbackInput(
+                pf.ProvisionId,
+                pf.Position,
+                string.IsNullOrWhiteSpace(pf.Reasoning) ? null : pf.Reasoning,
+                string.IsNullOrWhiteSpace(pf.SuggestedAmendment) ? null : pf.SuggestedAmendment,
+                string.IsNullOrWhiteSpace(pf.ImpactAssessment) ? null : pf.ImpactAssessment
+            )).ToList();
+
+            await ConsultationService.SubmitFeedbackAsync(
+                ConsultationId,
+                _institutionId,
+                _overallPosition,
+                string.IsNullOrWhiteSpace(_generalComments) ? null : _generalComments,
+                provisionInputs,
+                _userId);
+
+            _submitted = true;
+        }
+        catch (Exception ex)
+        {
+            _submitError = ex.Message;
+        }
+        finally
+        {
+            _submitting = false;
+        }
+    }
+
+    private static string FormatPosition(ProvisionPosition pos) => pos switch
+    {
+        ProvisionPosition.Support => "Support",
+        ProvisionPosition.Oppose => "Oppose",
+        ProvisionPosition.Neutral => "Neutral",
+        ProvisionPosition.Amend => "Support with Amendments",
+        _ => pos.ToString()
+    };
+
+    private static string FormatOverallPosition(FeedbackPosition pos) => pos switch
+    {
+        FeedbackPosition.Support => "Support",
+        FeedbackPosition.PartialSupport => "Partial Support",
+        FeedbackPosition.Oppose => "Oppose",
+        _ => pos.ToString()
+    };
+
+    private static string ConsultStatusClass(ConsultationStatus status) => status switch
+    {
+        ConsultationStatus.Published => "portal-badge-info",
+        ConsultationStatus.Open => "portal-badge-success",
+        ConsultationStatus.Closed => "portal-badge-neutral",
+        _ => "portal-badge-neutral"
+    };
+
+    private sealed class ProvisionFeedbackDraft
+    {
+        public long ProvisionId { get; set; }
+        public ProvisionPosition Position { get; set; }
+        public string? Reasoning { get; set; }
+        public string? SuggestedAmendment { get; set; }
+        public string? ImpactAssessment { get; set; }
+    }
+}

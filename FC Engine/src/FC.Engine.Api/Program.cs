@@ -312,6 +312,7 @@ v1.MapWhiteLabelDocsEndpoints();
 v1.MapComplianceEndpoints();
 v1.MapRootCauseAnalysisEndpoints();
 app.MapPolicySimulationEndpoints();
+v1.MapCrossBorderEndpoints();
 
 // v2 endpoints (future — same implementations for now, diverge later)
 var v2 = app.MapGroup("/api/v2")

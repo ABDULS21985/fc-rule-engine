@@ -1,7 +1,10 @@
 using FC.Engine.Domain.Abstractions;
+using FC.Engine.Domain.Entities;
 using FC.Engine.Domain.Enums;
 using FC.Engine.Domain.Models;
+using FC.Engine.Infrastructure.Metadata;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 
 namespace FC.Engine.Api.Endpoints;
 
@@ -67,6 +70,21 @@ public static class PolicySimulationEndpoints
             return Results.NoContent();
         }).WithName("AddPolicyParameter")
           .WithSummary("Add a parameter adjustment to a policy scenario");
+
+        regulator.MapPut("/scenarios/{scenarioId:long}/parameters/{parameterCode}", async (
+            long scenarioId,
+            string parameterCode,
+            [FromBody] UpdateParameterRequest req,
+            IPolicyScenarioService svc,
+            HttpContext ctx, CancellationToken ct) =>
+        {
+            var regulatorId = GetRegulatorId(ctx);
+            var userId = GetUserId(ctx);
+            await svc.UpdateParameterAsync(scenarioId, regulatorId, parameterCode,
+                req.NewProposedValue, userId, ct);
+            return Results.NoContent();
+        }).WithName("UpdatePolicyParameter")
+          .WithSummary("Update the proposed value for an existing parameter adjustment");
 
         regulator.MapPost("/scenarios/{scenarioId:long}/clone", async (
             long scenarioId,
@@ -248,6 +266,22 @@ public static class PolicySimulationEndpoints
         }).WithName("GetAccuracyScore")
           .WithSummary("Get the latest accuracy score for a policy decision");
 
+        regulator.MapGet("/parameter-presets", async (
+            [FromQuery] PolicyDomain? domain,
+            MetadataDbContext db,
+            CancellationToken ct) =>
+        {
+            var query = db.Set<PolicyParameterPreset>().AsQueryable();
+            if (domain.HasValue)
+                query = query.Where(p => p.PolicyDomain == domain.Value);
+            var presets = await query
+                .OrderBy(p => p.PolicyDomain)
+                .ThenBy(p => p.ParameterCode)
+                .ToListAsync(ct);
+            return Results.Ok(presets);
+        }).WithName("GetParameterPresets")
+          .WithSummary("List regulatory parameter presets, optionally filtered by domain");
+
         // ── Institution-facing endpoints ───────────────────────────────
         var institution = app.MapGroup("/api/v1/institution/consultations")
             .RequireAuthorization()
@@ -297,3 +331,4 @@ public static class PolicySimulationEndpoints
 }
 
 public sealed record CloneScenarioRequest(string NewTitle);
+public sealed record UpdateParameterRequest(decimal NewProposedValue);

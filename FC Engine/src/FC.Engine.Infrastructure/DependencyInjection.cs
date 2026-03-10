@@ -439,6 +439,16 @@ public static class DependencyInjection
         services.AddHostedService<BatchStatusPollingJob>();
         services.AddHostedService<BatchQuerySyncJob>();
 
+        // ── Cross-Border Harmonisation (RG-41) ──
+        services.AddScoped<IHarmonisationAuditLogger, Services.CrossBorder.HarmonisationAuditLogger>();
+        services.AddScoped<ICurrencyConversionEngine, Services.CrossBorder.CurrencyConversionEngine>();
+        services.AddScoped<IEquivalenceMappingService, Services.CrossBorder.EquivalenceMappingService>();
+        services.AddScoped<IConsolidationEngine, Services.CrossBorder.ConsolidationEngine>();
+        services.AddScoped<ICrossBorderDataFlowEngine, Services.CrossBorder.CrossBorderDataFlowEngine>();
+        services.AddScoped<IDivergenceDetectionService, Services.CrossBorder.DivergenceDetectionService>();
+        services.AddScoped<IPanAfricanDashboardService, Services.CrossBorder.PanAfricanDashboardService>();
+        services.AddScoped<IAfcftaTrackingService, Services.CrossBorder.AfcftaTrackingService>();
+
         // ── Compliance-as-a-Service (RG-35) ──
         services.AddCaaSEngine(configuration);
 

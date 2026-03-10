@@ -151,6 +151,24 @@ public class MetadataDbContext : DbContext
     // Compliance Health Scoring (RG-32)
     public DbSet<ChsScoreSnapshot> ChsScoreSnapshots => Set<ChsScoreSnapshot>();
 
+    // Cross-Border Harmonisation (RG-41)
+    public DbSet<RegulatoryJurisdiction> RegulatoryJurisdictions => Set<RegulatoryJurisdiction>();
+    public DbSet<FinancialGroup> FinancialGroups => Set<FinancialGroup>();
+    public DbSet<GroupSubsidiary> GroupSubsidiaries => Set<GroupSubsidiary>();
+    public DbSet<RegulatoryEquivalenceMapping> RegulatoryEquivalenceMappings => Set<RegulatoryEquivalenceMapping>();
+    public DbSet<EquivalenceMappingEntry> EquivalenceMappingEntries => Set<EquivalenceMappingEntry>();
+    public DbSet<CrossBorderFxRate> CrossBorderFxRates => Set<CrossBorderFxRate>();
+    public DbSet<ConsolidationRun> ConsolidationRuns => Set<ConsolidationRun>();
+    public DbSet<ConsolidationSubsidiarySnapshot> ConsolidationSubsidiarySnapshots => Set<ConsolidationSubsidiarySnapshot>();
+    public DbSet<GroupConsolidationAdjustment> GroupConsolidationAdjustments => Set<GroupConsolidationAdjustment>();
+    public DbSet<CrossBorderDataFlow> CrossBorderDataFlows => Set<CrossBorderDataFlow>();
+    public DbSet<DataFlowExecution> DataFlowExecutions => Set<DataFlowExecution>();
+    public DbSet<RegulatoryDivergence> RegulatoryDivergences => Set<RegulatoryDivergence>();
+    public DbSet<DivergenceNotification> DivergenceNotifications => Set<DivergenceNotification>();
+    public DbSet<AfcftaProtocolTracking> AfcftaProtocolTracking => Set<AfcftaProtocolTracking>();
+    public DbSet<RegulatoryDeadline> RegulatoryDeadlines => Set<RegulatoryDeadline>();
+    public DbSet<HarmonisationAuditLog> HarmonisationAuditLogs => Set<HarmonisationAuditLog>();
+
     // Policy Simulation & What-If Modelling (RG-40)
     public DbSet<PolicyScenario> PolicyScenarios => Set<PolicyScenario>();
     public DbSet<PolicyParameter> PolicyParameters => Set<PolicyParameter>();
