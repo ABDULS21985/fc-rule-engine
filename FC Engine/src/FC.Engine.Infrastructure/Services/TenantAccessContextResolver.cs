@@ -23,7 +23,7 @@ public interface ITenantAccessContextResolver
         CancellationToken ct = default);
 }
 
-internal sealed class TenantAccessContextResolver : ITenantAccessContextResolver
+public sealed class TenantAccessContextResolver : ITenantAccessContextResolver
 {
     private readonly MetadataDbContext _db;
 
@@ -71,13 +71,18 @@ internal sealed class TenantAccessContextResolver : ITenantAccessContextResolver
         TenantType tenantType,
         string tenantSlug)
     {
+        if (tenantType != TenantType.Regulator)
+        {
+            return null;
+        }
+
         var claimValue = principal?.FindFirst("RegulatorCode")?.Value;
         if (!string.IsNullOrWhiteSpace(claimValue))
         {
             return claimValue.Trim().ToUpperInvariant();
         }
 
-        if (tenantType != TenantType.Regulator || string.IsNullOrWhiteSpace(tenantSlug))
+        if (string.IsNullOrWhiteSpace(tenantSlug))
         {
             return null;
         }
@@ -90,15 +95,15 @@ internal sealed class TenantAccessContextResolver : ITenantAccessContextResolver
         TenantType tenantType,
         Guid tenantId)
     {
+        if (tenantType != TenantType.Regulator)
+        {
+            return null;
+        }
+
         var claimValue = principal?.FindFirst("RegulatorId")?.Value;
         if (int.TryParse(claimValue, out var parsed) && parsed > 0)
         {
             return parsed;
-        }
-
-        if (tenantType != TenantType.Regulator)
-        {
-            return null;
         }
 
         return ComputeStableRegulatorId(tenantId);

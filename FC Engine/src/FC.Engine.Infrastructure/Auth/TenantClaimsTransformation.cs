@@ -4,7 +4,7 @@ using Microsoft.AspNetCore.Authentication;
 
 namespace FC.Engine.Infrastructure.Auth;
 
-internal sealed class TenantClaimsTransformation : IClaimsTransformation
+public sealed class TenantClaimsTransformation : IClaimsTransformation
 {
     private readonly ITenantAccessContextResolver _tenantAccessContextResolver;
 
