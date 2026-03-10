@@ -51,7 +51,7 @@ public class CaaSServiceTests
         // but if partner allowed modules don't include the module, it should throw.
         // We need to mock the DB to return the partner's allowed modules.
         var connMock = new Mock<IDbConnection>();
-        _dbMock.Setup(d => d.OpenAsync(It.IsAny<CancellationToken>()))
+        _dbMock.Setup(d => d.CreateConnectionAsync(null, It.IsAny<CancellationToken>()))
             .ReturnsAsync(connMock.Object);
 
         var svc = CreateService();
@@ -78,7 +78,7 @@ public class CaaSServiceTests
     public async Task GetDeadlinesAsync_WithOpenConnection_CallsDb()
     {
         var connMock = new Mock<IDbConnection>();
-        _dbMock.Setup(d => d.OpenAsync(It.IsAny<CancellationToken>()))
+        _dbMock.Setup(d => d.CreateConnectionAsync(null, It.IsAny<CancellationToken>()))
             .ReturnsAsync(connMock.Object);
 
         var svc = CreateService();
@@ -93,7 +93,7 @@ public class CaaSServiceTests
     public async Task GetChangesAsync_WithOpenConnection_CallsDb()
     {
         var connMock = new Mock<IDbConnection>();
-        _dbMock.Setup(d => d.OpenAsync(It.IsAny<CancellationToken>()))
+        _dbMock.Setup(d => d.CreateConnectionAsync(null, It.IsAny<CancellationToken>()))
             .ReturnsAsync(connMock.Object);
 
         var svc = CreateService();

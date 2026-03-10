@@ -1,0 +1,24 @@
+@* Reusable jurisdiction flag + code badge *@
+
+<span class="rg-cb-flag-badge @CssClass" title="@Tooltip">
+    <span class="rg-cb-flag" aria-hidden="true">@GetFlag(Code)</span>
+    <span class="rg-cb-flag-code">@Code</span>
+    @if (!string.IsNullOrEmpty(Label))
+    {
+        <span class="rg-cb-flag-label">@Label</span>
+    }
+</span>
+
+@code {
+    [Parameter] public string Code { get; set; } = "";
+    [Parameter] public string? Label { get; set; }
+    [Parameter] public string? Tooltip { get; set; }
+    [Parameter] public string? CssClass { get; set; }
+
+    private static string GetFlag(string isoCode)
+    {
+        if (string.IsNullOrEmpty(isoCode) || isoCode.Length < 2) return "🏳";
+        var upper = isoCode[..2].ToUpperInvariant();
+        return string.Concat(upper.Select(c => char.ConvertFromUtf32(0x1F1E6 + c - 'A')));
+    }
+}

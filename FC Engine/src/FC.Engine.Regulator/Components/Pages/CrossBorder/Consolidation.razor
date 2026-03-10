@@ -1,0 +1,227 @@
+@page "/cross-border/consolidation"
+@attribute [Authorize(Policy = "RegulatorOnly")]
+@inject IConsolidationEngine ConsolidationEngine
+@inject NavigationManager Nav
+@using FC.Engine.Domain.Entities
+@using FC.Engine.Infrastructure.Metadata
+@inject MetadataDbContext Db
+@using Microsoft.EntityFrameworkCore
+
+<PageTitle>Consolidation — RegOS™</PageTitle>
+
+<div class="rg-cb-hero">
+    <div class="rg-cb-hero-text">
+        <div class="rg-cb-kicker">Cross-Border Harmonisation</div>
+        <h1 class="rg-cb-hero-title">Prudential Consolidation</h1>
+        <p class="rg-cb-hero-sub">
+            Consolidate regulatory returns across subsidiaries with automatic FX conversion,
+            IFRS-aligned adjustments, and minority interest calculations.
+        </p>
+    </div>
+</div>
+
+@* ── Group Selection + Run Form ── *@
+<div class="rg-card" style="padding:1rem;margin-bottom:1rem;">
+    <h3 class="rg-section-title">Run Consolidation</h3>
+    <div class="rg-cb-form-row">
+        <div class="rg-cb-field">
+            <label>Financial Group</label>
+            <select class="rg-cb-group-select" @bind="_selectedGroupId">
+                <option value="0">— Select group —</option>
+                @foreach (var g in _groups)
+                {
+                    <option value="@g.Id">@g.GroupName (@g.GroupCode)</option>
+                }
+            </select>
+        </div>
+        <div class="rg-cb-field">
+            <label>Reporting Period</label>
+            <input @bind="_reportingPeriod" placeholder="2025-Q4" />
+        </div>
+        <div class="rg-cb-field">
+            <label>Snapshot Date</label>
+            <input type="date" @bind="_snapshotDate" />
+        </div>
+        <div class="rg-cb-field" style="justify-content:flex-end;">
+            <button class="rg-btn primary" @onclick="RunConsolidation" disabled="@(_running || _selectedGroupId == 0)">
+                @(_running ? "Running…" : "Run Consolidation")
+            </button>
+        </div>
+    </div>
+    @if (!string.IsNullOrWhiteSpace(_runMessage))
+    {
+        <p style="margin-top:0.5rem;font-size:0.82rem;color:@(_runError ? "var(--rg-danger)" : "#15803d");">@_runMessage</p>
+    }
+</div>
+
+@* ── Latest Run Result ── *@
+@if (_latestRun is not null)
+{
+    <div class="rg-cb-section-head">
+        <h2 class="rg-cb-section-title">Run #@_latestRun.RunNumber — @_latestRun.ReportingPeriod</h2>
+        <button class="rg-btn" @onclick='() => Nav.NavigateTo($"/cross-border/consolidation/{_latestRun.RunId}")'>Full Detail →</button>
+    </div>
+
+    @* ── Progress Stepper ── *@
+    <div class="rg-cb-progress-stepper">
+        @{
+            var steps = new[] { "Collecting", "Converting", "Consolidating", "Adjusting", "Completed" };
+            var statusIdx = _latestRun.Status switch
+            {
+                ConsolidationRunStatus.Pending => -1,
+                ConsolidationRunStatus.Collecting => 0,
+                ConsolidationRunStatus.Converting => 1,
+                ConsolidationRunStatus.Consolidating => 2,
+                ConsolidationRunStatus.Adjusting => 3,
+                ConsolidationRunStatus.Completed => 4,
+                ConsolidationRunStatus.Failed => -2,
+                _ => -1
+            };
+        }
+        @for (var i = 0; i < steps.Length; i++)
+        {
+            var stepClass = i < statusIdx ? "rg-cb-step--done"
+                : i == statusIdx ? "rg-cb-step--active"
+                : statusIdx == -2 ? "rg-cb-step--failed"
+                : "";
+            <div class="rg-cb-step @stepClass">
+                <span class="rg-cb-step-icon">@(i < statusIdx ? "✓" : i == statusIdx ? "●" : "○")</span>
+                @steps[i]
+            </div>
+        }
+    </div>
+
+    @* ── Summary KPIs ── *@
+    <div class="rg-cb-kpis" style="margin-bottom:1rem;">
+        <div class="rg-card rg-cb-kpi rg-cb-kpi--info">
+            <div class="rg-cb-kpi-value rg-cb-kpi-value--info">@_latestRun.SubsidiariesCollected / @_latestRun.TotalSubsidiaries</div>
+            <div class="rg-cb-kpi-label">Subsidiaries Collected</div>
+        </div>
+        <div class="rg-card rg-cb-kpi rg-cb-kpi--success">
+            <div class="rg-cb-kpi-value rg-cb-kpi-value--success">@((_latestRun.ConsolidatedCAR ?? 0).ToString("F2"))%</div>
+            <div class="rg-cb-kpi-label">Consolidated CAR</div>
+        </div>
+        <div class="rg-card rg-cb-kpi rg-cb-kpi--warning">
+            <div class="rg-cb-kpi-value rg-cb-kpi-value--warning">@_latestRun.TotalAdjustments</div>
+            <div class="rg-cb-kpi-label">Adjustments</div>
+        </div>
+        <div class="rg-card rg-cb-kpi rg-cb-kpi--info">
+            <div class="rg-cb-kpi-value rg-cb-kpi-value--info">@((_latestRun.ExecutionTimeMs ?? 0).ToString("N0"))ms</div>
+            <div class="rg-cb-kpi-label">Execution Time</div>
+        </div>
+    </div>
+
+    @* ── Subsidiary Results ── *@
+    @if (_subsidiaries.Count > 0)
+    {
+        <div class="rg-card" style="padding:0.75rem;margin-bottom:1rem;">
+            <h3 class="rg-section-title" style="margin-bottom:0.5rem;">Subsidiary Breakdown</h3>
+            <div class="rg-table-wrap">
+                <table class="rg-table">
+                    <thead>
+                        <tr>
+                            <th>Subsidiary</th>
+                            <th>Jurisdiction</th>
+                            <th>Local Assets</th>
+                            <th>FX Rate</th>
+                            <th>Converted (@_latestRun.BaseCurrency)</th>
+                            <th>Adjusted</th>
+                            <th>Method</th>
+                            <th>Ownership</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var s in _subsidiaries)
+                        {
+                            <tr>
+                                <td>
+                                    <div><strong>@s.SubsidiaryCode</strong></div>
+                                    <div style="font-size:0.72rem;color:var(--rg-muted);">@s.SubsidiaryName</div>
+                                </td>
+                                <td><FlagBadge Code="@s.JurisdictionCode" /></td>
+                                <td style="text-align:right;font-family:monospace;font-size:0.82rem;">
+                                    @FormatAmount(s.LocalTotalAssets, s.LocalCurrency)
+                                </td>
+                                <td style="text-align:right;font-size:0.78rem;">
+                                    <div>@s.FxRateUsed.ToString("F4")</div>
+                                    <div style="font-size:0.68rem;color:var(--rg-muted);">@s.FxRateSource · @s.FxRateDate.ToString("dd MMM")</div>
+                                </td>
+                                <td style="text-align:right;font-family:monospace;font-size:0.82rem;">
+                                    @FormatAmount(s.ConvertedTotalAssets, _latestRun.BaseCurrency)
+                                </td>
+                                <td style="text-align:right;font-family:monospace;font-size:0.82rem;font-weight:600;">
+                                    @FormatAmount(s.AdjustedTotalAssets, _latestRun.BaseCurrency)
+                                </td>
+                                <td><StatusPill Label="@s.ConsolidationMethod" Variant="@(s.ConsolidationMethod == "Full" ? "primary" : "warning")" /></td>
+                                <td style="text-align:right;">@s.OwnershipPercentage%</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    }
+}
+
+@code {
+    private bool _running;
+    private int _selectedGroupId;
+    private string _reportingPeriod = $"{DateTime.UtcNow.Year}-Q{(DateTime.UtcNow.Month - 1) / 3 + 1}";
+    private DateOnly _snapshotDate = DateOnly.FromDateTime(DateTime.UtcNow);
+    private string? _runMessage;
+    private bool _runError;
+
+    private ConsolidationResult? _latestRun;
+    private List<ConsolidationSubsidiaryResult> _subsidiaries = [];
+    private List<FinancialGroup> _groups = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        _groups = await Db.FinancialGroups
+            .AsNoTracking()
+            .Where(g => g.IsActive)
+            .OrderBy(g => g.GroupName)
+            .ToListAsync();
+    }
+
+    private async Task RunConsolidation()
+    {
+        _running = true;
+        _runMessage = null;
+        _runError = false;
+        StateHasChanged();
+
+        try
+        {
+            _latestRun = await ConsolidationEngine.RunConsolidationAsync(
+                _selectedGroupId, _reportingPeriod, _snapshotDate, 1);
+
+            _subsidiaries = (await ConsolidationEngine.GetSubsidiarySnapshotsAsync(
+                _latestRun.RunId, _selectedGroupId)).ToList();
+
+            _runMessage = $"Consolidation completed successfully (Run #{_latestRun.RunNumber}).";
+        }
+        catch (Exception ex)
+        {
+            _runMessage = $"Consolidation failed: {ex.Message}";
+            _runError = true;
+        }
+        finally { _running = false; StateHasChanged(); }
+    }
+
+    private static string FormatAmount(decimal amount, string currency)
+    {
+        var symbol = currency switch
+        {
+            "NGN" => "₦",
+            "GHS" => "GH₵",
+            "KES" => "KSh",
+            "ZAR" => "R",
+            "EGP" => "E£",
+            "XOF" or "XAF" => "CFA",
+            "USD" => "$",
+            _ => currency + " "
+        };
+        return $"{symbol}{amount:N0}";
+    }
+}

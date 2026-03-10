@@ -1,0 +1,227 @@
+@page "/cross-border/divergences"
+@attribute [Authorize(Policy = "RegulatorOnly")]
+@inject IDivergenceDetectionService DivergenceService
+@inject NavigationManager Nav
+
+<PageTitle>Divergence Alerts — RegOS™</PageTitle>
+
+<div class="rg-cb-hero">
+    <div class="rg-cb-hero-text">
+        <div class="rg-cb-kicker">Cross-Border Harmonisation</div>
+        <h1 class="rg-cb-hero-title">Regulatory Divergence Alerts</h1>
+        <p class="rg-cb-hero-sub">
+            Monitor and respond to regulatory divergences across jurisdictions. Detect threshold changes,
+            framework upgrades, and calculation method differences automatically.
+        </p>
+    </div>
+    <div class="rg-cb-hero-actions">
+        <button class="rg-btn primary" @onclick="RunDetection" disabled="@_detecting">
+            @(_detecting ? "Detecting…" : "Run Detection")
+        </button>
+    </div>
+</div>
+
+@* ── Filters ── *@
+<div class="rg-cb-filters">
+    <select class="rg-cb-filter-select" @bind="_domainFilter" @bind:after="LoadDivergences">
+        <option value="">All Domains</option>
+        <option value="CAPITAL_ADEQUACY">Capital Adequacy</option>
+        <option value="LIQUIDITY">Liquidity</option>
+        <option value="LEVERAGE">Leverage</option>
+        <option value="FX">FX</option>
+        <option value="RISK_MANAGEMENT">Risk Management</option>
+    </select>
+    <select class="rg-cb-filter-select" @bind="_severityFilter" @bind:after="LoadDivergences">
+        <option value="">All Severities</option>
+        <option value="Low">Low</option>
+        <option value="Medium">Medium</option>
+        <option value="High">High</option>
+        <option value="Critical">Critical</option>
+    </select>
+</div>
+
+@if (_loading)
+{
+    <p class="rg-muted">Loading divergences…</p>
+}
+else if (_divergences.Count == 0)
+{
+    <div class="rg-cb-empty">
+        <div class="rg-cb-empty-icon">✓</div>
+        <div class="rg-cb-empty-title">No Open Divergences</div>
+        <div class="rg-cb-empty-desc">All jurisdictions are harmonised. Run detection to check for new divergences.</div>
+    </div>
+}
+else
+{
+    @* ── Summary Strip ── *@
+    <div class="rg-cb-kpis" style="margin-bottom:1rem;">
+        <div class="rg-card rg-cb-kpi rg-cb-kpi--danger">
+            <div class="rg-cb-kpi-value rg-cb-kpi-value--danger">@_divergences.Count(d => d.Severity == DivergenceSeverity.Critical)</div>
+            <div class="rg-cb-kpi-label">Critical</div>
+        </div>
+        <div class="rg-card rg-cb-kpi rg-cb-kpi--warning">
+            <div class="rg-cb-kpi-value rg-cb-kpi-value--warning">@_divergences.Count(d => d.Severity == DivergenceSeverity.High)</div>
+            <div class="rg-cb-kpi-label">High</div>
+        </div>
+        <div class="rg-card rg-cb-kpi rg-cb-kpi--info">
+            <div class="rg-cb-kpi-value rg-cb-kpi-value--info">@_divergences.Count(d => d.Severity == DivergenceSeverity.Medium)</div>
+            <div class="rg-cb-kpi-label">Medium</div>
+        </div>
+        <div class="rg-card rg-cb-kpi rg-cb-kpi--success">
+            <div class="rg-cb-kpi-value rg-cb-kpi-value--success">@_divergences.Count(d => d.Severity == DivergenceSeverity.Low)</div>
+            <div class="rg-cb-kpi-label">Low</div>
+        </div>
+    </div>
+
+    @* ── Divergence Cards ── *@
+    @foreach (var d in _divergences)
+    {
+        <div class="rg-cb-divergence-card rg-cb-divergence-card--@d.Severity.ToString().ToLowerInvariant()">
+            <div class="rg-cb-divergence-head">
+                <div class="rg-cb-divergence-badges">
+                    <SeverityBadge Severity="d.Severity" />
+                    <StatusPill Label="@FormatType(d.Type)" Variant="default" />
+                    <StatusPill Label="@d.ConceptDomain.Replace("_", " ")" Variant="info" />
+                </div>
+                <span style="font-size:0.74rem;color:var(--rg-muted);">@d.DetectedAt.ToString("dd MMM yyyy HH:mm")</span>
+            </div>
+
+            <div class="rg-cb-divergence-desc">@d.Description</div>
+
+            <div class="rg-cb-divergence-flow">
+                <span class="rg-cb-divergence-flow-chip">
+                    <FlagBadge Code="@d.SourceJurisdiction" />
+                    <span style="font-size:0.72rem;color:var(--rg-muted);">changed</span>
+                </span>
+                <span class="rg-cb-divergence-flow-arrow">→</span>
+                @foreach (var aff in d.AffectedJurisdictions)
+                {
+                    <span class="rg-cb-divergence-flow-chip">
+                        <FlagBadge Code="@aff" />
+                    </span>
+                }
+                <span style="font-size:0.72rem;color:var(--rg-muted);margin-left:0.25rem;">haven't aligned</span>
+            </div>
+
+            <div class="rg-cb-divergence-actions">
+                <button class="rg-btn" @onclick="() => AcknowledgeDivergence(d.DivergenceId)">Acknowledge</button>
+                <button class="rg-btn" @onclick="() => ShowResolveModal(d.DivergenceId)">Resolve</button>
+            </div>
+        </div>
+    }
+}
+
+@* ── Resolve Modal ── *@
+@if (_showResolveModal)
+{
+    <div class="rg-cb-modal-backdrop" @onclick="() => _showResolveModal = false">
+        <div class="rg-cb-modal" @onclick:stopPropagation="true">
+            <h3 class="rg-cb-modal-title">Resolve Divergence</h3>
+            <div class="rg-cb-field">
+                <label>Resolution Notes</label>
+                <textarea @bind="_resolution" rows="3" placeholder="Describe how this divergence was resolved…"
+                          style="width:100%;padding:0.5rem;border:1px solid var(--rg-border);border-radius:6px;font-size:0.84rem;"></textarea>
+            </div>
+            <div class="rg-cb-modal-actions">
+                <button class="rg-btn" @onclick="() => _showResolveModal = false">Cancel</button>
+                <button class="rg-btn primary" @onclick="ResolveDivergence" disabled="@(string.IsNullOrWhiteSpace(_resolution))">Confirm Resolve</button>
+            </div>
+        </div>
+    </div>
+}
+
+@if (!string.IsNullOrWhiteSpace(_message))
+{
+    <p style="margin-top:0.5rem;font-size:0.82rem;color:#15803d;">@_message</p>
+}
+
+@code {
+    private bool _loading = true;
+    private bool _detecting;
+    private string _domainFilter = "";
+    private string _severityFilter = "";
+    private string? _message;
+    private List<DivergenceAlert> _divergences = [];
+
+    private bool _showResolveModal;
+    private long _resolveId;
+    private string _resolution = "";
+
+    protected override async Task OnInitializedAsync() => await LoadDivergences();
+
+    private async Task LoadDivergences()
+    {
+        _loading = true;
+        StateHasChanged();
+
+        try
+        {
+            var domain = string.IsNullOrWhiteSpace(_domainFilter) ? null : _domainFilter;
+            DivergenceSeverity? minSev = null;
+            if (Enum.TryParse<DivergenceSeverity>(_severityFilter, out var s))
+                minSev = s;
+
+            var result = await DivergenceService.GetOpenDivergencesAsync(domain, minSev);
+            _divergences = result.ToList();
+        }
+        catch { _divergences = []; }
+        finally { _loading = false; StateHasChanged(); }
+    }
+
+    private async Task RunDetection()
+    {
+        _detecting = true;
+        _message = null;
+        StateHasChanged();
+
+        try
+        {
+            var alerts = await DivergenceService.DetectDivergencesAsync();
+            _message = $"Detection complete. {alerts.Count} new divergence(s) found.";
+            await LoadDivergences();
+        }
+        catch { _message = null; }
+        finally { _detecting = false; StateHasChanged(); }
+    }
+
+    private async Task AcknowledgeDivergence(long id)
+    {
+        try
+        {
+            await DivergenceService.AcknowledgeDivergenceAsync(id, 1);
+            _message = "Divergence acknowledged.";
+            await LoadDivergences();
+        }
+        catch { }
+    }
+
+    private void ShowResolveModal(long id)
+    {
+        _resolveId = id;
+        _resolution = "";
+        _showResolveModal = true;
+    }
+
+    private async Task ResolveDivergence()
+    {
+        try
+        {
+            await DivergenceService.ResolveDivergenceAsync(_resolveId, _resolution, 1);
+            _showResolveModal = false;
+            _message = "Divergence resolved.";
+            await LoadDivergences();
+        }
+        catch { }
+    }
+
+    private static string FormatType(DivergenceType t) => t switch
+    {
+        DivergenceType.ThresholdChange => "Threshold Change",
+        DivergenceType.FrameworkUpgrade => "Framework Upgrade",
+        DivergenceType.NewRequirement => "New Requirement",
+        DivergenceType.CalculationMethodChange => "Calculation Method",
+        DivergenceType.ReportingFrequencyChange => "Reporting Frequency",
+        _ => t.ToString()
+    };
+}

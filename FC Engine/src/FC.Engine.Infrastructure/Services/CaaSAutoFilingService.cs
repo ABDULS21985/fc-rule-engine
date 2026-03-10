@@ -1,7 +1,6 @@
 using Azure.Security.KeyVault.Secrets;
 using Cronos;
 using Dapper;
-using FC.Engine.Application.Services;
 using FC.Engine.Domain.Abstractions;
 using Microsoft.Extensions.Logging;
 
@@ -17,7 +16,6 @@ public sealed class CaaSAutoFilingService : ICaaSAutoFilingService
     private readonly IDbConnectionFactory _db;
     private readonly ICoreBankingAdapterFactory _cbFactory;
     private readonly ICaaSService _caas;
-    private readonly ISubmissionOrchestrator _submission;
     private readonly ICaaSWebhookDispatcher _webhook;
     private readonly SecretClient? _secretClient;
     private readonly ILogger<CaaSAutoFilingService> _log;
@@ -26,7 +24,6 @@ public sealed class CaaSAutoFilingService : ICaaSAutoFilingService
         IDbConnectionFactory db,
         ICoreBankingAdapterFactory cbFactory,
         ICaaSService caas,
-        ISubmissionOrchestrator submission,
         ICaaSWebhookDispatcher webhook,
         ILogger<CaaSAutoFilingService> log,
         SecretClient? secretClient = null)
@@ -34,7 +31,6 @@ public sealed class CaaSAutoFilingService : ICaaSAutoFilingService
         _db           = db;
         _cbFactory    = cbFactory;
         _caas         = caas;
-        _submission   = submission;
         _webhook      = webhook;
         _secretClient = secretClient;
         _log          = log;
@@ -64,6 +60,7 @@ public sealed class CaaSAutoFilingService : ICaaSAutoFilingService
             throw new KeyNotFoundException($"Schedule {scheduleId} not found or inactive.");
 
         var periodCode = DerivePeriodCode(schedule.CronExpression);
+        var nextRunAt  = ComputeNextRun(schedule.CronExpression);
 
         // Insert run record
         var runId = await conn.ExecuteScalarAsync<long>(
@@ -75,6 +72,8 @@ public sealed class CaaSAutoFilingService : ICaaSAutoFilingService
             """,
             new { ScheduleId = scheduleId, PartnerId = schedule.PartnerId,
                   ModuleCode = schedule.ModuleCode, Period = periodCode });
+
+        await MarkScheduleRunningAsync(conn, scheduleId, nextRunAt);
 
         _log.LogInformation(
             "Auto-filing run started: RunId={RunId} Schedule={ScheduleId} " +
@@ -116,7 +115,7 @@ public sealed class CaaSAutoFilingService : ICaaSAutoFilingService
         }
         catch (Exception ex)
         {
-            await FailRun(conn, runId, scheduleId, $"Extraction failed: {ex.Message}", ct);
+            await FailRun(conn, runId, scheduleId, nextRunAt, $"Extraction failed: {ex.Message}", ct);
             return await GetRunAsync(conn, runId);
         }
 
@@ -153,7 +152,7 @@ public sealed class CaaSAutoFilingService : ICaaSAutoFilingService
         }
         catch (Exception ex)
         {
-            await FailRun(conn, runId, scheduleId, $"Validation error: {ex.Message}", ct);
+            await FailRun(conn, runId, scheduleId, nextRunAt, $"Validation error: {ex.Message}", ct);
             return await GetRunAsync(conn, runId);
         }
 
@@ -169,6 +168,8 @@ public sealed class CaaSAutoFilingService : ICaaSAutoFilingService
                 new { Error = $"{validation.ErrorCount} validation error(s). " +
                               "Return held pending correction.",
                       Id = runId });
+
+            await UpdateScheduleStatusAsync(conn, scheduleId, nextRunAt, "HELD");
 
             await _webhook.EnqueueAsync(schedule.PartnerId,
                 WebhookEventType.AutoFilingHeld,
@@ -194,6 +195,8 @@ public sealed class CaaSAutoFilingService : ICaaSAutoFilingService
                 WHERE  Id=@Id
                 """,
                 new { Id = runId });
+
+            await UpdateScheduleStatusAsync(conn, scheduleId, nextRunAt, "VALIDATED");
 
             _log.LogInformation(
                 "Auto-filing extracted & validated (manual submit required): RunId={RunId}",
@@ -221,15 +224,7 @@ public sealed class CaaSAutoFilingService : ICaaSAutoFilingService
                 new { ReturnId = submitResult.ReturnInstanceId,
                       BatchId  = submitResult.BatchId, Id = runId });
 
-            await conn.ExecuteAsync(
-                """
-                UPDATE CaaSAutoFilingSchedules
-                SET    LastRunAt=SYSUTCDATETIME(), LastRunStatus='SUCCESS',
-                       NextRunAt=@NextRun
-                WHERE  Id=@ScheduleId
-                """,
-                new { NextRun = ComputeNextRun(schedule.CronExpression),
-                      ScheduleId = scheduleId });
+            await UpdateScheduleStatusAsync(conn, scheduleId, nextRunAt, "SUCCESS");
 
             _log.LogInformation(
                 "Auto-filing complete: RunId={RunId} BatchRef={BatchRef}",
@@ -237,7 +232,7 @@ public sealed class CaaSAutoFilingService : ICaaSAutoFilingService
         }
         catch (Exception ex)
         {
-            await FailRun(conn, runId, scheduleId, $"Submission failed: {ex.Message}", ct);
+            await FailRun(conn, runId, scheduleId, nextRunAt, $"Submission failed: {ex.Message}", ct);
         }
 
         return await GetRunAsync(conn, runId);
@@ -265,6 +260,7 @@ public sealed class CaaSAutoFilingService : ICaaSAutoFilingService
     // ── Helpers ──────────────────────────────────────────────────────────
     private static async Task FailRun(
         System.Data.IDbConnection conn, long runId, int scheduleId,
+        DateTime nextRunAt,
         string error, CancellationToken ct)
     {
         await conn.ExecuteAsync(
@@ -275,10 +271,37 @@ public sealed class CaaSAutoFilingService : ICaaSAutoFilingService
             """,
             new { Error = error[..Math.Min(2000, error.Length)], Id = runId });
 
-        await conn.ExecuteAsync(
-            "UPDATE CaaSAutoFilingSchedules SET LastRunStatus='FAILED' WHERE Id=@Id",
-            new { Id = scheduleId });
+        await UpdateScheduleStatusAsync(conn, scheduleId, nextRunAt, "FAILED");
     }
+
+    private static Task MarkScheduleRunningAsync(
+        System.Data.IDbConnection conn,
+        int scheduleId,
+        DateTime nextRunAt)
+        => conn.ExecuteAsync(
+            """
+            UPDATE CaaSAutoFilingSchedules
+            SET    LastRunAt = SYSUTCDATETIME(),
+                   LastRunStatus = 'RUNNING',
+                   NextRunAt = @NextRun
+            WHERE  Id = @ScheduleId
+            """,
+            new { ScheduleId = scheduleId, NextRun = nextRunAt });
+
+    private static Task UpdateScheduleStatusAsync(
+        System.Data.IDbConnection conn,
+        int scheduleId,
+        DateTime nextRunAt,
+        string status)
+        => conn.ExecuteAsync(
+            """
+            UPDATE CaaSAutoFilingSchedules
+            SET    LastRunAt = SYSUTCDATETIME(),
+                   LastRunStatus = @Status,
+                   NextRunAt = @NextRun
+            WHERE  Id = @ScheduleId
+            """,
+            new { ScheduleId = scheduleId, Status = status, NextRun = nextRunAt });
 
     private static async Task<CaaSAutoFilingRun> GetRunAsync(
         System.Data.IDbConnection conn, long runId)

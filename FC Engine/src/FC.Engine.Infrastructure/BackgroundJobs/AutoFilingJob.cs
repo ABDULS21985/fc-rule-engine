@@ -67,35 +67,57 @@ public sealed class AutoFilingSchedulerBackgroundService : BackgroundService
         {
             try
             {
-                await using var scope = _services.CreateAsyncScope();
-                var db            = scope.ServiceProvider.GetRequiredService<IDbConnectionFactory>();
-                var filingService = scope.ServiceProvider.GetRequiredService<ICaaSAutoFilingService>();
-
-                using var conn = await db.OpenAsync(ct);
-                var dueSchedules = await conn.QueryAsync<int>(
-                    """
-                    SELECT Id
-                    FROM   CaaSAutoFilingSchedules
-                    WHERE  IsActive = 1
-                      AND  NextRunAt <= SYSUTCDATETIME()
-                    """);
-
-                foreach (var scheduleId in dueSchedules)
-                {
-                    _ = filingService.ExecuteScheduleAsync(scheduleId, ct)
-                        .ContinueWith(t =>
-                        {
-                            if (t.IsFaulted)
-                                _log.LogError(t.Exception,
-                                    "Auto-filing schedule {Id} failed.", scheduleId);
-                        }, TaskScheduler.Default);
-                }
+                await RunCycleAsync(ct);
             }
             catch (Exception ex)
             {
                 _log.LogError(ex, "Auto-filing scheduler background cycle failed.");
             }
             await Task.Delay(TimeSpan.FromSeconds(60), ct);
+        }
+    }
+
+    internal async Task RunCycleAsync(CancellationToken ct)
+    {
+        var dueSchedules = await GetDueScheduleIdsAsync(ct);
+        if (dueSchedules.Count == 0)
+            return;
+
+        var tasks = dueSchedules
+            .Select(scheduleId => ExecuteScheduleInOwnScopeAsync(scheduleId, ct))
+            .ToArray();
+
+        await Task.WhenAll(tasks);
+    }
+
+    private async Task<IReadOnlyList<int>> GetDueScheduleIdsAsync(CancellationToken ct)
+    {
+        await using var scope = _services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<IDbConnectionFactory>();
+
+        using var conn = await db.OpenAsync(ct);
+        var dueSchedules = await conn.QueryAsync<int>(
+            """
+            SELECT Id
+            FROM   CaaSAutoFilingSchedules
+            WHERE  IsActive = 1
+              AND  NextRunAt <= SYSUTCDATETIME()
+            """);
+
+        return dueSchedules.ToList();
+    }
+
+    private async Task ExecuteScheduleInOwnScopeAsync(int scheduleId, CancellationToken ct)
+    {
+        try
+        {
+            await using var scope = _services.CreateAsyncScope();
+            var filingService = scope.ServiceProvider.GetRequiredService<ICaaSAutoFilingService>();
+            await filingService.ExecuteScheduleAsync(scheduleId, ct);
+        }
+        catch (Exception ex) when (!ct.IsCancellationRequested)
+        {
+            _log.LogError(ex, "Auto-filing schedule {Id} failed.", scheduleId);
         }
     }
 }
