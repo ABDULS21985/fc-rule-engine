@@ -1,116 +1,115 @@
 @page "/regulator/contagion"
 @attribute [Authorize(Policy = "RegulatorOnly")]
 @inject IContagionAnalyzer ContagionAnalyzer
+@inject ToastService Toast
 @using FC.Engine.Domain.Abstractions
 @using FC.Engine.Domain.Models
 @using Microsoft.AspNetCore.Authorization
 
-<PageTitle>Contagion Network Analysis — RegOS™ SupTech</PageTitle>
+<PageTitle>Contagion Network Analysis</PageTitle>
 
-<div class="rg-page">
-    <div class="rg-page-header rg-border-bottom">
-        <div>
-            <h1 class="rg-page-title">Interbank Contagion Network</h1>
-            <p class="rg-muted">
-                Systemic importance ranking · D-SIB identification · Exposure network
-            </p>
-        </div>
-        <button class="rg-btn primary" @onclick="LoadAsync">Refresh</button>
-    </div>
+<PageHeader Title="Interbank Contagion Network"
+            Subtitle="Systemic importance ranking, D-SIB identification, and exposure network"
+            CountBadge="@(!_loading ? _nodes.Count : null)">
+    <PrimaryAction>
+        <button class="fc-btn fc-btn--primary" @onclick="LoadAsync">Refresh</button>
+    </PrimaryAction>
+</PageHeader>
 
+<SectionErrorBoundary Title="Couldn't load contagion data" ExternalError="@_loadException" OnRetry="LoadAsync">
     @if (_loading)
     {
-        <div class="rg-spinner-center"><div class="rg-spinner"></div></div>
-    }
-    else if (!string.IsNullOrWhiteSpace(_error))
+        <div class="rg-grid rg-grid-4" style="margin-bottom:1rem;">
+                @for (var i = 0; i < 4; i++)
+                {
+                    <SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Card" />
+                }
+            </div>
+            <SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.TableRows" RowCount="8" />
+}
+    else if (!_nodes.Any())
     {
-        <div class="rg-alert rg-alert-danger">@_error</div>
+        <EmptyState Context="data"
+                    Heading="No interbank exposure data"
+                    Description="No interbank exposure data is available for this period. Ensure institution exposures are reported."
+                    PrimaryActionLabel="Refresh"
+                    OnPrimaryAction="LoadAsync" />
     }
     else
     {
-        <!-- D-SIB alert banner -->
         @if (_dsibs.Count > 0)
         {
             <div class="rg-alert rg-alert-critical" style="margin-bottom:1rem;">
-                <strong>⚠ @_dsibs.Count Domestically Systemically Important Bank(s) detected</strong>
+                <strong>@_dsibs.Count Domestically Systemically Important Bank(s) detected</strong>
                 with elevated contagion risk. Immediate supervisory attention required.
             </div>
         }
 
-        @if (!_nodes.Any())
-        {
-            <p class="rg-muted">No interbank exposure data available for this period.</p>
-        }
-        else
-        {
-            <!-- Summary KPIs -->
-            <div class="rg-grid rg-grid-4" style="margin-bottom:1.5rem;">
-                <div class="rg-card" style="text-align:center;">
-                    <div style="font-size:1.6rem;font-weight:700;">@_nodes.Count</div>
-                    <div class="rg-muted" style="font-size:.8rem;">Institutions in Network</div>
-                </div>
-                <div class="rg-card" style="text-align:center;">
-                    <div style="font-size:1.6rem;font-weight:700;color:#dc2626;">@_dsibs.Count</div>
-                    <div class="rg-muted" style="font-size:.8rem;">D-SIBs Identified</div>
-                </div>
-                <div class="rg-card" style="text-align:center;">
-                    <div style="font-size:1.6rem;font-weight:700;">
-                        @(_nodes.Count > 0
-                            ? _nodes.Max(n => n.ContagionRiskScore).ToString("F0")
-                            : "0")
-                    </div>
-                    <div class="rg-muted" style="font-size:.8rem;">Max Contagion Score</div>
-                </div>
-                <div class="rg-card" style="text-align:center;">
-                    <div style="font-size:1.6rem;font-weight:700;">
-                        ₦@((_nodes.Sum(n => n.TotalOutbound) / 1000).ToString("N0"))B
-                    </div>
-                    <div class="rg-muted" style="font-size:.8rem;">Total Interbank Exposure</div>
-                </div>
+        <div class="rg-grid rg-grid-4" style="margin-bottom:1.5rem;">
+            <div class="rg-card" style="text-align:center;">
+                <div style="font-size:1.6rem;font-weight:700;">@_nodes.Count</div>
+                <div class="rg-muted" style="font-size:.8rem;">Institutions in Network</div>
             </div>
+            <div class="rg-card" style="text-align:center;">
+                <div style="font-size:1.6rem;font-weight:700;color:#dc2626;">@_dsibs.Count</div>
+                <div class="rg-muted" style="font-size:.8rem;">D-SIBs Identified</div>
+            </div>
+            <div class="rg-card" style="text-align:center;">
+                <div style="font-size:1.6rem;font-weight:700;">
+                    @(_nodes.Count > 0
+                        ? _nodes.Max(n => n.ContagionRiskScore).ToString("F0")
+                        : "0")
+                </div>
+                <div class="rg-muted" style="font-size:.8rem;">Max Contagion Score</div>
+            </div>
+            <div class="rg-card" style="text-align:center;">
+                <div style="font-size:1.6rem;font-weight:700;">
+                    @((_nodes.Sum(n => n.TotalOutbound) / 1000).ToString("N0"))B
+                </div>
+                <div class="rg-muted" style="font-size:.8rem;">Total Interbank Exposure</div>
+            </div>
+        </div>
 
-            <!-- Contagion node table -->
-            <div class="rg-card" style="overflow:auto;">
-                <table class="rg-table">
-                    <thead>
-                        <tr>
-                            <th>Institution</th>
-                            <th>Type</th>
-                            <th class="rg-text-right">Outbound (₦M)</th>
-                            <th class="rg-text-right">Inbound (₦M)</th>
-                            <th class="rg-text-right">Eigenvector</th>
-                            <th class="rg-text-right">Betweenness</th>
-                            <th class="rg-text-right">Contagion Score</th>
-                            <th>D-SIB</th>
+        <div class="rg-card" style="overflow:auto;">
+            <table class="rg-table">
+                <thead>
+                    <tr>
+                        <th>Institution</th>
+                        <th>Type</th>
+                        <th class="rg-text-right">Outbound (M)</th>
+                        <th class="rg-text-right">Inbound (M)</th>
+                        <th class="rg-text-right">Eigenvector</th>
+                        <th class="rg-text-right">Betweenness</th>
+                        <th class="rg-text-right">Contagion Score</th>
+                        <th>D-SIB</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var node in _nodes.OrderByDescending(n => n.ContagionRiskScore))
+                    {
+                        <tr class="@(node.IsSystemicallyImportant ? "rg-row-dsib" : "")">
+                            <td>@node.InstitutionName</td>
+                            <td><span class="rg-badge">@node.InstitutionType</span></td>
+                            <td class="rg-text-right">@node.TotalOutbound.ToString("N0")</td>
+                            <td class="rg-text-right">@node.TotalInbound.ToString("N0")</td>
+                            <td class="rg-text-right">@node.EigenvectorCentrality.ToString("F4")</td>
+                            <td class="rg-text-right">@node.BetweennessCentrality.ToString("F4")</td>
+                            <td class="rg-text-right">
+                                <ContagionScoreBadge Score="@node.ContagionRiskScore" />
+                            </td>
+                            <td>
+                                @if (node.IsSystemicallyImportant)
+                                {
+                                    <span class="rg-badge rg-badge-critical">D-SIB</span>
+                                }
+                            </td>
                         </tr>
-                    </thead>
-                    <tbody>
-                        @foreach (var node in _nodes.OrderByDescending(n => n.ContagionRiskScore))
-                        {
-                            <tr class="@(node.IsSystemicallyImportant ? "rg-row-dsib" : "")">
-                                <td>@node.InstitutionName</td>
-                                <td><span class="rg-badge">@node.InstitutionType</span></td>
-                                <td class="rg-text-right">@node.TotalOutbound.ToString("N0")</td>
-                                <td class="rg-text-right">@node.TotalInbound.ToString("N0")</td>
-                                <td class="rg-text-right">@node.EigenvectorCentrality.ToString("F4")</td>
-                                <td class="rg-text-right">@node.BetweennessCentrality.ToString("F4")</td>
-                                <td class="rg-text-right">
-                                    <ContagionScoreBadge Score="@node.ContagionRiskScore" />
-                                </td>
-                                <td>
-                                    @if (node.IsSystemicallyImportant)
-                                    {
-                                        <span class="rg-badge rg-badge-critical">D-SIB</span>
-                                    }
-                                </td>
-                            </tr>
-                        }
-                    </tbody>
-                </table>
-            </div>
-        }
+                    }
+                </tbody>
+            </table>
+        </div>
     }
-</div>
+</SectionErrorBoundary>
 
 @code {
     [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
@@ -118,7 +117,7 @@
     private IReadOnlyList<ContagionNode> _nodes = Array.Empty<ContagionNode>();
     private List<ContagionNode> _dsibs = new();
     private bool _loading = true;
-    private string? _error;
+    private Exception? _loadException;
     private string _regulatorCode = "CBN";
     private string _periodCode = string.Empty;
 
@@ -139,7 +138,7 @@
     private async Task LoadAsync()
     {
         _loading = true;
-        _error   = null;
+        _loadException = null;
         try
         {
             _nodes = await ContagionAnalyzer.AnalyzeAsync(
@@ -148,7 +147,7 @@
         }
         catch (Exception ex)
         {
-            _error = $"Could not load contagion data: {ex.Message}";
+            _loadException = ex;
         }
         finally
         {

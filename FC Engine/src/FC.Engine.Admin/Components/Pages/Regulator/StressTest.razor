@@ -5,39 +5,35 @@
 @inject IDbConnectionFactory Db
 @inject NavigationManager Nav
 @inject IJSRuntime JS
+@inject ToastService Toast
 @using FC.Engine.Domain.Abstractions
 @using FC.Engine.Domain.Models
 @using Dapper
 
 <PageTitle>Sector Stress Testing — RegOS™ SupTech</PageTitle>
 
-<div class="suptech-page">
-    <div class="page-header regos-border-bottom">
-        <div>
-            <h1 class="page-title">Sector-Wide Stress Testing</h1>
-            <p class="page-subtitle">
-                Apply macro-prudential and climate shocks to all supervised entities.
-                CBN/IMF transmission coefficients · NGFS Climate Scenarios · Contagion cascade analysis.
-            </p>
-        </div>
-    </div>
+<PageHeader Title="Sector-Wide Stress Testing"
+            Subtitle="Apply macro-prudential and climate shocks to all supervised entities. CBN/IMF transmission coefficients · NGFS Climate Scenarios · Contagion cascade analysis.">
+    <PrimaryAction>
+        <button class="fc-btn fc-btn--primary"
+                @onclick="RunStressTestAsync"
+                disabled="@(!_selectedScenarioId.HasValue || string.IsNullOrWhiteSpace(_periodCode) || _running)">
+            <span class="btn-icon">▶</span>
+            Run Stress Test
+        </button>
+    </PrimaryAction>
+</PageHeader>
+
+<SectionErrorBoundary Title="Couldn't load stress test data" ExternalError="@_loadException" OnRetry="ReloadAsync">
 
     @if (_running)
     {
         <div class="stress-running-banner">
-            <div class="regos-spinner"></div>
+            <div class="fc-skel fc-skel-circle" style="--skel-w: 24px; --skel-h: 24px"></div>
             <span>
                 Stress test running — applying shocks to @_entityCount entities across
                 @RegulatorCode jurisdiction…
             </span>
-        </div>
-    }
-    else if (!string.IsNullOrWhiteSpace(_error))
-    {
-        <div class="rg-card stress-error-card">
-            <strong>Stress Test Failed</strong>
-            <p>@_error</p>
-            <button class="regos-btn regos-btn-sm" @onclick="() => _error = null">Dismiss</button>
         </div>
     }
     else
@@ -50,9 +46,17 @@
                     <span class="config-count-badge">@_scenarios.Count available</span>
                 </h2>
 
-                @if (_scenarios.Count == 0)
+                @if (_loading)
                 {
-                    <p class="rg-muted">Loading scenarios…</p>
+                    <SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Card" />
+                        <SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Card" />
+                        <SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Card" />
+}
+                else if (_scenarios.Count == 0)
+                {
+                    <EmptyState Context="data" Size="sm"
+                                Heading="No scenarios available"
+                                Description="There are no active stress test scenarios configured. Contact a platform administrator to set up macro-economic or climate scenarios." />
                 }
                 else
                 {
@@ -140,9 +144,9 @@
                     }
                 }
 
-                <button class="regos-btn regos-btn-primary regos-btn-large stress-run-btn"
+                <button class="fc-btn fc-btn--primary stress-run-btn"
                         @onclick="RunStressTestAsync"
-                        disabled="@(!_selectedScenarioId.HasValue || string.IsNullOrWhiteSpace(_periodCode))">
+                        disabled="@(!_selectedScenarioId.HasValue || string.IsNullOrWhiteSpace(_periodCode) || _running)">
                     <span class="btn-icon">▶</span>
                     Run Stress Test
                 </button>
@@ -160,11 +164,15 @@
         <div class="stress-recent-section">
             <h2 class="section-heading">Recent Stress Test Runs</h2>
 
-            @if (_recentRuns.Count == 0)
+            @if (_loading)
             {
-                <div class="rg-card rg-muted" style="text-align:center;padding:2rem;">
-                    No stress tests have been run yet. Select a scenario above to begin.
-                </div>
+                <SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.TableRows" RowCount="5" />
+}
+            else if (_recentRuns.Count == 0)
+            {
+                <EmptyState Context="data" Size="sm"
+                            Heading="No stress tests run yet"
+                            Description="Select a scenario above and click Run Stress Test to begin your first sector-wide analysis." />
             }
             else
             {
@@ -218,11 +226,11 @@
                                 <td class="rg-actions">
                                     @if (run.Status == "COMPLETED")
                                     {
-                                        <button class="regos-btn regos-btn-sm"
+                                        <button class="fc-btn fc-btn--outline"
                                                 @onclick="() => ViewResults(run.RunGuid)">
                                             View
                                         </button>
-                                        <button class="regos-btn regos-btn-sm regos-btn-secondary"
+                                        <button class="fc-btn fc-btn--outline"
                                                 @onclick="() => DownloadReportAsync(run.Id, run.ScenarioCode)">
                                             PDF
                                         </button>
@@ -345,18 +353,19 @@
             </table>
 
             <div class="results-actions">
-                <button class="regos-btn regos-btn-secondary"
+                <button class="fc-btn fc-btn--outline"
                         @onclick="() => DownloadReportAsync(_lastRunId, _lastScenarioCode)">
                     Download PDF Report
                 </button>
-                <button class="regos-btn"
+                <button class="fc-btn fc-btn--outline"
                         @onclick="() => _lastSummary = null">
                     Dismiss Results
                 </button>
             </div>
         </div>
     }
-</div>
+
+</SectionErrorBoundary>
 
 @code {
     [CascadingParameter] private string RegulatorCode { get; set; } = "CBN";
@@ -371,27 +380,45 @@
     private string _timeHorizon = "1Y";
     private bool _anonymise = true;
     private bool _running;
+    private bool _loading = true;
     private int _entityCount;
-    private string? _error;
+    private Exception? _loadException;
     private StressTestRunSummary? _lastSummary;
     private long _lastRunId;
     private string _lastScenarioCode = string.Empty;
 
-    protected override async Task OnInitializedAsync()
+    protected override async Task OnInitializedAsync() => await ReloadAsync();
+
+    private async Task ReloadAsync()
     {
-        _periodCode = CurrentPeriodCode;
-        using var conn = await Db.OpenAsync();
+        _loading = true;
+        _loadException = null;
+        StateHasChanged();
 
-        _scenarios = (await conn.QueryAsync<ScenarioListRow>(
-            """
-            SELECT Id, ScenarioCode, ScenarioName, Category, Severity,
-                   TimeHorizon, NarrativeSummary
-            FROM   StressScenarios
-            WHERE  IsActive = 1
-            ORDER  BY Category, Severity DESC
-            """)).ToList();
+        try
+        {
+            _periodCode = CurrentPeriodCode;
+            using var conn = await Db.OpenAsync();
 
-        await LoadRecentRunsAsync(conn);
+            _scenarios = (await conn.QueryAsync<ScenarioListRow>(
+                """
+                SELECT Id, ScenarioCode, ScenarioName, Category, Severity,
+                       TimeHorizon, NarrativeSummary
+                FROM   StressScenarios
+                WHERE  IsActive = 1
+                ORDER  BY Category, Severity DESC
+                """)).ToList();
+
+            await LoadRecentRunsAsync(conn);
+        }
+        catch (Exception ex)
+        {
+            _loadException = ex;
+        }
+        finally
+        {
+            _loading = false;
+        }
     }
 
     private async Task LoadRecentRunsAsync(System.Data.IDbConnection conn)
@@ -431,7 +458,6 @@
         if (!_selectedScenarioId.HasValue || string.IsNullOrWhiteSpace(_periodCode)) return;
 
         _running  = true;
-        _error    = null;
         _lastSummary = null;
         _entityCount = await GetEntityCountAsync();
         StateHasChanged();
@@ -449,13 +475,15 @@
             _lastRunId        = summary.RunId;
             _lastScenarioCode = summary.ScenarioCode;
 
+            Toast.Success("Stress test completed successfully.", title: summary.ScenarioName);
+
             // Refresh recent runs list
             using var conn = await Db.OpenAsync();
             await LoadRecentRunsAsync(conn);
         }
         catch (Exception ex)
         {
-            _error = ex.Message;
+            Toast.Error($"Stress test failed: {ex.Message}", title: "Stress Test Error");
         }
         finally
         {
@@ -471,10 +499,11 @@
             var fileName = $"StressTest_{scenarioCode}_{_periodCode}_{DateTime.UtcNow:yyyyMMdd}.pdf";
             var base64  = Convert.ToBase64String(bytes);
             await JS.InvokeVoidAsync("portalDownloadBase64File", base64, fileName, "application/pdf");
+            Toast.Success($"PDF report downloaded: {fileName}");
         }
         catch (Exception ex)
         {
-            _error = $"Failed to generate PDF: {ex.Message}";
+            Toast.Error($"Failed to generate PDF: {ex.Message}", title: "Report Error");
         }
     }
 

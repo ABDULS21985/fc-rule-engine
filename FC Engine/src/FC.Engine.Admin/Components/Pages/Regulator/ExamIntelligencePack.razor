@@ -1,0 +1,117 @@
+@using FC.Engine.Domain.Entities
+
+@if (IntelligencePack is null || !IntelligencePack.Institutions.Any())
+{
+    <EmptyState Context="data"
+                Heading="No intelligence data available"
+                Description="Intelligence packs are generated from scoped institutions, CHS trends, and EWI triggers." />
+}
+else
+{
+    <div class="fc-exam-intel-grid">
+        @foreach (var inst in IntelligencePack.Institutions)
+        {
+            <div class="fc-exam-intel-card">
+                @* ── Header ──────────────────────────────────── *@
+                <div class="fc-exam-intel-head">
+                    <div>
+                        <strong>@inst.InstitutionName</strong>
+                        <span class="fc-exam-intel-licence">@inst.LicenceType</span>
+                    </div>
+                    <MiniSparkline DataJson="@inst.ChsTrendJson" Width="72" Height="24" />
+                </div>
+
+                @* ── Metrics row 1: CHS Trend + Peer Comparison ── *@
+                <div class="fc-exam-intel-metrics">
+                    <div class="fc-exam-intel-metric">
+                        <span class="fc-exam-intel-metric-label">4Q CHS</span>
+                        @if (inst.ChsTrend.Count == 0)
+                        {
+                            <span class="fc-exam-intel-metric-empty">No CHS history</span>
+                        }
+                        else
+                        {
+                            <ul class="fc-exam-intel-chs-list">
+                                @foreach (var point in inst.ChsTrend)
+                                {
+                                    <li>@point.QuarterLabel: @point.Score.ToString("F1")</li>
+                                }
+                            </ul>
+                        }
+                    </div>
+
+                    <div class="fc-exam-intel-metric">
+                        <span class="fc-exam-intel-metric-label">Peer Comparison</span>
+                        @if (inst.PeerComparison is null)
+                        {
+                            <span class="fc-exam-intel-metric-empty">No benchmark available</span>
+                        }
+                        else
+                        {
+                            var peer = inst.PeerComparison;
+                            <ul class="fc-exam-intel-peer-list">
+                                <li>CAR @peer.CarValue.ToString("F1")% <span class="fc-exam-intel-vs">vs</span> @peer.CarPeerAverage.ToString("F1")% avg</li>
+                                <li>NPL @peer.NplValue.ToString("F1")% <span class="fc-exam-intel-vs">vs</span> @peer.NplPeerAverage.ToString("F1")% avg</li>
+                                <li>DQ @peer.DataQualityScore.ToString("F1") <span class="fc-exam-intel-vs">vs</span> @peer.DataQualityPeerAverage.ToString("F1") avg</li>
+                            </ul>
+                        }
+                    </div>
+                </div>
+
+                @* ── Metrics row 2: Active EWIs + Prior Findings ── *@
+                <div class="fc-exam-intel-metrics">
+                    <div class="fc-exam-intel-metric">
+                        <span class="fc-exam-intel-metric-label">
+                            Active EWIs
+                            <span class="fc-exam-intel-count-badge">@inst.ActiveWarnings.Count</span>
+                        </span>
+                        @if (!inst.ActiveWarnings.Any())
+                        {
+                            <span class="fc-exam-intel-metric-empty">No active triggers</span>
+                        }
+                        else
+                        {
+                            <ul class="fc-exam-intel-ewi-list">
+                                @foreach (var warning in inst.ActiveWarnings.Take(4))
+                                {
+                                    <li>
+                                        <span class="@SeverityClass(warning.Severity)">@warning.Severity</span>
+                                        @warning.FlagCode
+                                    </li>
+                                }
+                            </ul>
+                        }
+                    </div>
+
+                    <div class="fc-exam-intel-metric">
+                        <span class="fc-exam-intel-metric-label">Prior Findings</span>
+                        @if (!inst.OutstandingPreviousFindings.Any())
+                        {
+                            <span class="fc-exam-intel-metric-empty">Nothing carried forward</span>
+                        }
+                        else
+                        {
+                            <ul class="fc-exam-intel-findings-list">
+                                @foreach (var finding in inst.OutstandingPreviousFindings.Take(3))
+                                {
+                                    <li>@finding.Title</li>
+                                }
+                            </ul>
+                        }
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+}
+
+@code {
+    [Parameter] public ExaminationIntelligencePack? IntelligencePack { get; set; }
+
+    private static string SeverityClass(EarlyWarningSeverity severity) => severity switch
+    {
+        EarlyWarningSeverity.Red => "fc-exam-risk-high",
+        EarlyWarningSeverity.Amber => "fc-exam-risk-medium",
+        _ => "fc-exam-risk-medium"
+    };
+}

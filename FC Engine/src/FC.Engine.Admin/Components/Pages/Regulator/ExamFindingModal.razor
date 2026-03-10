@@ -1,0 +1,263 @@
+@using FC.Engine.Domain.Entities
+@inject IExaminationWorkspaceService WorkspaceService
+@inject ToastService Toast
+
+<AppModal @bind-Visible="Visible" Title="@(IsEditMode ? "Edit Finding" : "New Finding")"
+          Subtitle="@(IsEditMode ? "Update observation, risk classification, and management response" : "Document a new examination finding with risk classification")"
+          Size="lg">
+    <ChildContent>
+        <FormSection Title="Finding Details" IsOpen="true">
+            <div class="fc-exam-form-row">
+                <FormField Label="Title" IsRequired="true">
+                    <input class="fc-input" type="text" @bind="_title" placeholder="Short finding title" />
+                </FormField>
+                <FormField Label="Risk Area" IsRequired="true">
+                    <input class="fc-input" type="text" @bind="_riskArea" placeholder="e.g. Credit Risk, Liquidity" />
+                </FormField>
+            </div>
+
+            <div class="fc-exam-form-row--3">
+                <FormField Label="Risk Rating">
+                    <select class="fc-input" @bind="_riskRating">
+                        @foreach (var rating in Enum.GetValues<ExaminationRiskRating>())
+                        {
+                            <option value="@rating">@rating</option>
+                        }
+                    </select>
+                </FormField>
+                <FormField Label="Workflow Status">
+                    <select class="fc-input" @bind="_workflowStatus">
+                        @foreach (var status in Enum.GetValues<ExaminationWorkflowStatus>())
+                        {
+                            <option value="@status">@FormatWorkflowStatus(status)</option>
+                        }
+                    </select>
+                </FormField>
+                <FormField Label="Remediation Status">
+                    <select class="fc-input" @bind="_remediationStatus">
+                        @foreach (var rs in Enum.GetValues<ExaminationRemediationStatus>())
+                        {
+                            <option value="@rs">@rs</option>
+                        }
+                    </select>
+                </FormField>
+            </div>
+
+            <div class="fc-exam-form-row">
+                <FormField Label="Submission ID" HintText="Optional — link to a specific submission">
+                    <input class="fc-input" type="number" @bind="_submissionId" placeholder="e.g. 1042" />
+                </FormField>
+                <FormField Label="Institution ID" HintText="Optional — link to a specific institution">
+                    <input class="fc-input" type="number" @bind="_institutionId" placeholder="e.g. 15" />
+                </FormField>
+            </div>
+
+            <FormField Label="Field Code" HintText="Optional — specific field reference">
+                <input class="fc-input" type="text" @bind="_fieldCode" placeholder="e.g. CAR_001" />
+            </FormField>
+
+            <FormField Label="Observation" IsRequired="true">
+                <textarea class="fc-input" rows="3" @bind="_observation" placeholder="Describe what was observed during the examination..."></textarea>
+            </FormField>
+
+            <FormField Label="Recommendation">
+                <textarea class="fc-input" rows="3" @bind="_recommendation" placeholder="Recommended corrective action..."></textarea>
+            </FormField>
+        </FormSection>
+
+        <FormSection Title="Management Response">
+            <FormField Label="Management Response Deadline">
+                <input class="fc-input" type="date" @bind="_mgmtResponseDeadline" />
+            </FormField>
+
+            <FormField Label="Management Response">
+                <textarea class="fc-input" rows="3" @bind="_mgmtResponse" placeholder="Institution's management response..."></textarea>
+            </FormField>
+
+            <FormField Label="Management Action Plan">
+                <textarea class="fc-input" rows="3" @bind="_mgmtActionPlan" placeholder="Planned remediation steps and timeline..."></textarea>
+            </FormField>
+
+            @if (IsEditMode)
+            {
+                <FormField Label="Evidence Reference" HintText="Reference to supporting evidence files">
+                    <input class="fc-input" type="text" @bind="_evidenceReference" placeholder="e.g. EVD-2026-001" />
+                </FormField>
+            }
+        </FormSection>
+    </ChildContent>
+    <FooterContent>
+        <button class="fc-btn fc-btn--ghost" @onclick="CloseModal" type="button" disabled="@_saving">Cancel</button>
+        <button class="fc-btn fc-btn--primary @(_saving ? "fc-btn--loading" : "")"
+                @onclick="HandleSave" disabled="@_saving"
+                aria-busy="@(_saving ? "true" : null)" type="button">
+            @if (_saving)
+            {
+                <span class="fc-spinner fc-spinner--sm fc-spinner--white" aria-hidden="true"></span>
+            }
+            @(IsEditMode ? "Save Changes" : "Create Finding")
+        </button>
+    </FooterContent>
+</AppModal>
+
+@code {
+    [Parameter] public bool Visible { get; set; }
+    [Parameter] public EventCallback<bool> VisibleChanged { get; set; }
+    [Parameter] public ExaminationFinding? Finding { get; set; }
+    [Parameter] public EventCallback OnSaved { get; set; }
+    [Parameter] public Guid TenantId { get; set; }
+    [Parameter] public string RegulatorCode { get; set; } = string.Empty;
+    [Parameter] public int ProjectId { get; set; }
+    [Parameter] public int UserId { get; set; }
+
+    private bool IsEditMode => Finding is not null;
+
+    private bool _saving;
+    private ExaminationFinding? _prevFinding;
+
+    // Form fields
+    private string _title = string.Empty;
+    private string _riskArea = string.Empty;
+    private ExaminationRiskRating _riskRating = ExaminationRiskRating.Medium;
+    private ExaminationWorkflowStatus _workflowStatus = ExaminationWorkflowStatus.ToReview;
+    private ExaminationRemediationStatus _remediationStatus = ExaminationRemediationStatus.Open;
+    private int? _submissionId;
+    private int? _institutionId;
+    private string? _fieldCode;
+    private string _observation = string.Empty;
+    private string _recommendation = string.Empty;
+    private DateTime? _mgmtResponseDeadline;
+    private string? _mgmtResponse;
+    private string? _mgmtActionPlan;
+    private string? _evidenceReference;
+
+    protected override void OnParametersSet()
+    {
+        if (!ReferenceEquals(Finding, _prevFinding))
+        {
+            _prevFinding = Finding;
+            PopulateForm();
+        }
+    }
+
+    private void PopulateForm()
+    {
+        if (Finding is not null)
+        {
+            _title = Finding.Title;
+            _riskArea = Finding.RiskArea;
+            _riskRating = Finding.RiskRating;
+            _workflowStatus = Finding.Status;
+            _remediationStatus = Finding.RemediationStatus;
+            _submissionId = Finding.SubmissionId;
+            _institutionId = Finding.InstitutionId;
+            _fieldCode = Finding.FieldCode;
+            _observation = Finding.Observation;
+            _recommendation = Finding.Recommendation;
+            _mgmtResponseDeadline = Finding.ManagementResponseDeadline;
+            _mgmtResponse = Finding.ManagementResponse;
+            _mgmtActionPlan = Finding.ManagementActionPlan;
+            _evidenceReference = Finding.EvidenceReference;
+        }
+        else
+        {
+            ResetForm();
+        }
+    }
+
+    private void ResetForm()
+    {
+        _title = string.Empty;
+        _riskArea = string.Empty;
+        _riskRating = ExaminationRiskRating.Medium;
+        _workflowStatus = ExaminationWorkflowStatus.ToReview;
+        _remediationStatus = ExaminationRemediationStatus.Open;
+        _submissionId = null;
+        _institutionId = null;
+        _fieldCode = null;
+        _observation = string.Empty;
+        _recommendation = string.Empty;
+        _mgmtResponseDeadline = null;
+        _mgmtResponse = null;
+        _mgmtActionPlan = null;
+        _evidenceReference = null;
+    }
+
+    private async Task HandleSave()
+    {
+        if (string.IsNullOrWhiteSpace(_title) || string.IsNullOrWhiteSpace(_riskArea) || string.IsNullOrWhiteSpace(_observation))
+        {
+            Toast.Error("Title, Risk Area, and Observation are required.");
+            return;
+        }
+
+        _saving = true;
+        try
+        {
+            if (IsEditMode)
+            {
+                var request = new ExaminationFindingUpdateRequest
+                {
+                    Status = _workflowStatus,
+                    RemediationStatus = _remediationStatus,
+                    RiskRating = _riskRating,
+                    Observation = _observation,
+                    Recommendation = _recommendation,
+                    ManagementResponseDeadline = _mgmtResponseDeadline,
+                    ManagementResponse = _mgmtResponse,
+                    ManagementActionPlan = _mgmtActionPlan,
+                    EvidenceReference = _evidenceReference
+                };
+                await WorkspaceService.UpdateFinding(TenantId, ProjectId, Finding!.Id, request, UserId);
+                Toast.Success("Finding updated successfully.", "Finding Saved");
+            }
+            else
+            {
+                var request = new ExaminationFindingCreateRequest
+                {
+                    SubmissionId = _submissionId,
+                    InstitutionId = _institutionId,
+                    Title = _title,
+                    RiskArea = _riskArea,
+                    Observation = _observation,
+                    RiskRating = _riskRating,
+                    Recommendation = _recommendation,
+                    Status = _workflowStatus,
+                    RemediationStatus = _remediationStatus,
+                    FieldCode = _fieldCode,
+                    ManagementResponseDeadline = _mgmtResponseDeadline,
+                    ManagementResponse = _mgmtResponse,
+                    ManagementActionPlan = _mgmtActionPlan
+                };
+                await WorkspaceService.CreateFinding(TenantId, RegulatorCode, ProjectId, request, UserId);
+                Toast.Success("Finding created successfully.", "Finding Created");
+            }
+
+            await OnSaved.InvokeAsync();
+            await CloseModal();
+        }
+        catch (Exception ex)
+        {
+            Toast.Error($"Failed to save finding: {ex.Message}", "Save Failed");
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private async Task CloseModal()
+    {
+        await VisibleChanged.InvokeAsync(false);
+    }
+
+    private static string FormatWorkflowStatus(ExaminationWorkflowStatus s) => s switch
+    {
+        ExaminationWorkflowStatus.ToReview => "To Review",
+        ExaminationWorkflowStatus.InProgress => "In Progress",
+        ExaminationWorkflowStatus.FindingDocumented => "Finding Documented",
+        ExaminationWorkflowStatus.ManagementResponseRequired => "Mgmt Response Required",
+        ExaminationWorkflowStatus.Closed => "Closed",
+        _ => s.ToString()
+    };
+}

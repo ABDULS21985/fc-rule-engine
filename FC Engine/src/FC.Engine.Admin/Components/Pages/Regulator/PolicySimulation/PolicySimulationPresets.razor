@@ -2,6 +2,7 @@
 @attribute [Authorize(Policy = "RegulatorOnly")]
 @inject IPolicyScenarioService ScenarioService
 @inject NavigationManager Nav
+@inject ToastService Toast
 @using FC.Engine.Domain.Entities
 @using FC.Engine.Infrastructure.Metadata
 @using Microsoft.EntityFrameworkCore
@@ -9,50 +10,58 @@
 
 <PageTitle>Parameter Presets — Policy Simulation</PageTitle>
 
-<div class="rg-ps-page">
-    <div class="rg-ps-flex-between">
-        <div>
-            <h1 class="rg-page-title">Parameter Preset Library</h1>
-            <p class="rg-muted">
-                Standard regulatory parameters from CBN, NDIC, and other regulators.
-                Use these presets when creating policy scenarios.
-            </p>
-        </div>
-        <button class="rg-btn" @onclick="GoBack">Back to Scenarios</button>
-    </div>
+<PageHeader Title="Parameter Preset Library"
+            Subtitle="Standard regulatory parameters from CBN, NDIC, and other regulators."
+            BackUrl="/regulator/policies"
+            CountBadge="@(!_loading ? _presets.Count : null)">
+</PageHeader>
 
-    <!-- Filters -->
-    <div class="rg-card">
-        <div class="rg-controls">
-            <select @bind="_domainFilter" @bind:after="LoadAsync">
-                <option value="">All Domains</option>
-                @foreach (var d in Enum.GetValues<PolicyDomain>())
-                {
-                    <option value="@d">@FormatDomain(d)</option>
-                }
-            </select>
-            <select @bind="_regulatorFilter" @bind:after="LoadAsync">
-                <option value="">All Regulators</option>
-                <option value="CBN">CBN</option>
-                <option value="NDIC">NDIC</option>
-                <option value="SEC">SEC</option>
-                <option value="NAICOM">NAICOM</option>
-                <option value="PenCom">PenCom</option>
-            </select>
-            <input class="rg-ps-input" placeholder="Search parameters..." @bind="_search" @bind:after="LoadAsync"
-                   style="max-width:300px;" />
-        </div>
+<!-- Filters -->
+<div class="rg-card">
+    <div class="rg-controls">
+        <select @bind="_domainFilter" @bind:after="LoadAsync">
+            <option value="">All Domains</option>
+            @foreach (var d in Enum.GetValues<PolicyDomain>())
+            {
+                <option value="@d">@FormatDomain(d)</option>
+            }
+        </select>
+        <select @bind="_regulatorFilter" @bind:after="LoadAsync">
+            <option value="">All Regulators</option>
+            <option value="CBN">CBN</option>
+            <option value="NDIC">NDIC</option>
+            <option value="SEC">SEC</option>
+            <option value="NAICOM">NAICOM</option>
+            <option value="PenCom">PenCom</option>
+        </select>
+        <input class="rg-ps-input" placeholder="Search parameters..." @bind="_search" @bind:after="LoadAsync"
+               style="max-width:300px;" />
     </div>
+</div>
 
+<SectionErrorBoundary Title="Couldn't load parameter presets" ExternalError="@_loadException" OnRetry="LoadAsync">
     @if (_loading)
     {
-        <div class="rg-spinner-center"><div class="rg-spinner"></div></div>
-    }
+        @for (var i = 0; i < 3; i++)
+            {
+                <div class="rg-card">
+                    <SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Heading" Index="i" />
+                    <div class="rg-ps-preset-grid">
+                        @for (var j = 0; j < 4; j++)
+                        {
+                            <SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Card" Index="@(i * 4 + j)" />
+                        }
+                    </div>
+                </div>
+            }
+}
     else if (_presets.Count == 0)
     {
-        <div class="rg-card" style="text-align:center;padding:2rem;">
-            <p class="rg-muted">No parameter presets found.</p>
-        </div>
+        <EmptyState Context="data"
+                    Heading="No parameter presets found"
+                    Description="No presets match your current filters. Try adjusting your search criteria."
+                    PrimaryActionLabel="Clear Filters"
+                    OnPrimaryAction="ClearFilters" />
     }
     else
     {
@@ -89,12 +98,13 @@
             </div>
         }
     }
-</div>
+</SectionErrorBoundary>
 
 @code {
     [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
 
     private bool _loading = true;
+    private Exception? _loadException;
     private string _domainFilter = string.Empty;
     private string _regulatorFilter = string.Empty;
     private string _search = string.Empty;
@@ -105,6 +115,7 @@
     private async Task LoadAsync()
     {
         _loading = true;
+        _loadException = null;
         StateHasChanged();
         try
         {
@@ -129,11 +140,24 @@
 
             _presets = await query.OrderBy(p => p.PolicyDomain).ThenBy(p => p.ParameterCode).ToListAsync();
         }
-        catch { _presets = new(); }
+        catch (Exception ex)
+        {
+            _loadException = ex;
+            _presets = new();
+            Toast.Error($"Failed to load presets: {ex.Message}");
+        }
         finally
         {
             _loading = false;
         }
+    }
+
+    private async Task ClearFilters()
+    {
+        _domainFilter = string.Empty;
+        _regulatorFilter = string.Empty;
+        _search = string.Empty;
+        await LoadAsync();
     }
 
     private static string FormatDomain(PolicyDomain d) => d switch

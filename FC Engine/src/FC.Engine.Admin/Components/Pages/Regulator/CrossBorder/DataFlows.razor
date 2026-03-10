@@ -2,31 +2,26 @@
 @attribute [Authorize(Policy = "RegulatorOnly")]
 @inject ICrossBorderDataFlowEngine FlowEngine
 @inject NavigationManager Nav
+@inject ToastService Toast
 @using FC.Engine.Domain.Entities
 @using FC.Engine.Infrastructure.Metadata
 @inject MetadataDbContext Db
 @using Microsoft.EntityFrameworkCore
 
-<PageTitle>Data Flows — RegOS™</PageTitle>
+<PageTitle>Data Flows — RegOS</PageTitle>
 
-<div class="rg-cb-hero">
-    <div class="rg-cb-hero-text">
-        <div class="rg-cb-kicker">Cross-Border Harmonisation</div>
-        <h1 class="rg-cb-hero-title">Cross-Border Data Flows</h1>
-        <p class="rg-cb-hero-sub">
-            Define and execute automated data transformations between jurisdictions,
-            including currency conversion and proportional mapping.
-        </p>
-    </div>
-    <div class="rg-cb-hero-actions">
-        <button class="rg-btn primary" @onclick='() => Nav.NavigateTo("/regulator/cross-border/dataflows/new")'>Define Flow</button>
-    </div>
-</div>
+<PageHeader Title="Cross-Border Data Flows"
+            Subtitle="Define and execute automated data transformations between jurisdictions, including currency conversion and proportional mapping."
+            BackUrl="/regulator/cross-border">
+    <PrimaryAction>
+        <button class="fc-btn fc-btn--primary" @onclick='() => Nav.NavigateTo("/regulator/cross-border/dataflows/new")'>Define Flow</button>
+    </PrimaryAction>
+</PageHeader>
 
-@* ── Group Selection ── *@
+@* -- Group Selection -- *@
 <div class="rg-cb-filters">
     <select class="rg-cb-filter-select" @bind="_selectedGroupId" @bind:after="LoadFlows">
-        <option value="0">— Select group —</option>
+        <option value="0">-- Select group --</option>
         @foreach (var g in _groups)
         {
             <option value="@g.Id">@g.GroupName</option>
@@ -35,122 +30,111 @@
     @if (_selectedGroupId > 0)
     {
         <input class="rg-cb-filter-input" @bind="_executePeriod" placeholder="2025-Q4" style="width:120px;" />
-        <button class="rg-btn primary" @onclick="ExecuteFlows" disabled="@_executing">
-            @(_executing ? "Executing…" : "Execute All Flows")
+        <button class="fc-btn fc-btn--primary" @onclick="ExecuteFlows" disabled="@_executing">
+            @(_executing ? "Executing..." : "Execute All Flows")
         </button>
     }
 </div>
 
-@if (_loading)
-{
-    <p class="rg-muted">Loading data flows…</p>
-}
-else if (_selectedGroupId == 0)
-{
-    <div class="rg-cb-empty">
-        <div class="rg-cb-empty-icon">🔀</div>
-        <div class="rg-cb-empty-title">Select a Group</div>
-        <div class="rg-cb-empty-desc">Choose a financial group to view and manage its cross-border data flows.</div>
-    </div>
-}
-else
-{
-    @* ── Flow Visualization ── *@
-    @if (_flows.Count > 0)
+<SectionErrorBoundary Title="Couldn't load data flows" ExternalError="@_loadException" OnRetry="LoadFlows">
+    @if (_loading)
     {
-        <div class="rg-card" style="padding:0.85rem;margin-bottom:1rem;">
-            <h3 class="rg-section-title" style="margin-bottom:0.6rem;">Flow Definitions</h3>
-            <div class="rg-cb-flow-vis">
-                @foreach (var f in _flows)
-                {
-                    <div class="rg-cb-flow-row">
-                        <FlagBadge Code="@f.SourceJurisdiction" Label="@f.SourceReturnCode" />
-                        <span class="rg-cb-flow-arrow">→</span>
-                        <span class="rg-cb-flow-transform">@f.Transformation</span>
-                        @if (f.RequiresCurrencyConversion)
-                        {
-                            <span class="rg-cb-flow-fx">FX</span>
-                        }
-                        <span class="rg-cb-flow-arrow">→</span>
-                        <FlagBadge Code="@f.TargetJurisdiction" Label="@f.TargetReturnCode" />
-                        <span style="margin-left:auto;font-size:0.72rem;color:var(--rg-muted);font-family:monospace;">@f.FlowCode</span>
-                        <StatusPill Label="@(f.IsActive ? "Active" : "Inactive")" Variant="@(f.IsActive ? "success" : "default")" />
-                    </div>
-                }
-            </div>
-        </div>
+        <SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Card" />
+        <SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.TableRows" RowCount="4" />
+    }
+    else if (_selectedGroupId == 0)
+    {
+        <EmptyState Context="data" Heading="Select a Group" Description="Choose a financial group to view and manage its cross-border data flows." />
     }
     else
     {
-        <div class="rg-cb-empty">
-            <div class="rg-cb-empty-icon">🔀</div>
-            <div class="rg-cb-empty-title">No Data Flows</div>
-            <div class="rg-cb-empty-desc">Define cross-border data flows to automate regulatory data transformation between jurisdictions.</div>
-        </div>
-    }
-
-    @* ── Execution Results ── *@
-    @if (_executionResults.Count > 0)
-    {
-        <div class="rg-card" style="padding:0.85rem;">
-            <h3 class="rg-section-title" style="margin-bottom:0.6rem;">Execution Results — @_executePeriod</h3>
-            <div class="rg-table-wrap">
-                <table class="rg-table">
-                    <thead>
-                        <tr>
-                            <th>Flow</th>
-                            <th>Source Value</th>
-                            <th>FX Rate</th>
-                            <th>Converted</th>
-                            <th>Target Value</th>
-                            <th>Status</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @foreach (var r in _executionResults)
-                        {
-                            <tr>
-                                <td><code style="font-size:0.78rem;">@r.FlowCode</code></td>
-                                <td style="text-align:right;font-family:monospace;font-size:0.82rem;">
-                                    @r.SourceValue.ToString("N2") @r.SourceCurrency
-                                </td>
-                                <td style="text-align:right;font-size:0.78rem;">
-                                    @(r.FxRateApplied?.ToString("F4") ?? "—")
-                                </td>
-                                <td style="text-align:right;font-family:monospace;font-size:0.82rem;">
-                                    @(r.ConvertedValue?.ToString("N2") ?? "—")
-                                </td>
-                                <td style="text-align:right;font-family:monospace;font-size:0.82rem;font-weight:600;">
-                                    @r.TargetValue.ToString("N2") @r.TargetCurrency
-                                </td>
-                                <td>
-                                    <StatusPill Label="@r.Status" Variant="@(r.Status == "SUCCESS" ? "success" : "danger")" />
-                                    @if (!string.IsNullOrEmpty(r.ErrorMessage))
-                                    {
-                                        <div style="font-size:0.7rem;color:var(--rg-danger);margin-top:0.15rem;">@r.ErrorMessage</div>
-                                    }
-                                </td>
-                            </tr>
-                        }
-                    </tbody>
-                </table>
+        @* -- Flow Visualization -- *@
+        @if (_flows.Count > 0)
+        {
+            <div class="rg-card" style="padding:0.85rem;margin-bottom:1rem;">
+                <h3 class="rg-section-title" style="margin-bottom:0.6rem;">Flow Definitions</h3>
+                <div class="rg-cb-flow-vis">
+                    @foreach (var f in _flows)
+                    {
+                        <div class="rg-cb-flow-row">
+                            <FlagBadge Code="@f.SourceJurisdiction" Label="@f.SourceReturnCode" />
+                            <span class="rg-cb-flow-arrow">-></span>
+                            <span class="rg-cb-flow-transform">@f.Transformation</span>
+                            @if (f.RequiresCurrencyConversion)
+                            {
+                                <span class="rg-cb-flow-fx">FX</span>
+                            }
+                            <span class="rg-cb-flow-arrow">-></span>
+                            <FlagBadge Code="@f.TargetJurisdiction" Label="@f.TargetReturnCode" />
+                            <span style="margin-left:auto;font-size:0.72rem;color:var(--rg-muted);font-family:monospace;">@f.FlowCode</span>
+                            <StatusPill Label="@(f.IsActive ? "Active" : "Inactive")" Variant="@(f.IsActive ? "success" : "default")" />
+                        </div>
+                    }
+                </div>
             </div>
-        </div>
-    }
+        }
+        else
+        {
+            <EmptyState Context="data" Heading="No Data Flows" Description="Define cross-border data flows to automate regulatory data transformation between jurisdictions." />
+        }
 
-    @if (!string.IsNullOrWhiteSpace(_message))
-    {
-        <p style="margin-top:0.5rem;font-size:0.82rem;color:@(_msgError ? "var(--rg-danger)" : "#15803d");">@_message</p>
+        @* -- Execution Results -- *@
+        @if (_executionResults.Count > 0)
+        {
+            <div class="rg-card" style="padding:0.85rem;">
+                <h3 class="rg-section-title" style="margin-bottom:0.6rem;">Execution Results — @_executePeriod</h3>
+                <div class="rg-table-wrap">
+                    <table class="rg-table">
+                        <thead>
+                            <tr>
+                                <th>Flow</th>
+                                <th>Source Value</th>
+                                <th>FX Rate</th>
+                                <th>Converted</th>
+                                <th>Target Value</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var r in _executionResults)
+                            {
+                                <tr>
+                                    <td><code style="font-size:0.78rem;">@r.FlowCode</code></td>
+                                    <td style="text-align:right;font-family:monospace;font-size:0.82rem;">
+                                        @r.SourceValue.ToString("N2") @r.SourceCurrency
+                                    </td>
+                                    <td style="text-align:right;font-size:0.78rem;">
+                                        @(r.FxRateApplied?.ToString("F4") ?? "--")
+                                    </td>
+                                    <td style="text-align:right;font-family:monospace;font-size:0.82rem;">
+                                        @(r.ConvertedValue?.ToString("N2") ?? "--")
+                                    </td>
+                                    <td style="text-align:right;font-family:monospace;font-size:0.82rem;font-weight:600;">
+                                        @r.TargetValue.ToString("N2") @r.TargetCurrency
+                                    </td>
+                                    <td>
+                                        <StatusPill Label="@r.Status" Variant="@(r.Status == "SUCCESS" ? "success" : "danger")" />
+                                        @if (!string.IsNullOrEmpty(r.ErrorMessage))
+                                        {
+                                            <div style="font-size:0.7rem;color:var(--rg-danger);margin-top:0.15rem;">@r.ErrorMessage</div>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        }
     }
-}
+</SectionErrorBoundary>
 
 @code {
     private bool _loading;
     private bool _executing;
     private int _selectedGroupId;
     private string _executePeriod = $"{DateTime.UtcNow.Year}-Q{(DateTime.UtcNow.Month - 1) / 3 + 1}";
-    private string? _message;
-    private bool _msgError;
+    private Exception? _loadException;
 
     private List<DataFlowSummary> _flows = [];
     private List<DataFlowExecutionResult> _executionResults = [];
@@ -169,33 +153,35 @@ else
     {
         if (_selectedGroupId == 0) { _flows = []; return; }
         _loading = true;
+        _loadException = null;
         StateHasChanged();
 
         try
         {
             _flows = (await FlowEngine.ListFlowsAsync(_selectedGroupId, null, null)).ToList();
         }
-        catch { _flows = []; }
+        catch (Exception ex)
+        {
+            _loadException = ex;
+            _flows = [];
+        }
         finally { _loading = false; StateHasChanged(); }
     }
 
     private async Task ExecuteFlows()
     {
         _executing = true;
-        _message = null;
-        _msgError = false;
         StateHasChanged();
 
         try
         {
             _executionResults = (await FlowEngine.ExecuteFlowsAsync(_selectedGroupId, _executePeriod)).ToList();
             var success = _executionResults.Count(r => r.Status == "SUCCESS");
-            _message = $"Executed {_executionResults.Count} flows: {success} succeeded, {_executionResults.Count - success} failed.";
+            Toast.Success($"Executed {_executionResults.Count} flows: {success} succeeded, {_executionResults.Count - success} failed.");
         }
         catch (Exception ex)
         {
-            _message = ex.Message;
-            _msgError = true;
+            Toast.Error("Execution failed: " + ex.Message);
         }
         finally { _executing = false; StateHasChanged(); }
     }

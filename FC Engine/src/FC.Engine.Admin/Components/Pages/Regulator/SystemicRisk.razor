@@ -2,25 +2,40 @@
 @attribute [Authorize(Policy = "RegulatorOnly")]
 @inject ISystemicRiskService SystemicRiskService
 @inject FC.Engine.Infrastructure.Charts.ChartJsInterop Charts
+@inject ToastService Toast
 
 <PageTitle>Systemic Risk Dashboard</PageTitle>
 
-<h1 class="rg-page-title">Systemic Risk Dashboard</h1>
+<PageHeader Title="Systemic Risk Dashboard"
+            Subtitle="Comprehensive systemic risk indicators, contagion analysis and supervisory actions">
+    <PrimaryAction>
+        <button class="fc-btn fc-btn--primary" @onclick="Load">Refresh Dashboard</button>
+    </PrimaryAction>
+</PageHeader>
 
-<div class="rg-card">
-    <div class="rg-controls">
-        <button class="rg-btn primary" @onclick="Load">Refresh Dashboard</button>
-    </div>
-
-    @if (!string.IsNullOrWhiteSpace(_error))
+<SectionErrorBoundary Title="Couldn't load systemic risk dashboard" ExternalError="@_loadException" OnRetry="Load">
+    @if (_loading)
     {
-        <p class="rg-danger-text">@_error</p>
-    }
-    else if (_loading)
+        <div class="rg-grid rg-grid-2" style="margin-bottom:0.75rem;">
+                <SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Block" Height="80px" />
+                <SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Block" Height="80px" />
+                <SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Block" Height="80px" />
+                <SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Block" Height="80px" />
+            </div>
+            <SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Block" Height="48px" />
+            <SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.TableRows" RowCount="6" />
+            <SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Block" Height="200px" />
+            <SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.TableRows" RowCount="8" />
+}
+    else if (_dashboard is null)
     {
-        <p class="rg-muted">Computing systemic risk indicators...</p>
+        <EmptyState Context="data" Size="sm"
+                    Heading="No systemic risk data"
+                    Description="No systemic risk data is available for your jurisdiction. Try refreshing the dashboard."
+                    PrimaryActionLabel="Refresh"
+                    OnPrimaryAction="Load" />
     }
-    else if (_dashboard is not null)
+    else
     {
         var s = _dashboard.Summary;
 
@@ -104,94 +119,112 @@
         <!-- Sector Heatmap: entities by risk score vs size -->
         <div class="rg-card" style="margin-bottom:0.75rem;">
             <h3 style="margin-top:0;">Entity Heatmap (Risk Score vs Size)</h3>
-            <div class="rg-table-wrap">
-                <table class="rg-table">
-                    <thead>
-                        <tr>
-                            <th>Rating</th>
-                            <th>Institution</th>
-                            <th>Licence</th>
-                            <th>Risk Score</th>
-                            <th>Total Assets</th>
-                            <th>Flags</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @foreach (var entity in _dashboard.HeatmapData.OrderBy(h => h.RiskScore))
-                        {
-                            var bgColor = entity.Rating switch
-                            {
-                                RiskRating.Red => "#fef2f2",
-                                RiskRating.Amber => "#fffbeb",
-                                _ => "transparent"
-                            };
-                            <tr style="background:@bgColor;">
-                                <td>
-                                    <span class="rg-badge @(entity.Rating == RiskRating.Red ? "open" : entity.Rating == RiskRating.Amber ? "query" : "")"
-                                          style="@(entity.Rating == RiskRating.Green ? "background:#dcfce7;color:#166534;" : "")">
-                                        @entity.Rating
-                                    </span>
-                                </td>
-                                <td><strong>@entity.InstitutionName</strong></td>
-                                <td>@entity.LicenceType</td>
-                                <td>@entity.RiskScore.ToString("0.##")</td>
-                                <td>@FormatNumber(entity.Size)</td>
-                                <td>@entity.FlagCount</td>
+            @if (_dashboard.HeatmapData.Count == 0)
+            {
+                <EmptyState Context="data" Size="sm"
+                            Heading="No heatmap data"
+                            Description="No entity heatmap data is available for the current period." />
+            }
+            else
+            {
+                <div class="rg-table-wrap">
+                    <table class="rg-table">
+                        <thead>
+                            <tr>
+                                <th>Rating</th>
+                                <th>Institution</th>
+                                <th>Licence</th>
+                                <th>Risk Score</th>
+                                <th>Total Assets</th>
+                                <th>Flags</th>
                             </tr>
-                        }
-                    </tbody>
-                </table>
-            </div>
+                        </thead>
+                        <tbody>
+                            @foreach (var entity in _dashboard.HeatmapData.OrderBy(h => h.RiskScore))
+                            {
+                                var bgColor = entity.Rating switch
+                                {
+                                    RiskRating.Red => "#fef2f2",
+                                    RiskRating.Amber => "#fffbeb",
+                                    _ => "transparent"
+                                };
+                                <tr style="background:@bgColor;">
+                                    <td>
+                                        <span class="rg-badge @(entity.Rating == RiskRating.Red ? "open" : entity.Rating == RiskRating.Amber ? "query" : "")"
+                                              style="@(entity.Rating == RiskRating.Green ? "background:#dcfce7;color:#166534;" : "")">
+                                            @entity.Rating
+                                        </span>
+                                    </td>
+                                    <td><strong>@entity.InstitutionName</strong></td>
+                                    <td>@entity.LicenceType</td>
+                                    <td>@entity.RiskScore.ToString("0.##")</td>
+                                    <td>@FormatNumber(entity.Size)</td>
+                                    <td>@entity.FlagCount</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
         </div>
 
         <!-- CAMELS Scores Table -->
         <div class="rg-card" style="margin-bottom:0.75rem;">
             <h3 style="margin-top:0;">CAMELS Composite Scores</h3>
-            <div class="rg-chart"><canvas id="camelsChart"></canvas></div>
-            <div class="rg-table-wrap" style="margin-top:0.5rem;">
-                <table class="rg-table">
-                    <thead>
-                        <tr>
-                            <th>Rating</th>
-                            <th>Institution</th>
-                            <th>C</th>
-                            <th>A</th>
-                            <th>M</th>
-                            <th>E</th>
-                            <th>L</th>
-                            <th>S</th>
-                            <th>Composite</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @foreach (var score in _dashboard.Scores)
-                        {
-                            var bgColor = score.Rating switch
-                            {
-                                RiskRating.Red => "#fef2f2",
-                                RiskRating.Amber => "#fffbeb",
-                                _ => "transparent"
-                            };
-                            <tr style="background:@bgColor;">
-                                <td>
-                                    <span class="rg-badge @(score.Rating == RiskRating.Red ? "open" : score.Rating == RiskRating.Amber ? "query" : "")"
-                                          style="@(score.Rating == RiskRating.Green ? "background:#dcfce7;color:#166534;" : "")">
-                                        @score.Rating
-                                    </span>
-                                </td>
-                                <td><strong>@score.InstitutionName</strong></td>
-                                <td>@score.Capital.ToString("0.#")</td>
-                                <td>@score.AssetQuality.ToString("0.#")</td>
-                                <td>@score.Management.ToString("0.#")</td>
-                                <td>@score.Earnings.ToString("0.#")</td>
-                                <td>@score.Liquidity.ToString("0.#")</td>
-                                <td>@score.Sensitivity.ToString("0.#")</td>
-                                <td style="font-weight:700;">@score.Composite.ToString("0.##")</td>
+            @if (_dashboard.Scores.Count == 0)
+            {
+                <EmptyState Context="data" Size="sm"
+                            Heading="No CAMELS scores"
+                            Description="No CAMELS composite scores are available for the current period." />
+            }
+            else
+            {
+                <div class="rg-chart"><canvas id="camelsChart"></canvas></div>
+                <div class="rg-table-wrap" style="margin-top:0.5rem;">
+                    <table class="rg-table">
+                        <thead>
+                            <tr>
+                                <th>Rating</th>
+                                <th>Institution</th>
+                                <th>C</th>
+                                <th>A</th>
+                                <th>M</th>
+                                <th>E</th>
+                                <th>L</th>
+                                <th>S</th>
+                                <th>Composite</th>
                             </tr>
-                        }
-                    </tbody>
-                </table>
-            </div>
+                        </thead>
+                        <tbody>
+                            @foreach (var score in _dashboard.Scores)
+                            {
+                                var bgColor = score.Rating switch
+                                {
+                                    RiskRating.Red => "#fef2f2",
+                                    RiskRating.Amber => "#fffbeb",
+                                    _ => "transparent"
+                                };
+                                <tr style="background:@bgColor;">
+                                    <td>
+                                        <span class="rg-badge @(score.Rating == RiskRating.Red ? "open" : score.Rating == RiskRating.Amber ? "query" : "")"
+                                              style="@(score.Rating == RiskRating.Green ? "background:#dcfce7;color:#166534;" : "")">
+                                            @score.Rating
+                                        </span>
+                                    </td>
+                                    <td><strong>@score.InstitutionName</strong></td>
+                                    <td>@score.Capital.ToString("0.#")</td>
+                                    <td>@score.AssetQuality.ToString("0.#")</td>
+                                    <td>@score.Management.ToString("0.#")</td>
+                                    <td>@score.Earnings.ToString("0.#")</td>
+                                    <td>@score.Liquidity.ToString("0.#")</td>
+                                    <td>@score.Sensitivity.ToString("0.#")</td>
+                                    <td style="font-weight:700;">@score.Composite.ToString("0.##")</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
         </div>
 
         <!-- Contagion Analysis -->
@@ -314,7 +347,7 @@
             </div>
         }
     }
-</div>
+</SectionErrorBoundary>
 
 @code {
     [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
@@ -322,7 +355,7 @@
     private string _regulatorCode = string.Empty;
     private bool _loading = true;
     private bool _chartsRendered;
-    private string? _error;
+    private Exception? _loadException;
     private SystemicRiskDashboard? _dashboard;
 
     protected override async Task OnInitializedAsync()
@@ -339,7 +372,7 @@
 
         try
         {
-            // CAMELS bar chart — show composite scores per institution
+            // CAMELS bar chart -- show composite scores per institution
             var topEntities = _dashboard.Scores
                 .OrderBy(s => s.Composite)
                 .Take(20)
@@ -374,13 +407,13 @@
     {
         if (string.IsNullOrWhiteSpace(_regulatorCode))
         {
-            _error = "Regulator code claim is missing.";
+            Toast.Error("Regulator code claim is missing.");
             return;
         }
 
         _loading = true;
         _chartsRendered = false;
-        _error = null;
+        _loadException = null;
         StateHasChanged();
 
         try
@@ -389,7 +422,8 @@
         }
         catch (Exception ex)
         {
-            _error = ex.Message;
+            _loadException = ex;
+            Toast.Error($"Failed to load systemic risk dashboard: {ex.Message}");
         }
         finally
         {

@@ -2,216 +2,214 @@
 @attribute [Authorize(Policy = "RegulatorOnly")]
 @inject IConsolidationEngine ConsolidationEngine
 @inject NavigationManager Nav
+@inject ToastService Toast
 @using FC.Engine.Domain.Entities
 @using FC.Engine.Infrastructure.Metadata
 @inject MetadataDbContext Db
 @using Microsoft.EntityFrameworkCore
 
-<PageTitle>Consolidation Run — RegOS™</PageTitle>
+<PageTitle>Consolidation Run — RegOS</PageTitle>
 
-@if (_loading)
-{
-    <p class="rg-muted">Loading consolidation run…</p>
-}
-else if (_run is null)
-{
-    <div class="rg-cb-empty">
-        <div class="rg-cb-empty-icon">🔍</div>
-        <div class="rg-cb-empty-title">Run Not Found</div>
-        <div class="rg-cb-empty-desc">The requested consolidation run could not be found.</div>
-    </div>
-}
-else
-{
-    <div class="rg-cb-hero">
-        <div class="rg-cb-hero-text">
-            <div class="rg-cb-kicker">Consolidation Run #@_run.RunNumber</div>
-            <h1 class="rg-cb-hero-title">@_run.ReportingPeriod — @(_group?.GroupName ?? $"Group {_run.GroupId}")</h1>
-            <p class="rg-cb-hero-sub">
-                Snapshot: @_run.SnapshotDate.ToString("dd MMM yyyy") · Base: @_run.BaseCurrency · Status: @_run.Status
-            </p>
-        </div>
-        <div class="rg-cb-hero-actions">
-            <button class="rg-btn" @onclick='() => Nav.NavigateTo("/regulator/cross-border/consolidation")'>← Back</button>
-        </div>
-    </div>
-
-    @* ── Tabs ── *@
-    <div class="rg-cb-tabs">
-        <button class="rg-cb-tab @(_tab == "subsidiaries" ? "rg-cb-tab--active" : "")" @onclick='() => _tab = "subsidiaries"'>Subsidiaries</button>
-        <button class="rg-cb-tab @(_tab == "adjustments" ? "rg-cb-tab--active" : "")" @onclick='() => _tab = "adjustments"'>Adjustments (@_adjustments.Count)</button>
-        <button class="rg-cb-tab @(_tab == "add" ? "rg-cb-tab--active" : "")" @onclick='() => _tab = "add"'>Add Adjustment</button>
-    </div>
-
-    @if (_tab == "subsidiaries")
+<SectionErrorBoundary Title="Couldn't load consolidation run" ExternalError="@_loadException" OnRetry="ReloadAsync">
+    @if (_loading)
     {
-        @* ── Summary Cards ── *@
-        <div class="rg-cb-metrics-panel" style="margin-bottom:1rem;">
-            <div class="rg-card rg-cb-metric-card">
-                <div class="rg-cb-metric-title">Consolidated Total Assets</div>
-                <div style="font-size:1.3rem;font-weight:800;">@FormatAmount(_run.ConsolidatedTotalAssets ?? 0, _run.BaseCurrency)</div>
+        <SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Card" />
+            <div class="rg-cb-metrics-panel" style="margin-top:1rem;">
+                <SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Block" Height="160px" />
+                <SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Block" Height="160px" />
+                <SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Block" Height="160px" />
             </div>
-            <div class="rg-card rg-cb-metric-card">
-                <div class="rg-cb-metric-title">Consolidated Total Capital</div>
-                <div style="font-size:1.3rem;font-weight:800;">@FormatAmount(_run.ConsolidatedTotalCapital ?? 0, _run.BaseCurrency)</div>
-            </div>
-            <div class="rg-card rg-cb-metric-card">
-                <div class="rg-cb-metric-title">Consolidated CAR</div>
-                <div class="rg-cb-gauge">
-                    @{ var carPct = (double)(_run.ConsolidatedCAR ?? 0); }
-                    <svg viewBox="0 0 120 120">
-                        <circle cx="60" cy="60" r="50" fill="none" stroke="#e2e8f0" stroke-width="10" />
-                        <circle cx="60" cy="60" r="50" fill="none"
-                                stroke="@(carPct >= 15 ? "#15803d" : carPct >= 10 ? "#b45309" : "#b91c1c")"
-                                stroke-width="10"
-                                stroke-dasharray="@((carPct / 30.0 * 314).ToString("F0")) 314"
-                                stroke-linecap="round"
-                                transform="rotate(-90 60 60)" />
-                    </svg>
-                    <div class="rg-cb-gauge-value">
-                        <span class="rg-cb-gauge-number">@((_run.ConsolidatedCAR ?? 0).ToString("F2"))%</span>
-                        <span class="rg-cb-gauge-label">CAR</span>
+            <SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.TableRows" RowCount="6" />
+}
+    else if (_run is null)
+    {
+        <EmptyState Context="data"
+                    Heading="Run Not Found"
+                    Description="The requested consolidation run could not be found."
+                    PrimaryActionLabel="Back to Consolidation"
+                    PrimaryActionHref="/regulator/cross-border/consolidation" />
+    }
+    else
+    {
+        <PageHeader Title="@($"{_run.ReportingPeriod} — {_group?.GroupName ?? $"Group {_run.GroupId}"}")"
+                    Subtitle="@($"Snapshot: {_run.SnapshotDate:dd MMM yyyy} · Base: {_run.BaseCurrency} · Status: {_run.Status}")"
+                    BackUrl="/regulator/cross-border/consolidation">
+        </PageHeader>
+
+        @* -- Tabs -- *@
+        <div class="rg-cb-tabs">
+            <button class="rg-cb-tab @(_tab == "subsidiaries" ? "rg-cb-tab--active" : "")" @onclick='() => _tab = "subsidiaries"'>Subsidiaries</button>
+            <button class="rg-cb-tab @(_tab == "adjustments" ? "rg-cb-tab--active" : "")" @onclick='() => _tab = "adjustments"'>Adjustments (@_adjustments.Count)</button>
+            <button class="rg-cb-tab @(_tab == "add" ? "rg-cb-tab--active" : "")" @onclick='() => _tab = "add"'>Add Adjustment</button>
+        </div>
+
+        @if (_tab == "subsidiaries")
+        {
+            @* -- Summary Cards -- *@
+            <div class="rg-cb-metrics-panel" style="margin-bottom:1rem;">
+                <div class="rg-card rg-cb-metric-card">
+                    <div class="rg-cb-metric-title">Consolidated Total Assets</div>
+                    <div style="font-size:1.3rem;font-weight:800;">@FormatAmount(_run.ConsolidatedTotalAssets ?? 0, _run.BaseCurrency)</div>
+                </div>
+                <div class="rg-card rg-cb-metric-card">
+                    <div class="rg-cb-metric-title">Consolidated Total Capital</div>
+                    <div style="font-size:1.3rem;font-weight:800;">@FormatAmount(_run.ConsolidatedTotalCapital ?? 0, _run.BaseCurrency)</div>
+                </div>
+                <div class="rg-card rg-cb-metric-card">
+                    <div class="rg-cb-metric-title">Consolidated CAR</div>
+                    <div class="rg-cb-gauge">
+                        @{ var carPct = (double)(_run.ConsolidatedCAR ?? 0); }
+                        <svg viewBox="0 0 120 120">
+                            <circle cx="60" cy="60" r="50" fill="none" stroke="#e2e8f0" stroke-width="10" />
+                            <circle cx="60" cy="60" r="50" fill="none"
+                                    stroke="@(carPct >= 15 ? "#15803d" : carPct >= 10 ? "#b45309" : "#b91c1c")"
+                                    stroke-width="10"
+                                    stroke-dasharray="@((carPct / 30.0 * 314).ToString("F0")) 314"
+                                    stroke-linecap="round"
+                                    transform="rotate(-90 60 60)" />
+                        </svg>
+                        <div class="rg-cb-gauge-value">
+                            <span class="rg-cb-gauge-number">@((_run.ConsolidatedCAR ?? 0).ToString("F2"))%</span>
+                            <span class="rg-cb-gauge-label">CAR</span>
+                        </div>
                     </div>
                 </div>
             </div>
-        </div>
 
-        @* ── Subsidiary Data Table ── *@
-        <div class="rg-table-wrap">
-            <table class="rg-table">
-                <thead>
-                    <tr>
-                        <th>Subsidiary</th>
-                        <th>Jurisdiction</th>
-                        <th>Local Assets</th>
-                        <th>Local Capital</th>
-                        <th>Local CAR</th>
-                        <th>FX Rate</th>
-                        <th>Converted Assets</th>
-                        <th>Adjusted Assets</th>
-                        <th>Adjusted RWA</th>
-                        <th>Method</th>
-                        <th>%</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @foreach (var s in _subsidiaries)
-                    {
-                        <tr>
-                            <td>
-                                <div><strong>@s.SubsidiaryCode</strong></div>
-                                <div style="font-size:0.7rem;color:var(--rg-muted);">@s.SubsidiaryName</div>
-                            </td>
-                            <td><FlagBadge Code="@s.JurisdictionCode" /></td>
-                            <td style="text-align:right;font-family:monospace;font-size:0.8rem;">@FormatAmount(s.LocalTotalAssets, s.LocalCurrency)</td>
-                            <td style="text-align:right;font-family:monospace;font-size:0.8rem;">@FormatAmount(s.LocalTotalCapital, s.LocalCurrency)</td>
-                            <td style="text-align:right;font-weight:600;">@s.LocalCAR.ToString("F2")%</td>
-                            <td style="text-align:right;font-size:0.78rem;">@s.FxRateUsed.ToString("F4")</td>
-                            <td style="text-align:right;font-family:monospace;font-size:0.8rem;">@FormatAmount(s.ConvertedTotalAssets, _run.BaseCurrency)</td>
-                            <td style="text-align:right;font-family:monospace;font-size:0.8rem;font-weight:600;">@FormatAmount(s.AdjustedTotalAssets, _run.BaseCurrency)</td>
-                            <td style="text-align:right;font-family:monospace;font-size:0.8rem;">@FormatAmount(s.AdjustedRWA, _run.BaseCurrency)</td>
-                            <td><StatusPill Label="@s.ConsolidationMethod" Variant="@(s.ConsolidationMethod == "Full" ? "primary" : "warning")" /></td>
-                            <td style="text-align:right;">@s.OwnershipPercentage%</td>
-                        </tr>
-                    }
-                </tbody>
-            </table>
-        </div>
-    }
-    else if (_tab == "adjustments")
-    {
-        @if (_adjustments.Count == 0)
-        {
-            <div class="rg-cb-empty">
-                <div class="rg-cb-empty-icon">📋</div>
-                <div class="rg-cb-empty-title">No Adjustments</div>
-                <div class="rg-cb-empty-desc">No consolidation adjustments have been recorded for this run.</div>
-            </div>
-        }
-        else
-        {
+            @* -- Subsidiary Data Table -- *@
             <div class="rg-table-wrap">
                 <table class="rg-table">
                     <thead>
                         <tr>
-                            <th>Type</th>
-                            <th>Description</th>
                             <th>Subsidiary</th>
-                            <th>Debit</th>
-                            <th>Credit</th>
-                            <th>Amount</th>
-                            <th>Source</th>
+                            <th>Jurisdiction</th>
+                            <th>Local Assets</th>
+                            <th>Local Capital</th>
+                            <th>Local CAR</th>
+                            <th>FX Rate</th>
+                            <th>Converted Assets</th>
+                            <th>Adjusted Assets</th>
+                            <th>Adjusted RWA</th>
+                            <th>Method</th>
+                            <th>%</th>
                         </tr>
                     </thead>
                     <tbody>
-                        @foreach (var a in _adjustments)
+                        @foreach (var s in _subsidiaries)
                         {
                             <tr>
-                                <td><StatusPill Label="@a.AdjustmentType" Variant="@(a.IsAutomatic ? "info" : "warning")" /></td>
-                                <td>@a.Description</td>
-                                <td>@(a.AffectedSubsidiaryCode ?? "—")</td>
-                                <td style="font-family:monospace;font-size:0.8rem;">@a.DebitAccount</td>
-                                <td style="font-family:monospace;font-size:0.8rem;">@a.CreditAccount</td>
-                                <td style="text-align:right;font-weight:600;">@FormatAmount(a.Amount, a.Currency)</td>
-                                <td>@(a.IsAutomatic ? "Auto" : "Manual")</td>
+                                <td>
+                                    <div><strong>@s.SubsidiaryCode</strong></div>
+                                    <div style="font-size:0.7rem;color:var(--rg-muted);">@s.SubsidiaryName</div>
+                                </td>
+                                <td><FlagBadge Code="@s.JurisdictionCode" /></td>
+                                <td style="text-align:right;font-family:monospace;font-size:0.8rem;">@FormatAmount(s.LocalTotalAssets, s.LocalCurrency)</td>
+                                <td style="text-align:right;font-family:monospace;font-size:0.8rem;">@FormatAmount(s.LocalTotalCapital, s.LocalCurrency)</td>
+                                <td style="text-align:right;font-weight:600;">@s.LocalCAR.ToString("F2")%</td>
+                                <td style="text-align:right;font-size:0.78rem;">@s.FxRateUsed.ToString("F4")</td>
+                                <td style="text-align:right;font-family:monospace;font-size:0.8rem;">@FormatAmount(s.ConvertedTotalAssets, _run.BaseCurrency)</td>
+                                <td style="text-align:right;font-family:monospace;font-size:0.8rem;font-weight:600;">@FormatAmount(s.AdjustedTotalAssets, _run.BaseCurrency)</td>
+                                <td style="text-align:right;font-family:monospace;font-size:0.8rem;">@FormatAmount(s.AdjustedRWA, _run.BaseCurrency)</td>
+                                <td><StatusPill Label="@s.ConsolidationMethod" Variant="@(s.ConsolidationMethod == "Full" ? "primary" : "warning")" /></td>
+                                <td style="text-align:right;">@s.OwnershipPercentage%</td>
                             </tr>
                         }
                     </tbody>
                 </table>
             </div>
         }
-    }
-    else if (_tab == "add")
-    {
-        <div class="rg-card" style="padding:1rem;">
-            <h3 class="rg-section-title">Add Manual Adjustment</h3>
-            <div class="rg-cb-form-row">
-                <div class="rg-cb-field">
-                    <label>Type</label>
-                    <select @bind="_adjType">
-                        <option value="INTERCOMPANY_ELIMINATION">Intercompany Elimination</option>
-                        <option value="MINORITY_INTEREST">Minority Interest</option>
-                        <option value="GOODWILL_IMPAIRMENT">Goodwill Impairment</option>
-                        <option value="MANUAL">Manual</option>
-                    </select>
-                </div>
-                <div class="rg-cb-field">
-                    <label>Description</label>
-                    <input @bind="_adjDescription" placeholder="Describe the adjustment" />
-                </div>
-            </div>
-            <div class="rg-cb-form-row">
-                <div class="rg-cb-field">
-                    <label>Debit Account</label>
-                    <input @bind="_adjDebit" placeholder="e.g. 3100-INTERCO" />
-                </div>
-                <div class="rg-cb-field">
-                    <label>Credit Account</label>
-                    <input @bind="_adjCredit" placeholder="e.g. 3200-INVEST" />
-                </div>
-                <div class="rg-cb-field">
-                    <label>Amount</label>
-                    <input type="number" step="0.01" @bind="_adjAmount" />
-                </div>
-            </div>
-            <div class="rg-controls" style="margin-top:0.5rem;">
-                <button class="rg-btn primary" @onclick="AddAdjustment" disabled="@_adjSaving">
-                    @(_adjSaving ? "Adding…" : "Add Adjustment")
-                </button>
-            </div>
-            @if (!string.IsNullOrWhiteSpace(_adjMessage))
+        else if (_tab == "adjustments")
+        {
+            @if (_adjustments.Count == 0)
             {
-                <p style="margin-top:0.5rem;font-size:0.82rem;color:@(_adjError ? "var(--rg-danger)" : "#15803d");">@_adjMessage</p>
+                <EmptyState Context="data"
+                            Heading="No Adjustments"
+                            Description="No consolidation adjustments have been recorded for this run."
+                            PrimaryActionLabel="Add Adjustment"
+                            OnPrimaryAction='() => _tab = "add"' />
             }
-        </div>
+            else
+            {
+                <div class="rg-table-wrap">
+                    <table class="rg-table">
+                        <thead>
+                            <tr>
+                                <th>Type</th>
+                                <th>Description</th>
+                                <th>Subsidiary</th>
+                                <th>Debit</th>
+                                <th>Credit</th>
+                                <th>Amount</th>
+                                <th>Source</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var a in _adjustments)
+                            {
+                                <tr>
+                                    <td><StatusPill Label="@a.AdjustmentType" Variant="@(a.IsAutomatic ? "info" : "warning")" /></td>
+                                    <td>@a.Description</td>
+                                    <td>@(a.AffectedSubsidiaryCode ?? "—")</td>
+                                    <td style="font-family:monospace;font-size:0.8rem;">@a.DebitAccount</td>
+                                    <td style="font-family:monospace;font-size:0.8rem;">@a.CreditAccount</td>
+                                    <td style="text-align:right;font-weight:600;">@FormatAmount(a.Amount, a.Currency)</td>
+                                    <td>@(a.IsAutomatic ? "Auto" : "Manual")</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        }
+        else if (_tab == "add")
+        {
+            <div class="rg-card" style="padding:1rem;">
+                <h3 class="rg-section-title">Add Manual Adjustment</h3>
+                <div class="rg-cb-form-row">
+                    <div class="rg-cb-field">
+                        <label>Type</label>
+                        <select @bind="_adjType">
+                            <option value="INTERCOMPANY_ELIMINATION">Intercompany Elimination</option>
+                            <option value="MINORITY_INTEREST">Minority Interest</option>
+                            <option value="GOODWILL_IMPAIRMENT">Goodwill Impairment</option>
+                            <option value="MANUAL">Manual</option>
+                        </select>
+                    </div>
+                    <div class="rg-cb-field">
+                        <label>Description</label>
+                        <input @bind="_adjDescription" placeholder="Describe the adjustment" />
+                    </div>
+                </div>
+                <div class="rg-cb-form-row">
+                    <div class="rg-cb-field">
+                        <label>Debit Account</label>
+                        <input @bind="_adjDebit" placeholder="e.g. 3100-INTERCO" />
+                    </div>
+                    <div class="rg-cb-field">
+                        <label>Credit Account</label>
+                        <input @bind="_adjCredit" placeholder="e.g. 3200-INVEST" />
+                    </div>
+                    <div class="rg-cb-field">
+                        <label>Amount</label>
+                        <input type="number" step="0.01" @bind="_adjAmount" />
+                    </div>
+                </div>
+                <div class="rg-controls" style="margin-top:0.5rem;">
+                    <button class="fc-btn fc-btn--primary" @onclick="AddAdjustment" disabled="@_adjSaving">
+                        @(_adjSaving ? "Adding..." : "Add Adjustment")
+                    </button>
+                </div>
+            </div>
+        }
     }
-}
+</SectionErrorBoundary>
 
 @code {
     [Parameter] public long RunId { get; set; }
 
     private bool _loading = true;
     private string _tab = "subsidiaries";
+    private Exception? _loadException;
     private ConsolidationResult? _run;
     private List<ConsolidationSubsidiaryResult> _subsidiaries = [];
     private List<ConsolidationAdjustmentDto> _adjustments = [];
@@ -223,14 +221,17 @@ else
     private string _adjCredit = "";
     private decimal _adjAmount;
     private bool _adjSaving;
-    private string? _adjMessage;
-    private bool _adjError;
 
-    protected override async Task OnInitializedAsync()
+    protected override async Task OnInitializedAsync() => await ReloadAsync();
+
+    private async Task ReloadAsync()
     {
+        _loading = true;
+        _loadException = null;
+        StateHasChanged();
+
         try
         {
-            // Try common group IDs since we don't know the groupId from the URL
             foreach (var gid in await Db.FinancialGroups.AsNoTracking().Select(g => g.Id).ToListAsync())
             {
                 _run = await ConsolidationEngine.GetRunResultAsync(RunId, gid);
@@ -243,16 +244,18 @@ else
                 }
             }
         }
-        catch { _run = null; }
-        finally { _loading = false; }
+        catch (Exception ex)
+        {
+            _loadException = ex;
+            _run = null;
+        }
+        finally { _loading = false; StateHasChanged(); }
     }
 
     private async Task AddAdjustment()
     {
         if (_run is null) return;
         _adjSaving = true;
-        _adjMessage = null;
-        _adjError = false;
         StateHasChanged();
 
         try
@@ -268,14 +271,13 @@ else
 
             await ConsolidationEngine.AddManualAdjustmentAsync(RunId, _run.GroupId, input, 1);
             _adjustments = (await ConsolidationEngine.GetAdjustmentsAsync(RunId, _run.GroupId)).ToList();
-            _adjMessage = "Adjustment added successfully.";
+            Toast.Success("Adjustment added successfully.");
             _adjDescription = ""; _adjDebit = ""; _adjCredit = ""; _adjAmount = 0;
             _tab = "adjustments";
         }
         catch (Exception ex)
         {
-            _adjMessage = ex.Message;
-            _adjError = true;
+            Toast.Error("Failed to add adjustment: " + ex.Message);
         }
         finally { _adjSaving = false; StateHasChanged(); }
     }

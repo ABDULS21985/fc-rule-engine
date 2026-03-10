@@ -4,34 +4,28 @@
 @inject IPolicyScenarioService ScenarioService
 @inject NavigationManager Nav
 @inject IJSRuntime JS
+@inject ToastService Toast
 
 <PageTitle>Compare Scenarios — Policy Simulation</PageTitle>
 
-<div class="rg-ps-page">
-    <div class="rg-ps-flex-between">
-        <div>
-            <h1 class="rg-page-title">Scenario Comparison</h1>
-            <p class="rg-muted">Compare impact assessment results across multiple simulation runs side by side.</p>
-        </div>
-        <button class="rg-btn" @onclick="GoBack">Back to Scenarios</button>
-    </div>
+<PageHeader Title="Scenario Comparison"
+            Subtitle="Compare impact assessment results across multiple simulation runs side by side."
+            BackUrl="/regulator/policies">
+</PageHeader>
 
-    <!-- Run Selector -->
-    <div class="rg-card">
-        <h3 class="rg-section-title">Select Runs to Compare (2-4)</h3>
-        <div class="rg-controls">
-            <input class="rg-ps-input" placeholder="Run IDs, comma separated (e.g. 1,2,3)" @bind="_runIdsInput"
-                   style="max-width:400px;" />
-            <button class="rg-btn primary" @onclick="LoadComparison" disabled="@_comparing">
-                @(_comparing ? "Comparing..." : "Compare")
-            </button>
-        </div>
-        @if (!string.IsNullOrWhiteSpace(_error))
-        {
-            <p class="rg-danger-text rg-ps-mt">@_error</p>
-        }
+<!-- Run Selector -->
+<div class="rg-card">
+    <h3 class="rg-section-title">Select Runs to Compare (2-4)</h3>
+    <div class="rg-controls">
+        <input class="rg-ps-input" placeholder="Run IDs, comma separated (e.g. 1,2,3)" @bind="_runIdsInput"
+               style="max-width:400px;" />
+        <button class="fc-btn fc-btn--primary" @onclick="LoadComparison" disabled="@_comparing">
+            @(_comparing ? "Comparing..." : "Compare")
+        </button>
     </div>
+</div>
 
+<SectionErrorBoundary Title="Couldn't load comparison data" ExternalError="@_loadException" OnRetry="LoadComparison">
     @if (_comparison is not null)
     {
         <!-- Summary Cards -->
@@ -57,7 +51,9 @@
             <h3 class="rg-section-title">Entity Comparison Matrix</h3>
             @if (_comparison.EntityRows.Count == 0)
             {
-                <p class="rg-muted">No entity data to compare.</p>
+                <EmptyState Context="data"
+                            Heading="No entity data"
+                            Description="No entity data is available for the selected runs." />
             }
             else
             {
@@ -107,7 +103,23 @@
             }
         </div>
     }
-</div>
+    else if (!_comparing && _loadException is null)
+    {
+        <EmptyState Context="data"
+                    Heading="No comparison loaded"
+                    Description="Enter two or more simulation run IDs above to compare their results side by side." />
+    }
+    else if (_comparing)
+    {
+        <div class="rg-ps-kpis">
+                @for (var i = 0; i < 3; i++)
+                {
+                    <SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Card" Index="i" />
+                }
+            </div>
+            <SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.TableRows" />
+}
+</SectionErrorBoundary>
 
 @code {
     [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
@@ -115,7 +127,7 @@
 
     private int _regulatorId;
     private string _runIdsInput = string.Empty;
-    private string? _error;
+    private Exception? _loadException;
     private bool _comparing;
     private ScenarioComparisonResult? _comparison;
 
@@ -134,7 +146,7 @@
 
     private async Task LoadComparison()
     {
-        _error = null;
+        _loadException = null;
         var ids = _runIdsInput.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         var runIds = new List<long>();
         foreach (var id in ids)
@@ -145,7 +157,7 @@
 
         if (runIds.Count < 2)
         {
-            _error = "Please enter at least 2 run IDs.";
+            Toast.Error("Please enter at least 2 run IDs.");
             return;
         }
 
@@ -154,10 +166,12 @@
         try
         {
             _comparison = await ImpactEngine.CompareRunsAsync(runIds, _regulatorId);
+            Toast.Success($"Compared {_comparison.Scenarios.Count} scenarios successfully.");
         }
         catch (Exception ex)
         {
-            _error = ex.Message;
+            _loadException = ex;
+            Toast.Error($"Comparison failed: {ex.Message}");
         }
         finally
         {

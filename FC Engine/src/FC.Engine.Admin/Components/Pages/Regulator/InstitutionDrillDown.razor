@@ -4,46 +4,40 @@
 @inject ISupervisoryActionEngine ActionEngine
 @inject IDbConnectionFactory Db
 @inject NavigationManager Nav
+@inject ToastService Toast
 @using Dapper
 @using FC.Engine.Domain.Abstractions
 @using FC.Engine.Domain.Models
 @using Microsoft.AspNetCore.Authorization
 
-<PageTitle>Institution Risk Detail — RegOS™ SupTech</PageTitle>
+<PageTitle>Institution Risk Detail</PageTitle>
 
-<div class="rg-page">
+<PageHeader Title="@_institutionName"
+            Subtitle="@($"{_institutionType} · CAMELS Score: {_compositeScore:F2}")"
+            BackUrl="/regulator/heatmap"
+            StatusBadge="@_riskBand"
+            StatusVariant="@RiskBandVariant(_riskBand)">
+    <PrimaryAction>
+        <button class="fc-btn fc-btn--primary" @onclick="GenerateActionAsync" disabled="@_generatingAction">
+            @(_generatingAction ? "Generating..." : "Generate Supervisory Action")
+        </button>
+    </PrimaryAction>
+</PageHeader>
+
+<SectionErrorBoundary Title="Couldn't load institution data" ExternalError="@_loadException" OnRetry="LoadAsync">
     @if (_loading)
     {
-        <div class="rg-spinner-center"><div class="rg-spinner"></div></div>
-    }
-    else if (!string.IsNullOrWhiteSpace(_error))
-    {
-        <div class="rg-alert rg-alert-danger">@_error</div>
-    }
+        <div class="rg-camels-grid">
+                @for (var i = 0; i < 6; i++)
+                {
+                    <SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Card" />
+                }
+            </div>
+            <SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.TableRows" RowCount="6" />
+            <SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.TableRows" RowCount="4" />
+}
     else
     {
-        <!-- Institution header -->
-        <div class="rg-page-header rg-border-bottom">
-            <div>
-                <h1 class="rg-page-title">@_institutionName</h1>
-                <span class="rg-badge rg-badge-@_riskBand.ToLowerInvariant()">@_riskBand</span>
-                <span class="rg-muted" style="margin-left:.5rem;">
-                    @_institutionType · CAMELS Score: @_compositeScore.ToString("F2")
-                </span>
-            </div>
-            <div style="display:flex;gap:.5rem;">
-                <button class="rg-btn secondary" @onclick='() => Nav.NavigateTo("/regulator/heatmap")'>
-                    ← Heatmap
-                </button>
-                <button class="rg-btn danger"
-                        @onclick="GenerateActionAsync"
-                        disabled="@_generatingAction">
-                    @(_generatingAction ? "Generating…" : "Generate Supervisory Action")
-                </button>
-            </div>
-        </div>
-
-        <!-- CAMELS component grid -->
         <div class="rg-camels-grid">
             @foreach (var (component, score, label) in _camelsComponents)
             {
@@ -63,11 +57,12 @@
             }
         </div>
 
-        <!-- Active EWIs -->
         <h2 class="rg-section-heading">Active Early Warning Indicators</h2>
         @if (!_ewis.Any(e => e.IsActive))
         {
-            <p class="rg-muted">No active EWIs for this period.</p>
+            <EmptyState Context="data" Size="sm"
+                        Heading="No active EWIs"
+                        Description="No active early warning indicators for this period." />
         }
         else
         {
@@ -105,11 +100,12 @@
             </table>
         }
 
-        <!-- Open supervisory actions -->
         <h2 class="rg-section-heading">Open Supervisory Actions</h2>
         @if (!_actions.Any())
         {
-            <p class="rg-muted">No open supervisory actions.</p>
+            <EmptyState Context="data" Size="sm"
+                        Heading="No open actions"
+                        Description="No open supervisory actions for this institution." />
         }
         else
         {
@@ -138,14 +134,14 @@
                             <td>@action.EscalationLabel</td>
                             <td class="@(action.IsOverdue ? "rg-danger-text" : "")">
                                 @action.DueDate?.ToString("dd MMM yyyy")
-                                @(action.IsOverdue ? " ⚠" : "")
+                                @(action.IsOverdue ? " !" : "")
                             </td>
                             <td>
-                                <button class="rg-btn sm secondary"
+                                <button class="fc-btn fc-btn--outline fc-btn--sm"
                                         @onclick="() => IssueAction(action.ActionId)">
                                     Issue
                                 </button>
-                                <button class="rg-btn sm warning"
+                                <button class="fc-btn fc-btn--outline fc-btn--sm"
                                         @onclick="() => EscalateAction(action.ActionId)">
                                     Escalate
                                 </button>
@@ -156,7 +152,7 @@
             </table>
         }
     }
-</div>
+</SectionErrorBoundary>
 
 @code {
     [Parameter] public int InstitutionId { get; set; }
@@ -165,7 +161,7 @@
 
     private bool _loading = true;
     private bool _generatingAction;
-    private string? _error;
+    private Exception? _loadException;
     private string _regulatorCode = "CBN";
     private string _institutionName = string.Empty;
     private string _riskBand = "GREEN";
@@ -195,7 +191,7 @@
     private async Task LoadAsync()
     {
         _loading = true;
-        _error   = null;
+        _loadException = null;
         try
         {
             _ewis = await HeatmapService.GetInstitutionEWIHistoryAsync(
@@ -261,7 +257,7 @@
         }
         catch (Exception ex)
         {
-            _error = $"Could not load institution data: {ex.Message}";
+            _loadException = ex;
         }
         finally
         {
@@ -286,11 +282,12 @@
             if (runId != Guid.Empty)
                 await ActionEngine.GenerateActionsForRunAsync(runId, _regulatorCode);
 
+            Toast.Success("Supervisory action generated.");
             await LoadAsync();
         }
         catch (Exception ex)
         {
-            _error = $"Could not generate action: {ex.Message}";
+            Toast.Error($"Could not generate action: {ex.Message}");
         }
         finally
         {
@@ -300,15 +297,39 @@
 
     private async Task IssueAction(long actionId)
     {
-        await ActionEngine.IssueActionAsync(actionId, issuedByUserId: 0);
-        await LoadAsync();
+        try
+        {
+            await ActionEngine.IssueActionAsync(actionId, issuedByUserId: 0);
+            Toast.Success("Action issued.");
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            Toast.Error($"Failed to issue action: {ex.Message}");
+        }
     }
 
     private async Task EscalateAction(long actionId)
     {
-        await ActionEngine.EscalateActionAsync(actionId, 0, "Manual escalation from portal");
-        await LoadAsync();
+        try
+        {
+            await ActionEngine.EscalateActionAsync(actionId, 0, "Manual escalation from portal");
+            Toast.Success("Action escalated.");
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            Toast.Error($"Failed to escalate: {ex.Message}");
+        }
     }
+
+    private static string RiskBandVariant(string band) => band.ToUpperInvariant() switch
+    {
+        "GREEN" => "success",
+        "AMBER" => "warning",
+        "RED" or "CRITICAL" => "danger",
+        _ => "neutral"
+    };
 
     private sealed record CamelsRatingRow(
         decimal CompositeScore, string RiskBand,

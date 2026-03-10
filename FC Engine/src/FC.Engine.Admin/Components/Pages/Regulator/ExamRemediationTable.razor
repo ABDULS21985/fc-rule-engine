@@ -1,0 +1,101 @@
+@using FC.Engine.Domain.Entities
+@using FC.Engine.Domain.Enums
+
+@if (Findings.Count == 0)
+{
+    <EmptyState Context="data"
+                Heading="No findings recorded"
+                Description="Create findings from the Kanban tab to begin tracking remediation." />
+}
+else
+{
+    <DataTable TItem="ExaminationFinding"
+               Items="@SortedFindings"
+               Sortable="true"
+               Responsive
+               EmptyTitle="No findings recorded"
+               EmptyText="Create findings from the Kanban tab to begin tracking remediation.">
+        <ChildContent>
+            <DataColumn TItem="ExaminationFinding" Title="Finding" SortKey="f => f.Title">
+                <CellTemplate>
+                    <strong>@context.Title</strong>
+                    @if (!string.IsNullOrWhiteSpace(context.RiskArea))
+                    {
+                        <div class="fc-text-caption-muted">@context.RiskArea</div>
+                    }
+                </CellTemplate>
+            </DataColumn>
+            <DataColumn TItem="ExaminationFinding" Title="Risk" SortKey="f => (int)f.RiskRating" Width="100px">
+                <CellTemplate>
+                    <span class="@RiskClass(context.RiskRating)">@context.RiskRating</span>
+                </CellTemplate>
+            </DataColumn>
+            <DataColumn TItem="ExaminationFinding" Title="Workflow Status" SortKey="f => (int)f.Status" Width="180px">
+                <CellTemplate>
+                    @FormatWorkflowStatus(context.Status)
+                </CellTemplate>
+            </DataColumn>
+            <DataColumn TItem="ExaminationFinding" Title="Remediation Status" SortKey="f => (int)f.RemediationStatus" Width="160px">
+                <CellTemplate>
+                    <span class="@RemediationClass(context.RemediationStatus)">@context.RemediationStatus</span>
+                </CellTemplate>
+            </DataColumn>
+            <DataColumn TItem="ExaminationFinding" Title="Due Date" SortKey="f => f.ManagementResponseDeadline ?? DateTime.MaxValue" Width="130px">
+                <CellTemplate>
+                    @(context.ManagementResponseDeadline?.ToString("dd MMM yyyy") ?? "-")
+                </CellTemplate>
+            </DataColumn>
+            <DataColumn TItem="ExaminationFinding" Title="Carried Forward" SortKey="f => f.IsCarriedForward" Width="130px">
+                <CellTemplate>
+                    @(context.IsCarriedForward ? "Yes" : "No")
+                </CellTemplate>
+            </DataColumn>
+            <DataColumn TItem="ExaminationFinding" Title="Actions" Width="100px" Hideable="false">
+                <CellTemplate>
+                    <button class="fc-btn fc-btn--sm fc-btn--outline" type="button"
+                            @onclick="() => OnManageFinding.InvokeAsync(context.Id)">
+                        Manage
+                    </button>
+                </CellTemplate>
+            </DataColumn>
+        </ChildContent>
+    </DataTable>
+}
+
+@code {
+    [Parameter] public IReadOnlyList<ExaminationFinding> Findings { get; set; } = Array.Empty<ExaminationFinding>();
+    [Parameter] public EventCallback<int> OnManageFinding { get; set; }
+
+    private List<ExaminationFinding> SortedFindings =>
+        Findings
+            .OrderBy(f => f.ManagementResponseDeadline ?? DateTime.MaxValue)
+            .ThenByDescending(f => f.RiskRating)
+            .ToList();
+
+    private static string RiskClass(ExaminationRiskRating rating) => rating switch
+    {
+        ExaminationRiskRating.High   => "fc-exam-risk-high",
+        ExaminationRiskRating.Medium => "fc-exam-risk-medium",
+        ExaminationRiskRating.Low    => "fc-exam-risk-low",
+        _ => "fc-exam-risk-low"
+    };
+
+    private static string RemediationClass(ExaminationRemediationStatus status) => status switch
+    {
+        ExaminationRemediationStatus.Escalated          => "fc-exam-rem-escalated",
+        ExaminationRemediationStatus.Overdue            => "fc-exam-rem-overdue",
+        ExaminationRemediationStatus.Closed             => "fc-exam-rem-closed",
+        ExaminationRemediationStatus.PendingVerification => "fc-exam-rem-pending",
+        _ => "fc-exam-rem-default"
+    };
+
+    private static string FormatWorkflowStatus(ExaminationWorkflowStatus status) => status switch
+    {
+        ExaminationWorkflowStatus.ToReview                   => "To Review",
+        ExaminationWorkflowStatus.InProgress                 => "In Progress",
+        ExaminationWorkflowStatus.FindingDocumented          => "Finding Documented",
+        ExaminationWorkflowStatus.ManagementResponseRequired => "Management Response Required",
+        ExaminationWorkflowStatus.Closed                     => "Closed",
+        _ => status.ToString()
+    };
+}

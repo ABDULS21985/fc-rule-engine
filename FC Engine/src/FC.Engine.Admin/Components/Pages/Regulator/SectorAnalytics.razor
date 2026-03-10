@@ -2,25 +2,35 @@
 @attribute [Authorize(Policy = "RegulatorOnly")]
 @inject ISectorAnalyticsService Analytics
 @inject FC.Engine.Infrastructure.Charts.ChartJsInterop Charts
+@inject ToastService Toast
 
 <PageTitle>Sector Analytics</PageTitle>
 
-<h1 class="rg-page-title">Sector Analytics</h1>
+<PageHeader Title="Sector Analytics"
+            Subtitle="CAR distribution, NPL trends, deposit structure, and filing timeliness">
+    <PrimaryAction>
+        <button class="fc-btn fc-btn--primary" @onclick="LoadData">Refresh</button>
+    </PrimaryAction>
+</PageHeader>
 
-<div class="rg-card">
+<div class="rg-card" style="margin-bottom:1rem;">
     <div class="rg-controls">
         <input placeholder="Period code (YYYY-QN or YYYY-MM)" @bind="_periodCode" />
-        <button class="rg-btn" @onclick="LoadData">Refresh</button>
+        <button class="fc-btn fc-btn--outline" @onclick="LoadData">Apply</button>
     </div>
+</div>
 
-    @if (!string.IsNullOrWhiteSpace(_error))
+<SectionErrorBoundary Title="Couldn't load analytics" ExternalError="@_loadException" OnRetry="LoadData">
+    @if (_loading)
     {
-        <p class="rg-danger-text">@_error</p>
-    }
-    else if (_loading)
-    {
-        <p class="rg-muted">Loading analytics...</p>
-    }
+        <div class="rg-grid rg-grid-2">
+                @for (var i = 0; i < 4; i++)
+                {
+                    <SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Card" Height="200px" />
+                }
+            </div>
+            <SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.TableRows" RowCount="6" />
+}
     else
     {
         <div class="rg-grid rg-grid-2">
@@ -56,23 +66,30 @@
                         </tr>
                     </thead>
                     <tbody>
-                        @foreach (var institution in _heatmap.Institutions)
+                        @if (_heatmap.Institutions.Count == 0)
                         {
-                            <tr>
-                                <td>@institution</td>
-                                @foreach (var module in _heatmap.Modules)
-                                {
-                                    var filed = _heatmap.Cells.Any(c => c.Institution == institution && c.Module == module && c.Filed);
-                                    <td>@(filed ? "Filed" : "Pending")</td>
-                                }
-                            </tr>
+                            <tr><td colspan="@(_heatmap.Modules.Count + 1)"><EmptyState Context="data" Size="sm" Heading="No filing data" Description="No filings found for this period." /></td></tr>
+                        }
+                        else
+                        {
+                            @foreach (var institution in _heatmap.Institutions)
+                            {
+                                <tr>
+                                    <td>@institution</td>
+                                    @foreach (var module in _heatmap.Modules)
+                                    {
+                                        var filed = _heatmap.Cells.Any(c => c.Institution == institution && c.Module == module && c.Filed);
+                                        <td>@(filed ? "Filed" : "Pending")</td>
+                                    }
+                                </tr>
+                            }
                         }
                     </tbody>
                 </table>
             </div>
         </div>
     }
-</div>
+</SectionErrorBoundary>
 
 @code {
     [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
@@ -82,7 +99,7 @@
 
     private bool _loading = true;
     private bool _chartsRendered;
-    private string? _error;
+    private Exception? _loadException;
 
     private SectorCarDistribution _car = new();
     private SectorNplTrend _npl = new();
@@ -98,7 +115,7 @@
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (_loading || _chartsRendered || !string.IsNullOrWhiteSpace(_error))
+        if (_loading || _chartsRendered || _loadException is not null)
         {
             return;
         }
@@ -187,7 +204,7 @@
 
         _loading = true;
         _chartsRendered = false;
-        _error = null;
+        _loadException = null;
 
         try
         {
@@ -199,7 +216,7 @@
         }
         catch (Exception ex)
         {
-            _error = ex.Message;
+            _loadException = ex;
         }
         finally
         {

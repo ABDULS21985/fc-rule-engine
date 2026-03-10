@@ -2,29 +2,36 @@
 @attribute [Authorize(Policy = "RegulatorOnly")]
 @inject IComplianceHealthService ChsService
 @inject FC.Engine.Infrastructure.Charts.ChartJsInterop Charts
+@inject ToastService Toast
 
 <PageTitle>Sector Compliance Health</PageTitle>
 
-<h1 class="rg-page-title">Sector Compliance Health</h1>
+<PageHeader Title="Sector Compliance Health"
+            Subtitle="CHS scores, rating distribution, trends, and watch list monitoring"
+            StatusBadge="@(_summary is not null ? $"Avg {_summary.SectorAverage:F1}" : null)"
+            StatusVariant="@(_summary is not null && _summary.SectorAverage >= 70 ? "success" : "warning")">
+    <PrimaryAction>
+        <button class="fc-btn fc-btn--primary" @onclick="Load">Refresh</button>
+    </PrimaryAction>
+</PageHeader>
 
-<div class="rg-card">
-    <div class="rg-controls">
-        <button class="rg-btn primary" @onclick="Load">Refresh</button>
-    </div>
-
-    @if (!string.IsNullOrWhiteSpace(_error))
+<SectionErrorBoundary Title="Couldn't load compliance health" ExternalError="@_loadException" OnRetry="Load">
+    @if (_loading)
     {
-        <p class="rg-danger-text">@_error</p>
-    }
-    else if (_loading)
-    {
-        <p class="rg-muted">Computing sector health scores...</p>
-    }
+        <div class="rg-chs-kpi-grid">
+                @for (var i = 0; i < 4; i++)
+                {
+                    <SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Card" />
+                }
+            </div>
+            <div class="rg-grid rg-grid-2" style="margin-top:1rem;">
+                <SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Card" Height="200px" />
+                <SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Card" Height="200px" />
+            </div>
+            <SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.TableRows" RowCount="8" />
+}
     else if (_summary is not null)
     {
-        <!-- ════════════════════════════════════════════════════
-             KPI CARDS
-             ════════════════════════════════════════════════════ -->
         <div class="rg-chs-kpi-grid">
             <div class="rg-chs-kpi-card">
                 <span class="rg-chs-kpi-value">@_summary.SectorAverage.ToString("F1")</span>
@@ -44,9 +51,6 @@
             </div>
         </div>
 
-        <!-- ════════════════════════════════════════════════════
-             CHARTS ROW
-             ════════════════════════════════════════════════════ -->
         <div class="rg-grid rg-grid-2" style="margin-top:1rem;">
             <div class="rg-card">
                 <h3 class="rg-chs-card-title">Rating Distribution</h3>
@@ -62,9 +66,6 @@
             </div>
         </div>
 
-        <!-- ════════════════════════════════════════════════════
-             CHS HEATMAP TABLE
-             ════════════════════════════════════════════════════ -->
         <div style="margin-top:1rem;">
             <h3 class="rg-chs-card-title">Institution CHS Heatmap</h3>
             <div class="rg-table-wrap">
@@ -106,9 +107,6 @@
             </div>
         </div>
 
-        <!-- ════════════════════════════════════════════════════
-             WATCH LIST
-             ════════════════════════════════════════════════════ -->
         @if (_watchList.Count > 0)
         {
             <div style="margin-top:1rem;">
@@ -154,14 +152,14 @@
             </div>
         }
     }
-</div>
+</SectionErrorBoundary>
 
 @code {
     [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
 
     private string _regulatorCode = string.Empty;
     private bool _loading = true;
-    private string? _error;
+    private Exception? _loadException;
     private bool _chartsRendered;
 
     private SectorChsSummary? _summary;
@@ -179,12 +177,12 @@
     {
         if (string.IsNullOrWhiteSpace(_regulatorCode))
         {
-            _error = "Regulator code claim is missing.";
+            Toast.Error("Regulator code claim is missing.");
             return;
         }
 
         _loading = true;
-        _error = null;
+        _loadException = null;
         _chartsRendered = false;
 
         try
@@ -201,7 +199,7 @@
         }
         catch (Exception ex)
         {
-            _error = ex.Message;
+            _loadException = ex;
         }
         finally
         {
@@ -254,8 +252,6 @@
 
         await Charts.RenderLineChart("rg-sector-trend-chart", data);
     }
-
-    // ── Helpers ──
 
     private int GetABRatedCount()
     {

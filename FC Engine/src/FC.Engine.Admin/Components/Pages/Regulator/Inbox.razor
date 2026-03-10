@@ -2,10 +2,17 @@
 @attribute [Authorize(Policy = "RegulatorOnly")]
 @implements IDisposable
 @inject IRegulatorInboxService InboxService
+@inject ToastService Toast
 
 <PageTitle>Submissions Inbox</PageTitle>
 
-<h1 class="rg-page-title">Submissions Inbox</h1>
+<PageHeader Title="Submissions Inbox"
+            Subtitle="Review and process incoming regulatory filings"
+            CountBadge="@(!_loading ? _items.Count : null)">
+    <PrimaryAction>
+        <button class="fc-btn fc-btn--primary" @onclick="LoadInbox">Refresh</button>
+    </PrimaryAction>
+</PageHeader>
 
 <div class="rg-card">
     <div class="rg-controls">
@@ -22,16 +29,20 @@
             <option value="QueriesRaised">Queries Raised</option>
             <option value="ResponseReceived">Response Received</option>
         </select>
-        <button class="rg-btn" @onclick="LoadInbox">Apply</button>
+        <button class="fc-btn fc-btn--outline" @onclick="LoadInbox">Apply</button>
     </div>
+</div>
 
-    @if (!string.IsNullOrWhiteSpace(_error))
+<SectionErrorBoundary Title="Couldn't load inbox" ExternalError="@_loadException" OnRetry="LoadInbox">
+    @if (_loading)
     {
-        <p class="rg-danger-text">@_error</p>
-    }
-    else if (_loading)
+        <SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.TableRows" RowCount="10" />
+}
+    else if (_items.Count == 0)
     {
-        <p class="rg-muted">Loading inbox...</p>
+        <EmptyState Context="submissions"
+                    Heading="No submissions found"
+                    Description="No submissions match your current filter criteria. Try adjusting the filters above." />
     }
     else
     {
@@ -51,43 +62,36 @@
                     </tr>
                 </thead>
                 <tbody>
-                    @if (_items.Count == 0)
+                    @foreach (var item in _items)
                     {
-                        <tr><td colspan="9" class="rg-muted">No submissions found for this filter.</td></tr>
-                    }
-                    else
-                    {
-                        @foreach (var item in _items)
-                        {
-                            <tr>
-                                <td>@item.InstitutionName</td>
-                                <td>@item.LicenceType</td>
-                                <td>@item.ModuleCode</td>
-                                <td>@item.PeriodLabel</td>
-                                <td>@item.SubmittedAt.ToString("dd MMM yyyy HH:mm")</td>
-                                <td>@item.SubmissionStatus</td>
-                                <td>
-                                    <span class="rg-badge @ReceiptCss(item.ReceiptStatus)">@item.ReceiptStatus</span>
-                                </td>
-                                <td>
-                                    @if (item.OpenQueryCount > 0)
-                                    {
-                                        <span class="rg-badge open">@item.OpenQueryCount open</span>
-                                    }
-                                    else
-                                    {
-                                        <span class="rg-muted">0</span>
-                                    }
-                                </td>
-                                <td><a class="rg-btn" href="/regulator/inbox/@item.SubmissionId">Review</a></td>
-                            </tr>
-                        }
+                        <tr>
+                            <td>@item.InstitutionName</td>
+                            <td>@item.LicenceType</td>
+                            <td>@item.ModuleCode</td>
+                            <td>@item.PeriodLabel</td>
+                            <td>@item.SubmittedAt.ToString("dd MMM yyyy HH:mm")</td>
+                            <td>@item.SubmissionStatus</td>
+                            <td>
+                                <span class="rg-badge @ReceiptCss(item.ReceiptStatus)">@item.ReceiptStatus</span>
+                            </td>
+                            <td>
+                                @if (item.OpenQueryCount > 0)
+                                {
+                                    <span class="rg-badge open">@item.OpenQueryCount open</span>
+                                }
+                                else
+                                {
+                                    <span class="rg-muted">0</span>
+                                }
+                            </td>
+                            <td><a class="fc-btn fc-btn--outline fc-btn--sm" href="/regulator/inbox/@item.SubmissionId">Review</a></td>
+                        </tr>
                     }
                 </tbody>
             </table>
         </div>
     }
-</div>
+</SectionErrorBoundary>
 
 @code {
     [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
@@ -98,7 +102,7 @@
     private Guid _tenantId;
     private string _regulatorCode = string.Empty;
     private bool _loading = true;
-    private string? _error;
+    private Exception? _loadException;
     private Timer? _timer;
 
     protected override async Task OnInitializedAsync()
@@ -117,7 +121,7 @@
 
         if (!Guid.TryParse(tenantClaim, out _tenantId) || string.IsNullOrWhiteSpace(regulatorClaim))
         {
-            _error = "Regulator tenant context is unavailable for this session.";
+            Toast.Error("Regulator tenant context is unavailable for this session.");
             return;
         }
 
@@ -140,7 +144,7 @@
         }
 
         _loading = true;
-        _error = null;
+        _loadException = null;
 
         try
         {
@@ -150,7 +154,7 @@
         }
         catch (Exception ex)
         {
-            _error = ex.Message;
+            _loadException = ex;
         }
         finally
         {

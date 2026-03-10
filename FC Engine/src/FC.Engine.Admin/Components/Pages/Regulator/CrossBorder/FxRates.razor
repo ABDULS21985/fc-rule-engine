@@ -2,21 +2,15 @@
 @attribute [Authorize(Policy = "RegulatorOnly")]
 @inject ICurrencyConversionEngine FxEngine
 @inject NavigationManager Nav
+@inject ToastService Toast
 
-<PageTitle>FX Rates — RegOS™</PageTitle>
+<PageTitle>FX Rates — RegOS</PageTitle>
 
-<div class="rg-cb-hero">
-    <div class="rg-cb-hero-text">
-        <div class="rg-cb-kicker">Cross-Border Harmonisation</div>
-        <h1 class="rg-cb-hero-title">FX Rate Management</h1>
-        <p class="rg-cb-hero-sub">
-            Manage exchange rates for cross-border consolidation and data flow currency conversion.
-            View cross-rate matrices and rate history.
-        </p>
-    </div>
-</div>
+<PageHeader Title="FX Rate Management"
+            Subtitle="Manage exchange rates for cross-border consolidation and data flow currency conversion. View cross-rate matrices and rate history."
+            BackUrl="/regulator/cross-border" />
 
-@* ── Tabs ── *@
+@* -- Tabs -- *@
 <div class="rg-cb-tabs">
     <button class="rg-cb-tab @(_tab == "matrix" ? "rg-cb-tab--active" : "")" @onclick='() => _tab = "matrix"'>Cross-Rate Matrix</button>
     <button class="rg-cb-tab @(_tab == "convert" ? "rg-cb-tab--active" : "")" @onclick='() => _tab = "convert"'>Convert</button>
@@ -26,63 +20,65 @@
 
 @if (_tab == "matrix")
 {
-    @* ── Cross-Rate Matrix ── *@
-    <div class="rg-card" style="padding:1rem;">
-        <div class="rg-cb-section-head">
-            <h3 class="rg-cb-section-title">Cross-Rate Matrix</h3>
-            <div class="rg-cb-filters" style="margin-bottom:0;">
-                <label style="font-size:0.78rem;color:var(--rg-muted);">Date:</label>
-                <input type="date" class="rg-cb-filter-input" style="width:140px;" @bind="_matrixDate" />
-                <button class="rg-btn" @onclick="LoadMatrix">Load</button>
+    @* -- Cross-Rate Matrix -- *@
+    <SectionErrorBoundary Title="Couldn't load rate matrix" ExternalError="@_matrixException" OnRetry="LoadMatrix">
+        <div class="rg-card" style="padding:1rem;">
+            <div class="rg-cb-section-head">
+                <h3 class="rg-cb-section-title">Cross-Rate Matrix</h3>
+                <div class="rg-cb-filters" style="margin-bottom:0;">
+                    <label style="font-size:0.78rem;color:var(--rg-muted);">Date:</label>
+                    <input type="date" class="rg-cb-filter-input" style="width:140px;" @bind="_matrixDate" />
+                    <button class="fc-btn fc-btn--outline" @onclick="LoadMatrix">Load</button>
+                </div>
             </div>
-        </div>
 
-        @if (_matrixLoading)
-        {
-            <p class="rg-muted">Loading rates…</p>
-        }
-        else
-        {
-            <div class="rg-cb-matrix-wrap">
-                <table class="rg-cb-matrix">
-                    <thead>
-                        <tr>
-                            <th></th>
-                            @foreach (var c in _currencies)
-                            {
-                                <th>@c</th>
-                            }
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @foreach (var baseCur in _currencies)
-                        {
+            @if (_matrixLoading)
+            {
+                <SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.TableRows" RowCount="6" />
+            }
+            else
+            {
+                <div class="rg-cb-matrix-wrap">
+                    <table class="rg-cb-matrix">
+                        <thead>
                             <tr>
-                                <th>@baseCur</th>
-                                @foreach (var quoteCur in _currencies)
+                                <th></th>
+                                @foreach (var c in _currencies)
                                 {
-                                    if (baseCur == quoteCur)
-                                    {
-                                        <td class="rg-cb-matrix-diag">1.0000</td>
-                                    }
-                                    else
-                                    {
-                                        var key = $"{baseCur}/{quoteCur}";
-                                        var rate = _matrixRates.GetValueOrDefault(key);
-                                        <td>@(rate > 0 ? rate.ToString("F4") : "—")</td>
-                                    }
+                                    <th>@c</th>
                                 }
                             </tr>
-                        }
-                    </tbody>
-                </table>
-            </div>
-        }
-    </div>
+                        </thead>
+                        <tbody>
+                            @foreach (var baseCur in _currencies)
+                            {
+                                <tr>
+                                    <th>@baseCur</th>
+                                    @foreach (var quoteCur in _currencies)
+                                    {
+                                        if (baseCur == quoteCur)
+                                        {
+                                            <td class="rg-cb-matrix-diag">1.0000</td>
+                                        }
+                                        else
+                                        {
+                                            var key = $"{baseCur}/{quoteCur}";
+                                            var rate = _matrixRates.GetValueOrDefault(key);
+                                            <td>@(rate > 0 ? rate.ToString("F4") : "--")</td>
+                                        }
+                                    }
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </div>
+    </SectionErrorBoundary>
 }
 else if (_tab == "convert")
 {
-    @* ── Converter ── *@
+    @* -- Converter -- *@
     <div class="rg-card" style="padding:1rem;">
         <h3 class="rg-section-title">Currency Converter</h3>
         <div class="rg-cb-form-row">
@@ -103,7 +99,7 @@ else if (_tab == "convert")
                 <input type="number" step="0.01" @bind="_convertAmount" />
             </div>
             <div class="rg-cb-field" style="justify-content:flex-end;">
-                <button class="rg-btn primary" @onclick="ConvertCurrency">Convert</button>
+                <button class="fc-btn fc-btn--primary" @onclick="ConvertCurrency">Convert</button>
             </div>
         </div>
 
@@ -121,7 +117,7 @@ else if (_tab == "convert")
 }
 else if (_tab == "add")
 {
-    @* ── Add Rate ── *@
+    @* -- Add Rate -- *@
     <div class="rg-card" style="padding:1rem;">
         <h3 class="rg-section-title">Insert / Update FX Rate</h3>
         <div class="rg-cb-form-row">
@@ -161,19 +157,15 @@ else if (_tab == "add")
             </div>
         </div>
         <div class="rg-controls" style="margin-top:0.5rem;">
-            <button class="rg-btn primary" @onclick="AddRate" disabled="@_addSaving">
-                @(_addSaving ? "Saving…" : "Save Rate")
+            <button class="fc-btn fc-btn--primary" @onclick="AddRate" disabled="@_addSaving">
+                @(_addSaving ? "Saving..." : "Save Rate")
             </button>
         </div>
-        @if (!string.IsNullOrWhiteSpace(_addMessage))
-        {
-            <p style="margin-top:0.5rem;font-size:0.82rem;color:@(_addError ? "var(--rg-danger)" : "#15803d");">@_addMessage</p>
-        }
     </div>
 }
 else if (_tab == "history")
 {
-    @* ── Rate History ── *@
+    @* -- Rate History -- *@
     <div class="rg-card" style="padding:1rem;">
         <h3 class="rg-section-title">Rate History</h3>
         <div class="rg-cb-form-row">
@@ -198,7 +190,7 @@ else if (_tab == "history")
                 <input type="date" @bind="_histTo" />
             </div>
             <div class="rg-cb-field" style="justify-content:flex-end;">
-                <button class="rg-btn primary" @onclick="LoadHistory">Load</button>
+                <button class="fc-btn fc-btn--primary" @onclick="LoadHistory">Load</button>
             </div>
         </div>
 
@@ -230,6 +222,10 @@ else if (_tab == "history")
                 </table>
             </div>
         }
+        else
+        {
+            <EmptyState Context="data" Size="sm" Heading="No Rate History" Description="Select a currency pair and date range, then click Load to view rate history." />
+        }
     </div>
 }
 
@@ -240,6 +236,7 @@ else if (_tab == "history")
     // Matrix
     private DateOnly _matrixDate = DateOnly.FromDateTime(DateTime.UtcNow);
     private bool _matrixLoading;
+    private Exception? _matrixException;
     private Dictionary<string, decimal> _matrixRates = new();
 
     // Convert
@@ -256,8 +253,6 @@ else if (_tab == "history")
     private string _addSource = "CBN_OFFICIAL";
     private FxRateType _addType = FxRateType.Spot;
     private bool _addSaving;
-    private string? _addMessage;
-    private bool _addError;
 
     // History
     private string _histBase = "NGN";
@@ -271,25 +266,35 @@ else if (_tab == "history")
     private async Task LoadMatrix()
     {
         _matrixLoading = true;
+        _matrixException = null;
         StateHasChanged();
 
-        _matrixRates.Clear();
-        foreach (var baseCur in _currencies)
+        try
         {
-            foreach (var quoteCur in _currencies)
+            _matrixRates.Clear();
+            foreach (var baseCur in _currencies)
             {
-                if (baseCur == quoteCur) continue;
-                try
+                foreach (var quoteCur in _currencies)
                 {
-                    var rate = await FxEngine.GetRateAsync(baseCur, quoteCur, _matrixDate);
-                    _matrixRates[$"{baseCur}/{quoteCur}"] = rate;
+                    if (baseCur == quoteCur) continue;
+                    try
+                    {
+                        var rate = await FxEngine.GetRateAsync(baseCur, quoteCur, _matrixDate);
+                        _matrixRates[$"{baseCur}/{quoteCur}"] = rate;
+                    }
+                    catch { /* No rate available for this pair */ }
                 }
-                catch { /* No rate available */ }
             }
         }
-
-        _matrixLoading = false;
-        StateHasChanged();
+        catch (Exception ex)
+        {
+            _matrixException = ex;
+        }
+        finally
+        {
+            _matrixLoading = false;
+            StateHasChanged();
+        }
     }
 
     private async Task ConvertCurrency()
@@ -298,26 +303,27 @@ else if (_tab == "history")
         {
             _convertResult = await FxEngine.ConvertAsync(_convertAmount, _convertFrom, _convertTo, _matrixDate);
         }
-        catch { _convertResult = null; }
+        catch (Exception ex)
+        {
+            _convertResult = null;
+            Toast.Error("Conversion failed: " + ex.Message);
+        }
         StateHasChanged();
     }
 
     private async Task AddRate()
     {
         _addSaving = true;
-        _addMessage = null;
-        _addError = false;
         StateHasChanged();
 
         try
         {
             await FxEngine.UpsertRateAsync(_addBase, _addQuote, _addDate, _addRate, _addSource, _addType, 1);
-            _addMessage = "Rate saved successfully.";
+            Toast.Success("Rate saved successfully.");
         }
         catch (Exception ex)
         {
-            _addMessage = ex.Message;
-            _addError = true;
+            Toast.Error("Failed to save rate: " + ex.Message);
         }
         finally { _addSaving = false; StateHasChanged(); }
     }
@@ -328,7 +334,11 @@ else if (_tab == "history")
         {
             _historyRates = (await FxEngine.GetRateHistoryAsync(_histBase, _histQuote, _histFrom, _histTo)).ToList();
         }
-        catch { _historyRates = []; }
+        catch (Exception ex)
+        {
+            _historyRates = [];
+            Toast.Error("Failed to load history: " + ex.Message);
+        }
         StateHasChanged();
     }
 }

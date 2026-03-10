@@ -273,6 +273,9 @@ public partial class ModuleImportService : IModuleImportService
             ModuleCode = module.ModuleCode
         };
 
+        var strategy = _db.Database.CreateExecutionStrategy();
+        await strategy.ExecuteAsync(async () =>
+        {
         await using var tx = await BeginTransactionIfSupported(ct);
         try
         {
@@ -526,6 +529,7 @@ public partial class ModuleImportService : IModuleImportService
             result.Errors.Add($"Import failed: {BuildExceptionMessage(ex)}");
             _logger.LogError(ex, "Module import failed for {ModuleCode}", result.ModuleCode);
         }
+        });
 
         return result;
     }
@@ -568,6 +572,9 @@ public partial class ModuleImportService : IModuleImportService
             ModuleCode = moduleCode
         };
 
+        var strategy = _db.Database.CreateExecutionStrategy();
+        await strategy.ExecuteAsync(async () =>
+        {
         await using var tx = await BeginTransactionIfSupported(ct);
         try
         {
@@ -679,6 +686,7 @@ public partial class ModuleImportService : IModuleImportService
             result.Errors.Add($"Publish failed: {BuildExceptionMessage(ex)}");
             _logger.LogError(ex, "Module publish failed for {ModuleCode}", moduleCode);
         }
+        });
 
         return result;
     }

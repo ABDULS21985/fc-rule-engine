@@ -2,25 +2,20 @@
 @attribute [Authorize(Policy = "RegulatorOnly")]
 @inject IEquivalenceMappingService MappingService
 @inject NavigationManager Nav
+@inject ToastService Toast
 @using FC.Engine.Domain.Entities
 @using FC.Engine.Infrastructure.Metadata
 @inject MetadataDbContext Db
 @using Microsoft.EntityFrameworkCore
 
-<PageTitle>Create Equivalence Mapping — RegOS™</PageTitle>
+<PageTitle>Create Equivalence Mapping — RegOS</PageTitle>
 
-<div class="rg-cb-hero">
-    <div class="rg-cb-hero-text">
-        <div class="rg-cb-kicker">New Equivalence Mapping</div>
-        <h1 class="rg-cb-hero-title">Create Mapping</h1>
-        <p class="rg-cb-hero-sub">Define a regulatory parameter mapping across jurisdictions for cross-border comparison.</p>
-    </div>
-    <div class="rg-cb-hero-actions">
-        <button class="rg-btn" @onclick='() => Nav.NavigateTo("/regulator/cross-border/mappings")'>← Cancel</button>
-    </div>
-</div>
+<PageHeader Title="Create Mapping"
+            Subtitle="Define a regulatory parameter mapping across jurisdictions for cross-border comparison."
+            BackUrl="/regulator/cross-border/mappings">
+</PageHeader>
 
-@* ── Wizard Steps ── *@
+@* -- Wizard Steps -- *@
 <div class="rg-cb-wizard-steps">
     <div class="rg-cb-wizard-step @(_step == 1 ? "rg-cb-wizard-step--active" : _step > 1 ? "rg-cb-wizard-step--done" : "")">1. Basic Info</div>
     <div class="rg-cb-wizard-step @(_step == 2 ? "rg-cb-wizard-step--active" : _step > 2 ? "rg-cb-wizard-step--done" : "")">2. Jurisdictions</div>
@@ -55,7 +50,7 @@
             </div>
             <div class="rg-cb-field">
                 <label>Description (optional)</label>
-                <textarea @bind="_description" rows="2" placeholder="Describe this mapping…"></textarea>
+                <textarea @bind="_description" rows="2" placeholder="Describe this mapping..."></textarea>
             </div>
         </div>
     }
@@ -173,18 +168,13 @@
                 </tbody>
             </table>
         </div>
-
-        @if (!string.IsNullOrWhiteSpace(_error))
-        {
-            <p class="rg-danger-text" style="margin-top:0.5rem;">@_error</p>
-        }
     }
 </div>
 
 <div class="rg-cb-wizard-nav">
     @if (_step > 1)
     {
-        <button class="rg-btn" @onclick="() => _step--">← Previous</button>
+        <button class="fc-btn fc-btn--outline" @onclick="() => _step--">← Previous</button>
     }
     else
     {
@@ -193,12 +183,12 @@
 
     @if (_step < 4)
     {
-        <button class="rg-btn primary" @onclick="NextStep" disabled="@(!CanAdvance)">Next →</button>
+        <button class="fc-btn fc-btn--primary" @onclick="NextStep" disabled="@(!CanAdvance)">Next →</button>
     }
     else
     {
-        <button class="rg-btn primary" @onclick="SubmitMapping" disabled="@_saving">
-            @(_saving ? "Creating…" : "Create Mapping")
+        <button class="fc-btn fc-btn--primary" @onclick="SubmitMapping" disabled="@_saving">
+            @(_saving ? "Creating..." : "Create Mapping")
         </button>
     }
 </div>
@@ -206,7 +196,6 @@
 @code {
     private int _step = 1;
     private bool _saving;
-    private string? _error;
 
     private string _code = "";
     private string _name = "";
@@ -248,7 +237,6 @@
     private async Task SubmitMapping()
     {
         _saving = true;
-        _error = null;
         StateHasChanged();
 
         try
@@ -266,11 +254,12 @@
             var id = await MappingService.CreateMappingAsync(
                 _code, _name, _domain, _description, validEntries, 1);
 
+            Toast.Success("Equivalence mapping created successfully.");
             Nav.NavigateTo($"/regulator/cross-border/mappings/{id}");
         }
         catch (Exception ex)
         {
-            _error = ex.Message;
+            Toast.Error("Failed to create mapping: " + ex.Message);
             _saving = false;
             StateHasChanged();
         }

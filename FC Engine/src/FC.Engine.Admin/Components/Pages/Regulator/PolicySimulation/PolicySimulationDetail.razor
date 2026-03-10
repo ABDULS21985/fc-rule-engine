@@ -8,59 +8,43 @@
 @inject IHistoricalImpactTracker Tracker
 @inject NavigationManager Nav
 @inject IJSRuntime JS
+@inject ToastService Toast
 
 <PageTitle>@(_scenario?.Title ?? "Scenario") — Policy Simulation</PageTitle>
 
-<div class="rg-ps-page">
+<SectionErrorBoundary Title="Couldn't load scenario" ExternalError="@_loadException" OnRetry="LoadAsync">
     @if (_loading)
     {
-        <div class="rg-spinner-center"><div class="rg-spinner"></div></div>
-    }
-    else if (!string.IsNullOrWhiteSpace(_error))
-    {
-        <div class="rg-card">
-            <p class="rg-danger-text">@_error</p>
-            <button class="rg-btn" @onclick="LoadAsync">Retry</button>
-        </div>
-    }
+        <SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Heading" />
+            <div class="rg-ps-kpis">
+                @for (var i = 0; i < 3; i++)
+                {
+                    <SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Card" Index="i" />
+                }
+            </div>
+            <SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.TableRows" />
+}
     else if (_scenario is not null)
     {
         <!-- Hero -->
-        <section class="rg-ps-hero">
-            <div>
-                <div class="rg-surveillance-kicker">RG-40 · Scenario #@_scenario.Id</div>
-                <h1 class="rg-page-title rg-ps-hero-title">@_scenario.Title</h1>
-                @if (!string.IsNullOrWhiteSpace(_scenario.Description))
+        <PageHeader Title="@_scenario.Title"
+                    Subtitle="@_scenario.Description"
+                    BackUrl="/regulator/policies"
+                    StatusBadge="@_scenario.Status.ToString()"
+                    StatusVariant="@StatusVariant(_scenario.Status)">
+            <PrimaryAction>
+                @if (_scenario.Status is PolicyStatus.ParametersSet or PolicyStatus.Simulated)
                 {
-                    <p class="rg-ps-hero-summary">@_scenario.Description</p>
+                    <button class="fc-btn fc-btn--primary" @onclick="RunSimulation" disabled="@_simulating">
+                        @(_simulating ? "Simulating..." : "Run Simulation")
+                    </button>
                 }
-            </div>
-            <div class="rg-ps-hero-actions">
-                <div class="rg-ps-flex">
-                    <PolicyStatusBadge Status="@_scenario.Status" />
-                    <DomainBadge Domain="@_scenario.Domain" />
-                </div>
-                <div class="rg-ps-flex">
-                    <button class="rg-btn" @onclick="GoBack">Back</button>
-                    <button class="rg-btn" @onclick="CloneScenario">Clone</button>
-                    @if (_scenario.Status is PolicyStatus.ParametersSet or PolicyStatus.Simulated)
-                    {
-                        <button class="rg-btn primary" @onclick="RunSimulation" disabled="@_simulating">
-                            @(_simulating ? "Simulating..." : "Run Simulation")
-                        </button>
-                    }
-                </div>
-            </div>
-        </section>
-
-        @if (!string.IsNullOrWhiteSpace(_actionMessage))
-        {
-            <div class="rg-surveillance-banner">@_actionMessage</div>
-        }
-        @if (!string.IsNullOrWhiteSpace(_actionError))
-        {
-            <div class="rg-surveillance-banner rg-surveillance-banner-error">@_actionError</div>
-        }
+            </PrimaryAction>
+            <SecondaryActions>
+                <DomainBadge Domain="@_scenario.Domain" />
+                <button class="fc-btn fc-btn--outline" @onclick="CloneScenario">Clone</button>
+            </SecondaryActions>
+        </PageHeader>
 
         <!-- Tabs -->
         <div class="rg-ps-tabs">
@@ -86,7 +70,9 @@
                     <h3 class="rg-section-title">Parameter Adjustments (@_scenario.Parameters.Count)</h3>
                     @if (_scenario.Parameters.Count == 0)
                     {
-                        <p class="rg-muted">No parameters defined yet.</p>
+                        <EmptyState Context="data"
+                                    Heading="No parameters defined"
+                                    Description="Add parameter adjustments to define the proposed regulatory changes." />
                     }
                     else
                     {
@@ -134,7 +120,7 @@
                             <div class="rg-controls">
                                 <input placeholder="Parameter code" @bind="_addParamCode" />
                                 <input type="number" step="0.01" placeholder="Proposed value" @bind="_addParamValue" />
-                                <button class="rg-btn primary" @onclick="AddParameter"
+                                <button class="fc-btn fc-btn--primary" @onclick="AddParameter"
                                         disabled="@(string.IsNullOrWhiteSpace(_addParamCode))">
                                     Add
                                 </button>
@@ -202,19 +188,19 @@
                         <div class="rg-ps-flex" style="flex-wrap:wrap;">
                             @if (_scenario.Status == PolicyStatus.Draft && _scenario.Parameters.Count > 0)
                             {
-                                <button class="rg-btn primary" @onclick="RunSimulation" disabled="@_simulating">
+                                <button class="fc-btn fc-btn--primary" @onclick="RunSimulation" disabled="@_simulating">
                                     Run Simulation
                                 </button>
                             }
                             @if (_scenario.Status is PolicyStatus.ParametersSet or PolicyStatus.Simulated)
                             {
-                                <button class="rg-btn primary" @onclick="RunSimulation" disabled="@_simulating">
+                                <button class="fc-btn fc-btn--primary" @onclick="RunSimulation" disabled="@_simulating">
                                     @(_simulating ? "Running..." : "Run / Re-run Simulation")
                                 </button>
                             }
                             @if (_scenario.Status != PolicyStatus.Withdrawn && _scenario.Status != PolicyStatus.Enacted)
                             {
-                                <button class="rg-btn danger" @onclick="WithdrawScenario">Withdraw</button>
+                                <button class="fc-btn fc-btn--outline" style="color:var(--cbn-danger);" @onclick="WithdrawScenario">Withdraw</button>
                             }
                         </div>
                     </div>
@@ -229,19 +215,16 @@
         {
             @if (_latestRun is null)
             {
-                <div class="rg-card" style="text-align:center;padding:2rem;">
-                    <p class="rg-muted">No simulation has been run yet.</p>
+                <EmptyState Context="data"
+                            Heading="No simulation has been run yet"
+                            Description="@(_scenario.Parameters.Count > 0 ? "Run an impact assessment to see how proposed changes affect supervised entities." : "Add parameters first, then run the simulation.")">
                     @if (_scenario.Parameters.Count > 0)
                     {
-                        <button class="rg-btn primary rg-ps-mt" @onclick="RunSimulation" disabled="@_simulating">
+                        <button class="fc-btn fc-btn--primary rg-ps-mt" @onclick="RunSimulation" disabled="@_simulating">
                             Run Impact Assessment
                         </button>
                     }
-                    else
-                    {
-                        <p class="rg-ps-text-sm rg-ps-text-muted">Add parameters first, then run the simulation.</p>
-                    }
-                </div>
+                </EmptyState>
             }
             else
             {
@@ -327,7 +310,7 @@
                                 <option value="PMB">PMB</option>
                                 <option value="MERC">MERC</option>
                             </select>
-                            <button class="rg-btn" @onclick="GoToCompare">
+                            <button class="fc-btn fc-btn--outline" @onclick="GoToCompare">
                                 Compare Runs
                             </button>
                         </div>
@@ -388,16 +371,16 @@
                                     Page @_entityPage / @_entityResults.TotalPages (@_entityResults.TotalCount entities)
                                 </span>
                                 <div class="rg-ps-flex">
-                                    <button class="rg-btn sm" disabled="@(_entityPage <= 1)" @onclick="PrevEntityPage">Prev</button>
-                                    <button class="rg-btn sm" disabled="@(!_entityResults.HasNextPage)" @onclick="NextEntityPage">Next</button>
+                                    <button class="fc-btn fc-btn--outline fc-btn--sm" disabled="@(_entityPage <= 1)" @onclick="PrevEntityPage">Prev</button>
+                                    <button class="fc-btn fc-btn--outline fc-btn--sm" disabled="@(!_entityResults.HasNextPage)" @onclick="NextEntityPage">Next</button>
                                 </div>
                             </div>
                         }
                     }
                     else
                     {
-                        <div class="rg-spinner-center"><div class="rg-spinner"></div></div>
-                    }
+                        <SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.TableRows" />
+}
                 </div>
 
                 <div class="rg-ps-flex-end">
@@ -415,19 +398,22 @@
         {
             @if (_cba is null)
             {
-                <div class="rg-card" style="text-align:center;padding:2rem;">
-                    @if (_latestRun is null)
-                    {
-                        <p class="rg-muted">Run an impact assessment first, then generate a CBA.</p>
-                    }
-                    else
-                    {
-                        <p class="rg-muted">No cost-benefit analysis has been generated yet.</p>
-                        <button class="rg-btn primary rg-ps-mt" @onclick="GenerateCBA" disabled="@_generatingCba">
+                @if (_latestRun is null)
+                {
+                    <EmptyState Context="data"
+                                Heading="Impact assessment required"
+                                Description="Run an impact assessment first, then generate a cost-benefit analysis." />
+                }
+                else
+                {
+                    <EmptyState Context="data"
+                                Heading="No cost-benefit analysis generated"
+                                Description="Generate a CBA to evaluate the costs and benefits of the proposed policy changes.">
+                        <button class="fc-btn fc-btn--primary rg-ps-mt" @onclick="GenerateCBA" disabled="@_generatingCba">
                             @(_generatingCba ? "Generating..." : "Generate Cost-Benefit Analysis")
                         </button>
-                    }
-                </div>
+                    </EmptyState>
+                }
             }
             else
             {
@@ -558,15 +544,16 @@
         {
             @if (_consultation is null && !_showCreateConsultation)
             {
-                <div class="rg-card" style="text-align:center;padding:2rem;">
-                    <p class="rg-muted">No consultation has been created for this scenario.</p>
+                <EmptyState Context="data"
+                            Heading="No consultation created"
+                            Description="Create a stakeholder consultation to gather feedback on the proposed policy changes.">
                     @if (_scenario.Status is PolicyStatus.Simulated or PolicyStatus.ParametersSet)
                     {
-                        <button class="rg-btn primary rg-ps-mt" @onclick="() => _showCreateConsultation = true">
+                        <button class="fc-btn fc-btn--primary rg-ps-mt" @onclick="() => _showCreateConsultation = true">
                             Create Consultation
                         </button>
                     }
-                </div>
+                </EmptyState>
             }
             else if (_showCreateConsultation)
             {
@@ -598,7 +585,7 @@
                                         <input class="rg-ps-input" placeholder="Provision title"
                                                @bind="_consultProvisions[idx].Title" style="max-width:300px;" />
                                     </div>
-                                    <button class="rg-btn sm danger" @onclick="() => _consultProvisions.RemoveAt(idx)">Remove</button>
+                                    <button class="fc-btn fc-btn--outline fc-btn--sm" style="color:var(--cbn-danger);" @onclick="() => _consultProvisions.RemoveAt(idx)">Remove</button>
                                 </div>
                                 <textarea class="rg-ps-textarea" placeholder="Provision text..."
                                           @bind="_consultProvisions[idx].Text" style="margin-top:0.35rem;"></textarea>
@@ -606,13 +593,13 @@
                                        @bind="_consultProvisions[idx].RelatedParam" style="margin-top:0.35rem;" />
                             </div>
                         }
-                        <button class="rg-btn" @onclick="() => _consultProvisions.Add(new ProvisionDraft())">
+                        <button class="fc-btn fc-btn--outline" @onclick="() => _consultProvisions.Add(new ProvisionDraft())">
                             + Add Provision
                         </button>
 
                         <div class="rg-ps-flex-between rg-ps-mt">
-                            <button class="rg-btn" @onclick="() => _showCreateConsultation = false">Cancel</button>
-                            <button class="rg-btn primary" @onclick="CreateConsultation"
+                            <button class="fc-btn fc-btn--outline" @onclick="() => _showCreateConsultation = false">Cancel</button>
+                            <button class="fc-btn fc-btn--primary" @onclick="CreateConsultation"
                                     disabled="@(string.IsNullOrWhiteSpace(_consultTitle) || _consultProvisions.Count == 0 || _creatingConsult)">
                                 @(_creatingConsult ? "Creating..." : "Create Consultation")
                             </button>
@@ -642,15 +629,15 @@
                         <div class="rg-ps-flex">
                             @if (_consultation.Status == ConsultationStatus.Draft)
                             {
-                                <button class="rg-btn primary" @onclick="PublishConsultation">Publish</button>
+                                <button class="fc-btn fc-btn--primary" @onclick="PublishConsultation">Publish</button>
                             }
                             @if (_consultation.Status is ConsultationStatus.Published or ConsultationStatus.Open)
                             {
-                                <button class="rg-btn warning" @onclick="CloseConsultation">Close</button>
+                                <button class="fc-btn fc-btn--outline" style="color:var(--cbn-warning);" @onclick="CloseConsultation">Close</button>
                             }
                             @if (_consultation.Status == ConsultationStatus.Closed)
                             {
-                                <button class="rg-btn primary" @onclick="AggregateFeedback">Aggregate Feedback</button>
+                                <button class="fc-btn fc-btn--primary" @onclick="AggregateFeedback">Aggregate Feedback</button>
                             }
                         </div>
                     </div>
@@ -730,11 +717,6 @@
              ═══════════════════════════════════════════════ -->
         @if (_tab == "decision")
         {
-            @if (_decisionRecorded)
-            {
-                <div class="rg-surveillance-banner">Decision recorded successfully.</div>
-            }
-
             <div class="rg-ps-decision-panel">
                 <div class="rg-card">
                     <h3 class="rg-section-title">Record Policy Decision</h3>
@@ -768,7 +750,7 @@
                             <input class="rg-ps-input" placeholder="e.g. BSD/DIR/GEN/CIR/08/001" @bind="_decisionCircular" />
                         </div>
                         <div class="rg-ps-flex-end">
-                            <button class="rg-btn primary" @onclick="RecordDecision"
+                            <button class="fc-btn fc-btn--primary" @onclick="RecordDecision"
                                     disabled="@(string.IsNullOrWhiteSpace(_decisionSummary) || _recordingDecision)">
                                 @(_recordingDecision ? "Recording..." : "Record Decision")
                             </button>
@@ -819,7 +801,7 @@
                         <div class="rg-card">
                             <h4>Generate Document</h4>
                             <p class="rg-ps-text-sm rg-ps-text-muted">Download the formal policy document.</p>
-                            <button class="rg-btn primary rg-ps-mt" @onclick="DownloadDocument">
+                            <button class="fc-btn fc-btn--primary rg-ps-mt" @onclick="DownloadDocument">
                                 Download Policy Document
                             </button>
                         </div>
@@ -835,15 +817,15 @@
         {
             @if (_scenario.Status != PolicyStatus.Enacted)
             {
-                <div class="rg-card" style="text-align:center;padding:2rem;">
-                    <p class="rg-muted">Historical tracking is available after the policy has been enacted.</p>
-                </div>
+                <EmptyState Context="data"
+                            Heading="Tracking not available"
+                            Description="Historical tracking is available after the policy has been enacted." />
             }
             else if (_trackingHistory is null || _trackingHistory.Count == 0)
             {
-                <div class="rg-card" style="text-align:center;padding:2rem;">
-                    <p class="rg-muted">No tracking data available yet. Data is collected on a monthly cycle.</p>
-                </div>
+                <EmptyState Context="data"
+                            Heading="No tracking data"
+                            Description="No tracking data available yet. Data is collected on a monthly cycle." />
             }
             else
             {
@@ -924,7 +906,7 @@
             }
         }
     }
-</div>
+</SectionErrorBoundary>
 
 @code {
     [Parameter] public long ScenarioId { get; set; }
@@ -933,9 +915,7 @@
     private int _regulatorId;
     private int _userId;
     private bool _loading = true;
-    private string? _error;
-    private string? _actionMessage;
-    private string? _actionError;
+    private Exception? _loadException;
     private string _tab = "overview";
 
     // Data
@@ -953,7 +933,6 @@
     private bool _showCreateConsultation;
     private bool _creatingConsult;
     private bool _recordingDecision;
-    private bool _decisionRecorded;
     private long _decisionId;
 
     // Add Parameter
@@ -991,7 +970,7 @@
     private async Task LoadAsync()
     {
         _loading = true;
-        _error = null;
+        _loadException = null;
         try
         {
             _scenario = await ScenarioService.GetScenarioAsync(ScenarioId, _regulatorId);
@@ -1010,15 +989,9 @@
             // Try load consultation
             try
             {
-                // Search for consultation via scenario (consultation is linked to scenario)
-                // We need to find the consultation. The detail page doesn't have consultationId directly,
-                // so we check if there's a consultation round. If we have a run, try consultation.
-                // For now, we'll rely on the scenario status to determine if consultation exists.
                 if (_scenario.Status >= PolicyStatus.Consultation)
                 {
                     // Note: Direct consultation lookup may require querying by scenario.
-                    // This is a simplified approach — in production, the ScenarioDetail model
-                    // would include consultation info or we'd have a method to look up by scenario.
                 }
             }
             catch { /* no consultation */ }
@@ -1036,7 +1009,8 @@
         }
         catch (Exception ex)
         {
-            _error = ex.Message;
+            _loadException = ex;
+            Toast.Error($"Failed to load scenario: {ex.Message}");
         }
         finally
         {
@@ -1062,26 +1036,22 @@
     private void SetTab(string tab)
     {
         _tab = tab;
-        _actionMessage = null;
-        _actionError = null;
     }
 
     private async Task RunSimulation()
     {
         _simulating = true;
-        _actionError = null;
-        _actionMessage = null;
         StateHasChanged();
         try
         {
             _latestRun = await ImpactEngine.RunAssessmentAsync(ScenarioId, _regulatorId, _userId);
-            _actionMessage = $"Simulation completed: {_latestRun.TotalEntitiesEvaluated} entities evaluated, {_latestRun.EntitiesWouldBreach} would breach.";
+            Toast.Success($"Simulation completed: {_latestRun.TotalEntitiesEvaluated} entities evaluated, {_latestRun.EntitiesWouldBreach} would breach.");
             await LoadAsync();
             _tab = "impact";
         }
         catch (Exception ex)
         {
-            _actionError = $"Simulation failed: {ex.Message}";
+            Toast.Error($"Simulation failed: {ex.Message}");
         }
         finally
         {
@@ -1093,15 +1063,14 @@
     {
         if (_latestRun is null) return;
         _generatingCba = true;
-        _actionError = null;
         try
         {
             _cba = await CbaService.GenerateAnalysisAsync(_latestRun.RunId, _regulatorId, _userId);
-            _actionMessage = "Cost-benefit analysis generated successfully.";
+            Toast.Success("Cost-benefit analysis generated successfully.");
         }
         catch (Exception ex)
         {
-            _actionError = $"CBA generation failed: {ex.Message}";
+            Toast.Error($"CBA generation failed: {ex.Message}");
         }
         finally
         {
@@ -1112,54 +1081,51 @@
     private async Task AddParameter()
     {
         if (string.IsNullOrWhiteSpace(_addParamCode)) return;
-        _actionError = null;
         try
         {
             await ScenarioService.AddParameterAsync(ScenarioId, _regulatorId, _addParamCode, _addParamValue, null, _userId);
             _addParamCode = string.Empty;
             _addParamValue = 0;
-            _actionMessage = "Parameter added.";
+            Toast.Success("Parameter added.");
             await LoadAsync();
         }
         catch (Exception ex)
         {
-            _actionError = $"Failed to add parameter: {ex.Message}";
+            Toast.Error($"Failed to add parameter: {ex.Message}");
         }
     }
 
     private async Task CloneScenario()
     {
-        _actionError = null;
         try
         {
             var newId = await ScenarioService.CloneScenarioAsync(ScenarioId, _regulatorId, $"{_scenario!.Title} (Clone)", _userId);
+            Toast.Success("Scenario cloned successfully.");
             Nav.NavigateTo($"/regulator/policies/{newId}");
         }
         catch (Exception ex)
         {
-            _actionError = $"Clone failed: {ex.Message}";
+            Toast.Error($"Clone failed: {ex.Message}");
         }
     }
 
     private async Task WithdrawScenario()
     {
-        _actionError = null;
         try
         {
             await ScenarioService.TransitionStatusAsync(ScenarioId, _regulatorId, PolicyStatus.Withdrawn, _userId);
-            _actionMessage = "Scenario withdrawn.";
+            Toast.Success("Scenario withdrawn.");
             await LoadAsync();
         }
         catch (Exception ex)
         {
-            _actionError = $"Withdrawal failed: {ex.Message}";
+            Toast.Error($"Withdrawal failed: {ex.Message}");
         }
     }
 
     private async Task CreateConsultation()
     {
         _creatingConsult = true;
-        _actionError = null;
         try
         {
             var provisions = _consultProvisions.Select((p, i) => new ConsultationProvisionInput(
@@ -1169,11 +1135,11 @@
                 _consultDeadline, provisions, _userId);
             _consultation = await ConsultationService.GetConsultationAsync(consultId, _regulatorId);
             _showCreateConsultation = false;
-            _actionMessage = "Consultation created.";
+            Toast.Success("Consultation created.");
         }
         catch (Exception ex)
         {
-            _actionError = $"Create failed: {ex.Message}";
+            Toast.Error($"Create failed: {ex.Message}");
         }
         finally
         {
@@ -1184,70 +1150,65 @@
     private async Task PublishConsultation()
     {
         if (_consultation is null) return;
-        _actionError = null;
         try
         {
             await ConsultationService.PublishConsultationAsync(_consultation.Id, _regulatorId, _userId);
             _consultation = await ConsultationService.GetConsultationAsync(_consultation.Id, _regulatorId);
-            _actionMessage = "Consultation published.";
+            Toast.Success("Consultation published.");
             await LoadAsync();
         }
         catch (Exception ex)
         {
-            _actionError = $"Publish failed: {ex.Message}";
+            Toast.Error($"Publish failed: {ex.Message}");
         }
     }
 
     private async Task CloseConsultation()
     {
         if (_consultation is null) return;
-        _actionError = null;
         try
         {
             await ConsultationService.CloseConsultationAsync(_consultation.Id, _regulatorId, _userId);
             _consultation = await ConsultationService.GetConsultationAsync(_consultation.Id, _regulatorId);
-            _actionMessage = "Consultation closed.";
+            Toast.Success("Consultation closed.");
             await LoadAsync();
         }
         catch (Exception ex)
         {
-            _actionError = $"Close failed: {ex.Message}";
+            Toast.Error($"Close failed: {ex.Message}");
         }
     }
 
     private async Task AggregateFeedback()
     {
         if (_consultation is null) return;
-        _actionError = null;
         try
         {
             await ConsultationService.AggregateFeedbackAsync(_consultation.Id, _regulatorId, _userId);
             _consultation = await ConsultationService.GetConsultationAsync(_consultation.Id, _regulatorId);
-            _actionMessage = "Feedback aggregated.";
+            Toast.Success("Feedback aggregated.");
             await LoadAsync();
         }
         catch (Exception ex)
         {
-            _actionError = $"Aggregation failed: {ex.Message}";
+            Toast.Error($"Aggregation failed: {ex.Message}");
         }
     }
 
     private async Task RecordDecision()
     {
         _recordingDecision = true;
-        _actionError = null;
         try
         {
             _decisionId = await DecisionService.RecordDecisionAsync(
                 ScenarioId, _regulatorId, _decisionType, _decisionSummary,
                 _decisionEffectiveDate, _decisionPhaseInMonths, _decisionCircular, _userId);
-            _decisionRecorded = true;
-            _actionMessage = "Decision recorded.";
+            Toast.Success("Decision recorded.");
             await LoadAsync();
         }
         catch (Exception ex)
         {
-            _actionError = $"Decision recording failed: {ex.Message}";
+            Toast.Error($"Decision recording failed: {ex.Message}");
         }
         finally
         {
@@ -1264,10 +1225,11 @@
             var base64 = Convert.ToBase64String(docBytes);
             await JS.InvokeVoidAsync("eval",
                 $"{{ var a=document.createElement('a');a.href='data:text/plain;base64,{base64}';a.download='policy-document-{_decisionId}.txt';a.click(); }}");
+            Toast.Success("Document downloaded.");
         }
         catch (Exception ex)
         {
-            _actionError = $"Download failed: {ex.Message}";
+            Toast.Error($"Download failed: {ex.Message}");
         }
     }
 
@@ -1429,6 +1391,18 @@
 
     private static string GaugeColor(decimal score) =>
         score >= 60 ? "#15803d" : score >= 30 ? "#d97706" : "#b91c1c";
+
+    private static string StatusVariant(PolicyStatus s) => s switch
+    {
+        PolicyStatus.Draft => "neutral",
+        PolicyStatus.ParametersSet => "info",
+        PolicyStatus.Simulated => "warning",
+        PolicyStatus.Consultation => "info",
+        PolicyStatus.FeedbackClosed => "warning",
+        PolicyStatus.Enacted => "success",
+        PolicyStatus.Withdrawn => "danger",
+        _ => "neutral"
+    };
 
     private static string ConsultationStatusClass(ConsultationStatus s) => s switch
     {

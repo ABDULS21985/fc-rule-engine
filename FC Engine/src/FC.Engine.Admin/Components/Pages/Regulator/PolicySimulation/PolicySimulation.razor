@@ -2,27 +2,27 @@
 @attribute [Authorize(Policy = "RegulatorOnly")]
 @inject IPolicyScenarioService ScenarioService
 @inject NavigationManager Nav
+@inject ToastService Toast
 
 <PageTitle>Policy Simulation — RegOS™</PageTitle>
 
-<div class="rg-ps-page">
-    <section class="rg-ps-hero">
-        <div>
-            <div class="rg-surveillance-kicker">RG-40 Engine</div>
-            <h1 class="rg-page-title rg-ps-hero-title">Policy Simulation & What-If Modelling</h1>
-            <p class="rg-ps-hero-summary">
-                Model the impact of proposed regulatory changes on supervised entities before issuance.
-                Run sector-wide impact assessments, cost-benefit analyses, and stakeholder consultations.
-            </p>
-        </div>
-        <div class="rg-ps-hero-actions">
-            <span class="rg-ps-hero-meta">Regulator @_regulatorCode</span>
-            <button class="rg-btn primary" @onclick="GoToNew">
-                + New Scenario
-            </button>
-        </div>
-    </section>
+<PageHeader Title="Policy Simulation & What-If Modelling"
+            Subtitle="Model the impact of proposed regulatory changes on supervised entities before issuance."
+            CountBadge="@(!_loading && _scenarios is not null ? _scenarios.TotalCount : null)">
+    <PrimaryAction>
+        <button class="fc-btn fc-btn--primary" @onclick="GoToNew">
+            + New Scenario
+        </button>
+    </PrimaryAction>
+    <SecondaryActions>
+        <span class="rg-ps-hero-meta">Regulator @_regulatorCode</span>
+        <button class="fc-btn fc-btn--outline" @onclick="GoToPresets">
+            Parameter Library
+        </button>
+    </SecondaryActions>
+</PageHeader>
 
+<SectionErrorBoundary Title="Couldn't load policy scenarios" ExternalError="@_loadException" OnRetry="LoadAsync">
     <!-- KPI Strip -->
     @if (!_loading && _scenarios is not null)
     {
@@ -73,24 +73,20 @@
                     <option value="@s">@s</option>
                 }
             </select>
-            <button class="rg-btn" @onclick="GoToPresets">
-                Parameter Library
-            </button>
         </div>
     </div>
 
     <!-- Table -->
     @if (_loading)
     {
-        <div class="rg-spinner-center"><div class="rg-spinner"></div></div>
-    }
-    else if (!string.IsNullOrWhiteSpace(_error))
-    {
-        <div class="rg-card">
-            <p class="rg-danger-text">@_error</p>
-            <button class="rg-btn" @onclick="LoadAsync">Retry</button>
-        </div>
-    }
+        <div class="rg-ps-kpis">
+                @for (var i = 0; i < 5; i++)
+                {
+                    <SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Card" Index="i" />
+                }
+            </div>
+            <SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.TableRows" />
+}
     else if (_scenarios is not null && _scenarios.Items.Count > 0)
     {
         <div class="rg-card">
@@ -122,7 +118,7 @@
                                 <td>@s.RunCount</td>
                                 <td>@s.CreatedAt.ToString("dd MMM yyyy")</td>
                                 <td>
-                                    <button class="rg-btn sm" @onclick="() => OpenScenario(s.Id)">
+                                    <button class="fc-btn fc-btn--outline fc-btn--sm" @onclick="() => OpenScenario(s.Id)">
                                         Open
                                     </button>
                                 </td>
@@ -139,8 +135,8 @@
                         Page @_page of @_scenarios.TotalPages (@_scenarios.TotalCount scenarios)
                     </span>
                     <div class="rg-ps-flex">
-                        <button class="rg-btn sm" disabled="@(_page <= 1)" @onclick="PrevPage">Prev</button>
-                        <button class="rg-btn sm" disabled="@(!_scenarios.HasNextPage)" @onclick="NextPage">Next</button>
+                        <button class="fc-btn fc-btn--outline fc-btn--sm" disabled="@(_page <= 1)" @onclick="PrevPage">Prev</button>
+                        <button class="fc-btn fc-btn--outline fc-btn--sm" disabled="@(!_scenarios.HasNextPage)" @onclick="NextPage">Next</button>
                     </div>
                 </div>
             }
@@ -148,14 +144,13 @@
     }
     else
     {
-        <div class="rg-card" style="text-align:center;padding:2rem;">
-            <p class="rg-muted">No policy scenarios found. Create your first scenario to begin modelling.</p>
-            <button class="rg-btn primary rg-ps-mt" @onclick="GoToNew">
-                + Create Scenario
-            </button>
-        </div>
+        <EmptyState Context="data"
+                    Heading="No policy scenarios found"
+                    Description="Create your first scenario to begin modelling the impact of proposed regulatory changes."
+                    PrimaryActionLabel="+ Create Scenario"
+                    OnPrimaryAction="GoToNew" />
     }
-</div>
+</SectionErrorBoundary>
 
 @code {
     [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
@@ -163,7 +158,7 @@
     private int _regulatorId;
     private string _regulatorCode = string.Empty;
     private bool _loading = true;
-    private string? _error;
+    private Exception? _loadException;
 
     private PagedResult<PolicyScenarioSummary>? _scenarios;
     private string _domainFilter = string.Empty;
@@ -188,7 +183,7 @@
     private async Task LoadAsync()
     {
         _loading = true;
-        _error = null;
+        _loadException = null;
         StateHasChanged();
         try
         {
@@ -198,7 +193,8 @@
         }
         catch (Exception ex)
         {
-            _error = ex.Message;
+            _loadException = ex;
+            Toast.Error($"Failed to load scenarios: {ex.Message}");
         }
         finally
         {

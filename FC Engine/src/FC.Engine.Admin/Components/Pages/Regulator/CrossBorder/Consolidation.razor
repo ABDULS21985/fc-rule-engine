@@ -2,25 +2,24 @@
 @attribute [Authorize(Policy = "RegulatorOnly")]
 @inject IConsolidationEngine ConsolidationEngine
 @inject NavigationManager Nav
+@inject ToastService Toast
 @using FC.Engine.Domain.Entities
 @using FC.Engine.Infrastructure.Metadata
 @inject MetadataDbContext Db
 @using Microsoft.EntityFrameworkCore
 
-<PageTitle>Consolidation — RegOS™</PageTitle>
+<PageTitle>Consolidation — RegOS</PageTitle>
 
-<div class="rg-cb-hero">
-    <div class="rg-cb-hero-text">
-        <div class="rg-cb-kicker">Cross-Border Harmonisation</div>
-        <h1 class="rg-cb-hero-title">Prudential Consolidation</h1>
-        <p class="rg-cb-hero-sub">
-            Consolidate regulatory returns across subsidiaries with automatic FX conversion,
-            IFRS-aligned adjustments, and minority interest calculations.
-        </p>
-    </div>
-</div>
+<PageHeader Title="Prudential Consolidation"
+            Subtitle="Consolidate regulatory returns across subsidiaries with automatic FX conversion, IFRS-aligned adjustments, and minority interest calculations.">
+    <PrimaryAction>
+        <button class="fc-btn fc-btn--primary" @onclick="RunConsolidation" disabled="@(_running || _selectedGroupId == 0)">
+            @(_running ? "Running..." : "Run Consolidation")
+        </button>
+    </PrimaryAction>
+</PageHeader>
 
-@* ── Group Selection + Run Form ── *@
+@* -- Group Selection + Run Form -- *@
 <div class="rg-card" style="padding:1rem;margin-bottom:1rem;">
     <h3 class="rg-section-title">Run Consolidation</h3>
     <div class="rg-cb-form-row">
@@ -42,27 +41,18 @@
             <label>Snapshot Date</label>
             <input type="date" @bind="_snapshotDate" />
         </div>
-        <div class="rg-cb-field" style="justify-content:flex-end;">
-            <button class="rg-btn primary" @onclick="RunConsolidation" disabled="@(_running || _selectedGroupId == 0)">
-                @(_running ? "Running…" : "Run Consolidation")
-            </button>
-        </div>
     </div>
-    @if (!string.IsNullOrWhiteSpace(_runMessage))
-    {
-        <p style="margin-top:0.5rem;font-size:0.82rem;color:@(_runError ? "var(--rg-danger)" : "#15803d");">@_runMessage</p>
-    }
 </div>
 
-@* ── Latest Run Result ── *@
+@* -- Latest Run Result -- *@
 @if (_latestRun is not null)
 {
     <div class="rg-cb-section-head">
         <h2 class="rg-cb-section-title">Run #@_latestRun.RunNumber — @_latestRun.ReportingPeriod</h2>
-        <button class="rg-btn" @onclick='() => Nav.NavigateTo($"/regulator/cross-border/consolidation/{_latestRun.RunId}")'>Full Detail →</button>
+        <button class="fc-btn fc-btn--outline" @onclick='() => Nav.NavigateTo($"/regulator/cross-border/consolidation/{_latestRun.RunId}")'>Full Detail →</button>
     </div>
 
-    @* ── Progress Stepper ── *@
+    @* -- Progress Stepper -- *@
     <div class="rg-cb-progress-stepper">
         @{
             var steps = new[] { "Collecting", "Converting", "Consolidating", "Adjusting", "Completed" };
@@ -91,7 +81,7 @@
         }
     </div>
 
-    @* ── Summary KPIs ── *@
+    @* -- Summary KPIs -- *@
     <div class="rg-cb-kpis" style="margin-bottom:1rem;">
         <div class="rg-card rg-cb-kpi rg-cb-kpi--info">
             <div class="rg-cb-kpi-value rg-cb-kpi-value--info">@_latestRun.SubsidiariesCollected / @_latestRun.TotalSubsidiaries</div>
@@ -111,7 +101,7 @@
         </div>
     </div>
 
-    @* ── Subsidiary Results ── *@
+    @* -- Subsidiary Results -- *@
     @if (_subsidiaries.Count > 0)
     {
         <div class="rg-card" style="padding:0.75rem;margin-bottom:1rem;">
@@ -161,6 +151,12 @@
             </div>
         </div>
     }
+    else
+    {
+        <EmptyState Context="data"
+                    Heading="No Subsidiary Data"
+                    Description="No subsidiary breakdown data is available for this consolidation run." />
+    }
 }
 
 @code {
@@ -168,8 +164,6 @@
     private int _selectedGroupId;
     private string _reportingPeriod = $"{DateTime.UtcNow.Year}-Q{(DateTime.UtcNow.Month - 1) / 3 + 1}";
     private DateOnly _snapshotDate = DateOnly.FromDateTime(DateTime.UtcNow);
-    private string? _runMessage;
-    private bool _runError;
 
     private ConsolidationResult? _latestRun;
     private List<ConsolidationSubsidiaryResult> _subsidiaries = [];
@@ -187,8 +181,6 @@
     private async Task RunConsolidation()
     {
         _running = true;
-        _runMessage = null;
-        _runError = false;
         StateHasChanged();
 
         try
@@ -199,12 +191,11 @@
             _subsidiaries = (await ConsolidationEngine.GetSubsidiarySnapshotsAsync(
                 _latestRun.RunId, _selectedGroupId)).ToList();
 
-            _runMessage = $"Consolidation completed successfully (Run #{_latestRun.RunNumber}).";
+            Toast.Success($"Consolidation completed successfully (Run #{_latestRun.RunNumber}).");
         }
         catch (Exception ex)
         {
-            _runMessage = $"Consolidation failed: {ex.Message}";
-            _runError = true;
+            Toast.Error("Consolidation failed: " + ex.Message);
         }
         finally { _running = false; StateHasChanged(); }
     }

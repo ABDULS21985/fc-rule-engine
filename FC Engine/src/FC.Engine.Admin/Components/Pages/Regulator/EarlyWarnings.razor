@@ -1,27 +1,30 @@
 @page "/regulator/warnings"
 @attribute [Authorize(Policy = "RegulatorOnly")]
 @inject IEarlyWarningService WarningService
+@inject ToastService Toast
 
 <PageTitle>Early Warnings</PageTitle>
 
-<h1 class="rg-page-title">Early Warning Flags</h1>
+<PageHeader Title="Early Warning Flags"
+            Subtitle="Computed early-warning indicators for your jurisdiction"
+            CountBadge="@(!_loading ? _flags.Count : null)">
+    <PrimaryAction>
+        <button class="fc-btn fc-btn--primary" @onclick="Load">Refresh Flags</button>
+    </PrimaryAction>
+</PageHeader>
 
-<div class="rg-card">
-    <div class="rg-controls">
-        <button class="rg-btn" @onclick="Load">Refresh Flags</button>
-    </div>
-
-    @if (!string.IsNullOrWhiteSpace(_error))
+<SectionErrorBoundary Title="Couldn't load early warnings" ExternalError="@_loadException" OnRetry="Load">
+    @if (_loading)
     {
-        <p class="rg-danger-text">@_error</p>
-    }
-    else if (_loading)
-    {
-        <p class="rg-muted">Computing flags...</p>
-    }
+        <SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.TableRows" RowCount="8" />
+}
     else if (_flags.Count == 0)
     {
-        <p class="rg-muted">No early-warning flags for this jurisdiction.</p>
+        <EmptyState Context="data"
+                    Heading="No early-warning flags"
+                    Description="No early-warning flags have been triggered for this jurisdiction."
+                    PrimaryActionLabel="Refresh"
+                    OnPrimaryAction="Load" />
     }
     else
     {
@@ -53,14 +56,14 @@
             </table>
         </div>
     }
-</div>
+</SectionErrorBoundary>
 
 @code {
     [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
 
     private string _regulatorCode = string.Empty;
     private bool _loading = true;
-    private string? _error;
+    private Exception? _loadException;
     private List<EarlyWarningFlag> _flags = new();
 
     protected override async Task OnInitializedAsync()
@@ -74,12 +77,12 @@
     {
         if (string.IsNullOrWhiteSpace(_regulatorCode))
         {
-            _error = "Regulator code claim is missing.";
+            Toast.Error("Regulator code claim is missing.");
             return;
         }
 
         _loading = true;
-        _error = null;
+        _loadException = null;
 
         try
         {
@@ -87,7 +90,8 @@
         }
         catch (Exception ex)
         {
-            _error = ex.Message;
+            _loadException = ex;
+            Toast.Error($"Failed to load warnings: {ex.Message}");
         }
         finally
         {

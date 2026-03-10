@@ -1,0 +1,348 @@
+@using FC.Engine.Domain.Entities
+@using FC.Engine.Domain.Enums
+@using FC.Engine.Domain.Abstractions
+@using FC.Engine.Domain.Models
+@inject IExaminationWorkspaceService WorkspaceService
+@inject ToastService Toast
+
+@if (Projects.Count == 0)
+{
+    <EmptyState Context="data"
+                Heading="No examination projects"
+                Description="Create your first examination project to get started."
+                PrimaryActionLabel="Create Project"
+                OnPrimaryAction="() => _showCreateModal = true" />
+}
+else
+{
+    <DataTable TItem="ExaminationProject"
+               Items="@Projects.ToList()"
+               Sortable="true"
+               Responsive
+               EmptyTitle="No examination projects"
+               EmptyText="Create your first examination project to get started.">
+        <ChildContent>
+            <DataColumn TItem="ExaminationProject" Title="Name" SortKey="p => p.Name">
+                <CellTemplate>
+                    <strong>@context.Name</strong>
+                </CellTemplate>
+            </DataColumn>
+            <DataColumn TItem="ExaminationProject" Title="Status" SortKey="p => p.Status" Width="120px">
+                <CellTemplate>
+                    <span class="fc-badge @ProjectStatusClass(context.Status)">@context.Status</span>
+                </CellTemplate>
+            </DataColumn>
+            <DataColumn TItem="ExaminationProject" Title="Created" SortKey="p => p.CreatedAt" Width="130px">
+                <CellTemplate>
+                    @context.CreatedAt.ToString("dd MMM yyyy")
+                </CellTemplate>
+            </DataColumn>
+            <DataColumn TItem="ExaminationProject" Title="Intelligence Pack" SortKey="p => p.IntelligencePackGeneratedAt" Width="160px">
+                <CellTemplate>
+                    @(context.IntelligencePackGeneratedAt?.ToString("dd MMM HH:mm") ?? "-")
+                </CellTemplate>
+            </DataColumn>
+            <DataColumn TItem="ExaminationProject" Title="Report" SortKey="p => p.LastReportGeneratedAt" Width="160px">
+                <CellTemplate>
+                    @(context.LastReportGeneratedAt?.ToString("dd MMM HH:mm") ?? "-")
+                </CellTemplate>
+            </DataColumn>
+            <DataColumn TItem="ExaminationProject" Title="Actions" Width="100px" Hideable="false">
+                <CellTemplate>
+                    <button class="fc-btn fc-btn--sm fc-btn--outline" type="button"
+                            @onclick="() => OnSelectProject.InvokeAsync(context.Id)">
+                        Open
+                    </button>
+                </CellTemplate>
+            </DataColumn>
+        </ChildContent>
+    </DataTable>
+}
+
+<AppModal @bind-Visible="_showCreateModal" Title="Create Examination Project" Size="lg">
+    <ChildContent>
+        <FormSection Title="Project Scope" IsOpen="true">
+            <div class="fc-exam-form-row">
+                <FormField Label="Project Name" FieldId="exam-name" IsRequired="true">
+                    <input class="fc-form-input" type="text" id="exam-name-input"
+                           placeholder="e.g. Q1 2026 On-Site Review"
+                           @bind="_createName" aria-required="true" />
+                </FormField>
+                <FormField Label="Scope" FieldId="exam-scope">
+                    <input class="fc-form-input" type="text" id="exam-scope-input"
+                           placeholder="Brief description of examination scope"
+                           @bind="_createScope" />
+                </FormField>
+            </div>
+            <div class="fc-exam-form-row">
+                <FormField Label="Institution IDs" FieldId="exam-entities"
+                           HintText="Comma-separated numeric IDs">
+                    <input class="fc-form-input" type="text" id="exam-entities-input"
+                           placeholder="e.g. 101, 205, 330"
+                           @bind="_createEntityIds" />
+                </FormField>
+                <FormField Label="Module Codes" FieldId="exam-modules"
+                           HintText="Comma-separated module codes">
+                    <input class="fc-form-input" type="text" id="exam-modules-input"
+                           placeholder="e.g. CAP, LIQ, NPL"
+                           @bind="_createModuleCodes" />
+                </FormField>
+            </div>
+        </FormSection>
+
+        <FormSection Title="Period" IsOpen="true">
+            <div class="fc-exam-form-row">
+                <FormField Label="From" FieldId="exam-from">
+                    <input class="fc-form-input" type="date" id="exam-from-input"
+                           @bind="_createPeriodFrom" />
+                </FormField>
+                <FormField Label="To" FieldId="exam-to">
+                    <input class="fc-form-input" type="date" id="exam-to-input"
+                           @bind="_createPeriodTo" />
+                </FormField>
+            </div>
+        </FormSection>
+
+        <FormSection Title="Team" IsOpen="true" BadgeText="@(_teamRows.Count.ToString())">
+            @for (var i = 0; i < _teamRows.Count; i++)
+            {
+                var idx = i;
+                <div class="fc-exam-team-row">
+                    <FormField Label="User ID" FieldId="@($"exam-team-uid-{idx}")">
+                        <input class="fc-form-input" type="text"
+                               id="@($"exam-team-uid-{idx}-input")"
+                               placeholder="User ID"
+                               value="@_teamRows[idx].UserIdText"
+                               @onchange="e => _teamRows[idx].UserIdText = e.Value?.ToString() ?? string.Empty" />
+                    </FormField>
+                    <FormField Label="Display Name" FieldId="@($"exam-team-name-{idx}")">
+                        <input class="fc-form-input" type="text"
+                               id="@($"exam-team-name-{idx}-input")"
+                               placeholder="Full name"
+                               value="@_teamRows[idx].DisplayName"
+                               @onchange="e => _teamRows[idx].DisplayName = e.Value?.ToString() ?? string.Empty" />
+                    </FormField>
+                    <FormField Label="Role" FieldId="@($"exam-team-role-{idx}")">
+                        <select class="fc-form-input" id="@($"exam-team-role-{idx}-input")"
+                                value="@_teamRows[idx].Role"
+                                @onchange="e => _teamRows[idx].Role = e.Value?.ToString() ?? string.Empty">
+                            <option value="Lead Examiner">Lead Examiner</option>
+                            <option value="Examiner">Examiner</option>
+                            <option value="Analyst">Analyst</option>
+                            <option value="Observer">Observer</option>
+                        </select>
+                    </FormField>
+                    <button class="fc-btn fc-btn--ghost fc-btn--sm" type="button"
+                            @onclick="() => _teamRows.RemoveAt(idx)"
+                            aria-label="Remove team member">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                             stroke-linecap="round" stroke-linejoin="round" width="16" height="16" aria-hidden="true">
+                            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                        </svg>
+                    </button>
+                </div>
+            }
+            <button class="fc-btn fc-btn--outline fc-btn--sm" type="button" @onclick="AddTeamRow">
+                + Add Team Member
+            </button>
+        </FormSection>
+
+        <FormSection Title="Milestones" IsOpen="true" BadgeText="@(_milestoneRows.Count.ToString())">
+            @for (var i = 0; i < _milestoneRows.Count; i++)
+            {
+                var idx = i;
+                <div class="fc-exam-milestone-row">
+                    <FormField Label="Title" FieldId="@($"exam-ms-title-{idx}")">
+                        <input class="fc-form-input" type="text"
+                               id="@($"exam-ms-title-{idx}-input")"
+                               placeholder="Milestone title"
+                               value="@_milestoneRows[idx].Title"
+                               @onchange="e => _milestoneRows[idx].Title = e.Value?.ToString() ?? string.Empty" />
+                    </FormField>
+                    <FormField Label="Owner" FieldId="@($"exam-ms-owner-{idx}")">
+                        <input class="fc-form-input" type="text"
+                               id="@($"exam-ms-owner-{idx}-input")"
+                               placeholder="Owner"
+                               value="@_milestoneRows[idx].Owner"
+                               @onchange="e => _milestoneRows[idx].Owner = e.Value?.ToString() ?? string.Empty" />
+                    </FormField>
+                    <FormField Label="Due Date" FieldId="@($"exam-ms-due-{idx}")">
+                        <input class="fc-form-input" type="date"
+                               id="@($"exam-ms-due-{idx}-input")"
+                               value="@_milestoneRows[idx].DueAt?.ToString("yyyy-MM-dd")"
+                               @onchange="e => _milestoneRows[idx].DueAt = DateTime.TryParse(e.Value?.ToString(), out var d) ? d : null" />
+                    </FormField>
+                    <button class="fc-btn fc-btn--ghost fc-btn--sm" type="button"
+                            @onclick="() => _milestoneRows.RemoveAt(idx)"
+                            aria-label="Remove milestone">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                             stroke-linecap="round" stroke-linejoin="round" width="16" height="16" aria-hidden="true">
+                            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                        </svg>
+                    </button>
+                </div>
+            }
+            <button class="fc-btn fc-btn--outline fc-btn--sm" type="button" @onclick="AddMilestoneRow">
+                + Add Milestone
+            </button>
+        </FormSection>
+    </ChildContent>
+    <FooterContent>
+        <button class="fc-btn fc-btn--outline" type="button" @onclick="() => _showCreateModal = false">Cancel</button>
+        <button class="fc-btn fc-btn--primary" type="button" @onclick="HandleCreate" disabled="@_saving">
+            @if (_saving)
+            {
+                <span>Creating...</span>
+            }
+            else
+            {
+                <span>Create Project</span>
+            }
+        </button>
+    </FooterContent>
+</AppModal>
+
+@code {
+    [Parameter] public IReadOnlyList<ExaminationProject> Projects { get; set; } = Array.Empty<ExaminationProject>();
+    [Parameter] public EventCallback<int> OnSelectProject { get; set; }
+    [Parameter] public int? SelectedProjectId { get; set; }
+    [Parameter] public EventCallback OnProjectCreated { get; set; }
+    [Parameter] public Guid TenantId { get; set; }
+    [Parameter] public int UserId { get; set; }
+
+    private bool _showCreateModal;
+    private bool _saving;
+
+    // Create form fields
+    private string _createName = string.Empty;
+    private string _createScope = string.Empty;
+    private string _createEntityIds = string.Empty;
+    private string _createModuleCodes = string.Empty;
+    private DateTime? _createPeriodFrom;
+    private DateTime? _createPeriodTo;
+    private List<TeamRow> _teamRows = new();
+    private List<MilestoneRow> _milestoneRows = new();
+
+    private void AddTeamRow() => _teamRows.Add(new TeamRow { Role = "Examiner" });
+    private void AddMilestoneRow() => _milestoneRows.Add(new MilestoneRow());
+
+    private async Task HandleCreate()
+    {
+        if (string.IsNullOrWhiteSpace(_createName))
+        {
+            Toast.Error("Project name is required.");
+            return;
+        }
+
+        _saving = true;
+        try
+        {
+            var request = new ExaminationProjectCreateRequest
+            {
+                Name = _createName.Trim(),
+                Scope = _createScope.Trim(),
+                InstitutionIds = ParseIntList(_createEntityIds),
+                ModuleCodes = ParseStringList(_createModuleCodes),
+                PeriodFrom = _createPeriodFrom,
+                PeriodTo = _createPeriodTo,
+                TeamAssignments = _teamRows
+                    .Where(r => int.TryParse(r.UserIdText, out _) && !string.IsNullOrWhiteSpace(r.DisplayName))
+                    .Select(r => new ExaminationTeamAssignment
+                    {
+                        UserId = int.Parse(r.UserIdText),
+                        DisplayName = r.DisplayName.Trim(),
+                        Role = r.Role
+                    })
+                    .ToList(),
+                Milestones = _milestoneRows
+                    .Where(r => !string.IsNullOrWhiteSpace(r.Title))
+                    .Select(r => new ExaminationMilestone
+                    {
+                        Title = r.Title.Trim(),
+                        Owner = r.Owner.Trim(),
+                        DueAt = r.DueAt
+                    })
+                    .ToList()
+            };
+
+            var project = await WorkspaceService.CreateProject(TenantId, UserId, request);
+            Toast.Success($"Project \"{project.Name}\" created successfully.");
+
+            ResetCreateForm();
+            _showCreateModal = false;
+            await OnProjectCreated.InvokeAsync();
+        }
+        catch (Exception ex)
+        {
+            Toast.Error($"Failed to create project: {ex.Message}");
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private void ResetCreateForm()
+    {
+        _createName = string.Empty;
+        _createScope = string.Empty;
+        _createEntityIds = string.Empty;
+        _createModuleCodes = string.Empty;
+        _createPeriodFrom = null;
+        _createPeriodTo = null;
+        _teamRows.Clear();
+        _milestoneRows.Clear();
+    }
+
+    private static string ProjectStatusClass(ExaminationProjectStatus status) => status switch
+    {
+        ExaminationProjectStatus.Completed => "fc-badge--success",
+        ExaminationProjectStatus.Archived  => "fc-badge--neutral",
+        ExaminationProjectStatus.InProgress => "fc-badge--info",
+        _ => "fc-badge--warning"
+    };
+
+    private static List<int> ParseIntList(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return new List<int>();
+        }
+
+        return value
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(x => int.TryParse(x, out var n) ? n : 0)
+            .Where(x => x > 0)
+            .Distinct()
+            .ToList();
+    }
+
+    private static List<string> ParseStringList(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return new List<string>();
+        }
+
+        return value
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Select(x => x.Trim().ToUpperInvariant())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    private class TeamRow
+    {
+        public string UserIdText { get; set; } = string.Empty;
+        public string DisplayName { get; set; } = string.Empty;
+        public string Role { get; set; } = "Examiner";
+    }
+
+    private class MilestoneRow
+    {
+        public string Title { get; set; } = string.Empty;
+        public string Owner { get; set; } = string.Empty;
+        public DateTime? DueAt { get; set; }
+    }
+}

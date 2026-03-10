@@ -1,0 +1,166 @@
+@using FC.Engine.Domain.Entities
+@using FC.Engine.Domain.Abstractions
+@inject IExaminationWorkspaceService WorkspaceService
+@inject ToastService Toast
+
+@if (Annotations.Count == 0 && !_showModal)
+{
+    <EmptyState Context="data"
+                Heading="No annotations yet"
+                Description="Add field-level notes during your examination."
+                PrimaryActionLabel="Add Annotation"
+                OnPrimaryAction="() => _showModal = true" />
+}
+else
+{
+    <div style="margin-bottom: var(--space-3);">
+        <button class="fc-btn fc-btn--primary fc-btn--sm" type="button"
+                @onclick="() => _showModal = true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                 stroke-linecap="round" stroke-linejoin="round" width="14" height="14" aria-hidden="true">
+                <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+            </svg>
+            Add Annotation
+        </button>
+    </div>
+
+    <DataTable TItem="ExaminationAnnotation"
+               Items="@Annotations.OrderByDescending(a => a.CreatedAt).ToList()"
+               Sortable="true"
+               Responsive
+               EmptyTitle="No annotations yet"
+               EmptyText="Add field-level notes during your examination.">
+        <ChildContent>
+            <DataColumn TItem="ExaminationAnnotation" Title="When" SortKey="a => a.CreatedAt" Width="160px">
+                <CellTemplate>
+                    @context.CreatedAt.ToString("dd MMM yyyy HH:mm")
+                </CellTemplate>
+            </DataColumn>
+            <DataColumn TItem="ExaminationAnnotation" Title="Submission" SortKey="a => a.SubmissionId" Width="120px">
+                <CellTemplate>
+                    #@context.SubmissionId
+                </CellTemplate>
+            </DataColumn>
+            <DataColumn TItem="ExaminationAnnotation" Title="Field Code" SortKey="a => a.FieldCode ?? string.Empty" Width="140px">
+                <CellTemplate>
+                    @(context.FieldCode ?? "-")
+                </CellTemplate>
+            </DataColumn>
+            <DataColumn TItem="ExaminationAnnotation" Title="Note">
+                <CellTemplate>
+                    @context.Note
+                </CellTemplate>
+            </DataColumn>
+        </ChildContent>
+    </DataTable>
+}
+
+<AppModal @bind-Visible="_showModal" Title="Add Annotation" Size="default">
+    <ChildContent>
+        <div class="fc-exam-form-row">
+            <FormField Label="Submission ID" FieldId="annot-sub" IsRequired="true">
+                <input class="fc-form-input" type="text" id="annot-sub-input"
+                       placeholder="e.g. 1042"
+                       @bind="_annotSubmissionId" aria-required="true" />
+            </FormField>
+            <FormField Label="Institution ID" FieldId="annot-inst"
+                       HintText="Optional">
+                <input class="fc-form-input" type="text" id="annot-inst-input"
+                       placeholder="e.g. 205"
+                       @bind="_annotInstitutionId" />
+            </FormField>
+        </div>
+        <FormField Label="Field Code" FieldId="annot-field"
+                   HintText="Optional field reference">
+            <input class="fc-form-input" type="text" id="annot-field-input"
+                   placeholder="e.g. CAP_001"
+                   @bind="_annotFieldCode" />
+        </FormField>
+        <FormField Label="Note" FieldId="annot-note" IsRequired="true">
+            <textarea class="fc-form-input" id="annot-note-input" rows="4"
+                      placeholder="Enter your annotation..."
+                      @bind="_annotNote" aria-required="true"></textarea>
+        </FormField>
+    </ChildContent>
+    <FooterContent>
+        <button class="fc-btn fc-btn--outline" type="button" @onclick="() => _showModal = false">Cancel</button>
+        <button class="fc-btn fc-btn--primary" type="button" @onclick="HandleSave" disabled="@_saving">
+            @if (_saving)
+            {
+                <span>Saving...</span>
+            }
+            else
+            {
+                <span>Save Annotation</span>
+            }
+        </button>
+    </FooterContent>
+</AppModal>
+
+@code {
+    [Parameter] public IReadOnlyList<ExaminationAnnotation> Annotations { get; set; } = Array.Empty<ExaminationAnnotation>();
+    [Parameter] public EventCallback OnRefresh { get; set; }
+    [Parameter] public Guid TenantId { get; set; }
+    [Parameter] public int ProjectId { get; set; }
+    [Parameter] public int UserId { get; set; }
+
+    private bool _showModal;
+    private bool _saving;
+
+    private string _annotSubmissionId = string.Empty;
+    private string _annotInstitutionId = string.Empty;
+    private string _annotFieldCode = string.Empty;
+    private string _annotNote = string.Empty;
+
+    private async Task HandleSave()
+    {
+        if (!int.TryParse(_annotSubmissionId, out var submissionId))
+        {
+            Toast.Error("Submission ID is required and must be numeric.");
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(_annotNote))
+        {
+            Toast.Error("Note is required.");
+            return;
+        }
+
+        int? institutionId = null;
+        if (int.TryParse(_annotInstitutionId, out var parsedInstitutionId))
+        {
+            institutionId = parsedInstitutionId;
+        }
+
+        _saving = true;
+        try
+        {
+            await WorkspaceService.AddAnnotation(
+                TenantId,
+                ProjectId,
+                submissionId,
+                institutionId,
+                string.IsNullOrWhiteSpace(_annotFieldCode) ? null : _annotFieldCode.Trim(),
+                _annotNote.Trim(),
+                UserId);
+
+            Toast.Success("Annotation saved successfully.");
+
+            _annotSubmissionId = string.Empty;
+            _annotInstitutionId = string.Empty;
+            _annotFieldCode = string.Empty;
+            _annotNote = string.Empty;
+            _showModal = false;
+
+            await OnRefresh.InvokeAsync();
+        }
+        catch (Exception ex)
+        {
+            Toast.Error($"Failed to save annotation: {ex.Message}");
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+}

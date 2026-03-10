@@ -2,34 +2,23 @@
 @attribute [Authorize(Policy = "RegulatorOnly")]
 @inject IPolicyScenarioService ScenarioService
 @inject NavigationManager Nav
+@inject ToastService Toast
 @using FC.Engine.Domain.Entities
 
 <PageTitle>New Policy Scenario — RegOS™</PageTitle>
 
-<div class="rg-ps-page">
-    <div class="rg-ps-flex-between">
-        <h1 class="rg-page-title">Create Policy Scenario</h1>
-        <button class="rg-btn" @onclick="GoBack">Cancel</button>
-    </div>
+<PageHeader Title="Create Policy Scenario"
+            Subtitle="Define a new what-if scenario with parameter adjustments"
+            BackUrl="/regulator/policies">
+    <SecondaryActions>
+        <button class="fc-btn fc-btn--outline" @onclick="GoBack">Cancel</button>
+    </SecondaryActions>
+</PageHeader>
 
-    <!-- Steps -->
-    <div class="rg-ps-steps">
-        <div class="rg-ps-step @(_step == 1 ? "active" : _step > 1 ? "done" : "")">
-            <span class="rg-ps-step-num">@(_step > 1 ? "✓" : "1")</span> Basic Information
-        </div>
-        <div class="rg-ps-step @(_step == 2 ? "active" : _step > 2 ? "done" : "")">
-            <span class="rg-ps-step-num">@(_step > 2 ? "✓" : "2")</span> Parameters
-        </div>
-        <div class="rg-ps-step @(_step == 3 ? "active" : "")">
-            <span class="rg-ps-step-num">3</span> Review & Create
-        </div>
-    </div>
+<!-- Steps -->
+<ProgressStepper Steps="@_steps" CurrentStep="@_step" CurrentStepChanged="NavigateToStep" Clickable="true" />
 
-    @if (!string.IsNullOrWhiteSpace(_error))
-    {
-        <div class="rg-alert rg-alert-danger">@_error</div>
-    }
-
+<SectionErrorBoundary Title="Couldn't create scenario" ExternalError="@_loadException" OnRetry="() => { _loadException = null; StateHasChanged(); }">
     <!-- Step 1: Basic Info -->
     @if (_step == 1)
     {
@@ -70,7 +59,7 @@
                 </div>
 
                 <div class="rg-ps-flex-end rg-ps-mt">
-                    <button class="rg-btn primary" @onclick="GoToStep2" disabled="@(string.IsNullOrWhiteSpace(_title))">
+                    <button class="fc-btn fc-btn--primary" @onclick="GoToStep2" disabled="@(string.IsNullOrWhiteSpace(_title))">
                         Next: Parameters
                     </button>
                 </div>
@@ -104,7 +93,7 @@
                     <input class="rg-ps-input" placeholder="ALL" @bind="_newParamEntityTypes" />
                 </div>
                 <div class="rg-ps-flex-end">
-                    <button class="rg-btn primary" @onclick="AddParameter"
+                    <button class="fc-btn fc-btn--primary" @onclick="AddParameter"
                             disabled="@(string.IsNullOrWhiteSpace(_newParamCode))">
                         + Add Parameter
                     </button>
@@ -126,15 +115,21 @@
                         <span class="rg-ps-param-arrow">→</span>
                         <div class="rg-ps-param-current">@p.Value</div>
                         <div></div>
-                        <button class="rg-btn sm danger" @onclick="() => _parameters.Remove(p)">Remove</button>
+                        <button class="fc-btn fc-btn--outline fc-btn--sm" style="color:var(--cbn-danger);" @onclick="() => _parameters.Remove(p)">Remove</button>
                     </div>
                 }
             </div>
         }
+        else
+        {
+            <EmptyState Context="data"
+                        Heading="No parameters added"
+                        Description="Add at least one parameter adjustment to proceed to the review step." />
+        }
 
         <div class="rg-ps-flex-between rg-ps-mt">
-            <button class="rg-btn" @onclick="() => _step = 1">Back</button>
-            <button class="rg-btn primary" @onclick="() => _step = 3"
+            <button class="fc-btn fc-btn--outline" @onclick="() => _step = 1">Back</button>
+            <button class="fc-btn fc-btn--primary" @onclick="() => _step = 3"
                     disabled="@(_parameters.Count == 0)">
                 Next: Review
             </button>
@@ -202,14 +197,14 @@
             </div>
 
             <div class="rg-ps-flex-between rg-ps-mt">
-                <button class="rg-btn" @onclick="() => _step = 2">Back</button>
-                <button class="rg-btn primary" @onclick="CreateScenario" disabled="@_creating">
+                <button class="fc-btn fc-btn--outline" @onclick="() => _step = 2">Back</button>
+                <button class="fc-btn fc-btn--primary" @onclick="CreateScenario" disabled="@_creating">
                     @(_creating ? "Creating..." : "Create Scenario")
                 </button>
             </div>
         </div>
     }
-</div>
+</SectionErrorBoundary>
 
 @code {
     [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
@@ -217,8 +212,15 @@
     private int _regulatorId;
     private int _userId;
     private int _step = 1;
-    private string? _error;
+    private Exception? _loadException;
     private bool _creating;
+
+    private readonly List<ProgressStepper.StepItem> _steps = new()
+    {
+        new ProgressStepper.StepItem("Basic Information"),
+        new ProgressStepper.StepItem("Parameters"),
+        new ProgressStepper.StepItem("Review & Create")
+    };
 
     // Step 1
     private string _title = string.Empty;
@@ -241,14 +243,18 @@
         _userId = int.Parse(state.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? "1");
     }
 
+    private void NavigateToStep(int step)
+    {
+        _step = step;
+    }
+
     private void GoToStep2()
     {
         if (string.IsNullOrWhiteSpace(_title))
         {
-            _error = "Title is required.";
+            Toast.Error("Title is required.");
             return;
         }
-        _error = null;
         _step = 2;
     }
 
@@ -257,20 +263,20 @@
         if (string.IsNullOrWhiteSpace(_newParamCode)) return;
         if (_parameters.Any(p => p.Code == _newParamCode))
         {
-            _error = $"Parameter {_newParamCode} already added.";
+            Toast.Error($"Parameter {_newParamCode} already added.");
             return;
         }
-        _error = null;
         _parameters.Add(new ParamEntry(_newParamCode, _newParamValue, _newParamEntityTypes));
         _newParamCode = string.Empty;
         _newParamValue = 0;
         _newParamEntityTypes = string.Empty;
+        Toast.Success("Parameter added.");
     }
 
     private async Task CreateScenario()
     {
         _creating = true;
-        _error = null;
+        _loadException = null;
         try
         {
             var entityTypes = string.IsNullOrWhiteSpace(_targetEntityTypes) ? "ALL" : _targetEntityTypes.Trim();
@@ -283,11 +289,13 @@
                 await ScenarioService.AddParameterAsync(scenarioId, _regulatorId, p.Code, p.Value, applicableTypes, _userId);
             }
 
+            Toast.Success("Scenario created successfully.");
             Nav.NavigateTo($"/regulator/policies/{scenarioId}");
         }
         catch (Exception ex)
         {
-            _error = ex.Message;
+            _loadException = ex;
+            Toast.Error($"Failed to create scenario: {ex.Message}");
         }
         finally
         {

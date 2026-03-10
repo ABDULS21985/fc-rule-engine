@@ -24,9 +24,12 @@
         }
         else
         {
-            @if (!string.IsNullOrWhiteSpace(_error))
+            @if (_submitException is not null)
             {
-                <div class="rg-surveillance-banner rg-surveillance-banner-error">@_error</div>
+                <div class="fc-error-card fc-error-card--visible" style="margin-bottom:1rem;">
+                    <strong>Submission failed</strong>
+                    <p>@_submitException.Message</p>
+                </div>
             }
 
             <div class="rg-controls rg-wb-form">
@@ -65,7 +68,12 @@
                     <textarea rows="3" @bind="_evidenceDescription" placeholder="Describe any records, screenshots, or transaction evidence available."></textarea>
                 </label>
 
-                <button class="rg-btn primary" @onclick="SubmitAsync" disabled="@_submitting">
+                @if (!string.IsNullOrWhiteSpace(_validationError))
+                {
+                    <p style="color:var(--cbn-danger);font-size:0.82rem;">@_validationError</p>
+                }
+
+                <button class="fc-btn fc-btn--primary" @onclick="SubmitAsync" disabled="@_submitting">
                     @(_submitting ? "Submitting..." : "Submit confidentially")
                 </button>
             </div>
@@ -80,21 +88,23 @@
     private string _summary = string.Empty;
     private string _evidenceDescription = string.Empty;
     private bool _submitting;
-    private string? _error;
+    private string? _validationError;
+    private Exception? _submitException;
     private WhistleblowerSubmissionReceipt? _receipt;
 
     private async Task SubmitAsync()
     {
         if (string.IsNullOrWhiteSpace(_summary) || _summary.Trim().Length < 50)
         {
-            _error = "Provide at least 50 characters of detail so the report can be assessed.";
+            _validationError = "Provide at least 50 characters of detail so the report can be assessed.";
             return;
         }
 
         try
         {
             _submitting = true;
-            _error = null;
+            _validationError = null;
+            _submitException = null;
 
             int? institutionId = null;
             if (!string.IsNullOrWhiteSpace(_institutionName))
@@ -121,7 +131,7 @@
         }
         catch (Exception ex)
         {
-            _error = ex.Message;
+            _submitException = ex;
         }
         finally
         {

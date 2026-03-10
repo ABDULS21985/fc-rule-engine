@@ -2,22 +2,17 @@
 @attribute [Authorize(Policy = "RegulatorOnly")]
 @inject IEquivalenceMappingService MappingService
 @inject NavigationManager Nav
+@inject ToastService Toast
 
-<PageTitle>Equivalence Mappings — RegOS™</PageTitle>
+<PageTitle>Equivalence Mappings — RegOS</PageTitle>
 
-<div class="rg-cb-hero">
-    <div class="rg-cb-hero-text">
-        <div class="rg-cb-kicker">Cross-Border Harmonisation</div>
-        <h1 class="rg-cb-hero-title">Equivalence Mappings</h1>
-        <p class="rg-cb-hero-sub">
-            Map regulatory parameters across jurisdictions to identify threshold divergences
-            and ensure consistent compliance treatment.
-        </p>
-    </div>
-    <div class="rg-cb-hero-actions">
-        <button class="rg-btn primary" @onclick='() => Nav.NavigateTo("/regulator/cross-border/mappings/new")'>Create Mapping</button>
-    </div>
-</div>
+<PageHeader Title="Equivalence Mappings"
+            Subtitle="Map regulatory parameters across jurisdictions to identify threshold divergences and ensure consistent compliance treatment."
+            CountBadge="@(!_loading ? _mappings.Count : null)">
+    <PrimaryAction>
+        <button class="fc-btn fc-btn--primary" @onclick='() => Nav.NavigateTo("/regulator/cross-border/mappings/new")'>Create Mapping</button>
+    </PrimaryAction>
+</PageHeader>
 
 <div class="rg-cb-filters">
     <select class="rg-cb-filter-select" @bind="_domainFilter">
@@ -28,59 +23,62 @@
         <option value="FX">FX</option>
         <option value="RISK_MANAGEMENT">Risk Management</option>
     </select>
-    <input class="rg-cb-filter-input" placeholder="Search mappings…" @bind="_searchQuery" @bind:event="oninput" />
-    <button class="rg-btn" @onclick="LoadMappings">Apply</button>
+    <input class="rg-cb-filter-input" placeholder="Search mappings..." @bind="_searchQuery" @bind:event="oninput" />
+    <button class="fc-btn fc-btn--outline" @onclick="LoadMappings">Apply</button>
 </div>
 
-@if (_loading)
-{
-    <p class="rg-muted">Loading mappings…</p>
+<SectionErrorBoundary Title="Couldn't load equivalence mappings" ExternalError="@_loadException" OnRetry="LoadMappings">
+    @if (_loading)
+    {
+        <SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.TableRows" RowCount="6" />
 }
-else if (_mappings.Count == 0)
-{
-    <div class="rg-cb-empty">
-        <div class="rg-cb-empty-icon">🗺</div>
-        <div class="rg-cb-empty-title">No Equivalence Mappings</div>
-        <div class="rg-cb-empty-desc">Create your first cross-border equivalence mapping to compare regulatory parameters across jurisdictions.</div>
-    </div>
-}
-else
-{
-    <div class="rg-table-wrap">
-        <table class="rg-table">
-            <thead>
-                <tr>
-                    <th>Code</th>
-                    <th>Name</th>
-                    <th>Domain</th>
-                    <th>Jurisdictions</th>
-                    <th>Version</th>
-                    <th></th>
-                </tr>
-            </thead>
-            <tbody>
-                @foreach (var m in FilteredMappings)
-                {
+    else if (_mappings.Count == 0)
+    {
+        <EmptyState Context="data"
+                    Heading="No Equivalence Mappings"
+                    Description="Create your first cross-border equivalence mapping to compare regulatory parameters across jurisdictions."
+                    PrimaryActionLabel="Create Mapping"
+                    PrimaryActionHref="/regulator/cross-border/mappings/new" />
+    }
+    else
+    {
+        <div class="rg-table-wrap">
+            <table class="rg-table">
+                <thead>
                     <tr>
-                        <td><code style="font-size:0.78rem;">@m.MappingCode</code></td>
-                        <td><strong>@m.MappingName</strong></td>
-                        <td><StatusPill Label="@m.ConceptDomain.Replace("_", " ")" Variant="info" /></td>
-                        <td>@m.JurisdictionCount</td>
-                        <td>v@m.Version</td>
-                        <td>
-                            <button class="rg-btn" @onclick='() => Nav.NavigateTo($"/regulator/cross-border/mappings/{m.Id}")'>View</button>
-                        </td>
+                        <th>Code</th>
+                        <th>Name</th>
+                        <th>Domain</th>
+                        <th>Jurisdictions</th>
+                        <th>Version</th>
+                        <th></th>
                     </tr>
-                }
-            </tbody>
-        </table>
-    </div>
-}
+                </thead>
+                <tbody>
+                    @foreach (var m in FilteredMappings)
+                    {
+                        <tr>
+                            <td><code style="font-size:0.78rem;">@m.MappingCode</code></td>
+                            <td><strong>@m.MappingName</strong></td>
+                            <td><StatusPill Label="@m.ConceptDomain.Replace("_", " ")" Variant="info" /></td>
+                            <td>@m.JurisdictionCount</td>
+                            <td>v@m.Version</td>
+                            <td>
+                                <button class="fc-btn fc-btn--outline" @onclick='() => Nav.NavigateTo($"/regulator/cross-border/mappings/{m.Id}")'>View</button>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</SectionErrorBoundary>
 
 @code {
     private bool _loading = true;
     private string _domainFilter = "";
     private string _searchQuery = "";
+    private Exception? _loadException;
     private List<EquivalenceMappingSummary> _mappings = [];
 
     private IEnumerable<EquivalenceMappingSummary> FilteredMappings =>
@@ -95,6 +93,7 @@ else
     private async Task LoadMappings()
     {
         _loading = true;
+        _loadException = null;
         StateHasChanged();
 
         try
@@ -103,7 +102,12 @@ else
             var result = await MappingService.ListMappingsAsync(domain);
             _mappings = result.ToList();
         }
-        catch { _mappings = []; }
+        catch (Exception ex)
+        {
+            _loadException = ex;
+            _mappings = [];
+            Toast.Error("Failed to load mappings: " + ex.Message);
+        }
         finally { _loading = false; StateHasChanged(); }
     }
 }

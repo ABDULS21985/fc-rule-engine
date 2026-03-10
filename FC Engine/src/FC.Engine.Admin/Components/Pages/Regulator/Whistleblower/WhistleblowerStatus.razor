@@ -11,15 +11,26 @@
 
         @if (_loading)
         {
-            <p class="rg-muted">Loading case status...</p>
+            <div style="display:flex;flex-direction:column;gap:0.75rem;margin-top:1rem;">
+                <SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Text" Width="60%" />
+                <SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Text" Width="40%" />
+                <SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Text" Width="50%" />
+                <SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Text" Width="45%" />
+            </div>
         }
-        else if (!string.IsNullOrWhiteSpace(_error))
+        else if (_loadException is not null)
         {
-            <div class="rg-surveillance-banner rg-surveillance-banner-error">@_error</div>
+            <div class="fc-error-card fc-error-card--visible" style="margin-top:1rem;">
+                <strong>Could not load case status</strong>
+                <p>@_loadException.Message</p>
+                <button class="fc-btn fc-btn--outline" @onclick="LoadStatus">Retry</button>
+            </div>
         }
         else if (_status is null)
         {
-            <div class="rg-surveillance-banner rg-surveillance-banner-error">No whistleblower case matched that token.</div>
+            <EmptyState Context="search" Size="sm"
+                        Heading="Case not found"
+                        Description="No whistleblower case matched that anonymous token. Please verify your token and try again." />
         }
         else
         {
@@ -49,20 +60,25 @@
     [Parameter] public string AnonymousToken { get; set; } = string.Empty;
 
     private bool _loading = true;
-    private string? _error;
+    private Exception? _loadException;
     private WhistleblowerStatusView? _status;
 
     protected override async Task OnParametersSetAsync()
     {
+        await LoadStatus();
+    }
+
+    private async Task LoadStatus()
+    {
         try
         {
             _loading = true;
-            _error = null;
+            _loadException = null;
             _status = await WhistleblowerService.CheckStatusAsync(AnonymousToken);
         }
         catch (Exception ex)
         {
-            _error = ex.Message;
+            _loadException = ex;
         }
         finally
         {

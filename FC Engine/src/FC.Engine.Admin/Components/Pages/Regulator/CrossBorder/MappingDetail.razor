@@ -2,165 +2,170 @@
 @attribute [Authorize(Policy = "RegulatorOnly")]
 @inject IEquivalenceMappingService MappingService
 @inject NavigationManager Nav
+@inject ToastService Toast
 
-<PageTitle>Mapping Detail — RegOS™</PageTitle>
+<PageTitle>Mapping Detail — RegOS</PageTitle>
 
-@if (_loading)
-{
-    <p class="rg-muted">Loading mapping…</p>
-}
-else if (_mapping is null)
-{
-    <div class="rg-cb-empty">
-        <div class="rg-cb-empty-icon">🔍</div>
-        <div class="rg-cb-empty-title">Mapping Not Found</div>
-        <div class="rg-cb-empty-desc">The requested equivalence mapping could not be found.</div>
-    </div>
-}
-else
-{
-    <div class="rg-cb-hero">
-        <div class="rg-cb-hero-text">
-            <div class="rg-cb-kicker">Equivalence Mapping</div>
-            <h1 class="rg-cb-hero-title">@_mapping.MappingName</h1>
-            <p class="rg-cb-hero-sub">
-                <code>@_mapping.MappingCode</code> · @_mapping.ConceptDomain.Replace("_", " ") · v@_mapping.Version
-                @if (!string.IsNullOrEmpty(_mapping.Description))
-                {
-                    <span> — @_mapping.Description</span>
-                }
-            </p>
-        </div>
-        <div class="rg-cb-hero-actions">
-            <button class="rg-btn" @onclick='() => Nav.NavigateTo("/regulator/cross-border/mappings")'>← Back</button>
-        </div>
-    </div>
-
-    @* ── Tabs ── *@
-    <div class="rg-cb-tabs">
-        <button class="rg-cb-tab @(_activeTab == "chart" ? "rg-cb-tab--active" : "")" @onclick='() => _activeTab = "chart"'>Threshold Comparison</button>
-        <button class="rg-cb-tab @(_activeTab == "table" ? "rg-cb-tab--active" : "")" @onclick='() => _activeTab = "table"'>Entry Details</button>
-    </div>
-
-    @if (_activeTab == "chart")
+<SectionErrorBoundary Title="Couldn't load mapping details" ExternalError="@_loadException" OnRetry="ReloadAsync">
+    @if (_loading)
     {
-        @* ── Threshold Comparison Bar Chart ── *@
-        @if (_thresholds.Count > 0)
-        {
-            var maxVal = _thresholds.Max(t => t.Threshold);
-            var avg = _thresholds.Average(t => (double)t.Threshold);
-
-            <div class="rg-card" style="padding:1rem;">
-                <div class="rg-cb-section-head">
-                    <h3 class="rg-cb-section-title">@_mapping.MappingName — Cross-Border Comparison</h3>
-                </div>
-
-                <div class="rg-cb-bar-chart" style="align-items:flex-end;position:relative;">
-                    @* Average reference line *@
-                    @{
-                        var avgPct = maxVal > 0 ? (decimal)avg / maxVal * 100 : 0;
-                    }
-                    <div style="position:absolute;left:0;right:0;bottom:@(avgPct.ToString("F0"))%;pointer-events:none;">
-                        <div class="rg-cb-bar-ref-line">
-                            <span class="rg-cb-bar-ref-label">Avg: @avg.ToString("F1")%</span>
-                        </div>
-                    </div>
-
-                    @foreach (var t in _thresholds.OrderBy(t => t.Threshold))
-                    {
-                        var heightPct = maxVal > 0 ? t.Threshold / maxVal * 100 : 0;
-                        var color = GetFrameworkColor(t.RegulatoryFramework);
-                        <div class="rg-cb-bar-col">
-                            <div class="rg-cb-bar" style="height:@(heightPct.ToString("F0"))%;background:@color;" title="@t.JurisdictionCode: @t.Threshold%">
-                                <span class="rg-cb-bar-value">@t.Threshold%</span>
-                            </div>
-                            <span class="rg-cb-bar-label">
-                                @GetFlag(t.JurisdictionCode) @t.JurisdictionCode
-                            </span>
-                        </div>
-                    }
-                </div>
-
-                @* Legend *@
-                <div style="display:flex;gap:1rem;justify-content:center;margin-top:0.75rem;">
-                    <div style="display:flex;align-items:center;gap:0.3rem;font-size:0.74rem;color:var(--rg-muted);">
-                        <span style="width:12px;height:12px;border-radius:2px;background:#0f766e;display:inline-block;"></span> Basel III
-                    </div>
-                    <div style="display:flex;align-items:center;gap:0.3rem;font-size:0.74rem;color:var(--rg-muted);">
-                        <span style="width:12px;height:12px;border-radius:2px;background:#d97706;display:inline-block;"></span> Basel III Transitional
-                    </div>
-                    <div style="display:flex;align-items:center;gap:0.3rem;font-size:0.74rem;color:var(--rg-muted);">
-                        <span style="width:12px;height:12px;border-radius:2px;background:#b91c1c;display:inline-block;"></span> Basel II
-                    </div>
-                </div>
-            </div>
-        }
+        <SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Card" />
+            <SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Block" Height="300px" />
+}
+    else if (_mapping is null)
+    {
+        <EmptyState Context="data"
+                    Heading="Mapping Not Found"
+                    Description="The requested equivalence mapping could not be found."
+                    PrimaryActionLabel="Back to Mappings"
+                    PrimaryActionHref="/regulator/cross-border/mappings" />
     }
     else
     {
-        @* ── Entry Table ── *@
-        <div class="rg-table-wrap">
-            <table class="rg-table">
-                <thead>
-                    <tr>
-                        <th>Jurisdiction</th>
-                        <th>Parameter</th>
-                        <th>Threshold</th>
-                        <th>Unit</th>
-                        <th>Calculation Basis</th>
-                        <th>Framework</th>
-                        <th>Return</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @foreach (var e in _mapping.Entries)
-                    {
-                        <tr>
-                            <td>
-                                <FlagBadge Code="@e.JurisdictionCode" Label="@e.CountryName" />
-                            </td>
-                            <td>
-                                <div><strong>@e.LocalParameterName</strong></div>
-                                <div style="font-size:0.72rem;color:var(--rg-muted);font-family:monospace;">@e.LocalParameterCode</div>
-                            </td>
-                            <td style="font-weight:700;">@e.LocalThreshold@(e.ThresholdUnit == "PERCENTAGE" ? "%" : " " + e.ThresholdUnit)</td>
-                            <td>@e.ThresholdUnit</td>
-                            <td style="font-size:0.8rem;">@e.CalculationBasis</td>
-                            <td>
-                                @{
-                                    var fwClass = e.RegulatoryFramework.Contains("III") ? "basel-iii"
-                                        : e.RegulatoryFramework.Contains("II") ? "basel-ii"
-                                        : "basel-iii-transitional";
-                                }
-                                <span class="rg-cb-framework rg-cb-framework--@fwClass">
-                                    @e.RegulatoryFramework.Replace("_", " ")
-                                </span>
-                            </td>
-                            <td style="font-size:0.78rem;color:var(--rg-muted);">
-                                @(e.ReturnFormCode ?? "—")
-                                @if (!string.IsNullOrEmpty(e.ReturnLineReference))
-                                {
-                                    <span>/@e.ReturnLineReference</span>
-                                }
-                            </td>
-                        </tr>
-                    }
-                </tbody>
-            </table>
+        <PageHeader Title="@_mapping.MappingName"
+                    Subtitle="@($"{_mapping.MappingCode} · {_mapping.ConceptDomain.Replace("_", " ")} · v{_mapping.Version}{(!string.IsNullOrEmpty(_mapping.Description) ? $" — {_mapping.Description}" : "")}")"
+                    BackUrl="/regulator/cross-border/mappings">
+        </PageHeader>
+
+        @* -- Tabs -- *@
+        <div class="rg-cb-tabs">
+            <button class="rg-cb-tab @(_activeTab == "chart" ? "rg-cb-tab--active" : "")" @onclick='() => _activeTab = "chart"'>Threshold Comparison</button>
+            <button class="rg-cb-tab @(_activeTab == "table" ? "rg-cb-tab--active" : "")" @onclick='() => _activeTab = "table"'>Entry Details</button>
         </div>
+
+        @if (_activeTab == "chart")
+        {
+            @* -- Threshold Comparison Bar Chart -- *@
+            @if (_thresholds.Count > 0)
+            {
+                var maxVal = _thresholds.Max(t => t.Threshold);
+                var avg = _thresholds.Average(t => (double)t.Threshold);
+
+                <div class="rg-card" style="padding:1rem;">
+                    <div class="rg-cb-section-head">
+                        <h3 class="rg-cb-section-title">@_mapping.MappingName — Cross-Border Comparison</h3>
+                    </div>
+
+                    <div class="rg-cb-bar-chart" style="align-items:flex-end;position:relative;">
+                        @* Average reference line *@
+                        @{
+                            var avgPct = maxVal > 0 ? (decimal)avg / maxVal * 100 : 0;
+                        }
+                        <div style="position:absolute;left:0;right:0;bottom:@(avgPct.ToString("F0"))%;pointer-events:none;">
+                            <div class="rg-cb-bar-ref-line">
+                                <span class="rg-cb-bar-ref-label">Avg: @avg.ToString("F1")%</span>
+                            </div>
+                        </div>
+
+                        @foreach (var t in _thresholds.OrderBy(t => t.Threshold))
+                        {
+                            var heightPct = maxVal > 0 ? t.Threshold / maxVal * 100 : 0;
+                            var color = GetFrameworkColor(t.RegulatoryFramework);
+                            <div class="rg-cb-bar-col">
+                                <div class="rg-cb-bar" style="height:@(heightPct.ToString("F0"))%;background:@color;" title="@t.JurisdictionCode: @t.Threshold%">
+                                    <span class="rg-cb-bar-value">@t.Threshold%</span>
+                                </div>
+                                <span class="rg-cb-bar-label">
+                                    @GetFlag(t.JurisdictionCode) @t.JurisdictionCode
+                                </span>
+                            </div>
+                        }
+                    </div>
+
+                    @* Legend *@
+                    <div style="display:flex;gap:1rem;justify-content:center;margin-top:0.75rem;">
+                        <div style="display:flex;align-items:center;gap:0.3rem;font-size:0.74rem;color:var(--rg-muted);">
+                            <span style="width:12px;height:12px;border-radius:2px;background:#0f766e;display:inline-block;"></span> Basel III
+                        </div>
+                        <div style="display:flex;align-items:center;gap:0.3rem;font-size:0.74rem;color:var(--rg-muted);">
+                            <span style="width:12px;height:12px;border-radius:2px;background:#d97706;display:inline-block;"></span> Basel III Transitional
+                        </div>
+                        <div style="display:flex;align-items:center;gap:0.3rem;font-size:0.74rem;color:var(--rg-muted);">
+                            <span style="width:12px;height:12px;border-radius:2px;background:#b91c1c;display:inline-block;"></span> Basel II
+                        </div>
+                    </div>
+                </div>
+            }
+            else
+            {
+                <EmptyState Context="data"
+                            Heading="No Threshold Data"
+                            Description="No cross-border threshold comparison data is available for this mapping." />
+            }
+        }
+        else
+        {
+            @* -- Entry Table -- *@
+            <div class="rg-table-wrap">
+                <table class="rg-table">
+                    <thead>
+                        <tr>
+                            <th>Jurisdiction</th>
+                            <th>Parameter</th>
+                            <th>Threshold</th>
+                            <th>Unit</th>
+                            <th>Calculation Basis</th>
+                            <th>Framework</th>
+                            <th>Return</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var e in _mapping.Entries)
+                        {
+                            <tr>
+                                <td>
+                                    <FlagBadge Code="@e.JurisdictionCode" Label="@e.CountryName" />
+                                </td>
+                                <td>
+                                    <div><strong>@e.LocalParameterName</strong></div>
+                                    <div style="font-size:0.72rem;color:var(--rg-muted);font-family:monospace;">@e.LocalParameterCode</div>
+                                </td>
+                                <td style="font-weight:700;">@e.LocalThreshold@(e.ThresholdUnit == "PERCENTAGE" ? "%" : " " + e.ThresholdUnit)</td>
+                                <td>@e.ThresholdUnit</td>
+                                <td style="font-size:0.8rem;">@e.CalculationBasis</td>
+                                <td>
+                                    @{
+                                        var fwClass = e.RegulatoryFramework.Contains("III") ? "basel-iii"
+                                            : e.RegulatoryFramework.Contains("II") ? "basel-ii"
+                                            : "basel-iii-transitional";
+                                    }
+                                    <span class="rg-cb-framework rg-cb-framework--@fwClass">
+                                        @e.RegulatoryFramework.Replace("_", " ")
+                                    </span>
+                                </td>
+                                <td style="font-size:0.78rem;color:var(--rg-muted);">
+                                    @(e.ReturnFormCode ?? "—")
+                                    @if (!string.IsNullOrEmpty(e.ReturnLineReference))
+                                    {
+                                        <span>/@e.ReturnLineReference</span>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
     }
-}
+</SectionErrorBoundary>
 
 @code {
     [Parameter] public long MappingId { get; set; }
 
     private bool _loading = true;
     private string _activeTab = "chart";
+    private Exception? _loadException;
     private EquivalenceMappingDetail? _mapping;
     private List<JurisdictionThreshold> _thresholds = [];
 
-    protected override async Task OnInitializedAsync()
+    protected override async Task OnInitializedAsync() => await ReloadAsync();
+
+    private async Task ReloadAsync()
     {
+        _loading = true;
+        _loadException = null;
+        StateHasChanged();
+
         try
         {
             _mapping = await MappingService.GetMappingAsync(MappingId);
@@ -169,8 +174,12 @@ else
                 _thresholds = (await MappingService.GetCrossBorderComparisonAsync(_mapping.MappingCode)).ToList();
             }
         }
-        catch { _mapping = null; }
-        finally { _loading = false; }
+        catch (Exception ex)
+        {
+            _loadException = ex;
+            _mapping = null;
+        }
+        finally { _loading = false; StateHasChanged(); }
     }
 
     private static string GetFrameworkColor(string fw) => fw switch

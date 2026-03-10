@@ -1,0 +1,336 @@
+@using FC.Engine.Domain.Entities
+@inject IExaminationWorkspaceService WorkspaceService
+@inject ToastService Toast
+
+<div class="fc-exam-form-row">
+    @* ── Evidence Requests (left column) ── *@
+    <div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:var(--space-3,0.75rem)">
+            <h4 class="rg-subsection-title">Evidence Requests</h4>
+            <button class="fc-btn fc-btn--primary fc-btn--sm" @onclick="() => _showCreateRequest = true" type="button">Create Request</button>
+        </div>
+
+        @if (EvidenceRequests.Count == 0)
+        {
+            <EmptyState Context="data"
+                        Heading="No evidence requests"
+                        Description="Request specific data or documents from institutions."
+                        PrimaryActionLabel="Create Request"
+                        OnPrimaryAction="() => _showCreateRequest = true"
+                        Size="sm" />
+        }
+        else
+        {
+            <DataTable Items="EvidenceRequests" PageSize="10" Striped="true">
+                <ChildContent>
+                    <DataColumn TItem="ExaminationEvidenceRequest" Title="Requested" Width="110px"
+                                SortKey="@(r => r.RequestedAt)">
+                        <CellTemplate>@context.RequestedAt.ToString("dd MMM yyyy")</CellTemplate>
+                    </DataColumn>
+                    <DataColumn TItem="ExaminationEvidenceRequest" Title="Title"
+                                SortKey="@(r => r.Title)">
+                        <CellTemplate>@context.Title</CellTemplate>
+                    </DataColumn>
+                    <DataColumn TItem="ExaminationEvidenceRequest" Title="Finding" Width="140px">
+                        <CellTemplate>@LinkedFindingTitle(context.FindingId)</CellTemplate>
+                    </DataColumn>
+                    <DataColumn TItem="ExaminationEvidenceRequest" Title="Status" Width="100px"
+                                SortKey="@(r => r.Status)">
+                        <CellTemplate>
+                            <span class="rg-badge @RequestStatusClass(context.Status)">@context.Status</span>
+                        </CellTemplate>
+                    </DataColumn>
+                    <DataColumn TItem="ExaminationEvidenceRequest" Title="Due Date" Width="110px"
+                                SortKey="@(r => r.DueAt ?? DateTime.MaxValue)">
+                        <CellTemplate>@(context.DueAt?.ToString("dd MMM yyyy") ?? "\u2014")</CellTemplate>
+                    </DataColumn>
+                </ChildContent>
+            </DataTable>
+        }
+    </div>
+
+    @* ── Evidence Files (right column) ── *@
+    <div>
+        <div style="margin-bottom:var(--space-3,0.75rem)">
+            <h4 class="rg-subsection-title">Evidence Files</h4>
+        </div>
+
+        <div class="rg-card" style="margin-bottom: var(--space-4, 1rem);">
+            <h5 class="rg-subsection-title" style="font-size: 0.85rem; margin-bottom: var(--space-3, 0.75rem);">Upload Evidence</h5>
+            <div class="fc-exam-form-row">
+                <FormField Label="Link Finding" HintText="Optional — associate with a finding">
+                    <select class="fc-input" @bind="_uploadFindingId">
+                        <option value="">— None —</option>
+                        @foreach (var f in Findings)
+                        {
+                            <option value="@f.Id">@f.Title</option>
+                        }
+                    </select>
+                </FormField>
+                <FormField Label="Link Request" HintText="Optional — associate with an evidence request">
+                    <select class="fc-input" @bind="_uploadRequestId">
+                        <option value="">— None —</option>
+                        @foreach (var r in EvidenceRequests)
+                        {
+                            <option value="@r.Id">@r.Title</option>
+                        }
+                    </select>
+                </FormField>
+            </div>
+            <div class="fc-exam-form-row">
+                <FormField Label="Evidence Kind">
+                    <select class="fc-input" @bind="_uploadKind">
+                        @foreach (var kind in Enum.GetValues<ExaminationEvidenceKind>())
+                        {
+                            <option value="@kind">@kind</option>
+                        }
+                    </select>
+                </FormField>
+                <FormField Label="Uploader Role">
+                    <select class="fc-input" @bind="_uploadRole">
+                        @foreach (var role in Enum.GetValues<ExaminationEvidenceUploaderRole>())
+                        {
+                            <option value="@role">@role</option>
+                        }
+                    </select>
+                </FormField>
+            </div>
+            <FormField Label="Notes" HintText="Optional — additional context for the file">
+                <input class="fc-input" type="text" @bind="_uploadNotes" placeholder="e.g. Board minutes Q4 2025" />
+            </FormField>
+            <div style="margin-top: var(--space-3, 0.75rem);">
+                <InputFile OnChange="HandleFileSelected" accept="*/*" />
+                <p class="rg-muted" style="margin-top: var(--space-2, 0.5rem); font-size: 0.8rem;">
+                    Files are timestamped, SHA-256 hashed, and stored immutably. Max 25 MB.
+                </p>
+            </div>
+            @if (_uploading)
+            {
+                <div style="margin-top: var(--space-2, 0.5rem);">
+                    <span class="fc-spinner fc-spinner--sm" aria-hidden="true"></span>
+                    <span class="rg-muted">Uploading...</span>
+                </div>
+            }
+        </div>
+
+        @if (EvidenceFiles.Count == 0)
+        {
+            <EmptyState Context="data"
+                        Heading="No evidence files"
+                        Description="Upload documents and data files linked to specific findings."
+                        Size="sm" />
+        }
+        else
+        {
+            <DataTable Items="EvidenceFiles" PageSize="10" Striped="true">
+                <ChildContent>
+                    <DataColumn TItem="ExaminationEvidenceFile" Title="Uploaded" Width="130px"
+                                SortKey="@(f => f.UploadedAt)">
+                        <CellTemplate>@context.UploadedAt.ToString("dd MMM yyyy HH:mm")</CellTemplate>
+                    </DataColumn>
+                    <DataColumn TItem="ExaminationEvidenceFile" Title="File Name"
+                                SortKey="@(f => f.FileName)">
+                        <CellTemplate>@context.FileName</CellTemplate>
+                    </DataColumn>
+                    <DataColumn TItem="ExaminationEvidenceFile" Title="Kind" Width="130px"
+                                SortKey="@(f => f.Kind)">
+                        <CellTemplate>@context.Kind</CellTemplate>
+                    </DataColumn>
+                    <DataColumn TItem="ExaminationEvidenceFile" Title="Finding" Width="140px">
+                        <CellTemplate>@LinkedFindingTitle(context.FindingId)</CellTemplate>
+                    </DataColumn>
+                    <DataColumn TItem="ExaminationEvidenceFile" Title="Hash" Width="120px">
+                        <CellTemplate><code>@ShortHash(context.FileHash)</code></CellTemplate>
+                    </DataColumn>
+                    <DataColumn TItem="ExaminationEvidenceFile" Title="" Width="80px">
+                        <CellTemplate>
+                            <a class="fc-btn fc-btn--ghost fc-btn--sm" href="/regulator/workspace/@ProjectId/evidence/@context.Id" target="_blank">Download</a>
+                        </CellTemplate>
+                    </DataColumn>
+                </ChildContent>
+            </DataTable>
+        }
+    </div>
+</div>
+
+@* ── Create Evidence Request Modal ── *@
+<AppModal @bind-Visible="_showCreateRequest"
+          Title="Create Evidence Request"
+          Subtitle="Request specific data or documents from an institution">
+    <ChildContent>
+        <FormField Label="Linked Finding" HintText="Optional — associate this request with a finding">
+            <select class="fc-input" @bind="_reqFindingId">
+                <option value="">— None —</option>
+                @foreach (var f in Findings)
+                {
+                    <option value="@f.Id">@f.Title</option>
+                }
+            </select>
+        </FormField>
+
+        <FormField Label="Title" IsRequired="true">
+            <input class="fc-input" type="text" @bind="_reqTitle" placeholder="Brief description of what is requested" />
+        </FormField>
+
+        <FormField Label="Request Text" IsRequired="true">
+            <textarea class="fc-input" rows="3" @bind="_reqText" placeholder="Detailed description of the evidence required..."></textarea>
+        </FormField>
+
+        <FormField Label="Requested Items" HintText="Comma-separated list of specific items needed">
+            <textarea class="fc-input" rows="2" @bind="_reqItemsText" placeholder="e.g. Board minutes, Risk report, Compliance checklist"></textarea>
+        </FormField>
+
+        <FormField Label="Due Date">
+            <input class="fc-input" type="date" @bind="_reqDueAt" />
+        </FormField>
+    </ChildContent>
+    <FooterContent>
+        <button class="fc-btn fc-btn--ghost" @onclick="() => _showCreateRequest = false" type="button" disabled="@_creatingRequest">Cancel</button>
+        <button class="fc-btn fc-btn--primary @(_creatingRequest ? "fc-btn--loading" : "")"
+                @onclick="CreateEvidenceRequest" disabled="@_creatingRequest"
+                aria-busy="@(_creatingRequest ? "true" : null)" type="button">
+            @if (_creatingRequest)
+            {
+                <span class="fc-spinner fc-spinner--sm fc-spinner--white" aria-hidden="true"></span>
+            }
+            Create
+        </button>
+    </FooterContent>
+</AppModal>
+
+@code {
+    [Parameter] public IReadOnlyList<ExaminationEvidenceRequest> EvidenceRequests { get; set; } = Array.Empty<ExaminationEvidenceRequest>();
+    [Parameter] public IReadOnlyList<ExaminationEvidenceFile> EvidenceFiles { get; set; } = Array.Empty<ExaminationEvidenceFile>();
+    [Parameter] public IReadOnlyList<ExaminationFinding> Findings { get; set; } = Array.Empty<ExaminationFinding>();
+    [Parameter] public EventCallback OnRefresh { get; set; }
+    [Parameter] public Guid TenantId { get; set; }
+    [Parameter] public int ProjectId { get; set; }
+    [Parameter] public int UserId { get; set; }
+
+    // Create request form
+    private bool _showCreateRequest;
+    private bool _creatingRequest;
+    private string _reqFindingId = string.Empty;
+    private string _reqTitle = string.Empty;
+    private string _reqText = string.Empty;
+    private string _reqItemsText = string.Empty;
+    private DateTime? _reqDueAt;
+
+    // Upload form
+    private bool _uploading;
+    private string _uploadFindingId = string.Empty;
+    private string _uploadRequestId = string.Empty;
+    private ExaminationEvidenceKind _uploadKind = ExaminationEvidenceKind.SupportingDocument;
+    private ExaminationEvidenceUploaderRole _uploadRole = ExaminationEvidenceUploaderRole.Examiner;
+    private string? _uploadNotes;
+
+    private async Task CreateEvidenceRequest()
+    {
+        if (string.IsNullOrWhiteSpace(_reqTitle) || string.IsNullOrWhiteSpace(_reqText))
+        {
+            Toast.Error("Title and Request Text are required.");
+            return;
+        }
+
+        _creatingRequest = true;
+        try
+        {
+            int? findingId = int.TryParse(_reqFindingId, out var fid) ? fid : null;
+            var items = string.IsNullOrWhiteSpace(_reqItemsText)
+                ? new List<string>()
+                : _reqItemsText.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
+
+            var request = new ExaminationEvidenceRequestCreateRequest
+            {
+                FindingId = findingId,
+                Title = _reqTitle,
+                RequestText = _reqText,
+                RequestedItems = items,
+                DueAt = _reqDueAt
+            };
+
+            await WorkspaceService.CreateEvidenceRequest(TenantId, ProjectId, request, UserId);
+            Toast.Success("Evidence request created.", "Request Created");
+
+            // Reset form
+            _reqFindingId = string.Empty;
+            _reqTitle = string.Empty;
+            _reqText = string.Empty;
+            _reqItemsText = string.Empty;
+            _reqDueAt = null;
+            _showCreateRequest = false;
+
+            await OnRefresh.InvokeAsync();
+        }
+        catch (Exception ex)
+        {
+            Toast.Error($"Failed to create request: {ex.Message}", "Request Failed");
+        }
+        finally
+        {
+            _creatingRequest = false;
+        }
+    }
+
+    private async Task HandleFileSelected(InputFileChangeEventArgs args)
+    {
+        _uploading = true;
+        try
+        {
+            var file = args.File;
+            await using var stream = file.OpenReadStream(maxAllowedSize: 25 * 1024 * 1024);
+
+            int? findingId = int.TryParse(_uploadFindingId, out var fid) ? fid : null;
+            int? requestId = int.TryParse(_uploadRequestId, out var rid) ? rid : null;
+
+            await WorkspaceService.UploadEvidence(
+                TenantId,
+                ProjectId,
+                findingId,
+                requestId,
+                null,
+                null,
+                file.Name,
+                file.ContentType,
+                file.Size,
+                stream,
+                _uploadKind,
+                _uploadRole,
+                _uploadNotes,
+                UserId);
+
+            Toast.Success($"Evidence file \"{file.Name}\" uploaded.", "Upload Complete");
+
+            // Reset upload form
+            _uploadNotes = null;
+            _uploadFindingId = string.Empty;
+            _uploadRequestId = string.Empty;
+
+            await OnRefresh.InvokeAsync();
+        }
+        catch (Exception ex)
+        {
+            Toast.Error($"Upload failed: {ex.Message}", "Upload Failed");
+        }
+        finally
+        {
+            _uploading = false;
+        }
+    }
+
+    private string LinkedFindingTitle(int? findingId)
+        => findingId.HasValue
+            ? Findings.FirstOrDefault(x => x.Id == findingId.Value)?.Title ?? $"Finding #{findingId.Value}"
+            : "\u2014";
+
+    private static string ShortHash(string? hash)
+        => string.IsNullOrWhiteSpace(hash) || hash.Length < 12 ? (hash ?? "") : $"{hash[..12]}\u2026";
+
+    private static string RequestStatusClass(ExaminationEvidenceRequestStatus status) => status switch
+    {
+        ExaminationEvidenceRequestStatus.Open => "rg-status-amber",
+        ExaminationEvidenceRequestStatus.Fulfilled => "rg-status-green",
+        ExaminationEvidenceRequestStatus.Cancelled => "rg-status-gray",
+        _ => ""
+    };
+}

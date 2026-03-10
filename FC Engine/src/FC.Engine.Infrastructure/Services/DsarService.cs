@@ -159,6 +159,9 @@ public class DsarService : IDsarService
         var anonymisedEmail = $"anonymised_{dsar.RequestedBy}@deleted.regos.app";
         var anonymisedUsername = $"anonymised_{dsar.RequestedBy}";
 
+        var strategy = _db.Database.CreateExecutionStrategy();
+        await strategy.ExecuteAsync(async () =>
+        {
         await using var tx = await _db.Database.BeginTransactionAsync(ct);
 
         var portalUser = await _db.PortalUsers
@@ -246,6 +249,7 @@ public class DsarService : IDsarService
 
         await _db.SaveChangesAsync(ct);
         await tx.CommitAsync(ct);
+        });
 
         await _auditLogger.Log(
             "DataSubjectRequest",

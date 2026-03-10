@@ -2,46 +2,54 @@
 @attribute [Authorize(Policy = "RegulatorOnly")]
 @inject IHeatmapQueryService HeatmapService
 @inject NavigationManager Nav
+@inject ToastService Toast
 @using FC.Engine.Domain.Abstractions
 @using FC.Engine.Domain.Enums
 @using FC.Engine.Domain.Models
 @using Microsoft.AspNetCore.Authorization
 
-<PageTitle>Sector Risk Heatmap — RegOS™ SupTech</PageTitle>
+<PageTitle>Sector Risk Heatmap</PageTitle>
 
-<div class="rg-page">
-    <div class="rg-page-header rg-border-bottom">
-        <div>
-            <h1 class="rg-page-title">Sector Risk Heatmap</h1>
-            <p class="rg-muted">
-                @_cells.Count supervised entities · Period: @_periodCode
-            </p>
-        </div>
-        <div class="rg-header-controls">
-            <select @bind="_institutionTypeFilter" class="rg-select">
-                <option value="">All Institution Types</option>
-                <option value="DMB">Deposit Money Banks</option>
-                <option value="MFB">Microfinance Banks</option>
-                <option value="PSP">Payment Service Providers</option>
-                <option value="BDC">Bureau de Change</option>
-                <option value="PFA">Pension Fund Administrators</option>
-                <option value="INSURER">Insurers</option>
-            </select>
-            <button class="rg-btn primary" @onclick="LoadDataAsync">Refresh</button>
-        </div>
-    </div>
+<PageHeader Title="Sector Risk Heatmap"
+            Subtitle="@($"{_cells.Count} supervised entities · Period: {_periodCode}")"
+            CountBadge="@(!_loading ? _cells.Count : null)">
+    <PrimaryAction>
+        <button class="fc-btn fc-btn--primary" @onclick="LoadDataAsync">Refresh</button>
+    </PrimaryAction>
+    <SecondaryActions>
+        <select @bind="_institutionTypeFilter" class="rg-select">
+            <option value="">All Institution Types</option>
+            <option value="DMB">Deposit Money Banks</option>
+            <option value="MFB">Microfinance Banks</option>
+            <option value="PSP">Payment Service Providers</option>
+            <option value="BDC">Bureau de Change</option>
+            <option value="PFA">Pension Fund Administrators</option>
+            <option value="INSURER">Insurers</option>
+        </select>
+    </SecondaryActions>
+</PageHeader>
 
+<SectionErrorBoundary Title="Couldn't load heatmap data" ExternalError="@_loadException" OnRetry="LoadDataAsync">
     @if (_loading)
     {
-        <div class="rg-spinner-center"><div class="rg-spinner"></div></div>
-    }
-    else if (!string.IsNullOrWhiteSpace(_error))
+        <div class="rg-risk-summary-row">
+                @for (var i = 0; i < 4; i++)
+                {
+                    <SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Card" />
+                }
+            </div>
+            <SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Block" Height="300px" />
+}
+    else if (_cells.Count == 0)
     {
-        <div class="rg-alert rg-alert-danger">@_error</div>
+        <EmptyState Context="data"
+                    Heading="No heatmap data"
+                    Description="No institution risk data is available for this period."
+                    PrimaryActionLabel="Refresh"
+                    OnPrimaryAction="LoadDataAsync" />
     }
     else
     {
-        <!-- Risk band summary cards -->
         <div class="rg-risk-summary-row">
             @foreach (var band in new[] { "Critical", "Red", "Amber", "Green" })
             {
@@ -54,7 +62,6 @@
             }
         </div>
 
-        <!-- Heatmap grid -->
         <div class="rg-heatmap-container">
             @foreach (var cell in _cells.OrderByDescending(c => c.CompositeScore))
             {
@@ -89,7 +96,6 @@
             }
         </div>
 
-        <!-- Legend -->
         <div class="rg-heatmap-legend">
             <span class="rg-legend-item"><span class="rg-legend-dot rg-band-green"></span> Green (≤1.5): Stable</span>
             <span class="rg-legend-item"><span class="rg-legend-dot rg-band-amber"></span> Amber (1.5–2.5): Watch</span>
@@ -98,14 +104,14 @@
             <span class="rg-legend-item rg-muted">Bubble size = total assets (log scale)</span>
         </div>
     }
-</div>
+</SectionErrorBoundary>
 
 @code {
     [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
 
     private IReadOnlyList<HeatmapCell> _cells = Array.Empty<HeatmapCell>();
     private bool _loading = true;
-    private string? _error;
+    private Exception? _loadException;
     private string? _institutionTypeFilter;
     private string _periodCode = string.Empty;
     private string _regulatorCode = "CBN";
@@ -125,7 +131,7 @@
     private async Task LoadDataAsync()
     {
         _loading = true;
-        _error   = null;
+        _loadException = null;
         try
         {
             _cells = await HeatmapService.GetSectorHeatmapAsync(
@@ -133,7 +139,7 @@
         }
         catch (Exception ex)
         {
-            _error = $"Could not load heatmap data: {ex.Message}";
+            _loadException = ex;
         }
         finally
         {
@@ -142,7 +148,7 @@
     }
 
     private void DrillDown(int institutionId)
-        => Nav.NavigateTo($"/supervisor/institution/{institutionId}?period={_periodCode}");
+        => Nav.NavigateTo($"/regulator/institution/{institutionId}?period={_periodCode}");
 
     private static string DeriveCurrentPeriod()
     {

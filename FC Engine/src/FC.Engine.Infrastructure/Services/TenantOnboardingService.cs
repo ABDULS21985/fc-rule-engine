@@ -35,281 +35,320 @@ public class TenantOnboardingService : ITenantOnboardingService
 
     public async Task<TenantOnboardingResult> OnboardTenant(TenantOnboardingRequest request, CancellationToken ct = default)
     {
-        var result = new TenantOnboardingResult();
-
-        await using var transaction = await _db.Database.BeginTransactionAsync(ct);
         try
         {
-            // ── Step 1: Validate ──
-            var slug = ResolveSlugCandidate(request);
-            if (await _db.Tenants.AnyAsync(t => t.TenantSlug == slug, ct))
+            var strategy = _db.Database.CreateExecutionStrategy();
+            var execution = await strategy.ExecuteAsync(async () =>
             {
-                if (!string.IsNullOrWhiteSpace(request.TenantSlug))
-                {
-                    result.Errors.Add($"Tenant slug '{slug}' is already in use");
-                    return result;
-                }
+                var result = new TenantOnboardingResult();
 
-                slug = await EnsureUniqueSlug(slug, ct);
-            }
-
-            if (await _db.Set<InstitutionUser>().AnyAsync(u => u.Email == request.AdminEmail, ct))
-            {
-                result.Errors.Add($"Email '{request.AdminEmail}' is already registered");
-                return result;
-            }
-
-            var licenceTypes = await _db.LicenceTypes
-                .Where(lt => request.LicenceTypeCodes.Contains(lt.Code) && lt.IsActive)
-                .ToListAsync(ct);
-
-            if (licenceTypes.Count != request.LicenceTypeCodes.Count)
-            {
-                var found = licenceTypes.Select(lt => lt.Code).ToHashSet();
-                var missing = request.LicenceTypeCodes.Where(c => !found.Contains(c));
-                result.Errors.Add($"Invalid licence type codes: {string.Join(", ", missing)}");
-                return result;
-            }
-
-            var selectedPlanCode = string.IsNullOrWhiteSpace(request.SubscriptionPlanCode)
-                ? "STARTER"
-                : request.SubscriptionPlanCode.Trim().ToUpperInvariant();
-
-            var selectedPlan = await _db.SubscriptionPlans
-                .FirstOrDefaultAsync(
-                    p => p.PlanCode == selectedPlanCode && p.IsActive,
-                    ct);
-
-            if (selectedPlan is null)
-            {
-                result.Errors.Add($"Invalid subscription plan code: {selectedPlanCode}");
-                return result;
-            }
-
-            if (request.ParentTenantId.HasValue)
-            {
-                var parentTenant = await _db.Tenants
-                    .AsNoTracking()
-                    .FirstOrDefaultAsync(t => t.TenantId == request.ParentTenantId.Value, ct);
-
-                if (parentTenant is null)
-                {
-                    result.Errors.Add($"Parent tenant '{request.ParentTenantId}' not found.");
-                    return result;
-                }
-
-                if (parentTenant.TenantType != TenantType.WhiteLabelPartner)
-                {
-                    result.Errors.Add("Parent tenant must be a white-label partner.");
-                    return result;
-                }
-            }
-
-            var jurisdictionCode = string.IsNullOrWhiteSpace(request.JurisdictionCode)
-                ? "NG"
-                : request.JurisdictionCode.Trim().ToUpperInvariant();
-
-            var jurisdiction = await _db.Jurisdictions
-                .FirstOrDefaultAsync(j => j.CountryCode == jurisdictionCode, ct);
-
-            if (jurisdiction is null
-                && jurisdictionCode == "NG"
-                && !await _db.Jurisdictions.AnyAsync(ct))
-            {
-                jurisdiction = new Jurisdiction
-                {
-                    CountryCode = "NG",
-                    CountryName = "Nigeria",
-                    Currency = "NGN",
-                    Timezone = "Africa/Lagos",
-                    RegulatoryBodies = "[\"CBN\",\"NDIC\",\"SEC\",\"NAICOM\",\"PenCom\",\"NFIU\"]",
-                    DateFormat = "dd/MM/yyyy",
-                    DataProtectionLaw = "NDPR/NDPA 2023",
-                    DataResidencyRegion = "SouthAfricaNorth",
-                    IsActive = true
-                };
-                _db.Jurisdictions.Add(jurisdiction);
-                await _db.SaveChangesAsync(ct);
-            }
-
-            if (jurisdiction is null)
-            {
-                result.Errors.Add($"Invalid jurisdiction code: {jurisdictionCode}");
-                return result;
-            }
-
-            // ── Step 2: Create Tenant ──
-            var tenant = Tenant.Create(request.TenantName, slug, request.TenantType, request.ContactEmail);
-            tenant.ContactPhone = request.ContactPhone;
-            tenant.Address = request.Address;
-            tenant.RcNumber = request.RcNumber;
-            tenant.TaxId = request.TaxId;
-            tenant.MaxInstitutions = selectedPlan.MaxEntities;
-            tenant.MaxUsersPerEntity = selectedPlan.MaxUsersPerEntity;
-            tenant.Timezone = jurisdiction.Timezone;
-            tenant.DefaultCurrency = jurisdiction.Currency;
-            tenant.SetParentTenant(request.ParentTenantId);
-
-            _db.Tenants.Add(tenant);
-            await _db.SaveChangesAsync(ct);
-
-            result.TenantId = tenant.TenantId;
-            result.TenantSlug = slug;
-
-            // ── Step 3: Assign Licence Types ──
-            foreach (var lt in licenceTypes)
-            {
-                _db.TenantLicenceTypes.Add(new TenantLicenceType
-                {
-                    TenantId = tenant.TenantId,
-                    LicenceTypeId = lt.Id,
-                    EffectiveDate = DateTime.UtcNow.Date,
-                    IsActive = true
-                });
-            }
-            await _db.SaveChangesAsync(ct);
-
-            // ── Step 4: Create Institution ──
-            var institution = new Institution
-            {
-                TenantId = tenant.TenantId,
-                JurisdictionId = jurisdiction.Id,
-                InstitutionCode = request.InstitutionCode,
-                InstitutionName = request.InstitutionName,
-                LicenseType = request.InstitutionType,
-                IsActive = true,
-                EntityType = EntityType.HeadOffice,
-                CreatedAt = DateTime.UtcNow,
-                MaxUsersAllowed = selectedPlan.MaxUsersPerEntity
-            };
-            _db.Institutions.Add(institution);
-            await _db.SaveChangesAsync(ct);
-
-            result.InstitutionId = institution.Id;
-
-            // ── Step 5: Create Admin User ──
-            var tempPassword = GenerateTemporaryPassword();
-            var passwordHash = AuthService.HashPassword(tempPassword);
-
-            var adminUsername = GenerateUsername(request.AdminEmail);
-
-            var adminUser = new InstitutionUser
-            {
-                TenantId = tenant.TenantId,
-                InstitutionId = institution.Id,
-                Username = adminUsername,
-                Email = request.AdminEmail,
-                DisplayName = request.AdminFullName,
-                PasswordHash = passwordHash,
-                PreferredLanguage = "en",
-                Role = InstitutionRole.Admin,
-                IsActive = true,
-                MustChangePassword = true,
-                CreatedAt = DateTime.UtcNow
-            };
-            _db.Set<InstitutionUser>().Add(adminUser);
-            await _db.SaveChangesAsync(ct);
-
-            result.AdminTemporaryPassword = tempPassword;
-
-            // ── Step 6: Create Subscription + auto-activate required modules ──
-            await _subscriptionService.CreateSubscription(
-                tenant.TenantId,
-                selectedPlan.PlanCode,
-                BillingFrequency.Monthly,
-                ct);
-
-            var baselineEntitlement = await _entitlementService.ResolveEntitlements(tenant.TenantId, ct);
-            foreach (var requiredModule in baselineEntitlement.EligibleModules.Where(m => m.IsRequired))
-            {
+                await using var transaction = await _db.Database.BeginTransactionAsync(ct);
                 try
                 {
-                    await _subscriptionService.ActivateModule(tenant.TenantId, requiredModule.ModuleCode, ct);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning(
-                        ex,
-                        "Auto-activate module {ModuleCode} failed for tenant {TenantId}",
-                        requiredModule.ModuleCode,
-                        tenant.TenantId);
-                }
-            }
-
-            await _entitlementService.InvalidateCache(tenant.TenantId);
-
-            // ── Step 7: Resolve Entitlements ──
-            var entitlement = await _entitlementService.ResolveEntitlements(tenant.TenantId, ct);
-            result.ActivatedModules = entitlement.ActiveModules.Select(m => m.ModuleCode).ToList();
-
-            // ── Step 8: Create Return Periods & Filing Calendar ──
-            var periodsCreated = await CreateInitialReturnPeriods(
-                tenant.TenantId, tenant.FiscalYearStartMonth, entitlement.ActiveModules, ct);
-            result.ReturnPeriodsCreated = periodsCreated;
-
-            // ── Step 9: Activate Tenant ──
-            tenant.Activate();
-            await _db.SaveChangesAsync(ct);
-
-            // ── Step 10: Create Welcome Notification ──
-            var notification = new PortalNotification
-            {
-                TenantId = tenant.TenantId,
-                InstitutionId = institution.Id,
-                UserId = adminUser.Id,
-                Type = NotificationType.SystemAnnouncement,
-                Title = "Welcome to RegOS",
-                Message = $"Your account has been set up with {result.ActivatedModules.Count} regulatory module(s) and {periodsCreated} filing period(s). Please change your password on first login.",
-                CreatedAt = DateTime.UtcNow
-            };
-            _db.PortalNotifications.Add(notification);
-            await _db.SaveChangesAsync(ct);
-
-            if (_notificationOrchestrator is not null)
-            {
-                try
-                {
-                    await _notificationOrchestrator.Notify(new NotificationRequest
+                    var inviteNotification = await ExecuteOnboarding(request, result, ct);
+                    if (result.Errors.Count > 0)
                     {
-                        TenantId = tenant.TenantId,
-                        EventType = NotificationEvents.UserInvited,
-                        Title = $"You've been invited to {tenant.TenantName}",
-                        Message = $"Welcome to RegOS. Your account for {tenant.TenantName} is ready.",
-                        Priority = NotificationPriority.Normal,
-                        RecipientUserIds = new List<int> { adminUser.Id },
-                        ActionUrl = "/login",
-                        Data = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
-                        {
-                            ["InvitedBy"] = "RegOS Platform",
-                            ["CompanyName"] = tenant.TenantName,
-                            ["Role"] = "Admin",
-                            ["SetupUrl"] = "https://portal.regos.app/login"
-                        }
-                    }, ct);
+                        await transaction.RollbackAsync(ct);
+                        return (Result: result, InviteNotification: (NotificationRequest?)null);
+                    }
+
+                    await transaction.CommitAsync(ct);
+                    result.Success = true;
+                    return (Result: result, InviteNotification: inviteNotification);
+                }
+                catch
+                {
+                    await transaction.RollbackAsync(ct);
+                    throw;
+                }
+            });
+
+            if (execution.InviteNotification is not null && _notificationOrchestrator is not null)
+            {
+                try
+                {
+                    await _notificationOrchestrator.Notify(execution.InviteNotification, ct);
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogWarning(ex, "Failed to emit onboarding invitation notification for tenant {TenantId}", tenant.TenantId);
+                    _logger.LogWarning(ex, "Failed to emit onboarding invitation notification for tenant {TenantId}", execution.Result.TenantId);
                 }
             }
 
-            // ── Step 11: Commit ──
-            await transaction.CommitAsync(ct);
+            if (execution.Result.Success)
+            {
+                _logger.LogInformation(
+                    "Onboarded tenant {TenantName} ({TenantId}) with {ModuleCount} modules",
+                    request.TenantName,
+                    execution.Result.TenantId,
+                    execution.Result.ActivatedModules.Count);
+            }
 
-            result.Success = true;
-            _logger.LogInformation(
-                "Onboarded tenant {TenantName} ({TenantId}) with {ModuleCount} modules",
-                tenant.TenantName, tenant.TenantId, result.ActivatedModules.Count);
-
-            return result;
+            return execution.Result;
         }
         catch (Exception ex)
         {
-            await transaction.RollbackAsync(ct);
             _logger.LogError(ex, "Tenant onboarding failed for {TenantName}", request.TenantName);
-            result.Errors.Add($"Onboarding failed: {ex.Message} | Root cause: {ex.GetBaseException().Message}");
-            return result;
+
+            return new TenantOnboardingResult
+            {
+                Errors =
+                {
+                    $"Onboarding failed: {ex.Message} | Root cause: {ex.GetBaseException().Message}"
+                }
+            };
         }
+    }
+
+    private async Task<NotificationRequest?> ExecuteOnboarding(
+        TenantOnboardingRequest request,
+        TenantOnboardingResult result,
+        CancellationToken ct)
+    {
+        // ── Step 1: Validate ──
+        var slug = ResolveSlugCandidate(request);
+        if (await _db.Tenants.AnyAsync(t => t.TenantSlug == slug, ct))
+        {
+            if (!string.IsNullOrWhiteSpace(request.TenantSlug))
+            {
+                result.Errors.Add($"Tenant slug '{slug}' is already in use");
+                return null;
+            }
+
+            slug = await EnsureUniqueSlug(slug, ct);
+        }
+
+        if (await _db.Set<InstitutionUser>().AnyAsync(u => u.Email == request.AdminEmail, ct))
+        {
+            result.Errors.Add($"Email '{request.AdminEmail}' is already registered");
+            return null;
+        }
+
+        var licenceTypes = await _db.LicenceTypes
+            .Where(lt => request.LicenceTypeCodes.Contains(lt.Code) && lt.IsActive)
+            .ToListAsync(ct);
+
+        if (licenceTypes.Count != request.LicenceTypeCodes.Count)
+        {
+            var found = licenceTypes.Select(lt => lt.Code).ToHashSet();
+            var missing = request.LicenceTypeCodes.Where(c => !found.Contains(c));
+            result.Errors.Add($"Invalid licence type codes: {string.Join(", ", missing)}");
+            return null;
+        }
+
+        var selectedPlanCode = string.IsNullOrWhiteSpace(request.SubscriptionPlanCode)
+            ? "STARTER"
+            : request.SubscriptionPlanCode.Trim().ToUpperInvariant();
+
+        var selectedPlan = await _db.SubscriptionPlans
+            .FirstOrDefaultAsync(
+                p => p.PlanCode == selectedPlanCode && p.IsActive,
+                ct);
+
+        if (selectedPlan is null)
+        {
+            result.Errors.Add($"Invalid subscription plan code: {selectedPlanCode}");
+            return null;
+        }
+
+        if (request.ParentTenantId.HasValue)
+        {
+            var parentTenant = await _db.Tenants
+                .AsNoTracking()
+                .FirstOrDefaultAsync(t => t.TenantId == request.ParentTenantId.Value, ct);
+
+            if (parentTenant is null)
+            {
+                result.Errors.Add($"Parent tenant '{request.ParentTenantId}' not found.");
+                return null;
+            }
+
+            if (parentTenant.TenantType != TenantType.WhiteLabelPartner)
+            {
+                result.Errors.Add("Parent tenant must be a white-label partner.");
+                return null;
+            }
+        }
+
+        var jurisdictionCode = string.IsNullOrWhiteSpace(request.JurisdictionCode)
+            ? "NG"
+            : request.JurisdictionCode.Trim().ToUpperInvariant();
+
+        var jurisdiction = await _db.Jurisdictions
+            .FirstOrDefaultAsync(j => j.CountryCode == jurisdictionCode, ct);
+
+        if (jurisdiction is null
+            && jurisdictionCode == "NG"
+            && !await _db.Jurisdictions.AnyAsync(ct))
+        {
+            jurisdiction = new Jurisdiction
+            {
+                CountryCode = "NG",
+                CountryName = "Nigeria",
+                Currency = "NGN",
+                Timezone = "Africa/Lagos",
+                RegulatoryBodies = "[\"CBN\",\"NDIC\",\"SEC\",\"NAICOM\",\"PenCom\",\"NFIU\"]",
+                DateFormat = "dd/MM/yyyy",
+                DataProtectionLaw = "NDPR/NDPA 2023",
+                DataResidencyRegion = "SouthAfricaNorth",
+                IsActive = true
+            };
+            _db.Jurisdictions.Add(jurisdiction);
+            await _db.SaveChangesAsync(ct);
+        }
+
+        if (jurisdiction is null)
+        {
+            result.Errors.Add($"Invalid jurisdiction code: {jurisdictionCode}");
+            return null;
+        }
+
+        // ── Step 2: Create Tenant ──
+        var tenant = Tenant.Create(request.TenantName, slug, request.TenantType, request.ContactEmail);
+        tenant.ContactPhone = request.ContactPhone;
+        tenant.Address = request.Address;
+        tenant.RcNumber = request.RcNumber;
+        tenant.TaxId = request.TaxId;
+        tenant.MaxInstitutions = selectedPlan.MaxEntities;
+        tenant.MaxUsersPerEntity = selectedPlan.MaxUsersPerEntity;
+        tenant.Timezone = jurisdiction.Timezone;
+        tenant.DefaultCurrency = jurisdiction.Currency;
+        tenant.SetParentTenant(request.ParentTenantId);
+
+        _db.Tenants.Add(tenant);
+        await _db.SaveChangesAsync(ct);
+
+        result.TenantId = tenant.TenantId;
+        result.TenantSlug = slug;
+
+        // ── Step 3: Assign Licence Types ──
+        foreach (var lt in licenceTypes)
+        {
+            _db.TenantLicenceTypes.Add(new TenantLicenceType
+            {
+                TenantId = tenant.TenantId,
+                LicenceTypeId = lt.Id,
+                EffectiveDate = DateTime.UtcNow.Date,
+                IsActive = true
+            });
+        }
+        await _db.SaveChangesAsync(ct);
+
+        // ── Step 4: Create Institution ──
+        var institution = new Institution
+        {
+            TenantId = tenant.TenantId,
+            JurisdictionId = jurisdiction.Id,
+            InstitutionCode = request.InstitutionCode,
+            InstitutionName = request.InstitutionName,
+            LicenseType = request.InstitutionType,
+            IsActive = true,
+            EntityType = EntityType.HeadOffice,
+            CreatedAt = DateTime.UtcNow,
+            MaxUsersAllowed = selectedPlan.MaxUsersPerEntity
+        };
+        _db.Institutions.Add(institution);
+        await _db.SaveChangesAsync(ct);
+
+        result.InstitutionId = institution.Id;
+
+        // ── Step 5: Create Admin User ──
+        var tempPassword = GenerateTemporaryPassword();
+        var passwordHash = AuthService.HashPassword(tempPassword);
+
+        var adminUsername = GenerateUsername(request.AdminEmail);
+
+        var adminUser = new InstitutionUser
+        {
+            TenantId = tenant.TenantId,
+            InstitutionId = institution.Id,
+            Username = adminUsername,
+            Email = request.AdminEmail,
+            DisplayName = request.AdminFullName,
+            PasswordHash = passwordHash,
+            PreferredLanguage = "en",
+            Role = InstitutionRole.Admin,
+            IsActive = true,
+            MustChangePassword = true,
+            CreatedAt = DateTime.UtcNow
+        };
+        _db.Set<InstitutionUser>().Add(adminUser);
+        await _db.SaveChangesAsync(ct);
+
+        result.AdminTemporaryPassword = tempPassword;
+
+        // ── Step 6: Create Subscription + auto-activate required modules ──
+        await _subscriptionService.CreateSubscription(
+            tenant.TenantId,
+            selectedPlan.PlanCode,
+            BillingFrequency.Monthly,
+            ct);
+
+        var baselineEntitlement = await _entitlementService.ResolveEntitlements(tenant.TenantId, ct);
+        foreach (var requiredModule in baselineEntitlement.EligibleModules.Where(m => m.IsRequired))
+        {
+            try
+            {
+                await _subscriptionService.ActivateModule(tenant.TenantId, requiredModule.ModuleCode, ct);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(
+                    ex,
+                    "Auto-activate module {ModuleCode} failed for tenant {TenantId}",
+                    requiredModule.ModuleCode,
+                    tenant.TenantId);
+            }
+        }
+
+        await _entitlementService.InvalidateCache(tenant.TenantId);
+
+        // ── Step 7: Resolve Entitlements ──
+        var entitlement = await _entitlementService.ResolveEntitlements(tenant.TenantId, ct);
+        result.ActivatedModules = entitlement.ActiveModules.Select(m => m.ModuleCode).ToList();
+
+        // ── Step 8: Create Return Periods & Filing Calendar ──
+        var periodsCreated = await CreateInitialReturnPeriods(
+            tenant.TenantId, tenant.FiscalYearStartMonth, entitlement.ActiveModules, ct);
+        result.ReturnPeriodsCreated = periodsCreated;
+
+        // ── Step 9: Activate Tenant ──
+        tenant.Activate();
+        await _db.SaveChangesAsync(ct);
+
+        // ── Step 10: Create Welcome Notification ──
+        var notification = new PortalNotification
+        {
+            TenantId = tenant.TenantId,
+            InstitutionId = institution.Id,
+            UserId = adminUser.Id,
+            Type = NotificationType.SystemAnnouncement,
+            Title = "Welcome to RegOS",
+            Message = $"Your account has been set up with {result.ActivatedModules.Count} regulatory module(s) and {periodsCreated} filing period(s). Please change your password on first login.",
+            CreatedAt = DateTime.UtcNow
+        };
+        _db.PortalNotifications.Add(notification);
+        await _db.SaveChangesAsync(ct);
+
+        return _notificationOrchestrator is null
+            ? null
+            : new NotificationRequest
+            {
+                TenantId = tenant.TenantId,
+                EventType = NotificationEvents.UserInvited,
+                Title = $"You've been invited to {tenant.TenantName}",
+                Message = $"Welcome to RegOS. Your account for {tenant.TenantName} is ready.",
+                Priority = NotificationPriority.Normal,
+                RecipientUserIds = new List<int> { adminUser.Id },
+                ActionUrl = "/login",
+                Data = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["InvitedBy"] = "RegOS Platform",
+                    ["CompanyName"] = tenant.TenantName,
+                    ["Role"] = "Admin",
+                    ["SetupUrl"] = "https://portal.regos.app/login"
+                }
+            };
     }
 
     /// <summary>
