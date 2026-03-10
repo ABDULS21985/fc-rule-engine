@@ -914,6 +914,7 @@ else
                         }
                     </button>
                 </div>
+            </div>
                         }
                     </div>
 
@@ -1085,7 +1086,7 @@ else
         : "Configuration is taking shape";
     private string? SelectedCategoryLabel => string.IsNullOrWhiteSpace(_request.Profile.InstitutionCategory)
         ? null
-        : CbnInstitutionDirectory.Categories.FirstOrDefault(c => c.Code == _request.Profile.InstitutionCategory)?.Label;
+        : CbnInstitutionDirectory.Categories.Where(c => c.Code == _request.Profile.InstitutionCategory).Select(c => c.Label).FirstOrDefault();
     private IReadOnlyList<string> CurrentStepHighlights => _step switch
     {
         1 =>

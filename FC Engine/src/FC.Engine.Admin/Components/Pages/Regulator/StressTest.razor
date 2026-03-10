@@ -14,46 +14,75 @@
 <PageTitle>Sector Stress Testing — RegOS™ SupTech</PageTitle>
 
 <PageHeader Title="Sector-Wide Stress Testing"
-            Subtitle="Apply macro-prudential and climate shocks to all supervised entities. CBN/IMF transmission coefficients · NGFS Climate Scenarios · Contagion cascade analysis.">
+            Subtitle="Apply macro-prudential and climate shocks to all supervised entities. CBN/IMF transmission coefficients · NGFS Climate Scenarios · Contagion cascade analysis."
+            Tabs="@_tabs"
+            ActiveTabId="@_activeTab"
+            OnTabChange="@HandleTabChange"
+            StatusBadge="@(_lastSummary?.ResilienceRating)"
+            StatusVariant="@GetResilienceVariant(_lastSummary?.ResilienceRating)">
     <PrimaryAction>
-        <button class="fc-btn fc-btn--primary"
-                @onclick="RunStressTestAsync"
-                disabled="@(!_selectedScenarioId.HasValue || string.IsNullOrWhiteSpace(_periodCode) || _running)">
-            <span class="btn-icon">▶</span>
+        <LoadingButton Variant="fc-btn--primary"
+                       IsLoading="@_running"
+                       Disabled="@(!_selectedScenarioId.HasValue || string.IsNullOrWhiteSpace(_periodCode))"
+                       OnClick="RunStressTestAsync">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor"
+                 stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <polygon points="5,3 19,12 5,21"/>
+            </svg>
             Run Stress Test
-        </button>
+        </LoadingButton>
     </PrimaryAction>
+    <SecondaryActions>
+        @if (_lastSummary is not null)
+        {
+            <button class="fc-ph__overflow-item" role="menuitem"
+                    @onclick="() => DownloadReportAsync(_lastRunId, _lastScenarioCode)">
+                Download Last Report (PDF)
+            </button>
+        }
+    </SecondaryActions>
 </PageHeader>
 
 <SectionErrorBoundary Title="Couldn't load stress test data" ExternalError="@_loadException" OnRetry="ReloadAsync">
 
-    @if (_running)
+    @if (_loading)
     {
-        <div class="stress-running-banner">
-            <div class="fc-skel fc-skel-circle" style="--skel-w: 24px; --skel-h: 24px"></div>
-            <span>
-                Stress test running — applying shocks to @_entityCount entities across
-                @RegulatorCode jurisdiction…
-            </span>
+        <div class="fc-st-config-grid">
+            <div style="display:grid;gap:var(--space-3)">
+                <SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Card" Index="0" />
+                <SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Card" Index="1" />
+                <SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Card" Index="2" />
+            </div>
+            <SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Block" Width="100%" Height="300px" Index="3" />
         </div>
     }
-    else
+    else if (_activeTab == "configure")
     {
-        <!-- ── Scenario Selector ──────────────────────────────────── -->
-        <div class="stress-config-grid">
-            <div class="config-card">
-                <h2 class="config-heading">
+        @* ═══════ CONFIGURE & RUN TAB ═══════ *@
+
+        @if (_running)
+        {
+            <div class="fc-st-running" role="status" aria-live="polite">
+                <div class="fc-st-running-spinner" aria-hidden="true"></div>
+                <span class="fc-st-running-text">
+                    Stress test running — applying shocks to @_entityCount entities across
+                    @RegulatorCode jurisdiction…
+                </span>
+            </div>
+        }
+
+        <div class="fc-st-config-grid">
+            @* ── Scenario Selector (left) ── *@
+            <div>
+                <h2 class="fc-st-params-heading" style="margin-bottom:var(--space-3)">
                     Select Scenario
-                    <span class="config-count-badge">@_scenarios.Count available</span>
+                    @if (_scenarios.Count > 0)
+                    {
+                        <span class="fc-ph__count">@_scenarios.Count</span>
+                    }
                 </h2>
 
-                @if (_loading)
-                {
-                    <SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Card" />
-                        <SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Card" />
-                        <SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Card" />
-}
-                else if (_scenarios.Count == 0)
+                @if (_scenarios.Count == 0)
                 {
                     <EmptyState Context="data" Size="sm"
                                 Heading="No scenarios available"
@@ -61,318 +90,362 @@
                 }
                 else
                 {
-                    @foreach (var grp in _scenarios.GroupBy(s => s.Category))
-                    {
-                        <div class="scenario-group-label">
-                            @(grp.Key == "NGFS_CLIMATE" ? "NGFS Climate Scenarios"
-                              : grp.Key == "MACRO" ? "Macro-Economic Shocks"
-                              : "Custom Scenarios")
-                        </div>
-
-                        @foreach (var scenario in grp)
+                    <div class="fc-st-scenario-list" role="radiogroup" aria-label="Stress test scenarios">
+                        @foreach (var grp in _scenarios.GroupBy(s => s.Category))
                         {
-                            var selected = _selectedScenarioId == scenario.Id;
-                            var catClass = scenario.Category switch
-                            {
-                                "NGFS_CLIMATE" => "cat-climate",
-                                "MACRO"        => "cat-macro",
-                                _              => "cat-custom"
-                            };
-
-                            <div class="scenario-card @(selected ? "selected" : "") @catClass"
-                                 @onclick="() => SelectScenario(scenario)">
-                                <div class="scenario-header">
-                                    <span class="scenario-name">@scenario.ScenarioName</span>
-                                    <span class="severity-badge severity-@scenario.Severity.ToLowerInvariant()">
-                                        @scenario.Severity
-                                    </span>
-                                </div>
-                                <div class="scenario-horizon">
-                                    <span class="rg-muted">Horizon:</span> @scenario.TimeHorizon
-                                </div>
-                                <p class="scenario-summary">
-                                    @scenario.NarrativeSummary[..Math.Min(140, scenario.NarrativeSummary.Length)]…
-                                </p>
+                            <div class="fc-st-group-label">
+                                @(grp.Key == "NGFS_CLIMATE" ? "NGFS Climate Scenarios"
+                                  : grp.Key == "MACRO" ? "Macro-Economic Shocks"
+                                  : "Custom Scenarios")
                             </div>
+
+                            @foreach (var scenario in grp)
+                            {
+                                var isSelected = _selectedScenarioId == scenario.Id;
+                                var catClass = scenario.Category switch
+                                {
+                                    "NGFS_CLIMATE" => "fc-st-scenario--climate",
+                                    "MACRO"        => "fc-st-scenario--macro",
+                                    _              => "fc-st-scenario--custom"
+                                };
+
+                                <div class="fc-st-scenario @(isSelected ? "fc-st-scenario--selected" : "") @catClass"
+                                     @onclick="() => SelectScenario(scenario)"
+                                     role="radio"
+                                     aria-checked="@isSelected.ToString().ToLowerInvariant()"
+                                     tabindex="0">
+                                    <div class="fc-st-scenario-header">
+                                        <span class="fc-st-scenario-name">@scenario.ScenarioName</span>
+                                        <span class="fc-st-severity fc-st-severity--@scenario.Severity.ToLowerInvariant()">
+                                            @scenario.Severity
+                                        </span>
+                                    </div>
+                                    <p class="fc-st-scenario-summary">
+                                        @(scenario.NarrativeSummary.Length > 140
+                                            ? scenario.NarrativeSummary[..140] + "…"
+                                            : scenario.NarrativeSummary)
+                                    </p>
+                                    <div class="fc-st-scenario-meta">
+                                        <span>Horizon: @scenario.TimeHorizon</span>
+                                    </div>
+                                </div>
+                            }
                         }
-                    }
+                    </div>
                 }
             </div>
 
-            <div class="config-card">
-                <h2 class="config-heading">Run Parameters</h2>
+            @* ── Run Parameters (right) ── *@
+            <div class="fc-st-params-card">
+                <h2 class="fc-st-params-heading">Run Parameters</h2>
 
-                <div class="field-group">
-                    <label class="regos-label">Base Period</label>
-                    <input class="regos-input" @bind="_periodCode"
+                <FormField Label="Base Period"
+                           HintText="Must match a period in PrudentialMetrics with active entity data."
+                           IsRequired="true">
+                    <input class="fc-input" @bind="_periodCode"
                            placeholder="e.g. 2026-Q1"
                            disabled="@(_scenarios.Count == 0)" />
-                    <span class="regos-hint">
-                        Must match a period in PrudentialMetrics with active entity data.
-                    </span>
-                </div>
+                </FormField>
 
-                <div class="field-group">
-                    <label class="regos-label">Time Horizon</label>
-                    <select class="regos-select" @bind="_timeHorizon">
+                <FormField Label="Time Horizon" IsRequired="true">
+                    <select class="fc-input" @bind="_timeHorizon">
                         <option value="1Y">1 Year</option>
                         <option value="2Y">2 Years</option>
                         <option value="3Y">3 Years</option>
                         <option value="5Y">5 Years</option>
                     </select>
-                </div>
+                </FormField>
 
-                <div class="field-group">
-                    <label class="regos-label">Report Options</label>
-                    <div class="toggle-row">
-                        <input type="checkbox" id="anon-chk" @bind="_anonymise" />
-                        <label for="anon-chk">Anonymise entity names in PDF report</label>
-                    </div>
-                </div>
+                <FormField Label="Report Options">
+                    <label style="display:flex;align-items:center;gap:var(--space-2,0.5rem);cursor:pointer">
+                        <input type="checkbox" @bind="_anonymise" />
+                        <span>Anonymise entity names in PDF report</span>
+                    </label>
+                </FormField>
 
                 @if (_selectedScenarioId.HasValue)
                 {
                     var sel = _scenarios.FirstOrDefault(s => s.Id == _selectedScenarioId);
                     if (sel is not null)
                     {
-                        <div class="selected-scenario-info">
-                            <div class="selected-label">Selected scenario:</div>
-                            <div class="selected-name">@sel.ScenarioName</div>
-                            <div class="selected-meta">
+                        <div class="fc-st-selected-info">
+                            <div class="fc-st-selected-label">Selected scenario</div>
+                            <div class="fc-st-selected-name">@sel.ScenarioName</div>
+                            <div class="fc-st-selected-meta">
                                 @sel.Category · @sel.Severity · @sel.TimeHorizon
                             </div>
                         </div>
                     }
                 }
 
-                <button class="fc-btn fc-btn--primary stress-run-btn"
-                        @onclick="RunStressTestAsync"
-                        disabled="@(!_selectedScenarioId.HasValue || string.IsNullOrWhiteSpace(_periodCode) || _running)">
-                    <span class="btn-icon">▶</span>
+                <LoadingButton Variant="fc-btn--primary"
+                               IsLoading="@_running"
+                               Disabled="@(!_selectedScenarioId.HasValue || string.IsNullOrWhiteSpace(_periodCode))"
+                               OnClick="RunStressTestAsync">
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor"
+                         stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <polygon points="5,3 19,12 5,21"/>
+                    </svg>
                     Run Stress Test
-                </button>
+                </LoadingButton>
 
                 @if (!_selectedScenarioId.HasValue)
                 {
-                    <p class="rg-muted" style="margin-top:0.5rem;font-size:0.8rem;">
+                    <p style="font-size:0.8rem;color:var(--cbn-text-muted,#64748b);margin:0">
                         Select a scenario on the left to enable.
                     </p>
                 }
             </div>
         </div>
 
-        <!-- ── Recent Runs ────────────────────────────────────────── -->
-        <div class="stress-recent-section">
-            <h2 class="section-heading">Recent Stress Test Runs</h2>
-
-            @if (_loading)
-            {
-                <SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.TableRows" RowCount="5" />
-}
-            else if (_recentRuns.Count == 0)
-            {
-                <EmptyState Context="data" Size="sm"
-                            Heading="No stress tests run yet"
-                            Description="Select a scenario above and click Run Stress Test to begin your first sector-wide analysis." />
-            }
-            else
-            {
-                <table class="regos-table">
-                    <thead>
-                        <tr>
-                            <th>Scenario</th>
-                            <th>Period</th>
-                            <th>Entities</th>
-                            <th>Resilience Score</th>
-                            <th>Contagion Rounds</th>
-                            <th>Status</th>
-                            <th>Run Date</th>
-                            <th></th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @foreach (var run in _recentRuns)
-                        {
-                            var scoreClass = run.ResilienceRating switch
-                            {
-                                "RESILIENT"  => "score-resilient",
-                                "ADEQUATE"   => "score-adequate",
-                                "VULNERABLE" => "score-vulnerable",
-                                _            => "score-critical"
-                            };
-                            <tr>
-                                <td>@run.ScenarioName</td>
-                                <td>@run.PeriodCode</td>
-                                <td class="rg-num">@run.EntitiesShocked.ToString("N0")</td>
-                                <td>
-                                    @if (run.SystemicResilienceScore.HasValue)
-                                    {
-                                        <span class="score-badge @scoreClass">
-                                            @run.SystemicResilienceScore.Value.ToString("F1")/100
-                                            (@run.ResilienceRating)
-                                        </span>
-                                    }
-                                    else
-                                    {
-                                        <span class="rg-muted">—</span>
-                                    }
-                                </td>
-                                <td class="rg-num">@run.ContagionRounds</td>
-                                <td>
-                                    <span class="status-chip status-@run.Status.ToLowerInvariant()">
-                                        @run.Status
-                                    </span>
-                                </td>
-                                <td>@run.StartedAt.ToString("dd MMM yyyy HH:mm")</td>
-                                <td class="rg-actions">
-                                    @if (run.Status == "COMPLETED")
-                                    {
-                                        <button class="fc-btn fc-btn--outline"
-                                                @onclick="() => ViewResults(run.RunGuid)">
-                                            View
-                                        </button>
-                                        <button class="fc-btn fc-btn--outline"
-                                                @onclick="() => DownloadReportAsync(run.Id, run.ScenarioCode)">
-                                            PDF
-                                        </button>
-                                    }
-                                </td>
-                            </tr>
-                        }
-                    </tbody>
-                </table>
-            }
-        </div>
-    }
-
-    <!-- ── Results Detail Panel (shown after run) ──────────────── -->
-    @if (_lastSummary is not null && !_running)
-    {
-        var summary = _lastSummary;
-        var ratingClass = summary.ResilienceRating switch
+        @* ── Results Detail (inline after run) ── *@
+        @if (_lastSummary is not null && !_running)
         {
-            "RESILIENT"  => "resilience-resilient",
-            "ADEQUATE"   => "resilience-adequate",
-            "VULNERABLE" => "resilience-vulnerable",
-            _            => "resilience-critical"
-        };
-
-        <div class="stress-results-panel">
-            <div class="results-header">
-                <h2>Results: @summary.ScenarioName</h2>
-                <div class="results-meta">
-                    Period: @summary.PeriodCode · Horizon: @summary.TimeHorizon ·
-                    @summary.EntitiesShocked.ToString("N0") entities ·
-                    @summary.ContagionRounds contagion round(s) ·
-                    Duration: @summary.Duration.TotalSeconds.ToString("F1")s
-                </div>
-            </div>
-
-            <!-- Resilience Score -->
-            <div class="resilience-score-card @ratingClass">
-                <div class="resilience-score-number">
-                    @summary.SystemicResilienceScore.ToString("F1")
-                    <span class="resilience-denom">/100</span>
-                </div>
-                <div class="resilience-rating-label">@summary.ResilienceRating</div>
-                <div class="resilience-totals">
-                    <div class="resilience-total-item">
-                        <span class="rtotal-label">Capital Shortfall</span>
-                        <span class="rtotal-value">₦@summary.TotalCapitalShortfallNgn.ToString("N0")M</span>
-                    </div>
-                    <div class="resilience-total-item">
-                        <span class="rtotal-label">NDIC Exposure</span>
-                        <span class="rtotal-value">₦@summary.TotalNDICExposureAtRisk.ToString("N0")M</span>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Executive Summary -->
-            @if (!string.IsNullOrWhiteSpace(summary.ExecutiveSummary))
+            var summary = _lastSummary;
+            var ratingClass = summary.ResilienceRating switch
             {
-                <div class="exec-summary-card">
-                    <h3>Executive Summary</h3>
-                    <pre class="exec-summary-text">@summary.ExecutiveSummary</pre>
+                "RESILIENT"  => "fc-st-resilience--resilient",
+                "ADEQUATE"   => "fc-st-resilience--adequate",
+                "VULNERABLE" => "fc-st-resilience--vulnerable",
+                _            => "fc-st-resilience--critical"
+            };
+
+            <div class="fc-st-results">
+                <div class="fc-st-results-header">
+                    <div>
+                        <h2 class="fc-st-results-title">Results: @summary.ScenarioName</h2>
+                        <div class="fc-st-results-meta">
+                            Period: @summary.PeriodCode · Horizon: @summary.TimeHorizon ·
+                            @summary.EntitiesShocked.ToString("N0") entities ·
+                            @summary.ContagionRounds contagion round(s) ·
+                            Duration: @summary.Duration.TotalSeconds.ToString("F1")s
+                        </div>
+                    </div>
                 </div>
-            }
 
-            <!-- Sector Results -->
-            <h3 class="results-section-title">Sector Results</h3>
-            <table class="regos-table stress-sector-table">
-                <thead>
-                    <tr>
-                        <th>Sector</th>
-                        <th class="rg-num">Entities</th>
-                        <th class="rg-num">CAR Pre</th>
-                        <th class="rg-num">CAR Post</th>
-                        <th class="rg-num">NPL Pre</th>
-                        <th class="rg-num">NPL Post</th>
-                        <th class="rg-num">LCR Post</th>
-                        <th class="rg-num">Breach CAR</th>
-                        <th class="rg-num">Insolvent</th>
-                        <th class="rg-num">Shortfall ₦M</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @foreach (var sector in summary.BySector)
-                    {
-                        var carClass = sector.PostAvgCAR < 10 ? "metric-danger"
-                            : sector.PostAvgCAR < 15 ? "metric-warning" : "metric-ok";
-                        <tr>
-                            <td><strong>@sector.InstitutionType</strong></td>
-                            <td class="rg-num">@sector.EntityCount</td>
-                            <td class="rg-num">@sector.PreAvgCAR.ToString("F1")%</td>
-                            <td class="rg-num @carClass">@sector.PostAvgCAR.ToString("F1")%</td>
-                            <td class="rg-num">@sector.PreAvgNPL.ToString("F1")%</td>
-                            <td class="rg-num @(sector.PostAvgNPL > 20 ? "metric-danger" : sector.PostAvgNPL > 10 ? "metric-warning" : "metric-ok")">
-                                @sector.PostAvgNPL.ToString("F1")%
-                            </td>
-                            <td class="rg-num @(sector.PostAvgLCR < 100 ? "metric-danger" : "metric-ok")">
-                                @sector.PostAvgLCR.ToString("F1")%
-                            </td>
-                            <td class="rg-num @(sector.EntitiesBreachingCAR > 0 ? "metric-danger" : "")">
-                                @sector.EntitiesBreachingCAR
-                            </td>
-                            <td class="rg-num @(sector.EntitiesInsolvent > 0 ? "metric-critical" : "")">
-                                @sector.EntitiesInsolvent
-                            </td>
-                            <td class="rg-num">₦@sector.TotalCapitalShortfall.ToString("N0")</td>
-                        </tr>
-                    }
-                </tbody>
-                <tfoot>
-                    <tr class="totals-row">
-                        <td><strong>TOTAL</strong></td>
-                        <td class="rg-num">@summary.BySector.Sum(s => s.EntityCount)</td>
-                        <td colspan="4"></td>
-                        <td></td>
-                        <td class="rg-num">@summary.BySector.Sum(s => s.EntitiesBreachingCAR)</td>
-                        <td class="rg-num">@summary.BySector.Sum(s => s.EntitiesInsolvent)</td>
-                        <td class="rg-num">₦@summary.TotalCapitalShortfallNgn.ToString("N0")</td>
-                    </tr>
-                </tfoot>
-            </table>
+                <div class="fc-st-resilience @ratingClass">
+                    <div>
+                        <div class="fc-st-resilience-score">
+                            @summary.SystemicResilienceScore.ToString("F1")
+                            <span class="fc-st-resilience-denom">/100</span>
+                        </div>
+                        <div class="fc-st-resilience-rating">@summary.ResilienceRating</div>
+                    </div>
+                    <div class="fc-st-resilience-totals">
+                        <div class="fc-st-resilience-total">
+                            <span class="fc-st-rtotal-label">Capital Shortfall</span>
+                            <span class="fc-st-rtotal-value">₦@summary.TotalCapitalShortfallNgn.ToString("N0")M</span>
+                        </div>
+                        <div class="fc-st-resilience-total">
+                            <span class="fc-st-rtotal-label">NDIC Exposure at Risk</span>
+                            <span class="fc-st-rtotal-value">₦@summary.TotalNDICExposureAtRisk.ToString("N0")M</span>
+                        </div>
+                    </div>
+                </div>
 
-            <div class="results-actions">
-                <button class="fc-btn fc-btn--outline"
-                        @onclick="() => DownloadReportAsync(_lastRunId, _lastScenarioCode)">
-                    Download PDF Report
-                </button>
-                <button class="fc-btn fc-btn--outline"
-                        @onclick="() => _lastSummary = null">
-                    Dismiss Results
-                </button>
+                @if (!string.IsNullOrWhiteSpace(summary.ExecutiveSummary))
+                {
+                    <div class="fc-st-exec-summary">
+                        <h3>Executive Summary</h3>
+                        <pre>@summary.ExecutiveSummary</pre>
+                    </div>
+                }
+
+                <h3 style="font-weight:700;margin:0">Sector Results</h3>
+
+                <DataTable TItem="SectorStressAggregate"
+                           Items="@summary.BySector"
+                           Responsive="true"
+                           ShowExport="true"
+                           ExportFileName="@($"StressTest_{summary.ScenarioCode}_{summary.PeriodCode}_Sectors")">
+                    <ChildContent>
+                        <DataColumn TItem="SectorStressAggregate" Title="Sector"
+                                    SortKey="@(s => s.InstitutionType)">
+                            <CellTemplate><strong>@context.InstitutionType</strong></CellTemplate>
+                        </DataColumn>
+                        <DataColumn TItem="SectorStressAggregate" Title="Entities" Width="80px"
+                                    SortKey="@(s => s.EntityCount)">
+                            <CellTemplate>@context.EntityCount</CellTemplate>
+                        </DataColumn>
+                        <DataColumn TItem="SectorStressAggregate" Title="CAR Pre" Width="90px"
+                                    SortKey="@(s => s.PreAvgCAR)">
+                            <CellTemplate>@context.PreAvgCAR.ToString("F1")%</CellTemplate>
+                        </DataColumn>
+                        <DataColumn TItem="SectorStressAggregate" Title="CAR Post" Width="90px"
+                                    SortKey="@(s => s.PostAvgCAR)">
+                            <CellTemplate>
+                                <span class="@CarMetricClass(context.PostAvgCAR)">@context.PostAvgCAR.ToString("F1")%</span>
+                            </CellTemplate>
+                        </DataColumn>
+                        <DataColumn TItem="SectorStressAggregate" Title="NPL Pre" Width="90px"
+                                    SortKey="@(s => s.PreAvgNPL)">
+                            <CellTemplate>@context.PreAvgNPL.ToString("F1")%</CellTemplate>
+                        </DataColumn>
+                        <DataColumn TItem="SectorStressAggregate" Title="NPL Post" Width="90px"
+                                    SortKey="@(s => s.PostAvgNPL)">
+                            <CellTemplate>
+                                <span class="@NplMetricClass(context.PostAvgNPL)">@context.PostAvgNPL.ToString("F1")%</span>
+                            </CellTemplate>
+                        </DataColumn>
+                        <DataColumn TItem="SectorStressAggregate" Title="LCR Post" Width="90px"
+                                    SortKey="@(s => s.PostAvgLCR)">
+                            <CellTemplate>
+                                <span class="@(context.PostAvgLCR < 100 ? "fc-st-metric-danger" : "fc-st-metric-ok")">
+                                    @context.PostAvgLCR.ToString("F1")%
+                                </span>
+                            </CellTemplate>
+                        </DataColumn>
+                        <DataColumn TItem="SectorStressAggregate" Title="Breach CAR" Width="90px"
+                                    SortKey="@(s => s.EntitiesBreachingCAR)">
+                            <CellTemplate>
+                                <span class="@(context.EntitiesBreachingCAR > 0 ? "fc-st-metric-danger" : "")">
+                                    @context.EntitiesBreachingCAR
+                                </span>
+                            </CellTemplate>
+                        </DataColumn>
+                        <DataColumn TItem="SectorStressAggregate" Title="Insolvent" Width="90px"
+                                    SortKey="@(s => s.EntitiesInsolvent)">
+                            <CellTemplate>
+                                <span class="@(context.EntitiesInsolvent > 0 ? "fc-st-metric-danger" : "")">
+                                    @context.EntitiesInsolvent
+                                </span>
+                            </CellTemplate>
+                        </DataColumn>
+                        <DataColumn TItem="SectorStressAggregate" Title="Shortfall ₦M" Width="110px"
+                                    SortKey="@(s => s.TotalCapitalShortfall)">
+                            <CellTemplate>₦@context.TotalCapitalShortfall.ToString("N0")</CellTemplate>
+                        </DataColumn>
+                    </ChildContent>
+                </DataTable>
+
+                <div class="fc-st-kpi-strip">
+                    <div class="fc-st-kpi">
+                        <div class="fc-st-kpi-value">@summary.BySector.Sum(s => s.EntityCount)</div>
+                        <div class="fc-st-kpi-label">Total Entities</div>
+                    </div>
+                    <div class="fc-st-kpi">
+                        <div class="fc-st-kpi-value fc-st-metric-danger">@summary.BySector.Sum(s => s.EntitiesBreachingCAR)</div>
+                        <div class="fc-st-kpi-label">Breaching CAR</div>
+                    </div>
+                    <div class="fc-st-kpi">
+                        <div class="fc-st-kpi-value fc-st-metric-danger">@summary.BySector.Sum(s => s.EntitiesInsolvent)</div>
+                        <div class="fc-st-kpi-label">Insolvent</div>
+                    </div>
+                    <div class="fc-st-kpi">
+                        <div class="fc-st-kpi-value">₦@summary.TotalCapitalShortfallNgn.ToString("N0")M</div>
+                        <div class="fc-st-kpi-label">Total Shortfall</div>
+                    </div>
+                </div>
+
+                <div class="fc-st-results-actions">
+                    <button class="fc-btn fc-btn--outline"
+                            @onclick="() => DownloadReportAsync(_lastRunId, _lastScenarioCode)">
+                        Download PDF Report
+                    </button>
+                    <button class="fc-btn fc-btn--ghost"
+                            @onclick="() => _lastSummary = null">
+                        Dismiss Results
+                    </button>
+                </div>
             </div>
-        </div>
+        }
+    }
+    else if (_activeTab == "history")
+    {
+        @* ═══════ RUN HISTORY TAB ═══════ *@
+
+        @if (_recentRuns.Count == 0)
+        {
+            <EmptyState Context="data" Size="sm"
+                        Heading="No stress tests run yet"
+                        Description="Select a scenario in the Configure & Run tab and click Run Stress Test to begin your first sector-wide analysis."
+                        PrimaryActionLabel="Configure a Run"
+                        OnPrimaryAction="SwitchToConfigureTab" />
+        }
+        else
+        {
+            <DataTable TItem="RunListRow"
+                       Items="@_recentRuns"
+                       Sortable="true"
+                       Responsive="true"
+                       ShowExport="true"
+                       ExportFileName="StressTestRunHistory">
+                <ChildContent>
+                    <DataColumn TItem="RunListRow" Title="Scenario"
+                                SortKey="@(r => r.ScenarioName)">
+                        <CellTemplate>@context.ScenarioName</CellTemplate>
+                    </DataColumn>
+                    <DataColumn TItem="RunListRow" Title="Period" Width="100px"
+                                SortKey="@(r => r.PeriodCode)">
+                        <CellTemplate>@context.PeriodCode</CellTemplate>
+                    </DataColumn>
+                    <DataColumn TItem="RunListRow" Title="Entities" Width="80px"
+                                SortKey="@(r => r.EntitiesShocked)">
+                        <CellTemplate>@context.EntitiesShocked.ToString("N0")</CellTemplate>
+                    </DataColumn>
+                    <DataColumn TItem="RunListRow" Title="Resilience Score" Width="180px"
+                                SortKey="@(r => r.SystemicResilienceScore ?? 0m)">
+                        <CellTemplate>
+                            @if (context.SystemicResilienceScore.HasValue)
+                            {
+                                <span class="fc-st-score-badge @GetScoreClass(context.ResilienceRating)">
+                                    @context.SystemicResilienceScore.Value.ToString("F1")/100
+                                    (@context.ResilienceRating)
+                                </span>
+                            }
+                            else
+                            {
+                                <span style="color:var(--cbn-text-muted,#64748b)">—</span>
+                            }
+                        </CellTemplate>
+                    </DataColumn>
+                    <DataColumn TItem="RunListRow" Title="Contagion" Width="90px"
+                                SortKey="@(r => r.ContagionRounds)">
+                        <CellTemplate>@context.ContagionRounds</CellTemplate>
+                    </DataColumn>
+                    <DataColumn TItem="RunListRow" Title="Status" Width="110px"
+                                SortKey="@(r => r.Status)">
+                        <CellTemplate>
+                            <span class="fc-st-status fc-st-status--@context.Status.ToLowerInvariant()">
+                                @context.Status
+                            </span>
+                        </CellTemplate>
+                    </DataColumn>
+                    <DataColumn TItem="RunListRow" Title="Run Date" Width="150px"
+                                SortKey="@(r => r.StartedAt)">
+                        <CellTemplate>@context.StartedAt.ToString("dd MMM yyyy HH:mm")</CellTemplate>
+                    </DataColumn>
+                    <DataColumn TItem="RunListRow" Title="" Width="130px">
+                        <CellTemplate>
+                            @if (context.Status == "COMPLETED")
+                            {
+                                <div style="display:flex;gap:var(--space-2,0.5rem)">
+                                    <button class="fc-btn fc-btn--outline fc-btn--sm"
+                                            @onclick="() => ViewResults(context.RunGuid)">
+                                        View
+                                    </button>
+                                    <button class="fc-btn fc-btn--ghost fc-btn--sm"
+                                            @onclick="() => DownloadReportAsync(context.Id, context.ScenarioCode)">
+                                        PDF
+                                    </button>
+                                </div>
+                            }
+                        </CellTemplate>
+                    </DataColumn>
+                </ChildContent>
+            </DataTable>
+        }
     }
 
 </SectionErrorBoundary>
 
 @code {
+    // ── Session context ───────────────────────────────────────────────
     private string RegulatorCode { get; set; } = string.Empty;
     private string CurrentPeriodCode { get; set; } = "2026-Q1";
     private int CurrentUserId { get; set; }
 
+    // ── State ─────────────────────────────────────────────────────────
     private IReadOnlyList<ScenarioListRow> _scenarios = Array.Empty<ScenarioListRow>();
     private List<RunListRow> _recentRuns = new();
     private int? _selectedScenarioId;
@@ -388,6 +461,24 @@
     private long _lastRunId;
     private string _lastScenarioCode = string.Empty;
 
+    // ── Tabs ──────────────────────────────────────────────────────────
+    private static readonly List<TabItem> _tabs = new()
+    {
+        new("configure", "Configure & Run"),
+        new("history", "Run History")
+    };
+
+    private string _activeTab = "configure";
+
+    private void HandleTabChange(string tabId) => _activeTab = tabId;
+
+    private void SwitchToConfigureTab()
+    {
+        _activeTab = "configure";
+        StateHasChanged();
+    }
+
+    // ── Lifecycle ─────────────────────────────────────────────────────
     protected override async Task OnInitializedAsync() => await ReloadAsync();
 
     private async Task ReloadAsync()
@@ -449,19 +540,20 @@
             new { Regulator = RegulatorCode })).ToList();
     }
 
+    // ── Scenario selection ────────────────────────────────────────────
     private void SelectScenario(ScenarioListRow scenario)
     {
         _selectedScenarioId   = scenario.Id;
         _selectedScenarioCode = scenario.ScenarioCode;
-        // Default time horizon to scenario's defined horizon
         _timeHorizon = scenario.TimeHorizon;
     }
 
+    // ── Run stress test ───────────────────────────────────────────────
     private async Task RunStressTestAsync()
     {
         if (!_selectedScenarioId.HasValue || string.IsNullOrWhiteSpace(_periodCode)) return;
 
-        _running  = true;
+        _running = true;
         _lastSummary = null;
         _entityCount = await GetEntityCountAsync();
         StateHasChanged();
@@ -481,7 +573,6 @@
 
             Toast.Success("Stress test completed successfully.", title: summary.ScenarioName);
 
-            // Refresh recent runs list
             using var conn = await Db.OpenAsync();
             await LoadRecentRunsAsync(conn);
         }
@@ -495,6 +586,7 @@
         }
     }
 
+    // ── Report download ───────────────────────────────────────────────
     private async Task DownloadReportAsync(long runId, string scenarioCode)
     {
         try
@@ -512,7 +604,7 @@
     }
 
     private void ViewResults(Guid runGuid) =>
-        Nav.NavigateTo($"/regulator/regulator/stress-test/{runGuid}");
+        Nav.NavigateTo($"/regulator/stress-test/{runGuid}");
 
     private async Task<int> GetEntityCountAsync()
     {
@@ -527,7 +619,39 @@
             new { R = RegulatorCode, P = _periodCode });
     }
 
-    // ── Row types ─────────────────────────────────────────────────────────────
+    // ── Helpers ───────────────────────────────────────────────────────
+    private static string CarMetricClass(decimal postCar)
+    {
+        if (postCar < 10) return "fc-st-metric-danger";
+        if (postCar < 15) return "fc-st-metric-warn";
+        return "fc-st-metric-ok";
+    }
+
+    private static string NplMetricClass(decimal postNpl)
+    {
+        if (postNpl > 20) return "fc-st-metric-danger";
+        if (postNpl > 10) return "fc-st-metric-warn";
+        return "fc-st-metric-ok";
+    }
+
+    private static string GetScoreClass(string rating) => rating switch
+    {
+        "RESILIENT"  => "fc-st-score--resilient",
+        "ADEQUATE"   => "fc-st-score--adequate",
+        "VULNERABLE" => "fc-st-score--vulnerable",
+        _            => "fc-st-score--critical"
+    };
+
+    private static string? GetResilienceVariant(string? rating) => rating switch
+    {
+        "RESILIENT"  => "success",
+        "ADEQUATE"   => "info",
+        "VULNERABLE" => "warning",
+        "CRITICAL"   => "danger",
+        _            => null
+    };
+
+    // ── Row types ─────────────────────────────────────────────────────
     private sealed record ScenarioListRow(
         int Id, string ScenarioCode, string ScenarioName,
         string Category, string Severity,

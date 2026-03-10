@@ -147,7 +147,7 @@
             </DataColumn>
             <DataColumn TItem="CachedTemplate" Title="Frequency" Width="110px">
                 <CellTemplate>
-                    <span class="fc-list-cell-muted">@GetFrequency(context.ReturnCode)</span>
+                    <span class="fc-list-cell-muted">@GetFrequency(context)</span>
                 </CellTemplate>
             </DataColumn>
             <DataColumn TItem="CachedTemplate" Title="Fields" Width="60px">
@@ -205,7 +205,7 @@
                     t.ReturnCode.Contains(_filterTerm, StringComparison.OrdinalIgnoreCase) ||
                     t.Name.Contains(_filterTerm, StringComparison.OrdinalIgnoreCase))
         .Where(t => string.IsNullOrEmpty(_categoryFilter) || t.StructuralCategory == _categoryFilter)
-        .Where(t => string.IsNullOrEmpty(_frequencyFilter) || GetFrequency(t.ReturnCode) == _frequencyFilter)
+        .Where(t => string.IsNullOrEmpty(_frequencyFilter) || GetFrequency(t) == _frequencyFilter)
         .OrderBy(t => t.ReturnCode);
 
     // Restore filter state from URL on browser back/forward
@@ -338,8 +338,9 @@
         _ => "fc-badge--neutral"
     };
 
-    private static string GetFrequency(string rc) =>
-        rc.StartsWith("MFCR") ? "Monthly" :
-        rc.StartsWith("QFCR") ? "Quarterly" :
-        rc.StartsWith("SFCR") ? "Semi-Annual" : "Computed";
+    private static string GetFrequency(CachedTemplate template) => template.Frequency switch
+    {
+        ReturnFrequency.SemiAnnual => "Semi-Annual",
+        _ => template.Frequency.ToString()
+    };
 }

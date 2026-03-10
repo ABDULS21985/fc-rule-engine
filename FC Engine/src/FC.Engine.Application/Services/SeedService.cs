@@ -6,8 +6,8 @@ using FC.Engine.Domain.Metadata;
 namespace FC.Engine.Application.Services;
 
 /// <summary>
-/// Parses schema.sql to extract 103 template definitions and seeds them into metadata tables as Published.
-/// Detects structural category: serial_no → MultiRow, item_code → ItemCoded, else → FixedRow.
+/// Parses schema.sql to extract FC return/report templates and seeds them into metadata tables as Published.
+/// Handles both standard MFCR/QFCR/SFCR tables and workbook-derived FC/report tables such as FC CAR 1 and CONSOL.
 /// </summary>
 public class SeedService
 {
@@ -47,7 +47,7 @@ public class SeedService
 
             try
             {
-                var returnCode = DeriveReturnCode(table.TableName);
+                var returnCode = SchemaTemplateConventions.DeriveReturnCode(table.TableName);
                 if (string.IsNullOrEmpty(returnCode)) continue;
 
                 if (await _templateRepo.ExistsByReturnCode(returnCode, ct))
@@ -57,8 +57,8 @@ public class SeedService
                 }
 
                 var description = comments.GetValueOrDefault(table.TableName, returnCode);
-                var frequency = DeriveFrequency(returnCode);
-                var category = DeriveStructuralCategory(table);
+                var frequency = SchemaTemplateConventions.DeriveFrequency(returnCode);
+                var category = SchemaTemplateConventions.DeriveStructuralCategory(table);
 
                 var template = new ReturnTemplate
                 {
@@ -82,22 +82,22 @@ public class SeedService
 
                 // Add serial_no / item_code as key fields if applicable
                 int fieldOrder = 0;
-                if (category == StructuralCategory.MultiRow)
+                var keyColumn = SchemaTemplateConventions.GetStructuralKeyColumn(table, category);
+                if (keyColumn is not null)
                 {
-                    version.AddField(CreateKeyField("serial_no", "Serial Number", FieldDataType.Integer, "INT", ++fieldOrder));
-                }
-                else if (category == StructuralCategory.ItemCoded)
-                {
-                    var itemCodeCol = table.Columns.FirstOrDefault(c => c.Name.Equals("item_code", StringComparison.OrdinalIgnoreCase));
-                    var sqlType = itemCodeCol?.SqlType ?? "VARCHAR(20)";
-                    var dataType = sqlType.Contains("INT", StringComparison.OrdinalIgnoreCase)
-                        ? FieldDataType.Integer : FieldDataType.Text;
-                    version.AddField(CreateKeyField("item_code", "Item Code", dataType, sqlType, ++fieldOrder));
+                    version.AddField(CreateKeyField(
+                        keyColumn.Name,
+                        DeriveDisplayName(keyColumn.Name),
+                        MapSqlTypeToDataType(keyColumn.SqlType),
+                        keyColumn.SqlType,
+                        ++fieldOrder));
                 }
 
                 // Add data columns as fields
                 foreach (var col in table.Columns)
                 {
+                    if (keyColumn is not null && col.Name.Equals(keyColumn.Name, StringComparison.OrdinalIgnoreCase))
+                        continue;
                     if (SystemColumns.Contains(col.Name)) continue;
 
                     var dataType = MapSqlTypeToDataType(col.SqlType);
@@ -230,41 +230,6 @@ public class SeedService
         }
 
         return comments;
-    }
-
-    private static string DeriveReturnCode(string tableName)
-    {
-        // mfcr_300 → MFCR 300, qfcr_364 → QFCR 364, sfcr_400 → SFCR 400
-        // mfcr_306_1 → MFCR 306-1, fc_100 → FC 100
-        var match = Regex.Match(tableName, @"^(mfcr|qfcr|sfcr|fc)_(\d+)(?:_(\d+))?$", RegexOptions.IgnoreCase);
-        if (!match.Success) return string.Empty;
-
-        var prefix = match.Groups[1].Value.ToUpperInvariant();
-        var number = match.Groups[2].Value;
-        var suffix = match.Groups[3].Success ? $"-{match.Groups[3].Value}" : "";
-
-        return $"{prefix} {number}{suffix}";
-    }
-
-    private static ReturnFrequency DeriveFrequency(string returnCode)
-    {
-        if (returnCode.StartsWith("MFCR", StringComparison.OrdinalIgnoreCase))
-            return ReturnFrequency.Monthly;
-        if (returnCode.StartsWith("QFCR", StringComparison.OrdinalIgnoreCase))
-            return ReturnFrequency.Quarterly;
-        if (returnCode.StartsWith("SFCR", StringComparison.OrdinalIgnoreCase))
-            return ReturnFrequency.SemiAnnual;
-        if (returnCode.StartsWith("FC", StringComparison.OrdinalIgnoreCase))
-            return ReturnFrequency.Computed;
-        return ReturnFrequency.Monthly;
-    }
-
-    private static StructuralCategory DeriveStructuralCategory(ParsedTable table)
-    {
-        var colNames = table.Columns.Select(c => c.Name.ToLowerInvariant()).ToHashSet();
-        if (colNames.Contains("serial_no")) return StructuralCategory.MultiRow;
-        if (colNames.Contains("item_code")) return StructuralCategory.ItemCoded;
-        return StructuralCategory.FixedRow;
     }
 
     private static FieldDataType MapSqlTypeToDataType(string sqlType)

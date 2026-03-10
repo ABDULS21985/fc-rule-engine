@@ -35,7 +35,7 @@ public class FormulaSeedService
             if (SeedService.SkipTables.Contains(table.TableName))
                 continue;
 
-            var returnCode = DeriveReturnCode(table.TableName);
+            var returnCode = SchemaTemplateConventions.DeriveReturnCode(table.TableName);
             if (string.IsNullOrEmpty(returnCode)) continue;
 
             try
@@ -344,18 +344,6 @@ public class FormulaSeedService
     // Override special total columns that are actually DIFFERENCE formulas
     private static bool IsDifferenceTotal(string totalName) =>
         totalName is "total_net_loans" or "total_net_loans_ytd";
-
-    private static string DeriveReturnCode(string tableName)
-    {
-        var match = Regex.Match(tableName, @"^(mfcr|qfcr|sfcr|fc)_(\d+)(?:_(\d+))?$", RegexOptions.IgnoreCase);
-        if (!match.Success) return string.Empty;
-
-        var prefix = match.Groups[1].Value.ToUpperInvariant();
-        var number = match.Groups[2].Value;
-        var suffix = match.Groups[3].Success ? $"-{match.Groups[3].Value}" : "";
-
-        return $"{prefix} {number}{suffix}";
-    }
 
     private static List<ParsedTable> ParseCreateTables(string sql)
     {

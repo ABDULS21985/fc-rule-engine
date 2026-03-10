@@ -402,9 +402,7 @@ else
 
         // Frequency breakdown
         _frequencyBreakdown = templates
-            .GroupBy(t => t.ReturnCode.StartsWith("MFCR") ? "Monthly" :
-                          t.ReturnCode.StartsWith("QFCR") ? "Quarterly" :
-                          t.ReturnCode.StartsWith("SFCR") ? "Semi-Annual" : "Computed")
+            .GroupBy(t => FrequencyLabel(t.Frequency))
             .Select(g => (g.Key, g.Count()))
             .OrderByDescending(x => x.Item2)
             .ToList();
@@ -488,6 +486,12 @@ else
         SubmissionStatus.Validating => "Validating",
         SubmissionStatus.Parsing => "Parsing",
         _ => "Draft"
+    };
+
+    private static string FrequencyLabel(ReturnFrequency frequency) => frequency switch
+    {
+        ReturnFrequency.SemiAnnual => "Semi-Annual",
+        _ => frequency.ToString()
     };
 
     /// <summary>
