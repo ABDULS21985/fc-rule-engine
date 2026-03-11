@@ -152,6 +152,11 @@
                             <strong>@_workspace.KnowledgeGraph.DossierAttentionCount</strong>
                             <p>Knowledge-dossier sections currently in watch or critical posture.</p>
                         </article>
+                        <article class="fc-intel-card">
+                            <span class="fc-intel-card__label">Dossier Materialized</span>
+                            <strong>@(_workspace.KnowledgeGraph.DossierMaterializedAt?.ToString("dd MMM") ?? "Pending")</strong>
+                            <p>@(_workspace.KnowledgeGraph.DossierMaterializedAt?.ToString("HH:mm 'UTC'", CultureInfo.InvariantCulture) ?? "The compliance dossier has not been written yet.")</p>
+                        </article>
                     </div>
 
                     <div class="fc-intel-controlbar">
@@ -290,7 +295,10 @@
                                 <span class="fc-intel-card__label">Compliance Dossier</span>
                                 <h2>Structured regulator-facing pack assembled from graph, obligation, and impact evidence</h2>
                             </div>
-                            <span class="fc-intel-chip">@_workspace.KnowledgeGraph.DossierPack.Count section(s)</span>
+                            <div class="fc-intel-inline-chips">
+                                <span class="fc-intel-chip">@_workspace.KnowledgeGraph.DossierPack.Count section(s)</span>
+                                <span class="fc-intel-chip">@(_workspace.KnowledgeGraph.DossierMaterializedAt?.ToString("dd MMM HH:mm", CultureInfo.InvariantCulture) ?? "Pending")</span>
+                            </div>
                         </header>
                         @if (_workspace.KnowledgeGraph.DossierPack.Count == 0)
                         {

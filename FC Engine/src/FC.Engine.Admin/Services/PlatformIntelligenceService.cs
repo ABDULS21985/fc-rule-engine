@@ -65,6 +65,7 @@ public sealed class PlatformIntelligenceService
 
     private readonly MetadataDbContext _db;
     private readonly KnowledgeGraphCatalogService _knowledgeGraphCatalog;
+    private readonly KnowledgeGraphDossierCatalogService _knowledgeGraphDossierCatalog;
     private readonly CapitalActionCatalogService _capitalActionCatalog;
     private readonly CapitalPlanningScenarioStoreService _capitalPlanningScenarioStore;
     private readonly ModelInventoryCatalogService _modelInventoryCatalog;
@@ -81,6 +82,7 @@ public sealed class PlatformIntelligenceService
     public PlatformIntelligenceService(
         MetadataDbContext db,
         KnowledgeGraphCatalogService knowledgeGraphCatalog,
+        KnowledgeGraphDossierCatalogService knowledgeGraphDossierCatalog,
         CapitalActionCatalogService capitalActionCatalog,
         CapitalPlanningScenarioStoreService capitalPlanningScenarioStore,
         ModelInventoryCatalogService modelInventoryCatalog,
@@ -96,6 +98,7 @@ public sealed class PlatformIntelligenceService
     {
         _db = db;
         _knowledgeGraphCatalog = knowledgeGraphCatalog;
+        _knowledgeGraphDossierCatalog = knowledgeGraphDossierCatalog;
         _capitalActionCatalog = capitalActionCatalog;
         _capitalPlanningScenarioStore = capitalPlanningScenarioStore;
         _modelInventoryCatalog = modelInventoryCatalog;
@@ -284,6 +287,20 @@ public sealed class PlatformIntelligenceService
             institutionObligationRows,
             impactPropagationRows,
             knowledgeNavigatorDetails);
+        var knowledgeDossierCatalog = await _knowledgeGraphDossierCatalog.MaterializeAsync(
+            knowledgeDossierPack
+                .Select(x => new KnowledgeGraphDossierSectionInput
+                {
+                    SectionCode = x.SectionCode,
+                    SectionName = x.SectionName,
+                    RowCount = x.RowCount,
+                    Signal = x.Signal,
+                    Coverage = x.Coverage,
+                    Commentary = x.Commentary,
+                    RecommendedAction = x.RecommendedAction
+                })
+                .ToList(),
+            ct);
         var knowledgeCatalog = await _knowledgeGraphCatalog.MaterializeAsync(
             BuildKnowledgeGraphCatalogRequest(
                 ontologyCoverageRows,
@@ -424,8 +441,9 @@ public sealed class PlatformIntelligenceService
                 PersistedNodeCount = knowledgeCatalog.NodeCount,
                 PersistedEdgeCount = knowledgeCatalog.EdgeCount,
                 CatalogMaterializedAt = knowledgeCatalog.MaterializedAt,
-                DossierReadyCount = knowledgeDossierPack.Count(x => x.Signal == "Current"),
-                DossierAttentionCount = knowledgeDossierPack.Count(x => x.Signal is "Critical" or "Watch"),
+                DossierMaterializedAt = knowledgeDossierCatalog.MaterializedAt,
+                DossierReadyCount = knowledgeDossierCatalog.Sections.Count(x => x.Signal == "Current"),
+                DossierAttentionCount = knowledgeDossierCatalog.Sections.Count(x => x.Signal is "Critical" or "Watch"),
                 CatalogNodeTypes = knowledgeCatalog.NodeTypes
                     .Select(x => new KnowledgeGraphCatalogTypeRow { Type = x.Type, Count = x.Count })
                     .ToList(),
@@ -441,7 +459,18 @@ public sealed class PlatformIntelligenceService
                 InstitutionObligations = institutionObligationRows,
                 ImpactSurfaces = impactRows.Take(10).ToList(),
                 ImpactPropagation = impactPropagationRows,
-                DossierPack = knowledgeDossierPack
+                DossierPack = knowledgeDossierCatalog.Sections
+                    .Select(x => new KnowledgeGraphDossierRow
+                    {
+                        SectionCode = x.SectionCode,
+                        SectionName = x.SectionName,
+                        RowCount = x.RowCount,
+                        Signal = x.Signal,
+                        Coverage = x.Coverage,
+                        Commentary = x.Commentary,
+                        RecommendedAction = x.RecommendedAction
+                    })
+                    .ToList()
             },
             Capital = new CapitalManagementSnapshot
             {
@@ -5085,6 +5114,7 @@ public sealed class KnowledgeGraphSnapshot
     public int PersistedNodeCount { get; set; }
     public int PersistedEdgeCount { get; set; }
     public DateTime? CatalogMaterializedAt { get; set; }
+    public DateTime? DossierMaterializedAt { get; set; }
     public int DossierReadyCount { get; set; }
     public int DossierAttentionCount { get; set; }
     public List<KnowledgeGraphCatalogTypeRow> CatalogNodeTypes { get; set; } = [];
