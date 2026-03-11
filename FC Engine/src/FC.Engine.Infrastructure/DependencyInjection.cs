@@ -171,6 +171,7 @@ public static class DependencyInjection
         services.AddScoped<OpsResiliencePackCatalogService>();
         services.AddScoped<ModelRiskPackCatalogService>();
         services.AddScoped<SanctionsWatchlistCatalogService>();
+        services.AddScoped<SanctionsWatchlistRefreshService>();
         services.AddScoped<SanctionsPackCatalogService>();
         services.AddScoped<SanctionsScreeningSessionStoreService>();
         services.AddScoped<SanctionsWorkflowStoreService>();
@@ -324,6 +325,7 @@ public static class DependencyInjection
         services.AddHostedService<RetentionEnforcementJob>();
         services.AddHostedService<ScheduledReportJob>();
         services.AddHostedService<ContinuousDspmScheduler>();
+        services.AddHostedService<SanctionsWatchlistRefreshJob>();
 
         // ── Regulatory Direct Submission (RG-34) ──
         services.Configure<RegulatoryApiSettings>(configuration.GetSection(RegulatoryApiSettings.SectionName));

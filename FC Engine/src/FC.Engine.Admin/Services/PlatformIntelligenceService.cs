@@ -22,37 +22,6 @@ public sealed class PlatformIntelligenceService
         new("DIVIDEND", "Dividend restraint", "Retain a greater share of quarterly earnings to rebuild buffers organically.", "Earnings", 0m, 0m, 1.25m, 0.3m)
     ];
 
-    private static readonly IReadOnlyList<SanctionsWatchlistSource> WatchlistSources =
-    [
-        new("UN", "UN Security Council Consolidated List", "Daily", "active"),
-        new("OFAC", "OFAC SDN List", "Daily", "active"),
-        new("EU", "EU Consolidated List", "Daily", "active"),
-        new("UK", "UK HMT Sanctions List", "Daily", "active"),
-        new("NFIU", "Nigeria NFIU / EFCC Domestic List", "Daily", "active"),
-        new("INTERPOL", "Interpol Red Notices", "Daily", "active"),
-        new("PEP", "Politically Exposed Persons", "Daily", "active")
-    ];
-
-    private static readonly IReadOnlyList<SanctionsWatchlistEntry> WatchlistEntries =
-    [
-        new("UN", "AL-QAIDA", ["AL QAIDA", "QAEDA", "ALQAIDA"], "entity", "critical"),
-        new("UN", "ISLAMIC STATE", ["ISIS", "ISIL", "DAESH"], "entity", "critical"),
-        new("OFAC", "BOKO HARAM", ["JAMA'ATU AHLIS SUNNA LIDDA'AWATI WAL-JIHAD"], "entity", "critical"),
-        new("OFAC", "HEZBOLLAH", ["HIZBALLAH", "HIZBULLAH"], "entity", "critical"),
-        new("EU", "HAMAS", ["HARAKAT AL-MUQAWAMA AL-ISLAMIYYA"], "entity", "critical"),
-        new("UK", "WAGNER GROUP", ["PMC WAGNER", "WAGNER"], "entity", "high"),
-        new("NFIU", "TERROR FINANCE WATCH", ["TFS HIGH RISK COUNTERPARTY"], "entity", "high"),
-        new("INTERPOL", "JOSE RODRIGUEZ", ["JOSE MANUEL RODRIGUEZ"], "person", "high"),
-        new("INTERPOL", "MARIA IVANOVA", ["MARIA PETROVNA IVANOVA"], "person", "high"),
-        new("PEP", "MINISTER OF FINANCE", ["HONOURABLE MINISTER OF FINANCE"], "person", "medium"),
-        new("PEP", "CENTRAL BANK GOVERNOR", ["GOVERNOR OF THE CENTRAL BANK"], "person", "medium"),
-        new("UN", "ANSARU", ["JAMA'ATU ANSARUL MUSLIMINA FI BILADIS SUDAN"], "entity", "critical"),
-        new("OFAC", "AL-SHABAAB", ["AL SHABAAB", "HARAKAT AL SHABAAB AL MUJAHIDEEN"], "entity", "critical"),
-        new("EU", "LASHKAR-E-TAIBA", ["LASHKAR E TAIBA", "LET"], "entity", "critical"),
-        new("UK", "ISLAMIC JIHAD", ["PALESTINIAN ISLAMIC JIHAD"], "entity", "high"),
-        new("NFIU", "DOMESTIC AML WATCH SUBJECT", ["NIGERIA AML WATCH SUBJECT"], "person", "high")
-    ];
-
     private static readonly IReadOnlyList<ModelInventorySeed> DefaultModelInventoryCatalog =
     [
         new("ECL", "IFRS 9 Expected Credit Loss", "Tier 1", "Credit Risk", "MFB_IFR", ["ecl", "pd", "lgd", "ead"]),
@@ -74,6 +43,7 @@ public sealed class PlatformIntelligenceService
     private readonly OpsResiliencePackCatalogService _opsResiliencePackCatalog;
     private readonly ModelRiskPackCatalogService _modelRiskPackCatalog;
     private readonly SanctionsWatchlistCatalogService _sanctionsWatchlistCatalog;
+    private readonly SanctionsWatchlistRefreshService _sanctionsWatchlistRefresh;
     private readonly SanctionsPackCatalogService _sanctionsPackCatalog;
     private readonly SanctionsScreeningSessionStoreService _sanctionsScreeningSessionStore;
     private readonly SanctionsWorkflowStoreService _sanctionsWorkflowStore;
@@ -92,6 +62,7 @@ public sealed class PlatformIntelligenceService
         OpsResiliencePackCatalogService opsResiliencePackCatalog,
         ModelRiskPackCatalogService modelRiskPackCatalog,
         SanctionsWatchlistCatalogService sanctionsWatchlistCatalog,
+        SanctionsWatchlistRefreshService sanctionsWatchlistRefresh,
         SanctionsPackCatalogService sanctionsPackCatalog,
         SanctionsScreeningSessionStoreService sanctionsScreeningSessionStore,
         SanctionsWorkflowStoreService sanctionsWorkflowStore,
@@ -109,6 +80,7 @@ public sealed class PlatformIntelligenceService
         _opsResiliencePackCatalog = opsResiliencePackCatalog;
         _modelRiskPackCatalog = modelRiskPackCatalog;
         _sanctionsWatchlistCatalog = sanctionsWatchlistCatalog;
+        _sanctionsWatchlistRefresh = sanctionsWatchlistRefresh;
         _sanctionsPackCatalog = sanctionsPackCatalog;
         _sanctionsScreeningSessionStore = sanctionsScreeningSessionStore;
         _sanctionsWorkflowStore = sanctionsWorkflowStore;
@@ -312,9 +284,8 @@ public sealed class PlatformIntelligenceService
                 obligationRows,
                 institutionObligationRows),
             ct);
-        var sanctionsCatalog = await _sanctionsWatchlistCatalog.MaterializeAsync(
-            BuildSanctionsCatalogRequest(),
-            ct);
+        await _sanctionsWatchlistRefresh.RefreshIfStaleAsync(TimeSpan.FromHours(24), ct);
+        var sanctionsCatalog = await _sanctionsWatchlistCatalog.LoadAsync(ct);
         var capitalActionCatalog = await LoadCapitalActionCatalogAsync(ct);
         var modelInventoryCatalog = await LoadModelInventoryCatalogAsync(ct);
         var capitalPlanningScenario = await _capitalPlanningScenarioStore.LoadAsync(ct);
@@ -422,7 +393,7 @@ public sealed class PlatformIntelligenceService
             {
                 KnowledgeGraphNodes = knowledgeCatalog.NodeCount > 0 ? knowledgeCatalog.NodeCount : referencedRows.Count,
                 ActiveCapitalAlerts = capitalRows.Count(x => x.CapitalScore < 60m),
-                WatchlistSources = sanctionsCatalog.SourceCount,
+                WatchlistSources = sanctionsCatalog.Sources.Count,
                 OpenResilienceIncidents = incidents.Count(x => !x.RemediatedAt.HasValue),
                 ModelsUnderGovernance = modelInventory.Count,
                 PriorityInterventions = interventions.Count(x => x.Priority is "Critical" or "High")
@@ -501,9 +472,9 @@ public sealed class PlatformIntelligenceService
             },
             Sanctions = new SanctionsSnapshot
             {
-                SourceCount = sanctionsCatalog.SourceCount,
-                EntryCount = sanctionsCatalog.EntryCount,
-                LastUpdatedAt = sanctionsCatalog.MaterializedAt,
+                SourceCount = sanctionsCatalog.Sources.Count,
+                EntryCount = sanctionsCatalog.Entries.Count,
+                LastUpdatedAt = sanctionsCatalog.MaterializedAt ?? DateTime.UtcNow,
                 PersistedFalsePositiveCount = sanctionsWorkflowState.FalsePositiveLibrary.Count,
                 PersistedReviewAuditCount = sanctionsWorkflowState.AuditTrail.Count,
                 LastReviewedAt = sanctionsWorkflowState.AuditTrail.FirstOrDefault()?.ReviewedAtUtc,
@@ -874,13 +845,7 @@ public sealed class PlatformIntelligenceService
 
     private async Task<SanctionsCatalogState> LoadSanctionsCatalogAsync(CancellationToken ct)
     {
-        var catalog = await _sanctionsWatchlistCatalog.LoadAsync(ct);
-        if (catalog.Entries.Count > 0 && catalog.Sources.Count > 0)
-        {
-            return catalog;
-        }
-
-        await _sanctionsWatchlistCatalog.MaterializeAsync(BuildSanctionsCatalogRequest(), ct);
+        await _sanctionsWatchlistRefresh.RefreshIfStaleAsync(TimeSpan.FromHours(24), ct);
         return await _sanctionsWatchlistCatalog.LoadAsync(ct);
     }
 
@@ -1792,32 +1757,6 @@ public sealed class PlatformIntelligenceService
             Lineage = lineageInputs,
             Obligations = obligationInputs,
             InstitutionObligations = institutionObligationInputs
-        };
-    }
-
-    private static SanctionsCatalogMaterializationRequest BuildSanctionsCatalogRequest()
-    {
-        return new SanctionsCatalogMaterializationRequest
-        {
-            Sources = WatchlistSources
-                .Select(x => new SanctionsCatalogSourceInput
-                {
-                    SourceCode = x.Code,
-                    SourceName = x.Name,
-                    RefreshCadence = x.RefreshCadence,
-                    Status = x.Status
-                })
-                .ToList(),
-            Entries = WatchlistEntries
-                .Select(x => new SanctionsCatalogEntryInput
-                {
-                    SourceCode = x.SourceCode,
-                    PrimaryName = x.PrimaryName,
-                    Aliases = x.Aliases.ToList(),
-                    Category = x.Category,
-                    RiskLevel = x.RiskLevel
-                })
-                .ToList()
         };
     }
 

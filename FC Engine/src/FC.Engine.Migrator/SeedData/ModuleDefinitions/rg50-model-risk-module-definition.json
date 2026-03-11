@@ -1,0 +1,256 @@
+{
+  "moduleCode": "MODEL_RISK",
+  "moduleVersion": "1.0.0",
+  "description": "RG-50 Model Risk Management & Validation Framework covering inventory, validation, monitoring, change control, approvals, appetite compliance, and reporting.",
+  "templates": [
+    {
+      "returnCode": "MRM_INV",
+      "name": "Model Inventory Summary",
+      "frequency": "Quarterly",
+      "structuralCategory": "MultiRow",
+      "tablePrefix": "mrm",
+      "sections": [
+        { "code": "INV", "name": "Model Inventory", "displayOrder": 1 }
+      ],
+      "fields": [
+        { "fieldCode": "model_code", "label": "Model Code", "dataType": "Text", "section": "INV", "required": true, "displayOrder": 1, "regulatoryReference": "CBN-MRM-001" },
+        { "fieldCode": "model_name", "label": "Model Name", "dataType": "Text", "section": "INV", "required": true, "displayOrder": 2, "regulatoryReference": "CBN-MRM-002" },
+        { "fieldCode": "model_family", "label": "Model Family", "dataType": "Enum", "section": "INV", "required": true, "displayOrder": 3, "enumValues": "ECL,PD,LGD,EAD,CAR,LCR,NSFR,Stress,Climate", "regulatoryReference": "CBN-MRM-003" },
+        { "fieldCode": "model_tier", "label": "Model Risk Tier", "dataType": "Enum", "section": "INV", "required": true, "displayOrder": 4, "enumValues": "Tier 1,Tier 2", "regulatoryReference": "CBN-MRM-004" },
+        { "fieldCode": "materiality_rating", "label": "Materiality Rating", "dataType": "Enum", "section": "INV", "required": true, "displayOrder": 5, "enumValues": "High,Moderate,Low", "regulatoryReference": "CBN-MRM-005" },
+        { "fieldCode": "model_owner", "label": "Model Owner", "dataType": "Text", "section": "INV", "required": true, "displayOrder": 6, "regulatoryReference": "CBN-MRM-006" },
+        { "fieldCode": "last_validation_date", "label": "Last Validation Date", "dataType": "Date", "section": "INV", "required": true, "displayOrder": 7, "regulatoryReference": "CBN-MRM-007" },
+        { "fieldCode": "next_validation_due", "label": "Next Validation Due", "dataType": "Date", "section": "INV", "required": true, "displayOrder": 8, "regulatoryReference": "CBN-MRM-008" }
+      ]
+    },
+    {
+      "returnCode": "MRM_VAL",
+      "name": "Validation Status",
+      "frequency": "Quarterly",
+      "structuralCategory": "MultiRow",
+      "tablePrefix": "mrm",
+      "sections": [
+        { "code": "VAL", "name": "Validation Status", "displayOrder": 1 }
+      ],
+      "fields": [
+        { "fieldCode": "model_code", "label": "Model Code", "dataType": "Text", "section": "VAL", "required": true, "displayOrder": 1, "regulatoryReference": "CBN-MRM-009" },
+        { "fieldCode": "validation_type", "label": "Validation Type", "dataType": "Enum", "section": "VAL", "required": true, "displayOrder": 2, "enumValues": "Conceptual Soundness,Data Integrity,Implementation Testing,Backtesting,Sensitivity Analysis", "regulatoryReference": "CBN-MRM-010" },
+        { "fieldCode": "validation_status", "label": "Validation Status", "dataType": "Enum", "section": "VAL", "required": true, "displayOrder": 3, "enumValues": "Planned,In Progress,Completed,Overdue", "regulatoryReference": "CBN-MRM-011" },
+        { "fieldCode": "findings_count", "label": "Findings Count", "dataType": "Integer", "section": "VAL", "required": true, "displayOrder": 4, "minValue": 0, "regulatoryReference": "CBN-MRM-012" },
+        { "fieldCode": "risk_rating", "label": "Risk Rating", "dataType": "Enum", "section": "VAL", "required": true, "displayOrder": 5, "enumValues": "Low,Medium,High", "regulatoryReference": "CBN-MRM-013" },
+        { "fieldCode": "report_issue_date", "label": "Report Issue Date", "dataType": "Date", "section": "VAL", "required": true, "displayOrder": 6, "regulatoryReference": "CBN-MRM-014" }
+      ],
+      "crossSheetRules": [
+        {
+          "description": "Every validation record must map to a registered model inventory entry.",
+          "sourceTemplate": "MRM_INV",
+          "sourceField": "model_code",
+          "targetTemplate": "MRM_VAL",
+          "targetField": "model_code",
+          "operator": "Equals",
+          "severity": "Error"
+        }
+      ]
+    },
+    {
+      "returnCode": "MRM_PRF",
+      "name": "Performance Metrics",
+      "frequency": "Quarterly",
+      "structuralCategory": "MultiRow",
+      "tablePrefix": "mrm",
+      "sections": [
+        { "code": "PRF", "name": "Performance Metrics", "displayOrder": 1 }
+      ],
+      "fields": [
+        { "fieldCode": "model_code", "label": "Model Code", "dataType": "Text", "section": "PRF", "required": true, "displayOrder": 1, "regulatoryReference": "CBN-MRM-015" },
+        { "fieldCode": "population_stability_index", "label": "Population Stability Index", "dataType": "Decimal", "section": "PRF", "required": true, "displayOrder": 2, "decimalPlaces": 4, "regulatoryReference": "CBN-MRM-016" },
+        { "fieldCode": "gini_percent", "label": "Gini Percent", "dataType": "Percentage", "section": "PRF", "required": true, "displayOrder": 3, "minValue": 0, "maxValue": 100, "decimalPlaces": 2, "regulatoryReference": "CBN-MRM-017" },
+        { "fieldCode": "calibration_drift_percent", "label": "Calibration Drift Percent", "dataType": "Percentage", "section": "PRF", "required": true, "displayOrder": 4, "minValue": 0, "maxValue": 100, "decimalPlaces": 2, "regulatoryReference": "CBN-MRM-018" },
+        { "fieldCode": "performance_status", "label": "Performance Status", "dataType": "Enum", "section": "PRF", "required": true, "displayOrder": 5, "enumValues": "Current,Watch,Critical", "regulatoryReference": "CBN-MRM-019" },
+        { "fieldCode": "metric_date", "label": "Metric Date", "dataType": "Date", "section": "PRF", "required": true, "displayOrder": 6, "regulatoryReference": "CBN-MRM-020" }
+      ],
+      "crossSheetRules": [
+        {
+          "description": "Performance metrics must map to a registered model.",
+          "sourceTemplate": "MRM_INV",
+          "sourceField": "model_code",
+          "targetTemplate": "MRM_PRF",
+          "targetField": "model_code",
+          "operator": "Equals",
+          "severity": "Error"
+        }
+      ]
+    },
+    {
+      "returnCode": "MRM_BKT",
+      "name": "Backtesting & Outcome Analysis",
+      "frequency": "Quarterly",
+      "structuralCategory": "MultiRow",
+      "tablePrefix": "mrm",
+      "sections": [
+        { "code": "BKT", "name": "Backtesting", "displayOrder": 1 }
+      ],
+      "fields": [
+        { "fieldCode": "model_code", "label": "Model Code", "dataType": "Text", "section": "BKT", "required": true, "displayOrder": 1, "regulatoryReference": "CBN-MRM-021" },
+        { "fieldCode": "predicted_value", "label": "Predicted Value", "dataType": "Decimal", "section": "BKT", "required": true, "displayOrder": 2, "decimalPlaces": 4, "regulatoryReference": "CBN-MRM-022" },
+        { "fieldCode": "actual_value", "label": "Actual Value", "dataType": "Decimal", "section": "BKT", "required": true, "displayOrder": 3, "decimalPlaces": 4, "regulatoryReference": "CBN-MRM-023" },
+        { "fieldCode": "variance_value", "label": "Variance Value", "dataType": "Decimal", "section": "BKT", "required": true, "displayOrder": 4, "decimalPlaces": 4, "regulatoryReference": "CBN-MRM-024" },
+        { "fieldCode": "variance_tolerance", "label": "Variance Tolerance", "dataType": "Decimal", "section": "BKT", "required": true, "displayOrder": 5, "decimalPlaces": 4, "regulatoryReference": "CBN-MRM-025" },
+        { "fieldCode": "backtest_status", "label": "Backtest Status", "dataType": "Enum", "section": "BKT", "required": true, "displayOrder": 6, "enumValues": "Pass,Watch,Breach", "regulatoryReference": "CBN-MRM-026" }
+      ],
+      "formulas": [
+        {
+          "formulaType": "Difference",
+          "targetField": "variance_value",
+          "sourceFields": [ "actual_value", "predicted_value" ],
+          "severity": "Warning",
+          "description": "Variance should equal actual less predicted."
+        }
+      ],
+      "crossSheetRules": [
+        {
+          "description": "Backtesting evidence must map to a registered model.",
+          "sourceTemplate": "MRM_INV",
+          "sourceField": "model_code",
+          "targetTemplate": "MRM_BKT",
+          "targetField": "model_code",
+          "operator": "Equals",
+          "severity": "Error"
+        }
+      ]
+    },
+    {
+      "returnCode": "MRM_MON",
+      "name": "Monitoring Summary",
+      "frequency": "Monthly",
+      "structuralCategory": "MultiRow",
+      "tablePrefix": "mrm",
+      "sections": [
+        { "code": "MON", "name": "Monitoring Summary", "displayOrder": 1 }
+      ],
+      "fields": [
+        { "fieldCode": "model_code", "label": "Model Code", "dataType": "Text", "section": "MON", "required": true, "displayOrder": 1, "regulatoryReference": "CBN-MRM-027" },
+        { "fieldCode": "monitoring_focus", "label": "Monitoring Focus", "dataType": "Enum", "section": "MON", "required": true, "displayOrder": 2, "enumValues": "Stability,Accuracy,Calibration,Implementation", "regulatoryReference": "CBN-MRM-028" },
+        { "fieldCode": "monitoring_signal", "label": "Monitoring Signal", "dataType": "Enum", "section": "MON", "required": true, "displayOrder": 3, "enumValues": "Current,Watch,Critical", "regulatoryReference": "CBN-MRM-029" },
+        { "fieldCode": "sample_size", "label": "Sample Size", "dataType": "Integer", "section": "MON", "required": true, "displayOrder": 4, "minValue": 0, "regulatoryReference": "CBN-MRM-030" },
+        { "fieldCode": "monitored_at", "label": "Monitored At", "dataType": "Date", "section": "MON", "required": true, "displayOrder": 5, "regulatoryReference": "CBN-MRM-031" },
+        { "fieldCode": "action_owner", "label": "Action Owner", "dataType": "Text", "section": "MON", "required": true, "displayOrder": 6, "regulatoryReference": "CBN-MRM-032" }
+      ],
+      "crossSheetRules": [
+        {
+          "description": "Monitoring records must map to a registered model.",
+          "sourceTemplate": "MRM_INV",
+          "sourceField": "model_code",
+          "targetTemplate": "MRM_MON",
+          "targetField": "model_code",
+          "operator": "Equals",
+          "severity": "Error"
+        }
+      ]
+    },
+    {
+      "returnCode": "MRM_CHG",
+      "name": "Material Model Changes",
+      "frequency": "Monthly",
+      "structuralCategory": "MultiRow",
+      "tablePrefix": "mrm",
+      "sections": [
+        { "code": "CHG", "name": "Material Changes", "displayOrder": 1 }
+      ],
+      "fields": [
+        { "fieldCode": "model_code", "label": "Model Code", "dataType": "Text", "section": "CHG", "required": true, "displayOrder": 1, "regulatoryReference": "CBN-MRM-033" },
+        { "fieldCode": "change_reference", "label": "Change Reference", "dataType": "Text", "section": "CHG", "required": true, "displayOrder": 2, "regulatoryReference": "CBN-MRM-034" },
+        { "fieldCode": "change_type", "label": "Change Type", "dataType": "Enum", "section": "CHG", "required": true, "displayOrder": 3, "enumValues": "Parameter,Tuning,Data,Methodology,Implementation", "regulatoryReference": "CBN-MRM-035" },
+        { "fieldCode": "impact_assessment", "label": "Impact Assessment", "dataType": "Enum", "section": "CHG", "required": true, "displayOrder": 4, "enumValues": "Low,Moderate,High", "regulatoryReference": "CBN-MRM-036" },
+        { "fieldCode": "parallel_run_completed", "label": "Parallel Run Completed", "dataType": "Boolean", "section": "CHG", "required": true, "displayOrder": 5, "regulatoryReference": "CBN-MRM-037" },
+        { "fieldCode": "change_date", "label": "Change Date", "dataType": "Date", "section": "CHG", "required": true, "displayOrder": 6, "regulatoryReference": "CBN-MRM-038" }
+      ],
+      "crossSheetRules": [
+        {
+          "description": "Change records must map to a registered model.",
+          "sourceTemplate": "MRM_INV",
+          "sourceField": "model_code",
+          "targetTemplate": "MRM_CHG",
+          "targetField": "model_code",
+          "operator": "Equals",
+          "severity": "Error"
+        }
+      ]
+    },
+    {
+      "returnCode": "MRM_APR",
+      "name": "Approval Workflow",
+      "frequency": "Monthly",
+      "structuralCategory": "MultiRow",
+      "tablePrefix": "mrm",
+      "sections": [
+        { "code": "APR", "name": "Approval Workflow", "displayOrder": 1 }
+      ],
+      "fields": [
+        { "fieldCode": "model_code", "label": "Model Code", "dataType": "Text", "section": "APR", "required": true, "displayOrder": 1, "regulatoryReference": "CBN-MRM-039" },
+        { "fieldCode": "workflow_stage", "label": "Workflow Stage", "dataType": "Enum", "section": "APR", "required": true, "displayOrder": 2, "enumValues": "Owner,Validation,Committee,Board,Approved", "regulatoryReference": "CBN-MRM-040" },
+        { "fieldCode": "approval_status", "label": "Approval Status", "dataType": "Enum", "section": "APR", "required": true, "displayOrder": 3, "enumValues": "Pending,In Review,Approved,Rejected", "regulatoryReference": "CBN-MRM-041" },
+        { "fieldCode": "approver_name", "label": "Approver Name", "dataType": "Text", "section": "APR", "required": true, "displayOrder": 4, "regulatoryReference": "CBN-MRM-042" },
+        { "fieldCode": "decision_date", "label": "Decision Date", "dataType": "Date", "section": "APR", "required": false, "displayOrder": 5, "regulatoryReference": "CBN-MRM-043" },
+        { "fieldCode": "audit_reference", "label": "Audit Reference", "dataType": "Text", "section": "APR", "required": true, "displayOrder": 6, "regulatoryReference": "CBN-MRM-044" }
+      ]
+    },
+    {
+      "returnCode": "MRM_RAP",
+      "name": "Model Risk Appetite Compliance",
+      "frequency": "Quarterly",
+      "structuralCategory": "MultiRow",
+      "tablePrefix": "mrm",
+      "sections": [
+        { "code": "RAP", "name": "Risk Appetite", "displayOrder": 1 }
+      ],
+      "fields": [
+        { "fieldCode": "model_code", "label": "Model Code", "dataType": "Text", "section": "RAP", "required": true, "displayOrder": 1, "regulatoryReference": "CBN-MRM-045" },
+        { "fieldCode": "appetite_limit_percent", "label": "Appetite Limit Percent", "dataType": "Percentage", "section": "RAP", "required": true, "displayOrder": 2, "minValue": 0, "maxValue": 100, "decimalPlaces": 2, "regulatoryReference": "CBN-MRM-046" },
+        { "fieldCode": "observed_exposure_percent", "label": "Observed Exposure Percent", "dataType": "Percentage", "section": "RAP", "required": true, "displayOrder": 3, "minValue": 0, "maxValue": 100, "decimalPlaces": 2, "regulatoryReference": "CBN-MRM-047" },
+        { "fieldCode": "appetite_headroom_percent", "label": "Appetite Headroom Percent", "dataType": "Decimal", "section": "RAP", "required": true, "displayOrder": 4, "decimalPlaces": 2, "regulatoryReference": "CBN-MRM-048" },
+        { "fieldCode": "appetite_status", "label": "Appetite Status", "dataType": "Enum", "section": "RAP", "required": true, "displayOrder": 5, "enumValues": "Within Appetite,Watch,Breach", "regulatoryReference": "CBN-MRM-049" },
+        { "fieldCode": "review_date", "label": "Review Date", "dataType": "Date", "section": "RAP", "required": true, "displayOrder": 6, "regulatoryReference": "CBN-MRM-050" }
+      ],
+      "formulas": [
+        {
+          "formulaType": "Difference",
+          "targetField": "appetite_headroom_percent",
+          "sourceFields": [ "appetite_limit_percent", "observed_exposure_percent" ],
+          "severity": "Error",
+          "description": "Appetite headroom should equal limit less observed exposure."
+        }
+      ],
+      "crossSheetRules": [
+        {
+          "description": "Risk appetite records must map to a registered model.",
+          "sourceTemplate": "MRM_INV",
+          "sourceField": "model_code",
+          "targetTemplate": "MRM_RAP",
+          "targetField": "model_code",
+          "operator": "Equals",
+          "severity": "Error"
+        }
+      ]
+    },
+    {
+      "returnCode": "MRM_RPT",
+      "name": "Supervisory Reporting Pack",
+      "frequency": "Quarterly",
+      "structuralCategory": "FixedRow",
+      "tablePrefix": "mrm",
+      "sections": [
+        { "code": "RPT", "name": "Reporting Pack", "displayOrder": 1 }
+      ],
+      "fields": [
+        { "fieldCode": "reporting_period_end", "label": "Reporting Period End", "dataType": "Date", "section": "RPT", "required": true, "displayOrder": 1, "regulatoryReference": "CBN-MRM-051" },
+        { "fieldCode": "total_models", "label": "Total Models", "dataType": "Integer", "section": "RPT", "required": true, "displayOrder": 2, "minValue": 0, "regulatoryReference": "CBN-MRM-052" },
+        { "fieldCode": "overdue_validations", "label": "Overdue Validations", "dataType": "Integer", "section": "RPT", "required": true, "displayOrder": 3, "minValue": 0, "regulatoryReference": "CBN-MRM-053" },
+        { "fieldCode": "watch_models", "label": "Watch Models", "dataType": "Integer", "section": "RPT", "required": true, "displayOrder": 4, "minValue": 0, "regulatoryReference": "CBN-MRM-054" },
+        { "fieldCode": "breach_models", "label": "Breach Models", "dataType": "Integer", "section": "RPT", "required": true, "displayOrder": 5, "minValue": 0, "regulatoryReference": "CBN-MRM-055" },
+        { "fieldCode": "material_changes", "label": "Material Changes", "dataType": "Integer", "section": "RPT", "required": true, "displayOrder": 6, "minValue": 0, "regulatoryReference": "CBN-MRM-056" }
+      ]
+    }
+  ],
+  "interModuleDataFlows": []
+}
