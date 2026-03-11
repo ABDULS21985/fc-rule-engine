@@ -87,6 +87,10 @@
                 <input type="checkbox" @bind="_query.OnlyNeedsReconciliation" />
                 Needs reconciliation only
             </label>
+            <label class="fc-form-check fc-text-muted-sm">
+                <input type="checkbox" @bind="_query.OnlyStaleReconciliation" />
+                Stale only
+            </label>
             <button class="fc-btn fc-btn--primary" @onclick="ApplyFilters" disabled="@_loading">Apply</button>
             <button class="fc-btn fc-btn--outline" @onclick="ResetFilters" disabled="@_loading">Reset</button>
             <button class="fc-btn fc-btn--warning"
@@ -100,6 +104,14 @@
             </button>
             <button class="fc-btn fc-btn--outline" @onclick="Export" disabled="@_loading">Export Excel</button>
             <span class="fc-count-label">@_data.Tenants.Count tenant(s)</span>
+        </div>
+
+        <div class="fc-grid fc-grid-5 fc-mt-4">
+            <div class="fc-kv"><span>Healthy</span><strong>@_data.EntitlementSummary.HealthyTenants</strong></div>
+            <div class="fc-kv"><span>Needs Reconciliation</span><strong>@_data.EntitlementSummary.NeedsReconciliationTenants</strong></div>
+            <div class="fc-kv"><span>Stale</span><strong>@_data.EntitlementSummary.StaleReconciliationTenants</strong></div>
+            <div class="fc-kv"><span>Reconciled 24h</span><strong>@_data.EntitlementSummary.ReconciledLast24Hours</strong></div>
+            <div class="fc-kv"><span>No Activity</span><strong>@_data.EntitlementSummary.NoEntitlementActivityTenants</strong></div>
         </div>
     </div>
 </div>
@@ -157,7 +169,10 @@
             <CellTemplate>
                 @if (context.PendingReconciliationModules > 0)
                 {
-                    <span class="fc-badge fc-badge--warning">@context.PendingReconciliationModules pending</span>
+                    <div class="fc-mb-1">
+                        <span class="fc-badge @GetReconciliationBadge(context.ReconciliationState)">@context.ReconciliationState</span>
+                    </div>
+                    <div class="fc-text-muted-sm">@context.PendingReconciliationModules pending</div>
                 }
                 else
                 {
@@ -230,6 +245,7 @@
     [Parameter, SupplyParameterFromQuery(Name = "licence")]  public string? QLicence  { get; set; }
     [Parameter, SupplyParameterFromQuery(Name = "minMods")]  public int?    QMinMods  { get; set; }
     [Parameter, SupplyParameterFromQuery(Name = "needsRecon")] public bool? QNeedsRecon { get; set; }
+    [Parameter, SupplyParameterFromQuery(Name = "staleRecon")] public bool? QStaleRecon { get; set; }
     [Parameter, SupplyParameterFromQuery(Name = "sort")]     public string? QSort     { get; set; }
     [Parameter, SupplyParameterFromQuery(Name = "sortDesc")] public bool?   QSortDesc { get; set; }
 
@@ -252,6 +268,7 @@
         _query.LicenceType    = QLicence  ?? "";
         _query.MinModuleCount = QMinMods;
         _query.OnlyNeedsReconciliation = QNeedsRecon ?? false;
+        _query.OnlyStaleReconciliation = QStaleRecon ?? false;
         _query.SortBy         = QSort     ?? "name";
         _query.SortDescending = QSortDesc ?? false;
         if (_initialized) await LoadAsync();
@@ -410,6 +427,7 @@
         AddQuery(q, "licence",  _query.LicenceType);
         AddQuery(q, "minMods",  _query.MinModuleCount?.ToString());
         if (_query.OnlyNeedsReconciliation) AddQuery(q, "needsRecon", "true");
+        if (_query.OnlyStaleReconciliation) AddQuery(q, "staleRecon", "true");
         if (_query.SortBy != "name")  AddQuery(q, "sort",     _query.SortBy);
         if (_query.SortDescending)    AddQuery(q, "sortDesc", "true");
         return "/platform/tenants" + (q.Count > 0 ? "?" + string.Join("&", q) : "");
@@ -424,6 +442,7 @@
         if (excl != "licence")  AddQuery(q, "licence",  QLicence);
         if (excl != "minMods")  AddQuery(q, "minMods",  QMinMods?.ToString());
         if (excl != "needsRecon" && (QNeedsRecon ?? false)) AddQuery(q, "needsRecon", "true");
+        if (excl != "staleRecon" && (QStaleRecon ?? false)) AddQuery(q, "staleRecon", "true");
         if (excl != "sort"     && !string.IsNullOrEmpty(QSort) && QSort != "name") AddQuery(q, "sort", QSort);
         if (excl != "sortDesc" && (QSortDesc ?? false)) AddQuery(q, "sortDesc", "true");
         return "/platform/tenants" + (q.Count > 0 ? "?" + string.Join("&", q) : "");
@@ -448,6 +467,8 @@
             yield return new FilterChip($"min modules: {QMinMods}", () => RemoveFilter("minMods"));
         if (QNeedsRecon ?? false)
             yield return new FilterChip("needs reconciliation", () => RemoveFilter("needsRecon"));
+        if (QStaleRecon ?? false)
+            yield return new FilterChip("stale reconciliation", () => RemoveFilter("staleRecon"));
         if (!string.IsNullOrEmpty(QSort) && QSort != "name")
             yield return new FilterChip(
                 $"sorted by: {QSort} {((QSortDesc ?? false) ? "↓" : "↑")}",
@@ -465,6 +486,7 @@
         AddQuery(query, "sortDesc", _query.SortDescending ? "true" : "false");
         AddQuery(query, "minModules", _query.MinModuleCount?.ToString());
         AddQuery(query, "needsReconciliation", _query.OnlyNeedsReconciliation ? "true" : null);
+        AddQuery(query, "staleReconciliation", _query.OnlyStaleReconciliation ? "true" : null);
 
         var qs = query.Count > 0 ? "?" + string.Join("&", query) : string.Empty;
         Navigation.NavigateTo($"/platform/tenants/export{qs}", forceLoad: true);
@@ -492,6 +514,14 @@
         TenantStatus.PendingActivation => "fc-badge--warning",
         TenantStatus.Suspended => "fc-badge--danger",
         TenantStatus.Deactivated => "fc-badge--neutral",
+        _ => "fc-badge--neutral"
+    };
+
+    private static string GetReconciliationBadge(string state) => state switch
+    {
+        "Healthy" => "fc-badge--success",
+        "Action Needed" => "fc-badge--warning",
+        "Stale" => "fc-badge--danger",
         _ => "fc-badge--neutral"
     };
 

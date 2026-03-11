@@ -387,6 +387,7 @@ app.MapGet("/platform/tenants/export", async (
         PlanCode = context.Request.Query["plan"].ToString(),
         LicenceType = context.Request.Query["licence"].ToString(),
         OnlyNeedsReconciliation = string.Equals(context.Request.Query["needsReconciliation"], "true", StringComparison.OrdinalIgnoreCase),
+        OnlyStaleReconciliation = string.Equals(context.Request.Query["staleReconciliation"], "true", StringComparison.OrdinalIgnoreCase),
         SortBy = string.IsNullOrWhiteSpace(context.Request.Query["sortBy"]) ? "name" : context.Request.Query["sortBy"].ToString(),
         SortDescending = string.Equals(context.Request.Query["sortDesc"], "true", StringComparison.OrdinalIgnoreCase)
     };

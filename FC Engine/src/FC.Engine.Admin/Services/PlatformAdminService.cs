@@ -194,9 +194,7 @@ public class PlatformAdminService
             latestEntitlementAuditByTenant.TryGetValue(t.TenantId, out var latestEntitlementAudit);
             var reconciliationState = pendingReconciliationModules == 0
                 ? "Healthy"
-                : !latestEntitlementAudit?.PerformedAt.HasValue ?? true
-                    ? "Stale"
-                    : latestEntitlementAudit!.PerformedAt <= now.AddDays(-7)
+                : latestEntitlementAudit is null || latestEntitlementAudit.PerformedAt <= now.AddDays(-7)
                         ? "Stale"
                         : "Action Needed";
 
@@ -399,7 +397,7 @@ public class PlatformAdminService
         var headers = new[]
         {
             "Tenant Name", "Slug", "Status", "Plan", "Licence Type", "Active Modules",
-            "Pending Reconciliation", "Last Entitlement Action", "Last Entitlement At", "Users", "Entities", "MRR", "Created Date", "Contact Email"
+            "Pending Reconciliation", "Reconciliation State", "Last Entitlement Action", "Last Entitlement At", "Users", "Entities", "MRR", "Created Date", "Contact Email"
         };
 
         for (var i = 0; i < headers.Length; i++)
@@ -421,19 +419,20 @@ public class PlatformAdminService
             ws.Cell(row, 5).Value = tenant.LicenceType;
             ws.Cell(row, 6).Value = tenant.ActiveModules;
             ws.Cell(row, 7).Value = tenant.PendingReconciliationModules;
-            ws.Cell(row, 8).Value = tenant.LastEntitlementAction ?? string.Empty;
-            ws.Cell(row, 9).Value = tenant.LastEntitlementActionAt;
-            ws.Cell(row, 10).Value = tenant.Users;
-            ws.Cell(row, 11).Value = tenant.Entities;
-            ws.Cell(row, 12).Value = tenant.Mrr;
-            ws.Cell(row, 13).Value = tenant.CreatedAt;
-            ws.Cell(row, 14).Value = tenant.ContactEmail ?? string.Empty;
+            ws.Cell(row, 8).Value = tenant.ReconciliationState;
+            ws.Cell(row, 9).Value = tenant.LastEntitlementAction ?? string.Empty;
+            ws.Cell(row, 10).Value = tenant.LastEntitlementActionAt;
+            ws.Cell(row, 11).Value = tenant.Users;
+            ws.Cell(row, 12).Value = tenant.Entities;
+            ws.Cell(row, 13).Value = tenant.Mrr;
+            ws.Cell(row, 14).Value = tenant.CreatedAt;
+            ws.Cell(row, 15).Value = tenant.ContactEmail ?? string.Empty;
             row++;
         }
 
-        ws.Column(9).Style.DateFormat.Format = "yyyy-mm-dd hh:mm";
-        ws.Column(12).Style.NumberFormat.Format = "#,##0.00";
-        ws.Column(13).Style.DateFormat.Format = "yyyy-mm-dd";
+        ws.Column(10).Style.DateFormat.Format = "yyyy-mm-dd hh:mm";
+        ws.Column(13).Style.NumberFormat.Format = "#,##0.00";
+        ws.Column(14).Style.DateFormat.Format = "yyyy-mm-dd";
         ws.Columns().AdjustToContents();
 
         using var stream = new MemoryStream();
@@ -1521,6 +1520,7 @@ public class PlatformTenantListQuery
     public string? LicenceType { get; set; }
     public int? MinModuleCount { get; set; }
     public bool OnlyNeedsReconciliation { get; set; }
+    public bool OnlyStaleReconciliation { get; set; }
     public string SortBy { get; set; } = "name";
     public bool SortDescending { get; set; }
 }
@@ -1528,8 +1528,18 @@ public class PlatformTenantListQuery
 public class PlatformTenantListResult
 {
     public List<PlatformTenantListItem> Tenants { get; set; } = new();
+    public PlatformTenantEntitlementSummary EntitlementSummary { get; set; } = new();
     public List<string> PlanOptions { get; set; } = new();
     public List<string> LicenceOptions { get; set; } = new();
+}
+
+public class PlatformTenantEntitlementSummary
+{
+    public int HealthyTenants { get; set; }
+    public int NeedsReconciliationTenants { get; set; }
+    public int StaleReconciliationTenants { get; set; }
+    public int ReconciledLast24Hours { get; set; }
+    public int NoEntitlementActivityTenants { get; set; }
 }
 
 public class PlatformTenantListItem
@@ -1548,6 +1558,7 @@ public class PlatformTenantListItem
     public decimal Mrr { get; set; }
     public string? LastEntitlementAction { get; set; }
     public DateTime? LastEntitlementActionAt { get; set; }
+    public string ReconciliationState { get; set; } = "Healthy";
     public string? ContactEmail { get; set; }
     public DateTime CreatedAt { get; set; }
 }
