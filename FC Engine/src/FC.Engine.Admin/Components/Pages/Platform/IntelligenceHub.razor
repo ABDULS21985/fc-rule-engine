@@ -797,6 +797,11 @@
                             <p>Structured capital-management sections assembled from the current live scenario.</p>
                         </article>
                         <article class="fc-intel-card">
+                            <span class="fc-intel-card__label">Pack Materialized</span>
+                            <strong>@(_workspace.Capital.ReturnPackMaterializedAt?.ToString("dd MMM") ?? "Pending")</strong>
+                            <p>@(_workspace.Capital.ReturnPackMaterializedAt?.ToString("HH:mm 'UTC'", CultureInfo.InvariantCulture) ?? "The capital supervisory pack has not been written yet.")</p>
+                        </article>
+                        <article class="fc-intel-card">
                             <span class="fc-intel-card__label">Pack Attention</span>
                             <strong>@CapitalPackAttentionCount</strong>
                             <p>Capital pack sections currently sitting in watch or critical posture.</p>
@@ -809,7 +814,10 @@
                                 <span class="fc-intel-card__label">Capital Supervisory Pack</span>
                                 <h2>Structured prudential capital pack assembled from the current live scenario</h2>
                             </div>
-                            <span class="fc-intel-chip">@_capitalPackRows.Count section(s)</span>
+                            <div class="fc-intel-inline-chips">
+                                <span class="fc-intel-chip">@_capitalPackRows.Count section(s)</span>
+                                <span class="fc-intel-chip">@(_workspace.Capital.ReturnPackMaterializedAt?.ToString("dd MMM HH:mm", CultureInfo.InvariantCulture) ?? "Pending")</span>
+                            </div>
                         </header>
                         @if (_capitalPackRows.Count == 0)
                         {
@@ -905,7 +913,7 @@
                                 </label>
                             </div>
                             <div class="fc-intel-inline-actions">
-                                <button class="fc-btn fc-btn--primary fc-btn--sm" @onclick="RebuildProjection">Recalculate</button>
+                                <button class="fc-btn fc-btn--primary fc-btn--sm" @onclick="RebuildProjectionAsync">Recalculate</button>
                                 <span class="fc-intel-inline-note">@ProjectionHeadline</span>
                             </div>
                             <div class="fc-intel-table-wrap">
@@ -1090,7 +1098,7 @@
                                 </label>
                             </div>
                             <div class="fc-intel-inline-actions">
-                                <button class="fc-btn fc-btn--primary fc-btn--sm" @onclick="RebuildProjection">Optimise Stack</button>
+                                <button class="fc-btn fc-btn--primary fc-btn--sm" @onclick="RebuildProjectionAsync">Optimise Stack</button>
                                 <span class="fc-intel-inline-note">@CapitalStackHeadline</span>
                             </div>
                             @if (_capitalStackRows.FirstOrDefault() is { } bestCapitalStack)
@@ -4623,6 +4631,7 @@
             _workspace = await IntelligenceService.GetWorkspaceAsync();
             InitializeInteractiveState();
             await LoadClientStateAsync();
+            await SyncCapitalPackAsync();
         }
         catch (Exception ex)
         {
@@ -4687,7 +4696,7 @@
             StepPercent = 5m
         };
 
-        RebuildProjection();
+        RecalculateProjection();
         RebuildSanctionsPack();
     }
 
@@ -4759,7 +4768,13 @@
         }
     }
 
-    private void RebuildProjection()
+    private async Task RebuildProjectionAsync()
+    {
+        RecalculateProjection();
+        await SyncCapitalPackAsync();
+    }
+
+    private void RecalculateProjection()
     {
         _projectionRows = BuildProjectionRows(_projectionInput);
         _capitalActionRows = BuildCapitalActionRows(_projectionInput, _workspace?.Capital.ActionTemplates ?? []);
@@ -4791,6 +4806,39 @@
             _screeningAuditTrail,
             _transactionScreeningResult,
             SuppressedFalsePositiveCount);
+    }
+
+    private async Task SyncCapitalPackAsync()
+    {
+        if (_workspace is null)
+        {
+            return;
+        }
+
+        try
+        {
+            var catalog = await IntelligenceService.MaterializeCapitalPackAsync(
+                _capitalPackRows
+                    .Select(x => new CapitalPackSectionInput
+                    {
+                        SectionCode = x.SectionCode,
+                        SectionName = x.SectionName,
+                        RowCount = x.RowCount,
+                        Signal = x.Signal,
+                        Coverage = x.Coverage,
+                        Commentary = x.Commentary,
+                        RecommendedAction = x.RecommendedAction
+                    })
+                    .ToList());
+
+            _workspace.Capital.ReturnPack = catalog.Sections.ToList();
+            _workspace.Capital.ReturnPackAttentionCount = catalog.Sections.Count(x => x.Signal is "Critical" or "Watch");
+            _workspace.Capital.ReturnPackMaterializedAt = catalog.MaterializedAt;
+        }
+        catch
+        {
+            // Keep the live in-memory pack visible even if the persistence refresh fails.
+        }
     }
 
     private static List<CapitalProjectionRow> BuildProjectionRows(CapitalProjectionInput input)

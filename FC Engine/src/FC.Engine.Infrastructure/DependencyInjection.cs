@@ -162,6 +162,7 @@ public static class DependencyInjection
         services.AddScoped<IModuleImportService, ModuleImportService>();
         services.AddScoped<IInterModuleDataFlowEngine, InterModuleDataFlowEngine>();
         services.AddScoped<KnowledgeGraphCatalogService>();
+        services.AddScoped<CapitalPackCatalogService>();
         services.AddScoped<OpsResiliencePackCatalogService>();
         services.AddScoped<ModelRiskPackCatalogService>();
         services.AddScoped<SanctionsWatchlistCatalogService>();

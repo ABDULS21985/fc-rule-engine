@@ -65,6 +65,7 @@ public sealed class PlatformIntelligenceService
 
     private readonly MetadataDbContext _db;
     private readonly KnowledgeGraphCatalogService _knowledgeGraphCatalog;
+    private readonly CapitalPackCatalogService _capitalPackCatalog;
     private readonly OpsResiliencePackCatalogService _opsResiliencePackCatalog;
     private readonly ModelRiskPackCatalogService _modelRiskPackCatalog;
     private readonly SanctionsWatchlistCatalogService _sanctionsWatchlistCatalog;
@@ -75,6 +76,7 @@ public sealed class PlatformIntelligenceService
     public PlatformIntelligenceService(
         MetadataDbContext db,
         KnowledgeGraphCatalogService knowledgeGraphCatalog,
+        CapitalPackCatalogService capitalPackCatalog,
         OpsResiliencePackCatalogService opsResiliencePackCatalog,
         ModelRiskPackCatalogService modelRiskPackCatalog,
         SanctionsWatchlistCatalogService sanctionsWatchlistCatalog,
@@ -84,6 +86,7 @@ public sealed class PlatformIntelligenceService
     {
         _db = db;
         _knowledgeGraphCatalog = knowledgeGraphCatalog;
+        _capitalPackCatalog = capitalPackCatalog;
         _opsResiliencePackCatalog = opsResiliencePackCatalog;
         _modelRiskPackCatalog = modelRiskPackCatalog;
         _sanctionsWatchlistCatalog = sanctionsWatchlistCatalog;
@@ -280,6 +283,7 @@ public sealed class PlatformIntelligenceService
         var sanctionsWorkflowState = await _sanctionsWorkflowStore.LoadAsync(ct);
         var modelApprovalWorkflowState = await _modelApprovalWorkflowStore.LoadAsync(ct);
         var resilienceAssessmentState = await _resilienceAssessmentStore.LoadAsync(ct);
+        var capitalPackCatalog = await _capitalPackCatalog.LoadAsync(ct);
         var capitalRows = BuildCapitalRows(latestChs, institutions);
         var hotspotRows = BuildDependencyHotspots(cyberAssets, dependencies);
         var resilienceActions = BuildResilienceActionRows(incidents, securityAlerts, hotspotRows);
@@ -418,7 +422,10 @@ public sealed class PlatformIntelligenceService
                 CapitalWatchlistCount = capitalRows.Count(x => x.CapitalScore < 60m),
                 ActiveScenarioCount = policyScenarios.Count(x => x.Status != PolicyStatus.Enacted),
                 ActionTemplates = CapitalActionTemplates.ToList(),
-                Watchlist = capitalRows.Take(10).ToList()
+                Watchlist = capitalRows.Take(10).ToList(),
+                ReturnPack = capitalPackCatalog.Sections.ToList(),
+                ReturnPackAttentionCount = capitalPackCatalog.Sections.Count(x => x.Signal is "Critical" or "Watch"),
+                ReturnPackMaterializedAt = capitalPackCatalog.MaterializedAt
             },
             Sanctions = new SanctionsSnapshot
             {
@@ -732,6 +739,14 @@ public sealed class PlatformIntelligenceService
 
     public Task ResetResilienceAssessmentAsync(CancellationToken ct = default) =>
         _resilienceAssessmentStore.ResetAsync(ct);
+
+    public Task<CapitalPackCatalogState> GetCapitalPackCatalogStateAsync(CancellationToken ct = default) =>
+        _capitalPackCatalog.LoadAsync(ct);
+
+    public Task<CapitalPackCatalogState> MaterializeCapitalPackAsync(
+        IReadOnlyList<CapitalPackSectionInput> sections,
+        CancellationToken ct = default) =>
+        _capitalPackCatalog.MaterializeAsync(sections, ct);
 
     private async Task<SanctionsCatalogState> LoadSanctionsCatalogAsync(CancellationToken ct)
     {
@@ -5071,6 +5086,9 @@ public sealed class CapitalManagementSnapshot
     public int ActiveScenarioCount { get; set; }
     public List<CapitalActionTemplate> ActionTemplates { get; set; } = [];
     public List<CapitalWatchlistRow> Watchlist { get; set; } = [];
+    public List<CapitalPackSectionState> ReturnPack { get; set; } = [];
+    public int ReturnPackAttentionCount { get; set; }
+    public DateTime? ReturnPackMaterializedAt { get; set; }
 }
 
 public sealed class CapitalWatchlistRow
