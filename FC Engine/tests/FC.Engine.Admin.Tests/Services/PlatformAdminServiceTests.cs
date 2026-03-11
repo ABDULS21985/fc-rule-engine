@@ -7,12 +7,112 @@ using FC.Engine.Infrastructure.Metadata;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Moq;
+using System.Text.Json;
 using Xunit;
 
 namespace FC.Engine.Admin.Tests.Services;
 
 public class PlatformAdminServiceTests
 {
+    [Fact]
+    public async Task GetTenantList_And_Detail_Surface_Entitlement_Audit_Activity()
+    {
+        await using var db = CreateDbContext(nameof(GetTenantList_And_Detail_Surface_Entitlement_Audit_Activity));
+
+        var tenant = Tenant.Create("Tenant Gamma", "tenant-gamma", TenantType.Institution, "gamma@example.com");
+        tenant.Activate();
+        db.Tenants.Add(tenant);
+
+        var plan = new SubscriptionPlan
+        {
+            PlanCode = "ENTERPRISE",
+            PlanName = "Enterprise",
+            Tier = 3,
+            MaxModules = 50,
+            MaxUsersPerEntity = 100,
+            MaxEntities = 20,
+            BasePriceMonthly = 100000m,
+            BasePriceAnnual = 1000000m,
+            IsActive = true,
+            Features = "[\"all_features\"]"
+        };
+        db.SubscriptionPlans.Add(plan);
+        await db.SaveChangesAsync();
+
+        var subscription = new Subscription
+        {
+            TenantId = tenant.TenantId,
+            PlanId = plan.Id,
+            BillingFrequency = BillingFrequency.Monthly,
+            CurrentPeriodStart = DateTime.UtcNow.Date,
+            CurrentPeriodEnd = DateTime.UtcNow.Date.AddMonths(1)
+        };
+        subscription.Activate();
+        db.Subscriptions.Add(subscription);
+        await db.SaveChangesAsync();
+
+        db.AuditLog.AddRange(
+            new AuditLogEntry
+            {
+                TenantId = null,
+                EntityType = "Tenant",
+                EntityId = 0,
+                Action = "TenantLicenceAssigned",
+                NewValues = JsonSerializer.Serialize(new { TenantId = tenant.TenantId }),
+                PerformedBy = "platform-admin",
+                PerformedAt = new DateTime(2026, 3, 11, 8, 0, 0, DateTimeKind.Utc),
+                Hash = "hash-1",
+                PreviousHash = "GENESIS",
+                SequenceNumber = 1
+            },
+            new AuditLogEntry
+            {
+                TenantId = null,
+                EntityType = "Tenant",
+                EntityId = 0,
+                Action = "TenantModulesReconciled",
+                NewValues = JsonSerializer.Serialize(new { TenantId = tenant.TenantId }),
+                PerformedBy = "platform-admin",
+                PerformedAt = new DateTime(2026, 3, 11, 9, 30, 0, DateTimeKind.Utc),
+                Hash = "hash-2",
+                PreviousHash = "hash-1",
+                SequenceNumber = 2
+            });
+        await db.SaveChangesAsync();
+
+        var dashboardMock = new Mock<IDashboardService>();
+        dashboardMock
+            .Setup(x => x.GetAdminDashboard(tenant.TenantId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new AdminDashboardData
+            {
+                Usage = new SubscriptionUsageMetrics(),
+                Billing = new BillingSummaryMetrics()
+            });
+
+        var sut = new PlatformAdminService(
+            db,
+            dashboardMock.Object,
+            Mock.Of<ISubscriptionService>(),
+            Mock.Of<ITemplateRepository>(),
+            null!,
+            Mock.Of<IAuditLogger>(),
+            Mock.Of<INotificationOrchestrator>(),
+            Mock.Of<IFeatureFlagService>());
+
+        var list = await sut.GetTenantList(new PlatformTenantListQuery());
+        var detail = await sut.GetTenantDetail(tenant.TenantId);
+
+        var listRow = list.Tenants.Single(x => x.TenantId == tenant.TenantId);
+        listRow.LastEntitlementAction.Should().Be("Modules Reconciled");
+        listRow.LastEntitlementActionAt.Should().Be(new DateTime(2026, 3, 11, 9, 30, 0, DateTimeKind.Utc));
+
+        detail.Should().NotBeNull();
+        detail!.LastReconciledAt.Should().Be(new DateTime(2026, 3, 11, 9, 30, 0, DateTimeKind.Utc));
+        detail.EntitlementActivity.Should().HaveCount(2);
+        detail.EntitlementActivity[0].Action.Should().Be("Modules Reconciled");
+        detail.EntitlementActivity[1].Action.Should().Be("Licence Assigned");
+    }
+
     [Fact]
     public async Task GetTenantList_Computes_And_Filters_Pending_Reconciliation_Modules()
     {

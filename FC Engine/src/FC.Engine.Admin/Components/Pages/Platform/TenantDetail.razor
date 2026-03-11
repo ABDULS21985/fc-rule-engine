@@ -345,6 +345,17 @@
                         <div class="fc-kv"><span>Needs Reconciliation</span><strong>@_data.CurrentModuleEntitlements.Count(x => x.Status == "Pending Reconciliation")</strong></div>
                     </div>
 
+                    <div class="fc-grid fc-grid-2 fc-mb-4">
+                        <div class="fc-kv">
+                            <span>Last Reconciled</span>
+                            <strong>@(_data.LastReconciledAt?.ToString("dd MMM yyyy HH:mm 'UTC'") ?? "Never")</strong>
+                        </div>
+                        <div class="fc-kv">
+                            <span>Entitlement Events</span>
+                            <strong>@_data.EntitlementActivity.Count</strong>
+                        </div>
+                    </div>
+
                     @if (!string.IsNullOrWhiteSpace(_moduleReconciliationMessage))
                     {
                         <div class="fc-alert fc-alert--inline fc-alert--info">@_moduleReconciliationMessage</div>
@@ -398,6 +409,47 @@
                                             <div class="fc-text-muted-sm">Off: @(row.DeactivatedAt?.ToString("dd MMM yyyy") ?? "-")</div>
                                         </td>
                                         <td>@row.NextAction</td>
+                                    </tr>
+                                }
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="fc-card fc-card--mb">
+                <div class="fc-card__header">
+                    <div>
+                        <h2 class="fc-card__title">Entitlement Activity</h2>
+                        <p class="fc-text-muted-sm">Recent licence assignment, removal, and reconciliation activity for this tenant.</p>
+                    </div>
+                </div>
+                <div class="fc-card__body fc-card-body--flush">
+                    <table class="fc-table">
+                        <thead>
+                            <tr>
+                                <th>Action</th>
+                                <th>Performed By</th>
+                                <th>When</th>
+                                <th>Summary</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @if (_data.EntitlementActivity.Count == 0)
+                            {
+                                <tr>
+                                    <td colspan="4" class="fc-text-muted">No entitlement activity has been recorded for this tenant yet.</td>
+                                </tr>
+                            }
+                            else
+                            {
+                                @foreach (var row in _data.EntitlementActivity)
+                                {
+                                    <tr>
+                                        <td><span class="fc-badge fc-badge--neutral">@row.Action</span></td>
+                                        <td>@row.PerformedBy</td>
+                                        <td>@row.PerformedAt.ToString("dd MMM yyyy HH:mm")</td>
+                                        <td>@row.Summary</td>
                                     </tr>
                                 }
                             }

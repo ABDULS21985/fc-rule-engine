@@ -134,6 +134,25 @@ public class PlatformAdminService
             .GroupBy(x => x.PlanId)
             .ToDictionary(g => g.Key, g => g.ToList());
 
+        var entitlementAuditRows = await _db.AuditLog
+            .AsNoTracking()
+            .Where(x => x.Action == "TenantModulesReconciled"
+                     || x.Action == "TenantLicenceAssigned"
+                     || x.Action == "TenantLicenceRemoved")
+            .OrderByDescending(x => x.PerformedAt)
+            .ToListAsync(ct);
+
+        var latestEntitlementAuditByTenant = entitlementAuditRows
+            .Select(x => new
+            {
+                TenantId = ResolveEntitlementAuditTenantId(x),
+                x.Action,
+                x.PerformedAt
+            })
+            .Where(x => x.TenantId.HasValue)
+            .GroupBy(x => x.TenantId!.Value)
+            .ToDictionary(g => g.Key, g => g.First());
+
         var tenantRows = tenants.Select(t =>
         {
             var activeSubscription = subscriptionRows
@@ -170,6 +189,8 @@ public class PlatformAdminService
                 pendingReconciliationModules = includedBaseModuleIds.Count(moduleId => !activeModuleIds.Contains(moduleId));
             }
 
+            latestEntitlementAuditByTenant.TryGetValue(t.TenantId, out var latestEntitlementAudit);
+
             return new PlatformTenantListItem
             {
                 TenantId = t.TenantId,
@@ -181,6 +202,10 @@ public class PlatformAdminService
                 LicenceType = licenceLookup.GetValueOrDefault(t.TenantId, "N/A"),
                 ActiveModules = activeModules,
                 PendingReconciliationModules = pendingReconciliationModules,
+                LastEntitlementAction = latestEntitlementAudit is null
+                    ? null
+                    : DescribeEntitlementAction(latestEntitlementAudit.Action),
+                LastEntitlementActionAt = latestEntitlementAudit?.PerformedAt,
                 Users = userCounts.GetValueOrDefault(t.TenantId),
                 Entities = entityCounts.GetValueOrDefault(t.TenantId),
                 Mrr = decimal.Round(mrr, 2),
@@ -348,7 +373,7 @@ public class PlatformAdminService
         var headers = new[]
         {
             "Tenant Name", "Slug", "Status", "Plan", "Licence Type", "Active Modules",
-            "Pending Reconciliation", "Users", "Entities", "MRR", "Created Date", "Contact Email"
+            "Pending Reconciliation", "Last Entitlement Action", "Last Entitlement At", "Users", "Entities", "MRR", "Created Date", "Contact Email"
         };
 
         for (var i = 0; i < headers.Length; i++)
@@ -370,16 +395,19 @@ public class PlatformAdminService
             ws.Cell(row, 5).Value = tenant.LicenceType;
             ws.Cell(row, 6).Value = tenant.ActiveModules;
             ws.Cell(row, 7).Value = tenant.PendingReconciliationModules;
-            ws.Cell(row, 8).Value = tenant.Users;
-            ws.Cell(row, 9).Value = tenant.Entities;
-            ws.Cell(row, 10).Value = tenant.Mrr;
-            ws.Cell(row, 11).Value = tenant.CreatedAt;
-            ws.Cell(row, 12).Value = tenant.ContactEmail ?? string.Empty;
+            ws.Cell(row, 8).Value = tenant.LastEntitlementAction ?? string.Empty;
+            ws.Cell(row, 9).Value = tenant.LastEntitlementActionAt;
+            ws.Cell(row, 10).Value = tenant.Users;
+            ws.Cell(row, 11).Value = tenant.Entities;
+            ws.Cell(row, 12).Value = tenant.Mrr;
+            ws.Cell(row, 13).Value = tenant.CreatedAt;
+            ws.Cell(row, 14).Value = tenant.ContactEmail ?? string.Empty;
             row++;
         }
 
-        ws.Column(10).Style.NumberFormat.Format = "#,##0.00";
-        ws.Column(11).Style.DateFormat.Format = "yyyy-mm-dd";
+        ws.Column(9).Style.DateFormat.Format = "yyyy-mm-dd hh:mm";
+        ws.Column(12).Style.NumberFormat.Format = "#,##0.00";
+        ws.Column(13).Style.DateFormat.Format = "yyyy-mm-dd";
         ws.Columns().AdjustToContents();
 
         using var stream = new MemoryStream();
@@ -440,6 +468,26 @@ public class PlatformAdminService
                 .Include(x => x.Module)
                 .Where(x => x.PlanId == currentSubscription.PlanId)
                 .ToListAsync(ct);
+
+        var entitlementActivity = (await _db.AuditLog
+                .AsNoTracking()
+                .Where(x => x.Action == "TenantModulesReconciled"
+                         || x.Action == "TenantLicenceAssigned"
+                         || x.Action == "TenantLicenceRemoved")
+                .OrderByDescending(x => x.PerformedAt)
+                .Take(500)
+                .ToListAsync(ct))
+            .Where(x => ResolveEntitlementAuditTenantId(x) == tenantId)
+            .Take(20)
+            .Select(x => new TenantEntitlementActivityItem
+            {
+                Action = DescribeEntitlementAction(x.Action),
+                ActionCode = x.Action,
+                PerformedAt = x.PerformedAt,
+                PerformedBy = x.PerformedBy,
+                Summary = BuildEntitlementAuditSummary(x.Action)
+            })
+            .ToList();
 
         var dashboard = await _dashboardService.GetAdminDashboard(tenantId, ct);
 
@@ -526,6 +574,10 @@ public class PlatformAdminService
                 currentSubscription,
                 currentPlanPricingRows,
                 licenceModuleRows),
+            LastReconciledAt = entitlementActivity
+                .FirstOrDefault(x => string.Equals(x.ActionCode, "TenantModulesReconciled", StringComparison.Ordinal))?
+                .PerformedAt,
+            EntitlementActivity = entitlementActivity,
             Usage = dashboard.Usage,
             Billing = dashboard.Billing,
             SubscriptionHistory = subscriptionRows.Select(s => new TenantSubscriptionHistoryItem
@@ -1369,6 +1421,52 @@ public class PlatformAdminService
         return $"{row.LicenceType?.Code ?? $"LT-{row.LicenceTypeId}"} ({coverageType})";
     }
 
+    private static Guid? ResolveEntitlementAuditTenantId(AuditLogEntry entry)
+    {
+        if (entry.TenantId.HasValue)
+        {
+            return entry.TenantId.Value;
+        }
+
+        if (string.IsNullOrWhiteSpace(entry.NewValues))
+        {
+            return null;
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(entry.NewValues);
+            if (document.RootElement.TryGetProperty("TenantId", out var tenantIdProperty)
+                && tenantIdProperty.ValueKind == JsonValueKind.String
+                && Guid.TryParse(tenantIdProperty.GetString(), out var parsedTenantId))
+            {
+                return parsedTenantId;
+            }
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+
+        return null;
+    }
+
+    private static string DescribeEntitlementAction(string action) => action switch
+    {
+        "TenantModulesReconciled" => "Modules Reconciled",
+        "TenantLicenceAssigned" => "Licence Assigned",
+        "TenantLicenceRemoved" => "Licence Removed",
+        _ => action
+    };
+
+    private static string BuildEntitlementAuditSummary(string action) => action switch
+    {
+        "TenantModulesReconciled" => "Entitlement reconciliation executed for the tenant.",
+        "TenantLicenceAssigned" => "A platform administrator assigned a tenant licence and reconciled access.",
+        "TenantLicenceRemoved" => "A platform administrator removed a tenant licence and reconciled access.",
+        _ => "Platform entitlement activity recorded."
+    };
+
     private static bool FieldEquivalent(TemplateField oldField, TemplateField newField)
     {
         return string.Equals(oldField.DisplayName, newField.DisplayName, StringComparison.Ordinal)
@@ -1422,6 +1520,8 @@ public class PlatformTenantListItem
     public int Users { get; set; }
     public int Entities { get; set; }
     public decimal Mrr { get; set; }
+    public string? LastEntitlementAction { get; set; }
+    public DateTime? LastEntitlementActionAt { get; set; }
     public string? ContactEmail { get; set; }
     public DateTime CreatedAt { get; set; }
 }
@@ -1452,6 +1552,8 @@ public class PlatformTenantDetailData
     public List<TenantUserItem> Users { get; set; } = new();
     public List<TenantEntityItem> Entities { get; set; } = new();
     public List<TenantFilingMatrixItem> FilingMatrix { get; set; } = new();
+    public DateTime? LastReconciledAt { get; set; }
+    public List<TenantEntitlementActivityItem> EntitlementActivity { get; set; } = new();
     public List<TenantAuditItem> AuditEntries { get; set; } = new();
     public List<TenantSupportTicketItem> SupportTickets { get; set; } = new();
 }
@@ -1541,6 +1643,15 @@ public class TenantFilingMatrixItem
     public DateTime Deadline { get; set; }
     public string RagStatus { get; set; } = string.Empty;
     public string SubmissionStatus { get; set; } = string.Empty;
+}
+
+public class TenantEntitlementActivityItem
+{
+    public string Action { get; set; } = string.Empty;
+    public string ActionCode { get; set; } = string.Empty;
+    public DateTime PerformedAt { get; set; }
+    public string PerformedBy { get; set; } = string.Empty;
+    public string? Summary { get; set; }
 }
 
 public class TenantAuditItem

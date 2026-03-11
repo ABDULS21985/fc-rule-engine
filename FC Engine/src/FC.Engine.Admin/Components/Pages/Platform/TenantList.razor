@@ -165,6 +165,19 @@
                 }
             </CellTemplate>
         </DataColumn>
+        <DataColumn TItem="PlatformTenantListItem" Title="Last Entitlement" Width="170px">
+            <CellTemplate>
+                @if (context.LastEntitlementActionAt.HasValue)
+                {
+                    <div>@(context.LastEntitlementAction ?? "Activity")</div>
+                    <div class="fc-text-muted-sm">@context.LastEntitlementActionAt.Value.ToString("dd MMM yyyy HH:mm")</div>
+                }
+                else
+                {
+                    <span class="fc-text-muted-sm">No activity</span>
+                }
+            </CellTemplate>
+        </DataColumn>
         <DataColumn TItem="PlatformTenantListItem" Title="Users" Width="80px">
             <CellTemplate>@context.Users</CellTemplate>
         </DataColumn>
@@ -182,7 +195,7 @@
                 <div class="fc-actions">
                     <button class="fc-btn fc-btn--outline fc-btn--xs" @onclick="() => OpenTenant(context.TenantId)" @onclick:stopPropagation="true">View</button>
                     <button class="fc-btn fc-btn--outline fc-btn--xs" @onclick="() => ImpersonateTenant(context.TenantId)" @onclick:stopPropagation="true">Impersonate</button>
-                    @if (_bulkReconciling || _savingTenantIds.Contains(context.TenantId))
+                    @if (_savingTenantIds.Contains(context.TenantId))
                     {
                         <button class="fc-btn fc-btn--xs fc-btn--neutral" disabled aria-label="Saving..." @onclick:stopPropagation="true">
                             <span class="fc-spinner fc-spinner--xs fc-spinner--muted" aria-hidden="true"></span>
