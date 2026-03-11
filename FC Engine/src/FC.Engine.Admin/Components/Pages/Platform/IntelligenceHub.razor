@@ -797,6 +797,11 @@
                             <p>@(_workspace.Capital.LastScenarioUpdatedAt?.ToString("HH:mm 'UTC'", CultureInfo.InvariantCulture) ?? "The live capital planning scenario has not been saved yet.")</p>
                         </article>
                         <article class="fc-intel-card">
+                            <span class="fc-intel-card__label">Action Catalog</span>
+                            <strong>@_workspace.Capital.ActionTemplates.Count</strong>
+                            <p>@(_workspace.Capital.ActionCatalogUpdatedAt?.ToString("dd MMM HH:mm 'UTC'", CultureInfo.InvariantCulture) ?? "The capital action catalog has not been materialized yet.")</p>
+                        </article>
+                        <article class="fc-intel-card">
                             <span class="fc-intel-card__label">Pack Sections</span>
                             <strong>@_capitalPackRows.Count</strong>
                             <p>Structured capital-management sections assembled from the current live scenario.</p>
@@ -1194,7 +1199,10 @@
                                 <span class="fc-intel-card__label">What-If Capital Actions</span>
                                 <h2>Side-by-side CAR and buffer uplift comparison</h2>
                             </div>
-                            <span class="fc-intel-chip">@_capitalActionRows.Count scenario(s)</span>
+                            <div class="fc-intel-inline-chips">
+                                <span class="fc-intel-chip">@_capitalActionRows.Count scenario(s)</span>
+                                <span class="fc-intel-chip">@(_workspace.Capital.ActionCatalogUpdatedAt?.ToString("dd MMM HH:mm", CultureInfo.InvariantCulture) ?? "Pending")</span>
+                            </div>
                         </header>
                         <div class="fc-intel-inline-actions">
                             <span class="fc-intel-inline-note">@BestCapitalActionHeadline</span>
@@ -2953,6 +2961,11 @@
                             <p>Regulatory and prudential models now tracked in the governance baseline.</p>
                         </article>
                         <article class="fc-intel-card">
+                            <span class="fc-intel-card__label">Inventory Catalog</span>
+                            <strong>@(_workspace.ModelRisk.InventoryCatalogUpdatedAt?.ToString("dd MMM") ?? "Pending")</strong>
+                            <p>@(_workspace.ModelRisk.InventoryCatalogUpdatedAt?.ToString("HH:mm 'UTC'", CultureInfo.InvariantCulture) ?? "The model inventory catalog has not been materialized yet.")</p>
+                        </article>
+                        <article class="fc-intel-card">
                             <span class="fc-intel-card__label">Due Validations</span>
                             <strong>@_workspace.ModelRisk.DueValidationCount</strong>
                             <p>Models approaching or breaching the validation review window.</p>
@@ -3456,7 +3469,10 @@
                                 <span class="fc-intel-card__label">Model Inventory</span>
                                 <h2>Validation and monitoring baseline</h2>
                             </div>
-                            <span class="fc-intel-chip">@_workspace.ModelRisk.Inventory.Count model(s)</span>
+                            <div class="fc-intel-inline-chips">
+                                <span class="fc-intel-chip">@_workspace.ModelRisk.Inventory.Count model(s)</span>
+                                <span class="fc-intel-chip">@(_workspace.ModelRisk.InventoryCatalogUpdatedAt?.ToString("dd MMM HH:mm", CultureInfo.InvariantCulture) ?? "Pending")</span>
+                            </div>
                         </header>
                         <div class="fc-intel-table-wrap">
                             <table class="fc-intel-table">

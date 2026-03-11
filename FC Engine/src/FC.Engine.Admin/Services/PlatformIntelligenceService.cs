@@ -13,7 +13,7 @@ namespace FC.Engine.Admin.Services;
 
 public sealed class PlatformIntelligenceService
 {
-    private static readonly IReadOnlyList<CapitalActionTemplate> CapitalActionTemplates =
+    private static readonly IReadOnlyList<CapitalActionTemplate> DefaultCapitalActionTemplates =
     [
         new("COLLATERAL", "Collateral optimisation", "Tighten eligible collateral recognition and credit risk mitigation on existing exposures.", "RWA", 0m, 4.5m, 0m, 0.9m),
         new("REBALANCE", "Portfolio rebalance", "Tilt new origination toward lower-density exposures and trim high-weight asset growth.", "RWA", 0m, 6.5m, -0.3m, 1.2m),
@@ -53,7 +53,7 @@ public sealed class PlatformIntelligenceService
         new("NFIU", "DOMESTIC AML WATCH SUBJECT", ["NIGERIA AML WATCH SUBJECT"], "person", "high")
     ];
 
-    private static readonly IReadOnlyList<ModelInventorySeed> ModelInventoryCatalog =
+    private static readonly IReadOnlyList<ModelInventorySeed> DefaultModelInventoryCatalog =
     [
         new("ECL", "IFRS 9 Expected Credit Loss", "Tier 1", "Credit Risk", "MFB_IFR", ["ecl", "pd", "lgd", "ead"]),
         new("CAR", "Capital Adequacy Ratio Engine", "Tier 1", "Prudential Reporting", "MFB_CAP", ["car", "capital", "tier1", "tier2", "rwa"]),
@@ -65,7 +65,9 @@ public sealed class PlatformIntelligenceService
 
     private readonly MetadataDbContext _db;
     private readonly KnowledgeGraphCatalogService _knowledgeGraphCatalog;
+    private readonly CapitalActionCatalogService _capitalActionCatalog;
     private readonly CapitalPlanningScenarioStoreService _capitalPlanningScenarioStore;
+    private readonly ModelInventoryCatalogService _modelInventoryCatalog;
     private readonly CapitalPackCatalogService _capitalPackCatalog;
     private readonly OpsResiliencePackCatalogService _opsResiliencePackCatalog;
     private readonly ModelRiskPackCatalogService _modelRiskPackCatalog;
@@ -79,7 +81,9 @@ public sealed class PlatformIntelligenceService
     public PlatformIntelligenceService(
         MetadataDbContext db,
         KnowledgeGraphCatalogService knowledgeGraphCatalog,
+        CapitalActionCatalogService capitalActionCatalog,
         CapitalPlanningScenarioStoreService capitalPlanningScenarioStore,
+        ModelInventoryCatalogService modelInventoryCatalog,
         CapitalPackCatalogService capitalPackCatalog,
         OpsResiliencePackCatalogService opsResiliencePackCatalog,
         ModelRiskPackCatalogService modelRiskPackCatalog,
@@ -92,7 +96,9 @@ public sealed class PlatformIntelligenceService
     {
         _db = db;
         _knowledgeGraphCatalog = knowledgeGraphCatalog;
+        _capitalActionCatalog = capitalActionCatalog;
         _capitalPlanningScenarioStore = capitalPlanningScenarioStore;
+        _modelInventoryCatalog = modelInventoryCatalog;
         _capitalPackCatalog = capitalPackCatalog;
         _opsResiliencePackCatalog = opsResiliencePackCatalog;
         _modelRiskPackCatalog = modelRiskPackCatalog;
@@ -289,6 +295,8 @@ public sealed class PlatformIntelligenceService
         var sanctionsCatalog = await _sanctionsWatchlistCatalog.MaterializeAsync(
             BuildSanctionsCatalogRequest(),
             ct);
+        var capitalActionCatalog = await LoadCapitalActionCatalogAsync(ct);
+        var modelInventoryCatalog = await LoadModelInventoryCatalogAsync(ct);
         var capitalPlanningScenario = await _capitalPlanningScenarioStore.LoadAsync(ct);
         var sanctionsPackCatalog = await _sanctionsPackCatalog.LoadAsync(ct);
         var sanctionsWorkflowState = await _sanctionsWorkflowStore.LoadAsync(ct);
@@ -334,11 +342,20 @@ public sealed class PlatformIntelligenceService
                 })
                 .ToList(),
             ct);
-        var modelInventory = BuildModelInventory(fields, formulas, templates, modules, submissions, policyScenarios, historicalImpact);
+        var modelInventorySeeds = modelInventoryCatalog.Definitions
+            .Select(x => new ModelInventorySeed(
+                x.ModelCode,
+                x.ModelName,
+                x.Tier,
+                x.Owner,
+                x.ReturnHint,
+                x.MatchTerms))
+            .ToList();
+        var modelInventory = BuildModelInventory(modelInventorySeeds, fields, formulas, templates, modules, submissions, policyScenarios, historicalImpact);
         var modelChanges = BuildModelChangeRows(auditLog, fieldChanges);
         var modelValidationCalendar = BuildModelValidationCalendar(modelInventory);
-        var modelPerformanceRows = BuildModelPerformanceRows(modelInventory, submissions, policyScenarios, historicalImpact);
-        var modelBacktestingRows = BuildModelBacktestingRows(modelInventory, submissions, policyScenarios, historicalImpact);
+        var modelPerformanceRows = BuildModelPerformanceRows(modelInventorySeeds, modelInventory, submissions, policyScenarios, historicalImpact);
+        var modelBacktestingRows = BuildModelBacktestingRows(modelInventorySeeds, modelInventory, submissions, policyScenarios, historicalImpact);
         var modelMonitoringRows = BuildModelMonitoringSummaryRows(modelInventory, modelPerformanceRows, modelBacktestingRows);
         var modelApprovalQueue = BuildModelApprovalQueue(modelInventory, modelChanges);
         var modelRiskAppetiteRows = BuildModelRiskAppetiteRows(modelInventory, modelValidationCalendar, modelPerformanceRows, modelApprovalQueue);
@@ -432,7 +449,18 @@ public sealed class PlatformIntelligenceService
                 MedianCapitalScore = latestChs.Count == 0 ? 0m : Median(latestChs.Select(x => x.RegulatoryCapital)),
                 CapitalWatchlistCount = capitalRows.Count(x => x.CapitalScore < 60m),
                 ActiveScenarioCount = policyScenarios.Count(x => x.Status != PolicyStatus.Enacted),
-                ActionTemplates = CapitalActionTemplates.ToList(),
+                ActionCatalogUpdatedAt = capitalActionCatalog.MaterializedAt,
+                ActionTemplates = capitalActionCatalog.Templates
+                    .Select(x => new CapitalActionTemplate(
+                        x.Code,
+                        x.Title,
+                        x.Summary,
+                        x.PrimaryLever,
+                        x.CapitalActionBn,
+                        x.RwaOptimisationPercent,
+                        x.QuarterlyRetainedEarningsDeltaBn,
+                        x.EstimatedAnnualCostPercent))
+                    .ToList(),
                 Watchlist = capitalRows.Take(10).ToList(),
                 LastScenarioUpdatedAt = capitalPlanningScenario?.SavedAtUtc,
                 ReturnPack = capitalPackCatalog.Sections.ToList(),
@@ -546,6 +574,7 @@ public sealed class PlatformIntelligenceService
                     : Math.Round(historicalImpact.Where(x => x.AccuracyScore.HasValue).DefaultIfEmpty().Average(x => x?.AccuracyScore ?? 0m), 1),
                 ChangeReviewCount = modelChanges.Count(x => x.ReviewSignal is "Critical" or "Review"),
                 ApprovalQueueCount = modelApprovalQueue.Count,
+                InventoryCatalogUpdatedAt = modelInventoryCatalog.MaterializedAt,
                 RiskAppetiteScore = modelRiskAppetiteRows.Count == 0 ? 0m : Math.Round(modelRiskAppetiteRows.Average(x => x.RiskScore), 1),
                 InAppetiteCount = modelRiskAppetiteRows.Count(x => x.AppetiteStatus == "Within Appetite"),
                 WatchCount = modelRiskAppetiteRows.Count(x => x.AppetiteStatus == "Watch"),
@@ -808,6 +837,58 @@ public sealed class PlatformIntelligenceService
 
         await _sanctionsWatchlistCatalog.MaterializeAsync(BuildSanctionsCatalogRequest(), ct);
         return await _sanctionsWatchlistCatalog.LoadAsync(ct);
+    }
+
+    private async Task<CapitalActionCatalogState> LoadCapitalActionCatalogAsync(CancellationToken ct)
+    {
+        var catalog = await _capitalActionCatalog.LoadAsync(ct);
+        if (catalog.Templates.Count > 0)
+        {
+            return catalog;
+        }
+
+        await _capitalActionCatalog.MaterializeAsync(
+            DefaultCapitalActionTemplates
+                .Select(x => new CapitalActionTemplateInput
+                {
+                    Code = x.Code,
+                    Title = x.Title,
+                    Summary = x.Summary,
+                    PrimaryLever = x.PrimaryLever,
+                    CapitalActionBn = x.CapitalActionBn,
+                    RwaOptimisationPercent = x.RwaOptimisationPercent,
+                    QuarterlyRetainedEarningsDeltaBn = x.QuarterlyRetainedEarningsDeltaBn,
+                    EstimatedAnnualCostPercent = x.EstimatedAnnualCostPercent
+                })
+                .ToList(),
+            ct);
+
+        return await _capitalActionCatalog.LoadAsync(ct);
+    }
+
+    private async Task<ModelInventoryCatalogState> LoadModelInventoryCatalogAsync(CancellationToken ct)
+    {
+        var catalog = await _modelInventoryCatalog.LoadAsync(ct);
+        if (catalog.Definitions.Count > 0)
+        {
+            return catalog;
+        }
+
+        await _modelInventoryCatalog.MaterializeAsync(
+            DefaultModelInventoryCatalog
+                .Select(x => new ModelInventoryDefinitionInput
+                {
+                    ModelCode = x.ModelCode,
+                    ModelName = x.ModelName,
+                    Tier = x.Tier,
+                    Owner = x.Owner,
+                    ReturnHint = x.ReturnHint,
+                    MatchTerms = x.MatchTerms
+                })
+                .ToList(),
+            ct);
+
+        return await _modelInventoryCatalog.LoadAsync(ct);
     }
 
     private static SanctionsStoredScreeningRun MapStoredScreeningRun(SanctionsScreeningRun run) =>
@@ -2851,6 +2932,7 @@ public sealed class PlatformIntelligenceService
     }
 
     private static List<ModelInventoryRow> BuildModelInventory(
+        IReadOnlyList<ModelInventorySeed> modelCatalog,
         IReadOnlyList<TemplateField> fields,
         IReadOnlyList<IntraSheetFormula> formulas,
         IReadOnlyList<ReturnTemplate> templates,
@@ -2860,7 +2942,7 @@ public sealed class PlatformIntelligenceService
         IReadOnlyList<HistoricalImpactTracking> historicalImpact)
     {
         var rows = new List<ModelInventoryRow>();
-        foreach (var seed in ModelInventoryCatalog)
+        foreach (var seed in modelCatalog)
         {
             var fieldCoverage = fields.Count(field =>
                 seed.MatchTerms.Any(term =>
@@ -2977,17 +3059,21 @@ public sealed class PlatformIntelligenceService
     }
 
     private static List<ModelPerformanceEvidenceRow> BuildModelPerformanceRows(
+        IReadOnlyList<ModelInventorySeed> modelCatalog,
         IReadOnlyList<ModelInventoryRow> inventory,
         IReadOnlyList<Submission> submissions,
         IReadOnlyList<PolicyScenario> policyScenarios,
         IReadOnlyList<HistoricalImpactTracking> historicalImpact)
     {
         var scenarioById = policyScenarios.ToDictionary(x => x.Id);
+        var seedByCode = modelCatalog.ToDictionary(x => x.ModelCode, StringComparer.OrdinalIgnoreCase);
 
         return inventory
             .Select(row =>
             {
-                var seed = ModelInventoryCatalog.First(x => x.ModelCode == row.ModelCode);
+                var seed = seedByCode.TryGetValue(row.ModelCode, out var storedSeed)
+                    ? storedSeed
+                    : new ModelInventorySeed(row.ModelCode, row.ModelName, row.Tier, row.Owner, row.ModelCode, []);
 
                 if (row.ModelCode is "STRESS" or "CLIMATE")
                 {
@@ -3048,17 +3134,21 @@ public sealed class PlatformIntelligenceService
     }
 
     private static List<ModelBacktestingRow> BuildModelBacktestingRows(
+        IReadOnlyList<ModelInventorySeed> modelCatalog,
         IReadOnlyList<ModelInventoryRow> inventory,
         IReadOnlyList<Submission> submissions,
         IReadOnlyList<PolicyScenario> policyScenarios,
         IReadOnlyList<HistoricalImpactTracking> historicalImpact)
     {
         var scenarioById = policyScenarios.ToDictionary(x => x.Id);
+        var seedByCode = modelCatalog.ToDictionary(x => x.ModelCode, StringComparer.OrdinalIgnoreCase);
 
         return inventory
             .Select(row =>
             {
-                var seed = ModelInventoryCatalog.First(x => x.ModelCode == row.ModelCode);
+                var seed = seedByCode.TryGetValue(row.ModelCode, out var storedSeed)
+                    ? storedSeed
+                    : new ModelInventorySeed(row.ModelCode, row.ModelName, row.Tier, row.Owner, row.ModelCode, []);
 
                 if (row.ModelCode is "STRESS" or "CLIMATE")
                 {
@@ -5182,6 +5272,7 @@ public sealed class CapitalManagementSnapshot
     public decimal MedianCapitalScore { get; set; }
     public int CapitalWatchlistCount { get; set; }
     public int ActiveScenarioCount { get; set; }
+    public DateTime? ActionCatalogUpdatedAt { get; set; }
     public DateTime? LastScenarioUpdatedAt { get; set; }
     public List<CapitalActionTemplate> ActionTemplates { get; set; } = [];
     public List<CapitalWatchlistRow> Watchlist { get; set; } = [];
@@ -5615,6 +5706,7 @@ public sealed class ModelRiskSnapshot
     public int ChangeReviewCount { get; set; }
     public int ApprovalQueueCount { get; set; }
     public decimal? AverageAccuracyScore { get; set; }
+    public DateTime? InventoryCatalogUpdatedAt { get; set; }
     public decimal RiskAppetiteScore { get; set; }
     public int InAppetiteCount { get; set; }
     public int WatchCount { get; set; }
