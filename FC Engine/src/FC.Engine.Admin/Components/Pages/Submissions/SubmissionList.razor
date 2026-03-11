@@ -142,7 +142,7 @@
 </div>
 
 @code {
-    private int _institutionId;
+    private int? _institutionId;
     private bool _searched;
     private bool _loading;
     private string? _error;
@@ -159,6 +159,12 @@
                     s.ReturnCode.Contains(_filterTerm, StringComparison.OrdinalIgnoreCase) ||
                     (s.Institution?.InstitutionName?.Contains(_filterTerm, StringComparison.OrdinalIgnoreCase) ?? false))
         .Where(s => string.IsNullOrEmpty(_statusFilter) || s.Status.ToString() == _statusFilter);
+
+    protected override async Task OnInitializedAsync()
+    {
+        _showAll = true;
+        await LoadSubmissions();
+    }
 
     private async Task Search()
     {
@@ -185,13 +191,13 @@
                 return;
             }
 
-            if (_institutionId <= 0)
+            if (!_institutionId.HasValue || _institutionId.Value <= 0)
             {
                 _error = "Please enter a valid Institution ID";
                 return;
             }
 
-            _submissions = (await SubmissionRepo.GetByInstitution(_institutionId)).ToList();
+            _submissions = (await SubmissionRepo.GetByInstitution(_institutionId.Value)).ToList();
         }
         catch (Exception ex)
         {
@@ -203,15 +209,15 @@
         }
     }
 
-    private void ClearResults()
+    private async Task ClearResults()
     {
-        _submissions.Clear();
-        _searched = false;
-        _showAll = false;
+        _institutionId = null;
         _error = null;
         _searchTerm = "";
         _filterTerm = "";
         _statusFilter = "";
+        _showAll = true;
+        await LoadSubmissions();
     }
 
     private async void OnSearchInput(ChangeEventArgs e)

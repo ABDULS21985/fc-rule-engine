@@ -935,31 +935,6 @@ else
                             </ul>
                         </section>
 
-                        <section class="portal-wiz-context-card portal-wiz-context-card--cost">
-                            <div class="portal-wiz-context-head">
-                                <span>Commercial snapshot</span>
-                                <strong>@SelectedPlanName</strong>
-                            </div>
-                            <div class="portal-wiz-context-total">
-                                <span>Total monthly commitment</span>
-                                <strong>@FormatMoney(_estimate.Total)</strong>
-                            </div>
-                            <div class="portal-wiz-context-rows">
-                                <div class="portal-wiz-context-row">
-                                    <span>Base plan</span>
-                                    <strong>@FormatMoney(_estimate.BasePriceMonthly)</strong>
-                                </div>
-                                <div class="portal-wiz-context-row">
-                                    <span>Selected modules</span>
-                                    <strong>@FormatMoney(_estimate.ModuleLines.Sum(x => x.Amount))</strong>
-                                </div>
-                                <div class="portal-wiz-context-row">
-                                    <span>VAT</span>
-                                    <strong>@FormatMoney(_estimate.VatAmount)</strong>
-                                </div>
-                            </div>
-                        </section>
-
                         @if (_step == 4)
                         {
                             <section class="portal-wiz-context-card portal-wiz-context-card--launch">
@@ -1220,10 +1195,13 @@ else
     }
 
     // ── Institution picker ──────────────────────────────────────────────────────
-    private void OnCategoryPillClick(string code)
+    private async Task OnCategoryPillClick(string code)
     {
         _blurCts?.Cancel();
         OnCategoryChanged(new ChangeEventArgs { Value = code });
+        StateHasChanged();
+        await Task.Yield();
+        try { await JS.InvokeVoidAsync("eval", "document.getElementById('wiz-inst-name')?.focus()"); } catch { }
     }
 
     private void OnCategoryChanged(ChangeEventArgs e)
