@@ -48,6 +48,8 @@ public class PlatformAdminService
 
     public async Task<PlatformTenantListResult> GetTenantList(PlatformTenantListQuery query, CancellationToken ct = default)
     {
+        var now = DateTime.UtcNow;
+
         var tenants = await _db.Tenants
             .AsNoTracking()
             .OrderBy(t => t.TenantName)
@@ -190,6 +192,13 @@ public class PlatformAdminService
             }
 
             latestEntitlementAuditByTenant.TryGetValue(t.TenantId, out var latestEntitlementAudit);
+            var reconciliationState = pendingReconciliationModules == 0
+                ? "Healthy"
+                : !latestEntitlementAudit?.PerformedAt.HasValue ?? true
+                    ? "Stale"
+                    : latestEntitlementAudit!.PerformedAt <= now.AddDays(-7)
+                        ? "Stale"
+                        : "Action Needed";
 
             return new PlatformTenantListItem
             {
@@ -206,6 +215,7 @@ public class PlatformAdminService
                     ? null
                     : DescribeEntitlementAction(latestEntitlementAudit.Action),
                 LastEntitlementActionAt = latestEntitlementAudit?.PerformedAt,
+                ReconciliationState = reconciliationState,
                 Users = userCounts.GetValueOrDefault(t.TenantId),
                 Entities = entityCounts.GetValueOrDefault(t.TenantId),
                 Mrr = decimal.Round(mrr, 2),
@@ -249,6 +259,11 @@ public class PlatformAdminService
             tenantRows = tenantRows.Where(x => x.PendingReconciliationModules > 0);
         }
 
+        if (query.OnlyStaleReconciliation)
+        {
+            tenantRows = tenantRows.Where(x => string.Equals(x.ReconciliationState, "Stale", StringComparison.Ordinal));
+        }
+
         tenantRows = (query.SortBy ?? string.Empty).ToLowerInvariant() switch
         {
             "status" => query.SortDescending
@@ -285,6 +300,17 @@ public class PlatformAdminService
         return new PlatformTenantListResult
         {
             Tenants = rows,
+            EntitlementSummary = new PlatformTenantEntitlementSummary
+            {
+                HealthyTenants = rows.Count(x => string.Equals(x.ReconciliationState, "Healthy", StringComparison.Ordinal)),
+                NeedsReconciliationTenants = rows.Count(x => x.PendingReconciliationModules > 0),
+                StaleReconciliationTenants = rows.Count(x => string.Equals(x.ReconciliationState, "Stale", StringComparison.Ordinal)),
+                ReconciledLast24Hours = rows.Count(x =>
+                    string.Equals(x.LastEntitlementAction, "Modules Reconciled", StringComparison.Ordinal)
+                    && x.LastEntitlementActionAt.HasValue
+                    && x.LastEntitlementActionAt.Value >= now.AddHours(-24)),
+                NoEntitlementActivityTenants = rows.Count(x => !x.LastEntitlementActionAt.HasValue)
+            },
             PlanOptions = rows.Select(x => x.PlanCode)
                 .Where(x => !string.IsNullOrWhiteSpace(x) && !string.Equals(x, "N/A", StringComparison.OrdinalIgnoreCase))
                 .Distinct(StringComparer.OrdinalIgnoreCase)
