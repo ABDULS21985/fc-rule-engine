@@ -80,7 +80,7 @@ public class SanctionsScreeningSessionStoreServiceTests
         loaded.LatestRun.Should().NotBeNull();
         loaded.LatestRun!.Results.Should().HaveCount(2);
         loaded.LatestRun.MatchCount.Should().Be(1);
-        loaded.LatestRun.TfsPreview.ConfirmedMatches.Should().Be(1);
+        loaded.LatestRun.Results.Count(x => x.Disposition == "True Match").Should().Be(1);
 
         loaded.LatestTransaction.Should().NotBeNull();
         loaded.LatestTransaction!.TransactionReference.Should().Be("TXN-001");

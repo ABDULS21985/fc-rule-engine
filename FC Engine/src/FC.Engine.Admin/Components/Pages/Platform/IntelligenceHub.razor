@@ -7200,10 +7200,29 @@
 
     private async Task LoadClientStateAsync()
     {
+        await LoadSanctionsScreeningStateAsync();
         await LoadSanctionsWorkflowStateAsync();
         await LoadModelApprovalWorkflowStateAsync();
         await LoadResilienceClientStateAsync();
         _clientStateLoaded = true;
+    }
+
+    private async Task LoadSanctionsScreeningStateAsync()
+    {
+        try
+        {
+            var state = await IntelligenceService.GetSanctionsScreeningSessionStateAsync();
+            _screeningRun = state.LatestRun is null ? null : MapStoredScreeningRun(state.LatestRun);
+            _transactionScreeningResult = state.LatestTransaction is null ? null : MapStoredTransactionCheck(state.LatestTransaction);
+            NormalizeSelectedStrDraft();
+            RebuildSanctionsPack();
+        }
+        catch
+        {
+            _screeningRun = null;
+            _transactionScreeningResult = null;
+            RebuildSanctionsPack();
+        }
     }
 
     private async Task LoadSanctionsWorkflowStateAsync()
@@ -7248,6 +7267,54 @@
 
         await SyncSanctionsPackAsync();
     }
+
+    private static SanctionsScreeningRun MapStoredScreeningRun(SanctionsStoredScreeningRun run) =>
+        new()
+        {
+            ThresholdPercent = run.ThresholdPercent,
+            ScreenedAt = run.ScreenedAt,
+            TotalSubjects = run.TotalSubjects,
+            MatchCount = run.MatchCount,
+            Results = run.Results
+                .Select(x => new SanctionsScreeningResultRow
+                {
+                    Subject = x.Subject,
+                    Disposition = x.Disposition,
+                    MatchScore = x.MatchScore,
+                    MatchedName = x.MatchedName,
+                    SourceCode = x.SourceCode,
+                    SourceName = x.SourceName,
+                    Category = x.Category,
+                    RiskLevel = x.RiskLevel
+                })
+                .ToList()
+        };
+
+    private static SanctionsTransactionScreeningResult MapStoredTransactionCheck(SanctionsStoredTransactionCheck result) =>
+        new()
+        {
+            TransactionReference = result.TransactionReference,
+            Amount = result.Amount,
+            Currency = result.Currency,
+            Channel = result.Channel,
+            ThresholdPercent = result.ThresholdPercent,
+            HighRisk = result.HighRisk,
+            ControlDecision = result.ControlDecision,
+            Narrative = result.Narrative,
+            RequiresStrDraft = result.RequiresStrDraft,
+            PartyResults = result.PartyResults
+                .Select(x => new SanctionsTransactionPartyResult
+                {
+                    PartyRole = x.PartyRole,
+                    PartyName = x.PartyName,
+                    Disposition = x.Disposition,
+                    MatchScore = x.MatchScore,
+                    MatchedName = x.MatchedName,
+                    SourceCode = x.SourceCode,
+                    RiskLevel = x.RiskLevel
+                })
+                .ToList()
+        };
 
     private async Task LoadModelApprovalWorkflowStateAsync()
     {

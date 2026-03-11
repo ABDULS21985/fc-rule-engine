@@ -70,6 +70,7 @@ public sealed class PlatformIntelligenceService
     private readonly ModelRiskPackCatalogService _modelRiskPackCatalog;
     private readonly SanctionsWatchlistCatalogService _sanctionsWatchlistCatalog;
     private readonly SanctionsPackCatalogService _sanctionsPackCatalog;
+    private readonly SanctionsScreeningSessionStoreService _sanctionsScreeningSessionStore;
     private readonly SanctionsWorkflowStoreService _sanctionsWorkflowStore;
     private readonly ModelApprovalWorkflowStoreService _modelApprovalWorkflowStore;
     private readonly ResilienceAssessmentStoreService _resilienceAssessmentStore;
@@ -82,6 +83,7 @@ public sealed class PlatformIntelligenceService
         ModelRiskPackCatalogService modelRiskPackCatalog,
         SanctionsWatchlistCatalogService sanctionsWatchlistCatalog,
         SanctionsPackCatalogService sanctionsPackCatalog,
+        SanctionsScreeningSessionStoreService sanctionsScreeningSessionStore,
         SanctionsWorkflowStoreService sanctionsWorkflowStore,
         ModelApprovalWorkflowStoreService modelApprovalWorkflowStore,
         ResilienceAssessmentStoreService resilienceAssessmentStore)
@@ -93,6 +95,7 @@ public sealed class PlatformIntelligenceService
         _modelRiskPackCatalog = modelRiskPackCatalog;
         _sanctionsWatchlistCatalog = sanctionsWatchlistCatalog;
         _sanctionsPackCatalog = sanctionsPackCatalog;
+        _sanctionsScreeningSessionStore = sanctionsScreeningSessionStore;
         _sanctionsWorkflowStore = sanctionsWorkflowStore;
         _modelApprovalWorkflowStore = modelApprovalWorkflowStore;
         _resilienceAssessmentStore = resilienceAssessmentStore;
@@ -584,6 +587,16 @@ public sealed class PlatformIntelligenceService
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
 
+        var run = await BuildSanctionsScreeningRunAsync(cleanedSubjects, threshold, ct);
+        await _sanctionsScreeningSessionStore.RecordBatchRunAsync(MapStoredScreeningRun(run), ct);
+        return run;
+    }
+
+    private async Task<SanctionsScreeningRun> BuildSanctionsScreeningRunAsync(
+        IReadOnlyList<string> cleanedSubjects,
+        double threshold,
+        CancellationToken ct)
+    {
         var catalog = await LoadSanctionsCatalogAsync(ct);
         var sourceNameByCode = catalog.Sources.ToDictionary(x => x.SourceCode, x => x.SourceName, StringComparer.OrdinalIgnoreCase);
         var watchlistEntries = catalog.Entries
@@ -675,7 +688,10 @@ public sealed class PlatformIntelligenceService
             .ToList();
 
         var threshold = request.HighRisk ? 0.82d : 0.88d;
-        var screeningRun = await ScreenSubjectsAsync(subjectMap.Select(x => x.Name), threshold, ct);
+        var screeningRun = await BuildSanctionsScreeningRunAsync(
+            subjectMap.Select(x => x.Name).Distinct(StringComparer.OrdinalIgnoreCase).ToList(),
+            threshold,
+            ct);
 
         var roleByName = subjectMap
             .GroupBy(x => x.Name, StringComparer.OrdinalIgnoreCase)
@@ -711,7 +727,7 @@ public sealed class PlatformIntelligenceService
             _ => "No sanctions hit crossed the configured real-time threshold for this transaction. The payment path can proceed with standard monitoring."
         };
 
-        return new SanctionsTransactionScreeningResult
+        var result = new SanctionsTransactionScreeningResult
         {
             TransactionReference = request.TransactionReference,
             Amount = request.Amount,
@@ -724,7 +740,13 @@ public sealed class PlatformIntelligenceService
             RequiresStrDraft = blockDecision,
             PartyResults = partyResults
         };
+
+        await _sanctionsScreeningSessionStore.RecordTransactionCheckAsync(MapStoredTransactionCheck(result), ct);
+        return result;
     }
+
+    public Task<SanctionsScreeningSessionState> GetSanctionsScreeningSessionStateAsync(CancellationToken ct = default) =>
+        _sanctionsScreeningSessionStore.LoadLatestAsync(ct);
 
     public Task<SanctionsWorkflowState> GetSanctionsWorkflowStateAsync(CancellationToken ct = default) =>
         _sanctionsWorkflowStore.LoadAsync(ct);
@@ -774,6 +796,54 @@ public sealed class PlatformIntelligenceService
         await _sanctionsWatchlistCatalog.MaterializeAsync(BuildSanctionsCatalogRequest(), ct);
         return await _sanctionsWatchlistCatalog.LoadAsync(ct);
     }
+
+    private static SanctionsStoredScreeningRun MapStoredScreeningRun(SanctionsScreeningRun run) =>
+        new()
+        {
+            ThresholdPercent = run.ThresholdPercent,
+            ScreenedAt = run.ScreenedAt,
+            TotalSubjects = run.TotalSubjects,
+            MatchCount = run.MatchCount,
+            Results = run.Results
+                .Select(x => new SanctionsStoredScreeningResult
+                {
+                    Subject = x.Subject,
+                    Disposition = x.Disposition,
+                    MatchScore = x.MatchScore,
+                    MatchedName = x.MatchedName,
+                    SourceCode = x.SourceCode,
+                    SourceName = x.SourceName,
+                    Category = x.Category,
+                    RiskLevel = x.RiskLevel
+                })
+                .ToList()
+        };
+
+    private static SanctionsStoredTransactionCheck MapStoredTransactionCheck(SanctionsTransactionScreeningResult result) =>
+        new()
+        {
+            TransactionReference = result.TransactionReference,
+            Amount = result.Amount,
+            Currency = result.Currency,
+            Channel = result.Channel,
+            ThresholdPercent = result.ThresholdPercent,
+            HighRisk = result.HighRisk,
+            ControlDecision = result.ControlDecision,
+            Narrative = result.Narrative,
+            RequiresStrDraft = result.RequiresStrDraft,
+            PartyResults = result.PartyResults
+                .Select(x => new SanctionsStoredTransactionPartyResult
+                {
+                    PartyRole = x.PartyRole,
+                    PartyName = x.PartyName,
+                    Disposition = x.Disposition,
+                    MatchScore = x.MatchScore,
+                    MatchedName = x.MatchedName,
+                    SourceCode = x.SourceCode,
+                    RiskLevel = x.RiskLevel
+                })
+                .ToList()
+        };
 
     private async Task<List<ChsScoreSnapshot>> GetLatestChsSnapshotsAsync(CancellationToken ct)
     {

@@ -119,7 +119,6 @@ public sealed class SanctionsScreeningSessionStoreService
                 ScreenedAt = latestBatch.ScreenedAt,
                 TotalSubjects = latestBatch.TotalSubjects,
                 MatchCount = latestBatch.MatchCount,
-                TfsPreview = BuildTfsPreview(results),
                 Results = results.Select(MapResult).ToList()
             };
         }
@@ -337,35 +336,6 @@ public sealed class SanctionsScreeningSessionStoreService
             RiskLevel = record.RiskLevel
         };
 
-    private static SanctionsTfsPreview BuildTfsPreview(IReadOnlyList<SanctionsScreeningResultRecord> records)
-    {
-        var total = records.Count;
-        var matches = records.Count(x => x.Disposition != "Clear");
-        var confirmed = records.Count(x => x.Disposition == "True Match");
-        var potential = records.Count(x => x.Disposition == "Potential Match");
-        var frozen = records.Count(x => x.Disposition == "True Match" && x.RiskLevel is "critical" or "high");
-
-        return new SanctionsTfsPreview
-        {
-            ScreeningCount = total,
-            MatchesFound = matches,
-            PotentialMatches = potential,
-            ConfirmedMatches = confirmed,
-            AssetsFrozenCount = frozen,
-            FalsePositiveCount = 0,
-            FalsePositiveRatePercent = 0d,
-            WatchlistSources = records
-                .Where(x => !string.Equals(x.SourceCode, "N/A", StringComparison.OrdinalIgnoreCase))
-                .Select(x => x.SourceCode)
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
-                .ToList(),
-            StrDraftRequired = confirmed > 0,
-            Narrative = matches == 0
-                ? "No watchlist overlap was detected in the stored screening run."
-                : $"{matches} stored screening hit(s) were recorded across {total} screened subject(s)."
-        };
-    }
 }
 
 public sealed class SanctionsScreeningSessionState
@@ -380,7 +350,6 @@ public sealed class SanctionsStoredScreeningRun
     public DateTime ScreenedAt { get; init; }
     public int TotalSubjects { get; init; }
     public int MatchCount { get; init; }
-    public SanctionsTfsPreview TfsPreview { get; init; } = new();
     public List<SanctionsStoredScreeningResult> Results { get; init; } = [];
 }
 
