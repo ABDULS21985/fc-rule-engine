@@ -24,17 +24,52 @@ public sealed class SubscriptionModuleEntitlementBootstrapService
     }
 
     public Task<SubscriptionModuleEntitlementBootstrapResult> EnsureIncludedModulesAsync(CancellationToken ct = default)
-        => EnsureIncludedModulesInternalAsync(null, ct);
+        => EnsureIncludedModulesInternalAsync(null, null, ct);
 
     public Task<SubscriptionModuleEntitlementBootstrapResult> EnsureIncludedModulesForSubscriptionAsync(
         int subscriptionId,
         CancellationToken ct = default)
-        => EnsureIncludedModulesInternalAsync(subscriptionId, ct);
+        => EnsureIncludedModulesInternalAsync(subscriptionId, null, ct);
+
+    public Task<SubscriptionModuleEntitlementBootstrapResult> EnsureIncludedModulesForTenantAsync(
+        Guid tenantId,
+        CancellationToken ct = default)
+        => EnsureIncludedModulesInternalAsync(null, tenantId, ct);
 
     private async Task<SubscriptionModuleEntitlementBootstrapResult> EnsureIncludedModulesInternalAsync(
         int? subscriptionId,
+        Guid? tenantId,
         CancellationToken ct)
     {
+        var subscriptionQuery = _db.Subscriptions
+            .Where(subscription =>
+                subscription.Status == SubscriptionStatus.Trial
+                || subscription.Status == SubscriptionStatus.Active
+                || subscription.Status == SubscriptionStatus.PastDue
+                || subscription.Status == SubscriptionStatus.Suspended);
+
+        if (subscriptionId.HasValue)
+        {
+            subscriptionQuery = subscriptionQuery.Where(x => x.Id == subscriptionId.Value);
+        }
+
+        if (tenantId.HasValue)
+        {
+            subscriptionQuery = subscriptionQuery.Where(x => x.TenantId == tenantId.Value);
+        }
+
+        var subscriptions = await subscriptionQuery
+            .Select(x => new { x.Id, x.TenantId })
+            .ToListAsync(ct);
+
+        if (subscriptions.Count == 0)
+        {
+            return new SubscriptionModuleEntitlementBootstrapResult();
+        }
+
+        var subscriptionIds = subscriptions.Select(x => x.Id).ToList();
+        var tenantIdsBySubscription = subscriptions.ToDictionary(x => x.Id, x => x.TenantId);
+
         var candidateQuery =
             from subscription in _db.Subscriptions
             join tenantLicence in _db.TenantLicenceTypes on subscription.TenantId equals tenantLicence.TenantId
@@ -54,11 +89,17 @@ public sealed class SubscriptionModuleEntitlementBootstrapService
                 subscription.TenantId,
                 licenceModule.ModuleId,
                 pricing.PriceMonthly,
-                pricing.PriceAnnual);
+                pricing.PriceAnnual,
+                true);
 
         if (subscriptionId.HasValue)
         {
             candidateQuery = candidateQuery.Where(x => x.SubscriptionId == subscriptionId.Value);
+        }
+
+        if (tenantId.HasValue)
+        {
+            candidateQuery = candidateQuery.Where(x => x.TenantId == tenantId.Value);
         }
 
         var candidates = (await candidateQuery
@@ -68,24 +109,50 @@ public sealed class SubscriptionModuleEntitlementBootstrapService
             .Select(g => g.First())
             .ToList();
 
-        if (candidates.Count == 0)
-        {
-            return new SubscriptionModuleEntitlementBootstrapResult();
-        }
-
-        var subscriptionIds = candidates
-            .Select(x => x.SubscriptionId)
-            .Distinct()
-            .ToList();
-
         var existingRows = await _db.SubscriptionModules
             .Where(x => subscriptionIds.Contains(x.SubscriptionId))
             .ToListAsync(ct);
 
         var existingByKey = existingRows.ToDictionary(x => (x.SubscriptionId, x.ModuleId));
+        var eligibleModuleQuery =
+            from subscription in _db.Subscriptions
+            join tenantLicence in _db.TenantLicenceTypes on subscription.TenantId equals tenantLicence.TenantId
+            join licenceModule in _db.LicenceModuleMatrix on tenantLicence.LicenceTypeId equals licenceModule.LicenceTypeId
+            join pricing in _db.PlanModulePricing on new { subscription.PlanId, licenceModule.ModuleId }
+                equals new { pricing.PlanId, pricing.ModuleId }
+            join module in _db.Modules on licenceModule.ModuleId equals module.Id
+            where subscriptionIds.Contains(subscription.Id)
+                  && tenantLicence.IsActive
+                  && module.IsActive
+            select new IncludedModuleCandidate(
+                subscription.Id,
+                subscription.TenantId,
+                licenceModule.ModuleId,
+                pricing.PriceMonthly,
+                pricing.PriceAnnual,
+                pricing.IsIncludedInBase);
+
+        var eligibleCandidates = (await eligibleModuleQuery
+                .AsNoTracking()
+                .ToListAsync(ct))
+            .GroupBy(x => new { x.SubscriptionId, x.ModuleId })
+            .Select(g => g.First())
+            .ToList();
+
+        var eligibleModuleIdsBySubscription = eligibleCandidates
+            .GroupBy(x => x.SubscriptionId)
+            .ToDictionary(
+                g => g.Key,
+                g => g.Select(x => x.ModuleId).ToHashSet());
+
+        var eligiblePricingByKey = eligibleCandidates.ToDictionary(
+            x => (x.SubscriptionId, x.ModuleId),
+            x => x);
+
         var created = 0;
         var reactivated = 0;
         var updated = 0;
+        var deactivated = 0;
         var touchedTenantIds = new HashSet<Guid>();
 
         foreach (var candidate in candidates)
@@ -142,23 +209,68 @@ public sealed class SubscriptionModuleEntitlementBootstrapService
             }
         }
 
-        if (created == 0 && reactivated == 0 && updated == 0)
+        foreach (var row in existingRows.Where(x => x.IsActive))
+        {
+            var isStillEligible = eligibleModuleIdsBySubscription.TryGetValue(row.SubscriptionId, out var eligibleModuleIds)
+                                  && eligibleModuleIds.Contains(row.ModuleId);
+
+            if (!isStillEligible)
+            {
+                row.Deactivate();
+                deactivated++;
+                touchedTenantIds.Add(tenantIdsBySubscription[row.SubscriptionId]);
+                continue;
+            }
+
+            if (!eligiblePricingByKey.TryGetValue((row.SubscriptionId, row.ModuleId), out var eligibleCandidate))
+            {
+                continue;
+            }
+
+            var changed = false;
+            if (row.PriceMonthly != eligibleCandidate.PriceMonthly)
+            {
+                row.PriceMonthly = eligibleCandidate.PriceMonthly;
+                changed = true;
+            }
+
+            if (row.PriceAnnual != eligibleCandidate.PriceAnnual)
+            {
+                row.PriceAnnual = eligibleCandidate.PriceAnnual;
+                changed = true;
+            }
+
+            if (row.DeactivatedAt is not null)
+            {
+                row.DeactivatedAt = null;
+                changed = true;
+            }
+
+            if (changed)
+            {
+                updated++;
+                touchedTenantIds.Add(tenantIdsBySubscription[row.SubscriptionId]);
+            }
+        }
+
+        if (created == 0 && reactivated == 0 && updated == 0 && deactivated == 0)
         {
             return new SubscriptionModuleEntitlementBootstrapResult();
         }
 
         await _db.SaveChangesAsync(ct);
 
-        foreach (var tenantId in touchedTenantIds)
+        foreach (var touchedTenantId in touchedTenantIds)
         {
-            await _entitlementService.InvalidateCache(tenantId);
+            await _entitlementService.InvalidateCache(touchedTenantId);
         }
 
         _logger.LogInformation(
-            "Subscription module entitlement bootstrap completed. Created={Created} Reactivated={Reactivated} Updated={Updated} TenantsTouched={TenantsTouched}",
+            "Subscription module entitlement bootstrap completed. Created={Created} Reactivated={Reactivated} Updated={Updated} Deactivated={Deactivated} TenantsTouched={TenantsTouched}",
             created,
             reactivated,
             updated,
+            deactivated,
             touchedTenantIds.Count);
 
         return new SubscriptionModuleEntitlementBootstrapResult
@@ -166,6 +278,7 @@ public sealed class SubscriptionModuleEntitlementBootstrapService
             ModulesCreated = created,
             ModulesReactivated = reactivated,
             ModulesUpdated = updated,
+            ModulesDeactivated = deactivated,
             TenantsTouched = touchedTenantIds.Count
         };
     }
@@ -175,7 +288,8 @@ public sealed class SubscriptionModuleEntitlementBootstrapService
         Guid TenantId,
         int ModuleId,
         decimal PriceMonthly,
-        decimal PriceAnnual);
+        decimal PriceAnnual,
+        bool IsIncludedInBase);
 }
 
 public sealed class SubscriptionModuleEntitlementBootstrapResult
@@ -183,5 +297,6 @@ public sealed class SubscriptionModuleEntitlementBootstrapResult
     public int ModulesCreated { get; init; }
     public int ModulesReactivated { get; init; }
     public int ModulesUpdated { get; init; }
+    public int ModulesDeactivated { get; init; }
     public int TenantsTouched { get; init; }
 }

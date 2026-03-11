@@ -64,6 +64,7 @@ public class SubscriptionModuleEntitlementBootstrapServiceTests
         result.ModulesCreated.Should().Be(1);
         result.ModulesReactivated.Should().Be(0);
         result.ModulesUpdated.Should().Be(0);
+        result.ModulesDeactivated.Should().Be(0);
         result.TenantsTouched.Should().Be(1);
 
         var activeModules = await db.SubscriptionModules
@@ -153,11 +154,13 @@ public class SubscriptionModuleEntitlementBootstrapServiceTests
         first.ModulesCreated.Should().Be(0);
         first.ModulesReactivated.Should().Be(1);
         first.ModulesUpdated.Should().Be(1);
+        first.ModulesDeactivated.Should().Be(0);
         first.TenantsTouched.Should().Be(1);
 
         second.ModulesCreated.Should().Be(0);
         second.ModulesReactivated.Should().Be(0);
         second.ModulesUpdated.Should().Be(0);
+        second.ModulesDeactivated.Should().Be(0);
         second.TenantsTouched.Should().Be(0);
 
         var modules = await db.SubscriptionModules
@@ -168,6 +171,81 @@ public class SubscriptionModuleEntitlementBootstrapServiceTests
         modules.Should().OnlyContain(x => x.IsActive);
         modules.Should().OnlyContain(x => x.PriceMonthly == 0m && x.PriceAnnual == 0m);
         modules.Should().OnlyContain(x => x.DeactivatedAt == null);
+        entitlementService.InvalidatedTenantIds.Should().ContainSingle().Which.Should().Be(seed.TenantId);
+    }
+
+    [Fact]
+    public async Task EnsureIncludedModulesForTenantAsync_Deactivates_Modules_That_Are_No_Longer_Licence_Eligible()
+    {
+        await using var db = CreateDbContext(nameof(EnsureIncludedModulesForTenantAsync_Deactivates_Modules_That_Are_No_Longer_Licence_Eligible));
+        var seed = await SeedTenantSubscriptionAsync(db, "ENTERPRISE");
+
+        db.Modules.Add(new Module
+        {
+            ModuleCode = "DMB_BASEL3",
+            ModuleName = "DMB Basel III",
+            RegulatorCode = "CBN",
+            SheetCount = 5,
+            DefaultFrequency = "Monthly",
+            IsActive = true,
+            CreatedAt = DateTime.UtcNow
+        });
+        await db.SaveChangesAsync();
+
+        var moduleId = await db.Modules.Where(x => x.ModuleCode == "DMB_BASEL3").Select(x => x.Id).SingleAsync();
+
+        db.LicenceModuleMatrix.Add(new LicenceModuleMatrix
+        {
+            LicenceTypeId = seed.LicenceTypeId,
+            ModuleId = moduleId,
+            IsRequired = false,
+            IsOptional = true
+        });
+
+        db.PlanModulePricing.Add(new PlanModulePricing
+        {
+            PlanId = seed.PlanId,
+            ModuleId = moduleId,
+            PriceMonthly = 50000m,
+            PriceAnnual = 500000m,
+            IsIncludedInBase = false
+        });
+
+        db.SubscriptionModules.Add(new SubscriptionModule
+        {
+            SubscriptionId = seed.SubscriptionId,
+            ModuleId = moduleId,
+            PriceMonthly = 50000m,
+            PriceAnnual = 500000m,
+            IsActive = true
+        });
+        await db.SaveChangesAsync();
+
+        var activeTenantLicence = await db.TenantLicenceTypes
+            .SingleAsync(x => x.TenantId == seed.TenantId && x.LicenceTypeId == seed.LicenceTypeId);
+        activeTenantLicence.IsActive = false;
+        activeTenantLicence.ExpiryDate = DateTime.UtcNow.Date;
+        await db.SaveChangesAsync();
+
+        var entitlementService = new RecordingEntitlementService();
+        var sut = new SubscriptionModuleEntitlementBootstrapService(
+            db,
+            entitlementService,
+            NullLogger<SubscriptionModuleEntitlementBootstrapService>.Instance);
+
+        var result = await sut.EnsureIncludedModulesForTenantAsync(seed.TenantId);
+
+        result.ModulesCreated.Should().Be(0);
+        result.ModulesReactivated.Should().Be(0);
+        result.ModulesUpdated.Should().Be(0);
+        result.ModulesDeactivated.Should().Be(1);
+        result.TenantsTouched.Should().Be(1);
+
+        var module = await db.SubscriptionModules
+            .SingleAsync(x => x.SubscriptionId == seed.SubscriptionId && x.ModuleId == moduleId);
+
+        module.IsActive.Should().BeFalse();
+        module.DeactivatedAt.Should().NotBeNull();
         entitlementService.InvalidatedTenantIds.Should().ContainSingle().Which.Should().Be(seed.TenantId);
     }
 
