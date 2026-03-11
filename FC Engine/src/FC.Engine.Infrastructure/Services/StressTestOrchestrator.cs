@@ -201,23 +201,26 @@ public sealed class StressTestOrchestrator : IStressTestOrchestrator
         return rows.ToDictionary(r => r.InstitutionType, r => new ResolvedShockParameters(
             ScenarioId: scenarioId,
             InstitutionType: r.InstitutionType,
-            GDPGrowthShock: r.GDPGrowthShock ?? 0m,
-            OilPriceShockPct: r.OilPriceShockPct ?? 0m,
-            FXDepreciationPct: r.FXDepreciationPct ?? 0m,
-            InflationShockPp: r.InflationShockPp ?? 0m,
-            InterestRateShockBps: r.InterestRateShockBps ?? 0,
-            CarbonTaxUSDPerTon: r.CarbonTaxUSDPerTon ?? 0m,
-            StrandedAssetsPct: r.StrandedAssetsPct ?? 0m,
+            GDPGrowthShock: r.GDPGrowthShock,
+            OilPriceShockPct: r.OilPriceShockPct,
+            FXDepreciationPct: r.FXDepreciationPct,
+            InflationShockPp: r.InflationShockPp,
+            InterestRateShockBps: r.InterestRateShockBps,
+            TradeVolumeShockPct: r.TradeVolumeShockPct,
+            RemittanceShockPct: r.RemittanceShockPct,
+            FDIShockPct: r.FDIShockPct,
+            CarbonTaxUSDPerTon: r.CarbonTaxUSDPerTon,
+            StrandedAssetsPct: r.StrandedAssetsPct,
             PhysicalRiskHazardCode: r.PhysicalRiskHazardCode,
-            CARDeltaPerGDPPp: r.CARDeltaPerGDPPp ?? -0.30m,
-            NPLDeltaPerGDPPp: r.NPLDeltaPerGDPPp ?? 0.45m,
-            LCRDeltaPerRateHike100: r.LCRDeltaPerRateHike100 ?? -0.08m,
-            CARDeltaPerFXPct: r.CARDeltaPerFXPct ?? -0.10m,
-            NPLDeltaPerFXPct: r.NPLDeltaPerFXPct ?? 0.15m,
-            CARDeltaPerOilPct: r.CARDeltaPerOilPct ?? -0.08m,
-            NPLDeltaPerOilPct: r.NPLDeltaPerOilPct ?? 0.20m,
-            LCRDeltaPerCyber: r.LCRDeltaPerCyber ?? 0m,
-            DepositOutflowPctCyber: r.DepositOutflowPctCyber ?? 0m));
+            CARDeltaPerGDPPp: r.CARDeltaPerGDPPp,
+            NPLDeltaPerGDPPp: r.NPLDeltaPerGDPPp,
+            LCRDeltaPerRateHike100: r.LCRDeltaPerRateHike100,
+            CARDeltaPerFXPct: r.CARDeltaPerFXPct,
+            NPLDeltaPerFXPct: r.NPLDeltaPerFXPct,
+            CARDeltaPerOilPct: r.CARDeltaPerOilPct,
+            NPLDeltaPerOilPct: r.NPLDeltaPerOilPct,
+            LCRDeltaPerCyber: r.LCRDeltaPerCyber,
+            DepositOutflowPctCyber: r.DepositOutflowPctCyber));
     }
 
     private static async Task<List<PrudentialMetricSnapshot>> LoadSnapshotsAsync(
@@ -252,7 +255,9 @@ public sealed class StressTestOrchestrator : IStressTestOrchestrator
                 ? all with { InstitutionType = institutionType }
                 : new ResolvedShockParameters(
                     ScenarioId: 0, InstitutionType: institutionType,
-                    0m, 0m, 0m, 0m, 0, 0m, 0m, null,
+                    0m, 0m, 0m, 0m, 0,
+                    0m, 0m, 0m,
+                    0m, 0m, null,
                     -0.30m, 0.45m, -0.08m, -0.10m, 0.15m, -0.08m, 0.20m, 0m, 0m);
     }
 
@@ -491,14 +496,16 @@ Policy recommendation: {GetPolicyRecommendation(rating, totalBreachCAR, entityCo
         string ScenarioCode, string ScenarioName);
 
     private sealed record ScenarioParamRow(
-        int ScenarioId, string InstitutionType,
-        decimal? GDPGrowthShock, decimal? OilPriceShockPct,
-        decimal? FXDepreciationPct, decimal? InflationShockPp,
-        int? InterestRateShockBps, decimal? CarbonTaxUSDPerTon,
-        decimal? StrandedAssetsPct, string? PhysicalRiskHazardCode,
-        decimal? CARDeltaPerGDPPp, decimal? NPLDeltaPerGDPPp,
-        decimal? LCRDeltaPerRateHike100, decimal? CARDeltaPerFXPct,
-        decimal? NPLDeltaPerFXPct, decimal? CARDeltaPerOilPct,
-        decimal? NPLDeltaPerOilPct, decimal? LCRDeltaPerCyber,
-        decimal? DepositOutflowPctCyber);
+        int Id, int ScenarioId, string InstitutionType,
+        decimal GDPGrowthShock, decimal OilPriceShockPct,
+        decimal FXDepreciationPct, decimal InflationShockPp,
+        int InterestRateShockBps,
+        decimal TradeVolumeShockPct, decimal RemittanceShockPct, decimal FDIShockPct,
+        decimal CarbonTaxUSDPerTon, string PhysicalRiskHazardCode,
+        decimal StrandedAssetsPct,
+        decimal CARDeltaPerGDPPp, decimal NPLDeltaPerGDPPp,
+        decimal LCRDeltaPerRateHike100, decimal CARDeltaPerFXPct,
+        decimal NPLDeltaPerFXPct, decimal CARDeltaPerOilPct,
+        decimal NPLDeltaPerOilPct, decimal LCRDeltaPerCyber,
+        decimal DepositOutflowPctCyber);
 }

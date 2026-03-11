@@ -3,6 +3,7 @@
 @using FC.Engine.Admin.Services
 @using FC.Engine.Domain.Entities
 @using FC.Engine.Domain.Enums
+@using FC.Engine.Infrastructure.Services
 @inject PlatformAdminService PlatformService
 @inject TenantManagementService TenantService
 @inject NavigationManager Navigation
@@ -132,7 +133,7 @@
                     <div class="fc-grid fc-grid-3 fc-mb-4">
                         <div class="fc-form-row">
                             <label>Licence Type</label>
-                            <select class="fc-input" @bind="_selectedLicenceTypeId" disabled="@(_assigningLicence || AvailableLicenceOptions.Count == 0)">
+                            <select class="fc-input" @bind="SelectedLicenceTypeId" disabled="@(_assigningLicence || _previewingImpact || AvailableLicenceOptions.Count == 0)">
                                 <option value="">Select a licence type</option>
                                 @foreach (var licence in AvailableLicenceOptions)
                                 {
@@ -142,20 +143,32 @@
                         </div>
                         <div class="fc-form-row">
                             <label>Registration Number</label>
-                            <input class="fc-input" @bind="_registrationNumber" placeholder="Optional registration reference" disabled="@_assigningLicence" />
+                            <input class="fc-input" @bind="_registrationNumber" placeholder="Optional registration reference" disabled="@(_assigningLicence || _previewingImpact)" />
                         </div>
                         <div class="fc-form-row">
-                            <label>&nbsp;</label>
-                            <button class="fc-btn fc-btn--primary"
-                                    type="button"
-                                    disabled="@(_assigningLicence || !_selectedLicenceTypeId.HasValue)"
-                                    @onclick="AssignLicence">
-                                @if (_assigningLicence)
-                                {
-                                    <span class="fc-spinner fc-spinner--xs fc-mr-2" aria-hidden="true"></span>
-                                }
-                                Assign Licence
-                            </button>
+                            <label>Actions</label>
+                            <div class="fc-inline-actions">
+                                <button class="fc-btn fc-btn--outline"
+                                        type="button"
+                                        disabled="@(_assigningLicence || _previewingImpact || !_selectedLicenceTypeId.HasValue)"
+                                        @onclick="PreviewAssignLicenceImpact">
+                                    @if (_previewingImpact && _previewOperation == "Assign")
+                                    {
+                                        <span class="fc-spinner fc-spinner--xs fc-mr-2" aria-hidden="true"></span>
+                                    }
+                                    Preview Impact
+                                </button>
+                                <button class="fc-btn fc-btn--primary"
+                                        type="button"
+                                        disabled="@(_assigningLicence || _previewingImpact || !_selectedLicenceTypeId.HasValue)"
+                                        @onclick="AssignLicence">
+                                    @if (_assigningLicence)
+                                    {
+                                        <span class="fc-spinner fc-spinner--xs fc-mr-2" aria-hidden="true"></span>
+                                    }
+                                    Assign Licence
+                                </button>
+                            </div>
                         </div>
                     </div>
 
@@ -164,6 +177,63 @@
                         <div class="fc-kv"><span>Inactive History</span><strong>@InactiveTenantLicences.Count</strong></div>
                         <div class="fc-kv"><span>Eligible Types</span><strong>@AvailableLicenceOptions.Count</strong></div>
                     </div>
+
+                    @if (!string.IsNullOrWhiteSpace(_licenceImpactMessage))
+                    {
+                        <div class="fc-alert fc-alert--inline fc-alert--info">@_licenceImpactMessage</div>
+                    }
+
+                    @if (_licencePreview is not null)
+                    {
+                        <div class="fc-card fc-card--subtle fc-mt-4">
+                            <div class="fc-card__header">
+                                <div>
+                                    <h3 class="fc-card__title">@_licencePreview.Operation Licence Impact Preview</h3>
+                                    <p class="fc-text-muted-sm">@_licencePreview.LicenceCode - @_licencePreview.LicenceName</p>
+                                </div>
+                                <button class="fc-btn fc-btn--xs fc-btn--outline" type="button" @onclick="ClearLicencePreview">Clear Preview</button>
+                            </div>
+                            <div class="fc-card__body">
+                                <div class="fc-grid fc-grid-4 fc-mb-4">
+                                    <div class="fc-kv"><span>Activate</span><strong>@_licencePreview.ModulesToActivate</strong></div>
+                                    <div class="fc-kv"><span>Reactivate</span><strong>@_licencePreview.ModulesToReactivate</strong></div>
+                                    <div class="fc-kv"><span>Reprice</span><strong>@_licencePreview.ModulesToReprice</strong></div>
+                                    <div class="fc-kv"><span>Deactivate</span><strong>@_licencePreview.ModulesToDeactivate</strong></div>
+                                </div>
+
+                                @if (_licencePreview.Modules.Count == 0)
+                                {
+                                    <div class="fc-alert fc-alert--inline fc-alert--success">No module changes are expected from this licence update.</div>
+                                }
+                                else
+                                {
+                                    <table class="fc-table">
+                                        <thead>
+                                            <tr>
+                                                <th>Module</th>
+                                                <th>Action</th>
+                                                <th>Monthly</th>
+                                                <th>Annual</th>
+                                                <th>Reason</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            @foreach (var module in _licencePreview.Modules)
+                                            {
+                                                <tr>
+                                                    <td><code>@module.ModuleCode</code> @module.ModuleName</td>
+                                                    <td><span class="fc-badge @PreviewActionBadgeClass(module.Action)">@module.Action</span></td>
+                                                    <td>@module.PriceMonthly.ToString("N2")</td>
+                                                    <td>@module.PriceAnnual.ToString("N2")</td>
+                                                    <td>@module.Reason</td>
+                                                </tr>
+                                            }
+                                        </tbody>
+                                    </table>
+                                }
+                            </div>
+                        </div>
+                    }
                 </div>
             </div>
 
@@ -210,16 +280,28 @@
                                         <td>
                                             @if (tenantLicence.IsActive)
                                             {
-                                                <button class="fc-btn fc-btn--xs fc-btn--danger"
-                                                        type="button"
-                                                        disabled="@_savingLicenceTypeIds.Contains(licenceTypeId)"
-                                                        @onclick="() => RemoveLicence(licenceTypeId)">
-                                                    @if (_savingLicenceTypeIds.Contains(licenceTypeId))
-                                                    {
-                                                        <span class="fc-spinner fc-spinner--xs fc-mr-2" aria-hidden="true"></span>
-                                                    }
-                                                    Remove
-                                                </button>
+                                                <div class="fc-inline-actions">
+                                                    <button class="fc-btn fc-btn--xs fc-btn--outline"
+                                                            type="button"
+                                                            disabled="@(_previewingImpact || _savingLicenceTypeIds.Contains(licenceTypeId))"
+                                                            @onclick="() => PreviewRemoveLicenceImpact(licenceTypeId)">
+                                                        @if (_previewingImpact && _previewLicenceTypeId == licenceTypeId && _previewOperation == "Remove")
+                                                        {
+                                                            <span class="fc-spinner fc-spinner--xs fc-mr-2" aria-hidden="true"></span>
+                                                        }
+                                                        Preview Remove
+                                                    </button>
+                                                    <button class="fc-btn fc-btn--xs fc-btn--danger"
+                                                            type="button"
+                                                            disabled="@(_previewingImpact || _savingLicenceTypeIds.Contains(licenceTypeId))"
+                                                            @onclick="() => RemoveLicence(licenceTypeId)">
+                                                        @if (_savingLicenceTypeIds.Contains(licenceTypeId))
+                                                        {
+                                                            <span class="fc-spinner fc-spinner--xs fc-mr-2" aria-hidden="true"></span>
+                                                        }
+                                                        Remove
+                                                    </button>
+                                                </div>
                                             }
                                             else
                                             {
@@ -238,6 +320,92 @@
         <!-- Subscription Tab -->
         @if (_tab == "subscription")
         {
+            <div class="fc-card fc-card--mb">
+                <div class="fc-card__header">
+                    <div>
+                        <h2 class="fc-card__title">Current Module Entitlements</h2>
+                        <p class="fc-text-muted-sm">Live view of active module access, base-plan coverage, licence eligibility, and reconciliation gaps for the tenant's current subscription.</p>
+                    </div>
+                    <button class="fc-btn fc-btn--outline"
+                            type="button"
+                            disabled="@_reconcilingModules"
+                            @onclick="ReconcileModules">
+                        @if (_reconcilingModules)
+                        {
+                            <span class="fc-spinner fc-spinner--xs fc-mr-2" aria-hidden="true"></span>
+                        }
+                        Run Reconciliation
+                    </button>
+                </div>
+                <div class="fc-card__body">
+                    <div class="fc-grid fc-grid-4 fc-mb-4">
+                        <div class="fc-kv"><span>Active Modules</span><strong>@_data.CurrentModuleEntitlements.Count(x => x.IsActive)</strong></div>
+                        <div class="fc-kv"><span>Included In Base</span><strong>@_data.CurrentModuleEntitlements.Count(x => x.IsIncludedInBase)</strong></div>
+                        <div class="fc-kv"><span>Licence Eligible</span><strong>@_data.CurrentModuleEntitlements.Count(x => x.IsLicenceEligible)</strong></div>
+                        <div class="fc-kv"><span>Needs Reconciliation</span><strong>@_data.CurrentModuleEntitlements.Count(x => x.Status == "Pending Reconciliation")</strong></div>
+                    </div>
+
+                    @if (!string.IsNullOrWhiteSpace(_moduleReconciliationMessage))
+                    {
+                        <div class="fc-alert fc-alert--inline fc-alert--info">@_moduleReconciliationMessage</div>
+                    }
+                </div>
+                <div class="fc-card__body fc-card-body--flush">
+                    <table class="fc-table">
+                        <thead>
+                            <tr>
+                                <th>Module</th>
+                                <th>Status</th>
+                                <th>Pricing</th>
+                                <th>Licence Coverage</th>
+                                <th>Activated</th>
+                                <th>Next Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @if (_data.CurrentModuleEntitlements.Count == 0)
+                            {
+                                <tr>
+                                    <td colspan="6" class="fc-text-muted">No module entitlement data is available for the current subscription.</td>
+                                </tr>
+                            }
+                            else
+                            {
+                                @foreach (var row in _data.CurrentModuleEntitlements)
+                                {
+                                    <tr>
+                                        <td>
+                                            <div><code>@row.ModuleCode</code></div>
+                                            <div class="fc-text-muted-sm">@row.ModuleName</div>
+                                        </td>
+                                        <td>
+                                            <div class="fc-mb-1">
+                                                <span class="fc-badge @ModuleStatusBadgeClass(row.Status)">@row.Status</span>
+                                            </div>
+                                            <div class="fc-text-muted-sm">
+                                                @(row.IsIncludedInBase ? "Included in base" : "Not included in base")
+                                                ·
+                                                @(row.IsLicenceEligible ? "Licence eligible" : "No active licence coverage")
+                                            </div>
+                                        </td>
+                                        <td>
+                                            <div>@row.PricingMode</div>
+                                            <div class="fc-text-muted-sm">M: @row.MonthlyPrice.ToString("N2") · A: @row.AnnualPrice.ToString("N2")</div>
+                                        </td>
+                                        <td>@row.Coverage</td>
+                                        <td>
+                                            <div>@(row.ActivatedAt?.ToString("dd MMM yyyy") ?? "-")</div>
+                                            <div class="fc-text-muted-sm">Off: @(row.DeactivatedAt?.ToString("dd MMM yyyy") ?? "-")</div>
+                                        </td>
+                                        <td>@row.NextAction</td>
+                                    </tr>
+                                }
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
             <div class="fc-card fc-card--mb">
                 <div class="fc-card__header"><h2 class="fc-card__title">Subscription History</h2></div>
                 <div class="fc-card__body fc-card-body--flush">
@@ -546,11 +714,33 @@
     private List<LicenceType> _licenceOptions = new();
     private bool _loading = true;
     private bool _assigningLicence;
+    private bool _reconcilingModules;
     private string? _error;
+    private string? _licenceImpactMessage;
+    private string? _moduleReconciliationMessage;
     private int? _selectedLicenceTypeId;
+    private TenantLicenceImpactPreview? _licencePreview;
+    private bool _previewingImpact;
+    private int? _previewLicenceTypeId;
+    private string? _previewOperation;
     private string? _registrationNumber;
     private string _tab = "overview";
     private HashSet<int> _savingLicenceTypeIds = new();
+
+    private int? SelectedLicenceTypeId
+    {
+        get => _selectedLicenceTypeId;
+        set
+        {
+            if (_selectedLicenceTypeId == value)
+            {
+                return;
+            }
+
+            _selectedLicenceTypeId = value;
+            _licencePreview = null;
+        }
+    }
 
     private List<TenantLicenceType> ActiveTenantLicences => _tenantLicences
         .Where(x => x.IsActive)
@@ -585,6 +775,7 @@
             _data = await PlatformService.GetTenantDetail(TenantId);
             _tenantLicences = await TenantService.GetTenantLicencesAsync(TenantId);
             _licenceOptions = await TenantService.GetAllLicenceTypesAsync();
+            _licencePreview = null;
         }
         catch (Exception ex)
         {
@@ -606,6 +797,40 @@
     private void Impersonate()
         => Navigation.NavigateTo($"/platform/impersonate?tenantId={TenantId}", forceLoad: true);
 
+    private void ClearLicencePreview()
+    {
+        _licencePreview = null;
+        _previewLicenceTypeId = null;
+        _previewOperation = null;
+    }
+
+    private async Task PreviewAssignLicenceImpact()
+    {
+        if (!_selectedLicenceTypeId.HasValue)
+        {
+            return;
+        }
+
+        _previewingImpact = true;
+        _previewLicenceTypeId = _selectedLicenceTypeId;
+        _previewOperation = "Assign";
+
+        try
+        {
+            _moduleReconciliationMessage = null;
+            _licencePreview = await TenantService.PreviewAssignLicenceAsync(TenantId, _selectedLicenceTypeId.Value);
+        }
+        catch (Exception ex)
+        {
+            Toast.Error($"Failed to preview licence impact: {ex.Message}");
+        }
+        finally
+        {
+            _previewingImpact = false;
+            StateHasChanged();
+        }
+    }
+
     private async Task AssignLicence()
     {
         if (!_selectedLicenceTypeId.HasValue)
@@ -616,6 +841,7 @@
         _assigningLicence = true;
         try
         {
+            _moduleReconciliationMessage = null;
             var assigned = await TenantService.AssignLicenceAsync(
                 TenantId,
                 _selectedLicenceTypeId.Value,
@@ -624,7 +850,9 @@
             await LoadAsync();
             _selectedLicenceTypeId = null;
             _registrationNumber = null;
-            Toast.Success($"{assigned.LicenceType?.Name ?? "Licence"} assigned and entitlements reconciled.");
+            ClearLicencePreview();
+            _licenceImpactMessage = BuildLicenceImpactMessage("Assigned", assigned);
+            Toast.Success($"{assigned.TenantLicence.LicenceType?.Name ?? "Licence"} assigned and entitlements reconciled.");
         }
         catch (Exception ex)
         {
@@ -637,17 +865,42 @@
         }
     }
 
+    private async Task PreviewRemoveLicenceImpact(int licenceTypeId)
+    {
+        _previewingImpact = true;
+        _previewLicenceTypeId = licenceTypeId;
+        _previewOperation = "Remove";
+
+        try
+        {
+            _moduleReconciliationMessage = null;
+            _licencePreview = await TenantService.PreviewRemoveLicenceAsync(TenantId, licenceTypeId);
+        }
+        catch (Exception ex)
+        {
+            Toast.Error($"Failed to preview licence impact: {ex.Message}");
+        }
+        finally
+        {
+            _previewingImpact = false;
+            StateHasChanged();
+        }
+    }
+
     private async Task RemoveLicence(int licenceTypeId)
     {
         _savingLicenceTypeIds.Add(licenceTypeId);
         try
         {
+            _moduleReconciliationMessage = null;
             var licenceName = _tenantLicences
                 .FirstOrDefault(x => x.LicenceTypeId == licenceTypeId && x.IsActive)?
                 .LicenceType?.Name ?? "Licence";
 
-            await TenantService.RemoveLicenceAsync(TenantId, licenceTypeId);
+            var result = await TenantService.RemoveLicenceAsync(TenantId, licenceTypeId);
             await LoadAsync();
+            ClearLicencePreview();
+            _licenceImpactMessage = BuildLicenceImpactMessage("Removed", result);
             Toast.Success($"{licenceName} removed and entitlements reconciled.");
         }
         catch (Exception ex)
@@ -660,4 +913,66 @@
             StateHasChanged();
         }
     }
+
+    private async Task ReconcileModules()
+    {
+        _reconcilingModules = true;
+        try
+        {
+            var result = await TenantService.ReconcileTenantModulesAsync(TenantId);
+            await LoadAsync();
+            _moduleReconciliationMessage = BuildModuleReconciliationMessage(result);
+            Toast.Success("Tenant module entitlements reconciled.");
+        }
+        catch (Exception ex)
+        {
+            Toast.Error($"Failed to reconcile tenant modules: {ex.Message}");
+        }
+        finally
+        {
+            _reconcilingModules = false;
+            StateHasChanged();
+        }
+    }
+
+    private static string BuildLicenceImpactMessage(string verb, TenantLicenceChangeResult result)
+    {
+        var licenceName = result.TenantLicence.LicenceType?.Name
+                          ?? result.TenantLicence.LicenceType?.Code
+                          ?? "licence";
+        var reconciliation = result.Reconciliation;
+
+        return $"{verb} {licenceName}. "
+             + $"{reconciliation.ModulesCreated} module(s) activated, "
+             + $"{reconciliation.ModulesReactivated} reactivated, "
+             + $"{reconciliation.ModulesUpdated} repriced, "
+             + $"{reconciliation.ModulesDeactivated} deactivated.";
+    }
+
+    private static string BuildModuleReconciliationMessage(SubscriptionModuleEntitlementBootstrapResult reconciliation)
+    {
+        return $"{reconciliation.ModulesCreated} module(s) activated, "
+             + $"{reconciliation.ModulesReactivated} reactivated, "
+             + $"{reconciliation.ModulesUpdated} repriced, "
+             + $"{reconciliation.ModulesDeactivated} deactivated across {reconciliation.TenantsTouched} tenant(s).";
+    }
+
+    private static string PreviewActionBadgeClass(string action) => action switch
+    {
+        "Activate" => "fc-badge--success",
+        "Reactivate" => "fc-badge--success",
+        "Reprice" => "fc-badge--warning",
+        "Deactivate" => "fc-badge--danger",
+        _ => "fc-badge--neutral"
+    };
+
+    private static string ModuleStatusBadgeClass(string status) => status switch
+    {
+        "Active" => "fc-badge--success",
+        "Pending Reconciliation" => "fc-badge--warning",
+        "Eligible" => "fc-badge--neutral",
+        "Inactive" => "fc-badge--danger",
+        "Unavailable" => "fc-badge--neutral",
+        _ => "fc-badge--neutral"
+    };
 }

@@ -108,6 +108,12 @@ public class TenantManagementService
             .ToListAsync(ct);
     }
 
+    public Task<TenantLicenceImpactPreview> PreviewAssignLicenceAsync(Guid tenantId, int licenceTypeId, CancellationToken ct = default)
+        => BuildLicenceImpactPreviewAsync(tenantId, licenceTypeId, activate: true, ct);
+
+    public Task<TenantLicenceImpactPreview> PreviewRemoveLicenceAsync(Guid tenantId, int licenceTypeId, CancellationToken ct = default)
+        => BuildLicenceImpactPreviewAsync(tenantId, licenceTypeId, activate: false, ct);
+
     public async Task<TenantLicenceChangeResult> AssignLicenceAsync(
         Guid tenantId,
         int licenceTypeId,
@@ -200,6 +206,68 @@ public class TenantManagementService
         };
     }
 
+    public async Task<SubscriptionModuleEntitlementBootstrapResult> ReconcileTenantModulesAsync(
+        Guid tenantId,
+        CancellationToken ct = default)
+    {
+        _ = await _db.Tenants.FindAsync(new object[] { tenantId }, ct)
+            ?? throw new InvalidOperationException("Tenant not found");
+
+        var reconciliation = await _subscriptionModuleEntitlementBootstrapService.EnsureIncludedModulesForTenantAsync(tenantId, ct);
+        await _entitlementService.InvalidateCache(tenantId);
+        await LogPlatformAction("TenantModulesReconciled", tenantId, ct);
+        return reconciliation;
+    }
+
+    public async Task<TenantModuleReconciliationBatchResult> ReconcileTenantModulesAsync(
+        IEnumerable<Guid> tenantIds,
+        CancellationToken ct = default)
+    {
+        var requestedTenantIds = tenantIds
+            .Where(x => x != Guid.Empty)
+            .Distinct()
+            .ToList();
+
+        if (requestedTenantIds.Count == 0)
+        {
+            return new TenantModuleReconciliationBatchResult();
+        }
+
+        var existingTenantIds = await _db.Tenants
+            .AsNoTracking()
+            .Where(x => requestedTenantIds.Contains(x.TenantId))
+            .Select(x => x.TenantId)
+            .ToListAsync(ct);
+
+        var aggregate = new SubscriptionModuleEntitlementBootstrapResult();
+        var processed = 0;
+
+        foreach (var tenantId in existingTenantIds)
+        {
+            var result = await _subscriptionModuleEntitlementBootstrapService.EnsureIncludedModulesForTenantAsync(tenantId, ct);
+            await _entitlementService.InvalidateCache(tenantId);
+            await LogPlatformAction("TenantModulesReconciled", tenantId, ct);
+
+            aggregate = new SubscriptionModuleEntitlementBootstrapResult
+            {
+                ModulesCreated = aggregate.ModulesCreated + result.ModulesCreated,
+                ModulesReactivated = aggregate.ModulesReactivated + result.ModulesReactivated,
+                ModulesUpdated = aggregate.ModulesUpdated + result.ModulesUpdated,
+                ModulesDeactivated = aggregate.ModulesDeactivated + result.ModulesDeactivated,
+                TenantsTouched = aggregate.TenantsTouched + result.TenantsTouched
+            };
+
+            processed++;
+        }
+
+        return new TenantModuleReconciliationBatchResult
+        {
+            RequestedTenants = requestedTenantIds.Count,
+            ProcessedTenants = processed,
+            Reconciliation = aggregate
+        };
+    }
+
     public async Task<List<LicenceType>> GetAllLicenceTypesAsync(CancellationToken ct = default)
     {
         return await _db.LicenceTypes
@@ -223,6 +291,159 @@ public class TenantManagementService
             .Where(t => t.TenantId == tenantId)
             .Select(t => t.TenantName)
             .FirstOrDefaultAsync(ct);
+    }
+
+    private async Task<TenantLicenceImpactPreview> BuildLicenceImpactPreviewAsync(
+        Guid tenantId,
+        int licenceTypeId,
+        bool activate,
+        CancellationToken ct)
+    {
+        _ = await _db.Tenants.FindAsync(new object[] { tenantId }, ct)
+            ?? throw new InvalidOperationException("Tenant not found");
+
+        var licenceType = await _db.LicenceTypes
+            .AsNoTracking()
+            .FirstOrDefaultAsync(x => x.Id == licenceTypeId, ct)
+            ?? throw new InvalidOperationException("Licence type not found");
+
+        var subscription = await _db.Subscriptions
+            .AsNoTracking()
+            .Where(x => x.TenantId == tenantId)
+            .Where(x => x.Status != SubscriptionStatus.Cancelled && x.Status != SubscriptionStatus.Expired)
+            .OrderByDescending(x => x.UpdatedAt)
+            .ThenByDescending(x => x.Id)
+            .FirstOrDefaultAsync(ct)
+            ?? throw new InvalidOperationException("Active subscription not found");
+
+        var currentLicenceIds = await _db.TenantLicenceTypes
+            .AsNoTracking()
+            .Where(x => x.TenantId == tenantId && x.IsActive)
+            .Select(x => x.LicenceTypeId)
+            .ToListAsync(ct);
+
+        var targetLicenceIds = currentLicenceIds
+            .ToHashSet();
+
+        if (activate)
+        {
+            targetLicenceIds.Add(licenceTypeId);
+        }
+        else
+        {
+            targetLicenceIds.Remove(licenceTypeId);
+        }
+
+        var pricingRows = await _db.PlanModulePricing
+            .AsNoTracking()
+            .Include(x => x.Module)
+            .Where(x => x.PlanId == subscription.PlanId && x.Module != null && x.Module.IsActive)
+            .ToListAsync(ct);
+
+        var eligibleModuleIds = await (
+            from licenceModule in _db.LicenceModuleMatrix.AsNoTracking()
+            join pricing in _db.PlanModulePricing.AsNoTracking() on licenceModule.ModuleId equals pricing.ModuleId
+            join module in _db.Modules.AsNoTracking() on licenceModule.ModuleId equals module.Id
+            where targetLicenceIds.Contains(licenceModule.LicenceTypeId)
+                  && pricing.PlanId == subscription.PlanId
+                  && module.IsActive
+            select licenceModule.ModuleId)
+            .Distinct()
+            .ToListAsync(ct);
+
+        var includedPricingRows = pricingRows
+            .Where(x => x.IsIncludedInBase && targetLicenceIds.Count > 0)
+            .Where(x => eligibleModuleIds.Contains(x.ModuleId))
+            .ToList();
+
+        var subscriptionModules = await _db.SubscriptionModules
+            .AsNoTracking()
+            .Include(x => x.Module)
+            .Where(x => x.SubscriptionId == subscription.Id)
+            .ToListAsync(ct);
+
+        var moduleRows = new List<TenantLicenceImpactModuleRow>();
+        foreach (var pricing in includedPricingRows)
+        {
+            var existing = subscriptionModules.FirstOrDefault(x => x.ModuleId == pricing.ModuleId);
+            if (existing is null)
+            {
+                moduleRows.Add(new TenantLicenceImpactModuleRow
+                {
+                    ModuleCode = pricing.Module!.ModuleCode,
+                    ModuleName = pricing.Module.ModuleName,
+                    Action = "Activate",
+                    PriceMonthly = pricing.PriceMonthly,
+                    PriceAnnual = pricing.PriceAnnual,
+                    Reason = "Included in base for the current plan and licence mix."
+                });
+                continue;
+            }
+
+            if (!existing.IsActive)
+            {
+                moduleRows.Add(new TenantLicenceImpactModuleRow
+                {
+                    ModuleCode = existing.Module?.ModuleCode ?? pricing.Module!.ModuleCode,
+                    ModuleName = existing.Module?.ModuleName ?? pricing.Module!.ModuleName,
+                    Action = "Reactivate",
+                    PriceMonthly = pricing.PriceMonthly,
+                    PriceAnnual = pricing.PriceAnnual,
+                    Reason = "Module becomes included-in-base again under the target licence mix."
+                });
+                continue;
+            }
+
+            if (existing.PriceMonthly != pricing.PriceMonthly || existing.PriceAnnual != pricing.PriceAnnual)
+            {
+                moduleRows.Add(new TenantLicenceImpactModuleRow
+                {
+                    ModuleCode = existing.Module?.ModuleCode ?? pricing.Module!.ModuleCode,
+                    ModuleName = existing.Module?.ModuleName ?? pricing.Module!.ModuleName,
+                    Action = "Reprice",
+                    PriceMonthly = pricing.PriceMonthly,
+                    PriceAnnual = pricing.PriceAnnual,
+                    Reason = "Plan pricing for the module will be refreshed during reconciliation."
+                });
+            }
+        }
+
+        foreach (var activeModule in subscriptionModules.Where(x => x.IsActive))
+        {
+            if (eligibleModuleIds.Contains(activeModule.ModuleId))
+            {
+                continue;
+            }
+
+            moduleRows.Add(new TenantLicenceImpactModuleRow
+            {
+                ModuleCode = activeModule.Module?.ModuleCode ?? $"M-{activeModule.ModuleId}",
+                ModuleName = activeModule.Module?.ModuleName ?? "Unknown Module",
+                Action = "Deactivate",
+                PriceMonthly = activeModule.PriceMonthly,
+                PriceAnnual = activeModule.PriceAnnual,
+                Reason = "Module would no longer be licence-eligible after this change."
+            });
+        }
+
+        moduleRows = moduleRows
+            .OrderByDescending(x => x.Action == "Deactivate")
+            .ThenBy(x => x.ModuleCode)
+            .ToList();
+
+        return new TenantLicenceImpactPreview
+        {
+            TenantId = tenantId,
+            LicenceTypeId = licenceTypeId,
+            LicenceCode = licenceType.Code,
+            LicenceName = licenceType.Name,
+            Operation = activate ? "Assign" : "Remove",
+            ModulesToActivate = moduleRows.Count(x => x.Action == "Activate"),
+            ModulesToReactivate = moduleRows.Count(x => x.Action == "Reactivate"),
+            ModulesToReprice = moduleRows.Count(x => x.Action == "Reprice"),
+            ModulesToDeactivate = moduleRows.Count(x => x.Action == "Deactivate"),
+            Modules = moduleRows
+        };
     }
 
     private async Task LogPlatformAction(string action, Guid tenantId, CancellationToken ct)
@@ -254,5 +475,36 @@ public class TenantDashboardStats
 public class TenantLicenceChangeResult
 {
     public TenantLicenceType TenantLicence { get; set; } = new();
+    public SubscriptionModuleEntitlementBootstrapResult Reconciliation { get; set; } = new();
+}
+
+public class TenantLicenceImpactPreview
+{
+    public Guid TenantId { get; set; }
+    public int LicenceTypeId { get; set; }
+    public string LicenceCode { get; set; } = string.Empty;
+    public string LicenceName { get; set; } = string.Empty;
+    public string Operation { get; set; } = string.Empty;
+    public int ModulesToActivate { get; set; }
+    public int ModulesToReactivate { get; set; }
+    public int ModulesToReprice { get; set; }
+    public int ModulesToDeactivate { get; set; }
+    public List<TenantLicenceImpactModuleRow> Modules { get; set; } = new();
+}
+
+public class TenantLicenceImpactModuleRow
+{
+    public string ModuleCode { get; set; } = string.Empty;
+    public string ModuleName { get; set; } = string.Empty;
+    public string Action { get; set; } = string.Empty;
+    public decimal PriceMonthly { get; set; }
+    public decimal PriceAnnual { get; set; }
+    public string Reason { get; set; } = string.Empty;
+}
+
+public class TenantModuleReconciliationBatchResult
+{
+    public int RequestedTenants { get; set; }
+    public int ProcessedTenants { get; set; }
     public SubscriptionModuleEntitlementBootstrapResult Reconciliation { get; set; } = new();
 }

@@ -89,6 +89,51 @@ public class PlatformAdminService
             x => x.TenantId,
             x => string.Join(", ", x.Names.Distinct().OrderBy(n => n)));
 
+        var activeTenantLicenceRows = await _db.TenantLicenceTypes
+            .AsNoTracking()
+            .Where(x => x.IsActive)
+            .Select(x => new { x.TenantId, x.LicenceTypeId })
+            .ToListAsync(ct);
+
+        var activeLicenceIds = activeTenantLicenceRows
+            .Select(x => x.LicenceTypeId)
+            .Distinct()
+            .ToList();
+
+        var licenceModuleRows = activeLicenceIds.Count == 0
+            ? new List<LicenceModuleSummaryRow>()
+            : await _db.LicenceModuleMatrix
+                .AsNoTracking()
+                .Where(x => activeLicenceIds.Contains(x.LicenceTypeId))
+                .Select(x => new LicenceModuleSummaryRow(x.LicenceTypeId, x.ModuleId))
+                .ToListAsync(ct);
+
+        var planIds = subscriptionRows
+            .Select(x => x.PlanId)
+            .Distinct()
+            .ToList();
+
+        var planModuleRows = planIds.Count == 0
+            ? new List<PlanModuleSummaryRow>()
+            : await (
+                from pricing in _db.PlanModulePricing.AsNoTracking()
+                join module in _db.Modules.AsNoTracking() on pricing.ModuleId equals module.Id
+                where planIds.Contains(pricing.PlanId) && module.IsActive
+                select new PlanModuleSummaryRow(pricing.PlanId, pricing.ModuleId, pricing.IsIncludedInBase))
+                .ToListAsync(ct);
+
+        var licenceIdsByTenant = activeTenantLicenceRows
+            .GroupBy(x => x.TenantId)
+            .ToDictionary(g => g.Key, g => g.Select(x => x.LicenceTypeId).ToHashSet());
+
+        var moduleIdsByLicenceType = licenceModuleRows
+            .GroupBy(x => x.LicenceTypeId)
+            .ToDictionary(g => g.Key, g => g.Select(x => x.ModuleId).ToHashSet());
+
+        var planModuleRowsByPlan = planModuleRows
+            .GroupBy(x => x.PlanId)
+            .ToDictionary(g => g.Key, g => g.ToList());
+
         var tenantRows = tenants.Select(t =>
         {
             var activeSubscription = subscriptionRows
@@ -102,6 +147,28 @@ public class PlatformAdminService
 
             var activeModules = activeSubscription?.Modules.Count(m => m.IsActive) ?? 0;
             var mrr = activeSubscription != null ? ComputeMrr(activeSubscription) : 0m;
+            var pendingReconciliationModules = 0;
+
+            if (activeSubscription is not null
+                && licenceIdsByTenant.TryGetValue(t.TenantId, out var tenantLicenceIds)
+                && planModuleRowsByPlan.TryGetValue(activeSubscription.PlanId, out var tenantPlanRows))
+            {
+                var eligibleModuleIds = tenantLicenceIds
+                    .SelectMany(licenceTypeId => moduleIdsByLicenceType.GetValueOrDefault(licenceTypeId) ?? Enumerable.Empty<int>())
+                    .ToHashSet();
+
+                var includedBaseModuleIds = tenantPlanRows
+                    .Where(x => x.IsIncludedInBase && eligibleModuleIds.Contains(x.ModuleId))
+                    .Select(x => x.ModuleId)
+                    .ToHashSet();
+
+                var activeModuleIds = activeSubscription.Modules
+                    .Where(x => x.IsActive)
+                    .Select(x => x.ModuleId)
+                    .ToHashSet();
+
+                pendingReconciliationModules = includedBaseModuleIds.Count(moduleId => !activeModuleIds.Contains(moduleId));
+            }
 
             return new PlatformTenantListItem
             {
@@ -113,6 +180,7 @@ public class PlatformAdminService
                 PlanCode = activeSubscription?.Plan?.PlanCode ?? "N/A",
                 LicenceType = licenceLookup.GetValueOrDefault(t.TenantId, "N/A"),
                 ActiveModules = activeModules,
+                PendingReconciliationModules = pendingReconciliationModules,
                 Users = userCounts.GetValueOrDefault(t.TenantId),
                 Entities = entityCounts.GetValueOrDefault(t.TenantId),
                 Mrr = decimal.Round(mrr, 2),
@@ -151,6 +219,11 @@ public class PlatformAdminService
             tenantRows = tenantRows.Where(x => x.ActiveModules >= query.MinModuleCount.Value);
         }
 
+        if (query.OnlyNeedsReconciliation)
+        {
+            tenantRows = tenantRows.Where(x => x.PendingReconciliationModules > 0);
+        }
+
         tenantRows = (query.SortBy ?? string.Empty).ToLowerInvariant() switch
         {
             "status" => query.SortDescending
@@ -159,6 +232,9 @@ public class PlatformAdminService
             "plan" => query.SortDescending
                 ? tenantRows.OrderByDescending(x => x.PlanName).ThenBy(x => x.TenantName)
                 : tenantRows.OrderBy(x => x.PlanName).ThenBy(x => x.TenantName),
+            "reconciliation" => query.SortDescending
+                ? tenantRows.OrderByDescending(x => x.PendingReconciliationModules).ThenBy(x => x.TenantName)
+                : tenantRows.OrderBy(x => x.PendingReconciliationModules).ThenBy(x => x.TenantName),
             "modules" => query.SortDescending
                 ? tenantRows.OrderByDescending(x => x.ActiveModules).ThenBy(x => x.TenantName)
                 : tenantRows.OrderBy(x => x.ActiveModules).ThenBy(x => x.TenantName),
@@ -272,7 +348,7 @@ public class PlatformAdminService
         var headers = new[]
         {
             "Tenant Name", "Slug", "Status", "Plan", "Licence Type", "Active Modules",
-            "Users", "Entities", "MRR", "Created Date", "Contact Email"
+            "Pending Reconciliation", "Users", "Entities", "MRR", "Created Date", "Contact Email"
         };
 
         for (var i = 0; i < headers.Length; i++)
@@ -293,16 +369,17 @@ public class PlatformAdminService
             ws.Cell(row, 4).Value = tenant.PlanName;
             ws.Cell(row, 5).Value = tenant.LicenceType;
             ws.Cell(row, 6).Value = tenant.ActiveModules;
-            ws.Cell(row, 7).Value = tenant.Users;
-            ws.Cell(row, 8).Value = tenant.Entities;
-            ws.Cell(row, 9).Value = tenant.Mrr;
-            ws.Cell(row, 10).Value = tenant.CreatedAt;
-            ws.Cell(row, 11).Value = tenant.ContactEmail ?? string.Empty;
+            ws.Cell(row, 7).Value = tenant.PendingReconciliationModules;
+            ws.Cell(row, 8).Value = tenant.Users;
+            ws.Cell(row, 9).Value = tenant.Entities;
+            ws.Cell(row, 10).Value = tenant.Mrr;
+            ws.Cell(row, 11).Value = tenant.CreatedAt;
+            ws.Cell(row, 12).Value = tenant.ContactEmail ?? string.Empty;
             row++;
         }
 
-        ws.Column(9).Style.NumberFormat.Format = "#,##0.00";
-        ws.Column(10).Style.DateFormat.Format = "yyyy-mm-dd";
+        ws.Column(10).Style.NumberFormat.Format = "#,##0.00";
+        ws.Column(11).Style.DateFormat.Format = "yyyy-mm-dd";
         ws.Columns().AdjustToContents();
 
         using var stream = new MemoryStream();
@@ -335,6 +412,34 @@ public class PlatformAdminService
                               || s.Status == SubscriptionStatus.PastDue
                               || s.Status == SubscriptionStatus.Suspended)
             ?? subscriptionRows.FirstOrDefault();
+
+        var activeTenantLicences = await _db.TenantLicenceTypes
+            .AsNoTracking()
+            .Include(x => x.LicenceType)
+            .Where(x => x.TenantId == tenantId && x.IsActive)
+            .ToListAsync(ct);
+
+        var activeLicenceIds = activeTenantLicences
+            .Select(x => x.LicenceTypeId)
+            .Distinct()
+            .ToList();
+
+        var licenceModuleRows = activeLicenceIds.Count == 0
+            ? new List<LicenceModuleMatrix>()
+            : await _db.LicenceModuleMatrix
+                .AsNoTracking()
+                .Include(x => x.LicenceType)
+                .Include(x => x.Module)
+                .Where(x => activeLicenceIds.Contains(x.LicenceTypeId))
+                .ToListAsync(ct);
+
+        var currentPlanPricingRows = currentSubscription is null
+            ? new List<PlanModulePricing>()
+            : await _db.PlanModulePricing
+                .AsNoTracking()
+                .Include(x => x.Module)
+                .Where(x => x.PlanId == currentSubscription.PlanId)
+                .ToListAsync(ct);
 
         var dashboard = await _dashboardService.GetAdminDashboard(tenantId, ct);
 
@@ -417,6 +522,10 @@ public class PlatformAdminService
             Timezone = tenant.Timezone,
             CurrentPlanName = currentSubscription?.Plan?.PlanName ?? "N/A",
             CurrentPlanCode = currentSubscription?.Plan?.PlanCode ?? "N/A",
+            CurrentModuleEntitlements = BuildModuleEntitlements(
+                currentSubscription,
+                currentPlanPricingRows,
+                licenceModuleRows),
             Usage = dashboard.Usage,
             Billing = dashboard.Billing,
             SubscriptionHistory = subscriptionRows.Select(s => new TenantSubscriptionHistoryItem
@@ -1153,6 +1262,113 @@ public class PlatformAdminService
         };
     }
 
+    private static List<TenantModuleEntitlementItem> BuildModuleEntitlements(
+        Subscription? currentSubscription,
+        IReadOnlyList<PlanModulePricing> planPricingRows,
+        IReadOnlyList<LicenceModuleMatrix> licenceModuleRows)
+    {
+        if (currentSubscription is null)
+        {
+            return new List<TenantModuleEntitlementItem>();
+        }
+
+        var subscriptionModules = currentSubscription.Modules
+            .OrderBy(x => x.Module?.DisplayOrder ?? int.MaxValue)
+            .ThenBy(x => x.Module?.ModuleCode)
+            .ToList();
+
+        var moduleIds = subscriptionModules.Select(x => x.ModuleId)
+            .Concat(planPricingRows.Select(x => x.ModuleId))
+            .Concat(licenceModuleRows.Select(x => x.ModuleId))
+            .Distinct()
+            .ToList();
+
+        var subscriptionModuleById = subscriptionModules
+            .GroupBy(x => x.ModuleId)
+            .ToDictionary(g => g.Key, g => g.OrderByDescending(x => x.IsActive).ThenByDescending(x => x.ActivatedAt).First());
+
+        var planPricingById = planPricingRows
+            .GroupBy(x => x.ModuleId)
+            .ToDictionary(g => g.Key, g => g.First());
+
+        var coverageByModuleId = licenceModuleRows
+            .GroupBy(x => x.ModuleId)
+            .ToDictionary(
+                g => g.Key,
+                g => g.OrderBy(x => x.LicenceType?.DisplayOrder ?? int.MaxValue)
+                    .ThenBy(x => x.LicenceType?.Code)
+                    .ToList());
+
+        return moduleIds
+            .Select(moduleId =>
+            {
+                subscriptionModuleById.TryGetValue(moduleId, out var subscriptionModule);
+                planPricingById.TryGetValue(moduleId, out var pricing);
+                coverageByModuleId.TryGetValue(moduleId, out var coverageRows);
+
+                var module = subscriptionModule?.Module
+                             ?? pricing?.Module
+                             ?? coverageRows?.FirstOrDefault()?.Module;
+
+                var isActive = subscriptionModule?.IsActive == true;
+                var isIncludedInBase = pricing?.IsIncludedInBase == true;
+                var isLicenceEligible = coverageRows is { Count: > 0 };
+                var pricingMode = pricing is null
+                    ? "Unpriced"
+                    : pricing.IsIncludedInBase
+                        ? "Included"
+                        : "Add-on";
+                var status = isActive
+                    ? "Active"
+                    : isLicenceEligible && isIncludedInBase
+                        ? "Pending Reconciliation"
+                        : subscriptionModule is not null
+                            ? "Inactive"
+                            : isLicenceEligible
+                                ? "Eligible"
+                                : "Unavailable";
+                var nextAction = isActive && !isLicenceEligible
+                    ? "Review licence coverage or deactivate the module."
+                    : !isActive && isLicenceEligible && isIncludedInBase
+                        ? "Run entitlement reconciliation to activate this included module."
+                        : !isActive && isLicenceEligible && pricing is not null && !pricing.IsIncludedInBase
+                            ? "Activate as a priced add-on if the tenant needs access."
+                            : pricing is null && isLicenceEligible
+                                ? "Configure plan pricing for this licence-eligible module."
+                                : "No action required.";
+
+                return new TenantModuleEntitlementItem
+                {
+                    ModuleId = moduleId,
+                    ModuleCode = module?.ModuleCode ?? $"M-{moduleId}",
+                    ModuleName = module?.ModuleName ?? "Unknown Module",
+                    IsActive = isActive,
+                    IsIncludedInBase = isIncludedInBase,
+                    IsLicenceEligible = isLicenceEligible,
+                    PricingMode = pricingMode,
+                    MonthlyPrice = pricing?.PriceMonthly ?? subscriptionModule?.PriceMonthly ?? 0m,
+                    AnnualPrice = pricing?.PriceAnnual ?? subscriptionModule?.PriceAnnual ?? 0m,
+                    ActivatedAt = subscriptionModule?.ActivatedAt,
+                    DeactivatedAt = subscriptionModule?.DeactivatedAt,
+                    Status = status,
+                    Coverage = coverageRows is { Count: > 0 }
+                        ? string.Join(", ", coverageRows.Select(BuildCoverageLabel))
+                        : "No active licence coverage",
+                    NextAction = nextAction
+                };
+            })
+            .OrderByDescending(x => x.IsActive)
+            .ThenByDescending(x => x.IsLicenceEligible)
+            .ThenBy(x => x.ModuleCode)
+            .ToList();
+    }
+
+    private static string BuildCoverageLabel(LicenceModuleMatrix row)
+    {
+        var coverageType = row.IsRequired ? "Required" : "Optional";
+        return $"{row.LicenceType?.Code ?? $"LT-{row.LicenceTypeId}"} ({coverageType})";
+    }
+
     private static bool FieldEquivalent(TemplateField oldField, TemplateField newField)
     {
         return string.Equals(oldField.DisplayName, newField.DisplayName, StringComparison.Ordinal)
@@ -1180,6 +1396,7 @@ public class PlatformTenantListQuery
     public string? PlanCode { get; set; }
     public string? LicenceType { get; set; }
     public int? MinModuleCount { get; set; }
+    public bool OnlyNeedsReconciliation { get; set; }
     public string SortBy { get; set; } = "name";
     public bool SortDescending { get; set; }
 }
@@ -1201,12 +1418,16 @@ public class PlatformTenantListItem
     public string PlanCode { get; set; } = "N/A";
     public string LicenceType { get; set; } = "N/A";
     public int ActiveModules { get; set; }
+    public int PendingReconciliationModules { get; set; }
     public int Users { get; set; }
     public int Entities { get; set; }
     public decimal Mrr { get; set; }
     public string? ContactEmail { get; set; }
     public DateTime CreatedAt { get; set; }
 }
+
+file sealed record PlanModuleSummaryRow(int PlanId, int ModuleId, bool IsIncludedInBase);
+file sealed record LicenceModuleSummaryRow(int LicenceTypeId, int ModuleId);
 
 public class PlatformTenantDetailData
 {
@@ -1222,6 +1443,7 @@ public class PlatformTenantDetailData
     public DateTime CreatedAt { get; set; }
     public string CurrentPlanName { get; set; } = "N/A";
     public string CurrentPlanCode { get; set; } = "N/A";
+    public List<TenantModuleEntitlementItem> CurrentModuleEntitlements { get; set; } = new();
     public SubscriptionUsageMetrics Usage { get; set; } = new();
     public BillingSummaryMetrics Billing { get; set; } = new();
     public List<TenantSubscriptionHistoryItem> SubscriptionHistory { get; set; } = new();
@@ -1245,6 +1467,24 @@ public class TenantSubscriptionHistoryItem
     public DateTime CurrentPeriodEnd { get; set; }
     public DateTime CreatedAt { get; set; }
     public List<string> Modules { get; set; } = new();
+}
+
+public class TenantModuleEntitlementItem
+{
+    public int ModuleId { get; set; }
+    public string ModuleCode { get; set; } = string.Empty;
+    public string ModuleName { get; set; } = string.Empty;
+    public bool IsActive { get; set; }
+    public bool IsIncludedInBase { get; set; }
+    public bool IsLicenceEligible { get; set; }
+    public string PricingMode { get; set; } = string.Empty;
+    public decimal MonthlyPrice { get; set; }
+    public decimal AnnualPrice { get; set; }
+    public DateTime? ActivatedAt { get; set; }
+    public DateTime? DeactivatedAt { get; set; }
+    public string Status { get; set; } = string.Empty;
+    public string Coverage { get; set; } = string.Empty;
+    public string NextAction { get; set; } = string.Empty;
 }
 
 public class TenantInvoiceItem

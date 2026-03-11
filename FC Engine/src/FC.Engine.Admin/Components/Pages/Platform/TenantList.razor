@@ -5,7 +5,9 @@
 @using FC.Engine.Admin.Services
 @using FC.Engine.Admin.Utilities
 @using FC.Engine.Domain.Enums
+@using FC.Engine.Infrastructure.Services
 @inject PlatformAdminService PlatformService
+@inject TenantManagementService TenantService
 @inject NavigationManager Navigation
 @inject ToastService Toast
 
@@ -66,6 +68,7 @@
                     <option value="name">Name</option>
                     <option value="status">Status</option>
                     <option value="plan">Plan</option>
+                    <option value="reconciliation">Reconciliation</option>
                     <option value="modules">Modules</option>
                     <option value="users">Users</option>
                     <option value="entities">Entities</option>
@@ -80,8 +83,21 @@
                 <input type="checkbox" @bind="_query.SortDescending" />
                 Descending
             </label>
+            <label class="fc-form-check fc-text-muted-sm">
+                <input type="checkbox" @bind="_query.OnlyNeedsReconciliation" />
+                Needs reconciliation only
+            </label>
             <button class="fc-btn fc-btn--primary" @onclick="ApplyFilters" disabled="@_loading">Apply</button>
             <button class="fc-btn fc-btn--outline" @onclick="ResetFilters" disabled="@_loading">Reset</button>
+            <button class="fc-btn fc-btn--warning"
+                    @onclick="ReconcileVisibleTenants"
+                    disabled="@(_loading || _bulkReconciling || VisibleTenantsNeedingReconciliation == 0)">
+                @if (_bulkReconciling)
+                {
+                    <span class="fc-spinner fc-spinner--xs fc-mr-2" aria-hidden="true"></span>
+                }
+                Reconcile Visible (@VisibleTenantsNeedingReconciliation)
+            </button>
             <button class="fc-btn fc-btn--outline" @onclick="Export" disabled="@_loading">Export Excel</button>
             <span class="fc-count-label">@_data.Tenants.Count tenant(s)</span>
         </div>
@@ -137,6 +153,18 @@
         <DataColumn TItem="PlatformTenantListItem" Title="Active Modules" Width="120px">
             <CellTemplate>@context.ActiveModules</CellTemplate>
         </DataColumn>
+        <DataColumn TItem="PlatformTenantListItem" Title="Entitlements" Width="150px">
+            <CellTemplate>
+                @if (context.PendingReconciliationModules > 0)
+                {
+                    <span class="fc-badge fc-badge--warning">@context.PendingReconciliationModules pending</span>
+                }
+                else
+                {
+                    <span class="fc-badge fc-badge--success">Healthy</span>
+                }
+            </CellTemplate>
+        </DataColumn>
         <DataColumn TItem="PlatformTenantListItem" Title="Users" Width="80px">
             <CellTemplate>@context.Users</CellTemplate>
         </DataColumn>
@@ -154,12 +182,16 @@
                 <div class="fc-actions">
                     <button class="fc-btn fc-btn--outline fc-btn--xs" @onclick="() => OpenTenant(context.TenantId)" @onclick:stopPropagation="true">View</button>
                     <button class="fc-btn fc-btn--outline fc-btn--xs" @onclick="() => ImpersonateTenant(context.TenantId)" @onclick:stopPropagation="true">Impersonate</button>
-                    @if (_savingTenantIds.Contains(context.TenantId))
+                    @if (_bulkReconciling || _savingTenantIds.Contains(context.TenantId))
                     {
                         <button class="fc-btn fc-btn--xs fc-btn--neutral" disabled aria-label="Saving..." @onclick:stopPropagation="true">
                             <span class="fc-spinner fc-spinner--xs fc-spinner--muted" aria-hidden="true"></span>
                             Saving...
                         </button>
+                    }
+                    else if (context.PendingReconciliationModules > 0)
+                    {
+                        <button class="fc-btn fc-btn--xs fc-btn--warning" @onclick="() => ReconcileTenant(context.TenantId)" @onclick:stopPropagation="true">Reconcile</button>
                     }
                     else if (context.Status == TenantStatus.Active)
                     {
@@ -184,15 +216,19 @@
     [Parameter, SupplyParameterFromQuery(Name = "plan")]     public string? QPlan     { get; set; }
     [Parameter, SupplyParameterFromQuery(Name = "licence")]  public string? QLicence  { get; set; }
     [Parameter, SupplyParameterFromQuery(Name = "minMods")]  public int?    QMinMods  { get; set; }
+    [Parameter, SupplyParameterFromQuery(Name = "needsRecon")] public bool? QNeedsRecon { get; set; }
     [Parameter, SupplyParameterFromQuery(Name = "sort")]     public string? QSort     { get; set; }
     [Parameter, SupplyParameterFromQuery(Name = "sortDesc")] public bool?   QSortDesc { get; set; }
 
     private PlatformTenantListQuery _query = new();
     private PlatformTenantListResult _data = new();
     private bool _loading = true;
+    private bool _bulkReconciling;
     private bool _initialized;
     private string? _error;
     private HashSet<Guid> _savingTenantIds = new();
+
+    private int VisibleTenantsNeedingReconciliation => _data.Tenants.Count(x => x.PendingReconciliationModules > 0);
 
     // Fires on every navigation (browser back/forward); on first load runs before OnInitializedAsync
     protected override async Task OnParametersSetAsync()
@@ -202,6 +238,7 @@
         _query.PlanCode       = QPlan     ?? "";
         _query.LicenceType    = QLicence  ?? "";
         _query.MinModuleCount = QMinMods;
+        _query.OnlyNeedsReconciliation = QNeedsRecon ?? false;
         _query.SortBy         = QSort     ?? "name";
         _query.SortDescending = QSortDesc ?? false;
         if (_initialized) await LoadAsync();
@@ -276,6 +313,69 @@
         StateHasChanged();
     }
 
+    private async Task ReconcileTenant(Guid tenantId)
+    {
+        var tenant = _data.Tenants.Find(t => t.TenantId == tenantId);
+        if (tenant is null) return;
+
+        _savingTenantIds.Add(tenantId);
+        try
+        {
+            var result = await TenantService.ReconcileTenantModulesAsync(tenantId);
+            await LoadAsync();
+            Toast.Success($"{tenant.TenantName}: {BuildReconciliationMessage(result)}");
+        }
+        catch (Exception ex)
+        {
+            Toast.Error("Failed to reconcile modules: " + ex.Message);
+        }
+        finally
+        {
+            _savingTenantIds.Remove(tenantId);
+            StateHasChanged();
+        }
+    }
+
+    private async Task ReconcileVisibleTenants()
+    {
+        var tenantIds = _data.Tenants
+            .Where(x => x.PendingReconciliationModules > 0)
+            .Select(x => x.TenantId)
+            .ToList();
+
+        if (tenantIds.Count == 0)
+        {
+            Toast.Info("No visible tenants need reconciliation.");
+            return;
+        }
+
+        _bulkReconciling = true;
+        foreach (var tenantId in tenantIds)
+        {
+            _savingTenantIds.Add(tenantId);
+        }
+
+        try
+        {
+            var result = await TenantService.ReconcileTenantModulesAsync(tenantIds);
+            await LoadAsync();
+            Toast.Success(BuildBatchReconciliationMessage(result));
+        }
+        catch (Exception ex)
+        {
+            Toast.Error("Failed to reconcile visible tenants: " + ex.Message);
+        }
+        finally
+        {
+            _bulkReconciling = false;
+            foreach (var tenantId in tenantIds)
+            {
+                _savingTenantIds.Remove(tenantId);
+            }
+            StateHasChanged();
+        }
+    }
+
     private void OpenTenant(Guid tenantId)
         => Navigation.NavigateTo($"/platform/tenants/{tenantId}");
 
@@ -296,6 +396,7 @@
         AddQuery(q, "plan",     _query.PlanCode);
         AddQuery(q, "licence",  _query.LicenceType);
         AddQuery(q, "minMods",  _query.MinModuleCount?.ToString());
+        if (_query.OnlyNeedsReconciliation) AddQuery(q, "needsRecon", "true");
         if (_query.SortBy != "name")  AddQuery(q, "sort",     _query.SortBy);
         if (_query.SortDescending)    AddQuery(q, "sortDesc", "true");
         return "/platform/tenants" + (q.Count > 0 ? "?" + string.Join("&", q) : "");
@@ -309,6 +410,7 @@
         if (excl != "plan")     AddQuery(q, "plan",     QPlan);
         if (excl != "licence")  AddQuery(q, "licence",  QLicence);
         if (excl != "minMods")  AddQuery(q, "minMods",  QMinMods?.ToString());
+        if (excl != "needsRecon" && (QNeedsRecon ?? false)) AddQuery(q, "needsRecon", "true");
         if (excl != "sort"     && !string.IsNullOrEmpty(QSort) && QSort != "name") AddQuery(q, "sort", QSort);
         if (excl != "sortDesc" && (QSortDesc ?? false)) AddQuery(q, "sortDesc", "true");
         return "/platform/tenants" + (q.Count > 0 ? "?" + string.Join("&", q) : "");
@@ -331,6 +433,8 @@
             yield return new FilterChip($"licence: {QLicence}",     () => RemoveFilter("licence"));
         if (QMinMods.HasValue)
             yield return new FilterChip($"min modules: {QMinMods}", () => RemoveFilter("minMods"));
+        if (QNeedsRecon ?? false)
+            yield return new FilterChip("needs reconciliation", () => RemoveFilter("needsRecon"));
         if (!string.IsNullOrEmpty(QSort) && QSort != "name")
             yield return new FilterChip(
                 $"sorted by: {QSort} {((QSortDesc ?? false) ? "↓" : "↑")}",
@@ -347,6 +451,7 @@
         AddQuery(query, "sortBy", _query.SortBy);
         AddQuery(query, "sortDesc", _query.SortDescending ? "true" : "false");
         AddQuery(query, "minModules", _query.MinModuleCount?.ToString());
+        AddQuery(query, "needsReconciliation", _query.OnlyNeedsReconciliation ? "true" : null);
 
         var qs = query.Count > 0 ? "?" + string.Join("&", query) : string.Empty;
         Navigation.NavigateTo($"/platform/tenants/export{qs}", forceLoad: true);
@@ -376,4 +481,14 @@
         TenantStatus.Deactivated => "fc-badge--neutral",
         _ => "fc-badge--neutral"
     };
+
+    private static string BuildReconciliationMessage(SubscriptionModuleEntitlementBootstrapResult reconciliation)
+        => $"{reconciliation.ModulesCreated} activated, "
+         + $"{reconciliation.ModulesReactivated} reactivated, "
+         + $"{reconciliation.ModulesUpdated} repriced, "
+         + $"{reconciliation.ModulesDeactivated} deactivated.";
+
+    private static string BuildBatchReconciliationMessage(TenantModuleReconciliationBatchResult result)
+        => $"Reconciled {result.ProcessedTenants} of {result.RequestedTenants} tenant(s): "
+         + BuildReconciliationMessage(result.Reconciliation);
 }

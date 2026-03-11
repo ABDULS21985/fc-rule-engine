@@ -203,6 +203,10 @@ public sealed record ResolvedShockParameters(
     decimal FXDepreciationPct,
     decimal InflationShockPp,
     int    InterestRateShockBps,
+    // External-sector shocks
+    decimal TradeVolumeShockPct,
+    decimal RemittanceShockPct,
+    decimal FDIShockPct,
     // NGFS
     decimal CarbonTaxUSDPerTon,
     decimal StrandedAssetsPct,
