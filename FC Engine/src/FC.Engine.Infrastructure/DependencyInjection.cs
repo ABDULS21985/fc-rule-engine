@@ -164,6 +164,10 @@ public static class DependencyInjection
         services.AddScoped<KnowledgeGraphCatalogService>();
         services.AddScoped<KnowledgeGraphDossierCatalogService>();
         services.AddScoped<DashboardBriefingPackCatalogService>();
+        services.AddScoped<ModuleRegistryBootstrapService>();
+        services.AddScoped<SeedModuleDefinitionBootstrapService>();
+        services.AddScoped<ModuleMarketplaceBootstrapService>();
+        services.AddScoped<SubscriptionModuleEntitlementBootstrapService>();
         services.AddScoped<CapitalActionCatalogService>();
         services.AddScoped<CapitalPlanningScenarioStoreService>();
         services.AddScoped<ModelInventoryCatalogService>();
@@ -320,6 +324,10 @@ public static class DependencyInjection
         services.AddHostedService<FilingCalendarJob>();
         services.AddHostedService<ExportProcessingJob>();
         services.AddHostedService<ExportCleanupJob>();
+        services.AddHostedService<ModuleRegistryBootstrapJob>();
+        services.AddHostedService<SeedModuleDefinitionBootstrapJob>();
+        services.AddHostedService<ModuleMarketplaceBootstrapJob>();
+        services.AddHostedService<SubscriptionModuleEntitlementBootstrapJob>();
         services.AddHostedService<AuditIntegrityVerificationJob>();
         services.AddHostedService<DataBreachEscalationJob>();
         services.AddHostedService<RetentionEnforcementJob>();

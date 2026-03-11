@@ -141,13 +141,22 @@ public class SubscriptionServiceTests
         db.SaveChanges();
     }
 
-    private static SubscriptionService CreateSut(MetadataDbContext db, Mock<IEntitlementService> entitlementMock)
+    private static SubscriptionService CreateSut(
+        MetadataDbContext db,
+        Mock<IEntitlementService> entitlementMock,
+        SubscriptionModuleEntitlementBootstrapService? entitlementBootstrapService = null)
     {
         entitlementMock
             .Setup(x => x.InvalidateCache(It.IsAny<Guid>()))
             .Returns(Task.CompletedTask);
 
-        return new SubscriptionService(db, entitlementMock.Object, NullLogger<SubscriptionService>.Instance);
+        return new SubscriptionService(
+            db,
+            entitlementMock.Object,
+            NullLogger<SubscriptionService>.Instance,
+            null,
+            null,
+            entitlementBootstrapService);
     }
 
     [Fact]
@@ -221,6 +230,67 @@ public class SubscriptionServiceTests
 
         var act = () => sut.ActivateModule(tenant.TenantId, "DMB_BASEL3");
         await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("*not available on plan*");
+    }
+
+    [Fact]
+    public async Task CreateSubscription_Auto_Activates_Included_Base_Modules()
+    {
+        using var db = CreateDbContext();
+        SeedPlansAndModules(db);
+        var tenant = CreateTenant(db, "auto-included-create");
+        AssignLicence(db, tenant.TenantId, "FC");
+
+        var ent = new Mock<IEntitlementService>();
+        var entitlementBootstrap = new SubscriptionModuleEntitlementBootstrapService(
+            db,
+            ent.Object,
+            NullLogger<SubscriptionModuleEntitlementBootstrapService>.Instance);
+        var sut = CreateSut(db, ent, entitlementBootstrap);
+
+        var subscription = await sut.CreateSubscription(tenant.TenantId, "STARTER", BillingFrequency.Monthly);
+
+        var activeModules = await db.SubscriptionModules
+            .Include(x => x.Module)
+            .Where(x => x.SubscriptionId == subscription.Id && x.IsActive)
+            .ToListAsync();
+
+        activeModules.Should().ContainSingle(x =>
+            x.Module!.ModuleCode == "FC_RETURNS"
+            && x.PriceMonthly == 0m
+            && x.PriceAnnual == 0m);
+        ent.Verify(x => x.InvalidateCache(tenant.TenantId), Times.AtLeastOnce());
+    }
+
+    [Fact]
+    public async Task UpgradePlan_Auto_Activates_Newly_Included_Base_Modules()
+    {
+        using var db = CreateDbContext();
+        SeedPlansAndModules(db);
+        var tenant = CreateTenant(db, "auto-included-upgrade");
+        AssignLicence(db, tenant.TenantId, "FC");
+
+        var enterpriseId = db.SubscriptionPlans.Single(x => x.PlanCode == "ENTERPRISE").Id;
+        var dmbModuleId = db.Modules.Single(x => x.ModuleCode == "DMB_BASEL3").Id;
+        var dmbPricing = db.PlanModulePricing.Single(x => x.PlanId == enterpriseId && x.ModuleId == dmbModuleId);
+        dmbPricing.PriceMonthly = 0m;
+        dmbPricing.PriceAnnual = 0m;
+        dmbPricing.IsIncludedInBase = true;
+        db.SaveChanges();
+
+        var ent = new Mock<IEntitlementService>();
+        var entitlementBootstrap = new SubscriptionModuleEntitlementBootstrapService(
+            db,
+            ent.Object,
+            NullLogger<SubscriptionModuleEntitlementBootstrapService>.Instance);
+        var sut = CreateSut(db, ent, entitlementBootstrap);
+
+        await sut.CreateSubscription(tenant.TenantId, "STARTER", BillingFrequency.Monthly);
+        await sut.UpgradePlan(tenant.TenantId, "ENTERPRISE");
+
+        var sub = await sut.GetActiveSubscription(tenant.TenantId);
+        sub.Plan!.PlanCode.Should().Be("ENTERPRISE");
+        sub.Modules.Should().Contain(x => x.IsActive && x.Module!.ModuleCode == "FC_RETURNS");
+        sub.Modules.Should().Contain(x => x.IsActive && x.Module!.ModuleCode == "DMB_BASEL3" && x.PriceMonthly == 0m && x.PriceAnnual == 0m);
     }
 
     [Fact]

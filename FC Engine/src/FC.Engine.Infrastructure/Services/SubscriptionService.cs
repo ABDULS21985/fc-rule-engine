@@ -15,6 +15,7 @@ public class SubscriptionService : ISubscriptionService
 
     private readonly MetadataDbContext _db;
     private readonly IEntitlementService _entitlementService;
+    private readonly SubscriptionModuleEntitlementBootstrapService? _subscriptionModuleEntitlementBootstrapService;
     private readonly INotificationOrchestrator? _notificationOrchestrator;
     private readonly IDomainEventPublisher? _domainEventPublisher;
     private readonly ILogger<SubscriptionService> _logger;
@@ -24,13 +25,15 @@ public class SubscriptionService : ISubscriptionService
         IEntitlementService entitlementService,
         ILogger<SubscriptionService> logger,
         INotificationOrchestrator? notificationOrchestrator = null,
-        IDomainEventPublisher? domainEventPublisher = null)
+        IDomainEventPublisher? domainEventPublisher = null,
+        SubscriptionModuleEntitlementBootstrapService? subscriptionModuleEntitlementBootstrapService = null)
     {
         _db = db;
         _entitlementService = entitlementService;
         _logger = logger;
         _notificationOrchestrator = notificationOrchestrator;
         _domainEventPublisher = domainEventPublisher;
+        _subscriptionModuleEntitlementBootstrapService = subscriptionModuleEntitlementBootstrapService;
     }
 
     public async Task<Subscription> CreateSubscription(
@@ -72,6 +75,11 @@ public class SubscriptionService : ISubscriptionService
 
         _logger.LogInformation("Created {Status} subscription for tenant {TenantId} on plan {PlanCode}",
             sub.Status, tenantId, planCode);
+
+        if (_subscriptionModuleEntitlementBootstrapService is not null)
+        {
+            await _subscriptionModuleEntitlementBootstrapService.EnsureIncludedModulesForSubscriptionAsync(sub.Id, ct);
+        }
 
         await _entitlementService.InvalidateCache(tenantId);
         sub.Plan = plan;
@@ -706,6 +714,11 @@ public class SubscriptionService : ISubscriptionService
         subscription.PlanId = newPlan.Id;
         subscription.UpdatedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync(ct);
+
+        if (_subscriptionModuleEntitlementBootstrapService is not null)
+        {
+            await _subscriptionModuleEntitlementBootstrapService.EnsureIncludedModulesForSubscriptionAsync(subscription.Id, ct);
+        }
 
         await _entitlementService.InvalidateCache(tenantId);
 

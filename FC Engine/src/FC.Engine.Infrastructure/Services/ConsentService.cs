@@ -10,7 +10,7 @@ namespace FC.Engine.Infrastructure.Services;
 
 public class ConsentService : IConsentService
 {
-    private static readonly ConsentType[] RequiredConsentTypes = [ConsentType.Registration, ConsentType.DataProcessing];
+    private static readonly List<ConsentType> RequiredConsentTypes = [ConsentType.Registration, ConsentType.DataProcessing];
 
     private readonly MetadataDbContext _db;
     private readonly PrivacyComplianceOptions _options;

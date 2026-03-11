@@ -23,13 +23,13 @@ public class TenantBrandingService : ITenantBrandingService
 
     private const long MaxAssetSizeBytes = 2 * 1024 * 1024;
     private static readonly TimeSpan CacheTtl = TimeSpan.FromMinutes(30);
-    private static readonly SubscriptionStatus[] ActiveSubscriptionStatuses =
-    {
+    private static readonly List<SubscriptionStatus> ActiveSubscriptionStatuses =
+    [
         SubscriptionStatus.Active,
         SubscriptionStatus.Trial,
         SubscriptionStatus.PastDue,
         SubscriptionStatus.Suspended
-    };
+    ];
 
     private readonly IMemoryCache _cache;
     private readonly IFileStorageService _storage;
