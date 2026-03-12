@@ -148,7 +148,7 @@ public class AuditLogConfiguration : IEntityTypeConfiguration<AuditLogEntry>
         builder.ToTable("audit_log", "meta");
         builder.HasKey(a => a.Id);
         builder.Property(a => a.EntityType).HasMaxLength(50).IsRequired();
-        builder.Property(a => a.Action).HasMaxLength(20).IsRequired();
+        builder.Property(a => a.Action).HasMaxLength(64).IsRequired();
         builder.Property(a => a.PerformedBy).HasMaxLength(100).IsRequired();
         builder.Property(a => a.IpAddress).HasMaxLength(45);
         builder.Property(a => a.Hash).HasMaxLength(64).IsRequired();

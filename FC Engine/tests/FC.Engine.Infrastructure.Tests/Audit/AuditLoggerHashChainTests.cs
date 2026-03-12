@@ -96,6 +96,21 @@ public class AuditLoggerHashChainTests
         hash1.Should().NotBe(hash2);
     }
 
+    [Fact]
+    public async Task Log_Truncates_Overlong_Action_Codes_To_Fit_Audit_Log_Schema()
+    {
+        await using var db = CreateDb(nameof(Log_Truncates_Overlong_Action_Codes_To_Fit_Audit_Log_Schema));
+        var tenantId = Guid.NewGuid();
+        var sut = CreateLogger(db, tenantId);
+        var action = new string('A', 80);
+
+        await sut.Log("Submission", 1, action, null, new { Status = "Draft" }, "user1");
+
+        var entry = await db.AuditLog.SingleAsync();
+        entry.Action.Should().HaveLength(64);
+        entry.Action.Should().Be(action[..64]);
+    }
+
     private static MetadataDbContext CreateDb(string name)
     {
         var options = new DbContextOptionsBuilder<MetadataDbContext>()
