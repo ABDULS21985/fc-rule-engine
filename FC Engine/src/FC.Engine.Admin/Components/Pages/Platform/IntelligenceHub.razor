@@ -962,6 +962,11 @@
                             <p>@(_workspace.Capital.ActionCatalogUpdatedAt?.ToString("dd MMM HH:mm 'UTC'", CultureInfo.InvariantCulture) ?? "The capital action catalog has not been materialized yet.")</p>
                         </article>
                         <article class="fc-intel-card">
+                            <span class="fc-intel-card__label">Scenario History</span>
+                            <strong>@_workspace.Capital.ScenarioHistory.Count</strong>
+                            <p>Recent capital planning snapshots retained for supervisory replay and restoration.</p>
+                        </article>
+                        <article class="fc-intel-card">
                             <span class="fc-intel-card__label">Pack Sections</span>
                             <strong>@_capitalPackRows.Count</strong>
                             <p>Structured capital-management sections assembled from the current live scenario.</p>
@@ -1023,6 +1028,69 @@
                                                 <td><span class="fc-intel-status fc-intel-status--@StatusClass(row.Signal)">@row.Signal</span></td>
                                                 <td class="fc-intel-table__sub">@row.Commentary</td>
                                                 <td class="fc-intel-table__sub">@row.RecommendedAction</td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </table>
+                            </div>
+                        }
+                    </article>
+
+                    <article class="fc-intel-card fc-intel-card--table">
+                        <header class="fc-intel-card__header">
+                            <div>
+                                <span class="fc-intel-card__label">Scenario History</span>
+                                <h2>Recent capital planning snapshots with restore support</h2>
+                            </div>
+                            <span class="fc-intel-chip">@_workspace.Capital.ScenarioHistory.Count row(s)</span>
+                        </header>
+                        @if (_workspace.Capital.ScenarioHistory.Count == 0)
+                        {
+                            <div class="fc-intel-empty">
+                                <h3>No capital scenarios have been saved yet</h3>
+                                <p>Recalculate the capital plan to create a durable history of supervisory what-if runs.</p>
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="fc-intel-table-wrap">
+                                <table class="fc-intel-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Saved</th>
+                                            <th>Current / Target CAR</th>
+                                            <th>Q8 CAR</th>
+                                            <th>Action / RWA</th>
+                                            <th>Worst headroom</th>
+                                            <th>Signal</th>
+                                            <th>Action</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach (var row in _workspace.Capital.ScenarioHistory)
+                                        {
+                                            <tr>
+                                                <td>
+                                                    <strong>@row.SavedAtUtc.ToString("dd MMM yyyy", CultureInfo.InvariantCulture)</strong>
+                                                    <div class="fc-intel-table__sub">@row.SavedAtUtc.ToString("HH:mm 'UTC'", CultureInfo.InvariantCulture)</div>
+                                                </td>
+                                                <td>
+                                                    <strong>@row.CurrentCarPercent.ToString("0.0", CultureInfo.InvariantCulture)%</strong>
+                                                    <div class="fc-intel-table__sub">Target @row.TargetCarPercent.ToString("0.0", CultureInfo.InvariantCulture)%</div>
+                                                </td>
+                                                <td>@row.ProjectedQuarter8CarPercent.ToString("0.0", CultureInfo.InvariantCulture)%</td>
+                                                <td>
+                                                    <strong>@row.CapitalActionBn.ToString("0.0", CultureInfo.InvariantCulture) bn</strong>
+                                                    <div class="fc-intel-table__sub">RWA @row.RwaOptimisationPercent.ToString("0.0", CultureInfo.InvariantCulture)%</div>
+                                                </td>
+                                                <td>@row.WorstBufferHeadroomPercent.ToString("0.0", CultureInfo.InvariantCulture)%</td>
+                                                <td>
+                                                    <span class="fc-intel-status fc-intel-status--@StatusClass(row.Signal)">@row.Signal</span>
+                                                    <div class="fc-intel-table__sub">@row.Summary</div>
+                                                </td>
+                                                <td>
+                                                    <button class="fc-btn fc-btn--outline fc-btn--sm" @onclick="@(() => RestoreCapitalScenarioAsync(row))">Restore</button>
+                                                </td>
                                             </tr>
                                         }
                                     </tbody>
