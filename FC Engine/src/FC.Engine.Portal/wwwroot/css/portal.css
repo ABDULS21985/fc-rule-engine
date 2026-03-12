@@ -1257,6 +1257,26 @@ pre {
 .portal-login-layout:has(.portal-wiz-shell) .portal-login-content {
     min-height: auto;
     padding: 0;
+    max-width: none;
+    width: 100%;
+}
+
+/* Hide brand panel entirely on small screens when wizard is showing */
+@media (max-width: 720px) {
+    .portal-login-layout:has(.portal-wiz-shell) .portal-brand-panel {
+        display: none;
+    }
+}
+
+/* Tighten brand bar on tablets */
+@media (max-width: 1040px) {
+    .portal-login-layout:has(.portal-wiz-shell) .portal-brand-content {
+        padding: 0.5rem 1rem;
+    }
+
+    .portal-login-layout:has(.portal-wiz-shell) .portal-trust-badges {
+        display: none;
+    }
 }
 
 .portal-login-container {
@@ -20839,10 +20859,11 @@ html {
 .portal-wiz-frame {
     position: relative;
     z-index: 1;
-    width: min(1180px, 100%);
+    width: 100%;
+    max-width: 1600px;
     margin: 0 auto;
     display: grid;
-    grid-template-columns: 330px minmax(0, 1fr);
+    grid-template-columns: 340px minmax(0, 1fr);
     gap: 1.25rem;
 }
 
@@ -22327,6 +22348,7 @@ html {
     color: #64748b;
 }
 
+/* ── Tablet: collapse right sidebar, keep rail ── */
 @media (max-width: 1180px) {
     .portal-wiz-workspace {
         grid-template-columns: 1fr;
@@ -22338,6 +22360,7 @@ html {
     }
 }
 
+/* ── Small tablet / large phone: collapse rail to top, single column ── */
 @media (max-width: 1040px) {
     .portal-wiz-shell {
         padding: 1rem;
@@ -22349,27 +22372,148 @@ html {
 
     .portal-wiz-rail {
         position: static;
+        border-radius: 22px;
+        padding: 1.25rem;
+    }
+
+    /* Collapse the rail hero into a tighter layout */
+    .portal-wiz-rail-hero {
+        gap: 0.5rem;
+    }
+
+    .portal-wiz-rail-title {
+        font-size: 1.55rem;
+    }
+
+    /* Show step nav horizontally */
+    .portal-wiz-rail-nav {
+        flex-direction: row;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+    }
+
+    .portal-wiz-rail-nav::before {
+        display: none;
+    }
+
+    .portal-wiz-rail-step-btn {
+        grid-template-columns: 36px minmax(0, 1fr);
+        gap: 0.6rem;
+        padding: 0.4rem 0;
+    }
+
+    .portal-wiz-rail-step-marker {
+        width: 36px;
+        height: 36px;
+        border-radius: 12px;
+    }
+
+    .portal-wiz-rail-step-copy span:last-child {
+        display: none;
+    }
+
+    /* Stack the sidebar cards horizontally */
+    .portal-wiz-rail-card {
+        display: none;
+    }
+
+    .portal-wiz-rail-card--snapshot {
+        display: block;
+    }
+
+    .portal-wiz-rail-metrics {
+        grid-template-columns: repeat(2, 1fr);
     }
 
     .portal-wiz-main-head {
         flex-direction: column;
     }
+
+    .portal-wiz-main-badges {
+        justify-content: flex-start;
+    }
 }
 
+/* ── Phone: full single-column, touch-friendly ── */
 @media (max-width: 720px) {
     .portal-wiz-shell {
+        padding: 0.5rem;
+    }
+
+    .portal-wiz-rail {
+        border-radius: 18px;
+        padding: 1rem;
+    }
+
+    .portal-wiz-rail-title {
+        font-size: 1.3rem;
+    }
+
+    .portal-wiz-rail-desc {
+        font-size: 0.84rem;
+    }
+
+    .portal-wiz-progress-cluster {
+        flex-direction: column;
+        align-items: flex-start;
         padding: 0.75rem;
     }
 
+    .portal-wiz-progress-ring {
+        width: 64px;
+        height: 64px;
+    }
+
+    .portal-wiz-progress-ring-inner {
+        width: 46px;
+        height: 46px;
+    }
+
+    .portal-wiz-progress-ring-inner strong {
+        font-size: 0.82rem;
+    }
+
+    .portal-wiz-rail-metrics {
+        grid-template-columns: 1fr;
+    }
+
     .portal-wiz-main-copy h2 {
-        font-size: 1.55rem;
+        font-size: 1.4rem;
+    }
+
+    .portal-wiz-main-copy p {
+        font-size: 0.88rem;
+    }
+
+    .portal-wiz-main-badge {
+        font-size: 0.68rem;
+        padding: 0.42rem 0.65rem;
     }
 
     .portal-wiz-card,
     .portal-wiz-completion-lead,
     .portal-wiz-completion-card {
-        padding: 1.15rem;
-        border-radius: 22px;
+        padding: 1rem;
+        border-radius: 18px;
+    }
+
+    .portal-wiz-card-header {
+        flex-direction: column;
+        gap: 0.75rem;
+    }
+
+    .portal-wiz-card-icon {
+        width: 40px;
+        height: 40px;
+        border-radius: 12px;
+    }
+
+    .portal-wiz-card-title {
+        font-size: 1.1rem;
+    }
+
+    .portal-wiz-card-desc {
+        font-size: 0.84rem;
     }
 
     .portal-wiz-field-grid,
@@ -22380,30 +22524,67 @@ html {
         grid-template-columns: 1fr;
     }
 
-    .portal-wiz-invite-row,
+    .portal-wiz-invite-row {
+        grid-template-columns: 1fr;
+        gap: 0.5rem;
+    }
+
+    .portal-wiz-invite-row .portal-input {
+        width: 100%;
+    }
+
+    .portal-wiz-remove-btn {
+        justify-self: end;
+    }
+
     .portal-wiz-completion-grid,
     .portal-wiz-completion-stats {
         grid-template-columns: 1fr;
     }
 
-    .portal-wiz-actions,
-    .portal-wiz-actions-right,
+    .portal-wiz-completion-title {
+        font-size: 1.6rem;
+    }
+
+    .portal-wiz-actions {
+        flex-direction: column-reverse;
+        align-items: stretch;
+        gap: 0.5rem;
+    }
+
+    .portal-wiz-actions-right {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 0.5rem;
+    }
+
+    .portal-wiz-actions .portal-btn-primary,
+    .portal-wiz-actions .portal-btn-outline {
+        width: 100%;
+        justify-content: center;
+    }
+
+    .portal-wiz-skip-link {
+        text-align: center;
+        padding: 0.5rem;
+    }
+
     .portal-wiz-main-badges {
         flex-direction: column;
         align-items: stretch;
     }
 
-    .portal-wiz-rail-title {
-        font-size: 1.45rem;
+    .portal-wiz-main-badge {
+        justify-content: center;
     }
 
-    .portal-wiz-progress-cluster {
-        flex-direction: column;
-        align-items: flex-start;
+    .portal-wiz-inst-cats {
+        gap: 0.35rem;
     }
 
-    .portal-wiz-rail-step-btn {
-        gap: 0.7rem;
+    .portal-wiz-inst-cat {
+        padding: 0.35rem 0.55rem;
+        font-size: 0.68rem;
     }
 
     .portal-wiz-summary-row,
@@ -22411,11 +22592,68 @@ html {
     .portal-wiz-context-row {
         flex-direction: column;
         align-items: flex-start;
+        gap: 0.25rem;
     }
 
     .portal-wiz-summary-row strong,
     .portal-wiz-completion-row strong {
         text-align: left;
+    }
+
+    .portal-wiz-completion-actions {
+        gap: 0.5rem;
+    }
+
+    .portal-wiz-cta {
+        padding: 0.85rem 1rem;
+        font-size: 0.88rem;
+    }
+}
+
+/* ── Very small phone (≤ 400px) ── */
+@media (max-width: 400px) {
+    .portal-wiz-shell {
+        padding: 0.35rem;
+    }
+
+    .portal-wiz-rail {
+        padding: 0.85rem;
+        border-radius: 14px;
+    }
+
+    .portal-wiz-rail-title {
+        font-size: 1.15rem;
+    }
+
+    .portal-wiz-progress-cluster {
+        padding: 0.55rem;
+        border-radius: 14px;
+    }
+
+    .portal-wiz-card {
+        padding: 0.85rem;
+        border-radius: 14px;
+    }
+
+    .portal-wiz-main-head {
+        padding: 0.85rem;
+        border-radius: 16px;
+    }
+
+    .portal-wiz-main-copy h2 {
+        font-size: 1.2rem;
+    }
+
+    .portal-wiz-plan-card {
+        padding: 0.85rem;
+    }
+
+    .portal-wiz-checkitem {
+        padding: 0.75rem 0.85rem;
+    }
+
+    .portal-wiz-inst-dropdown {
+        border-radius: 14px;
     }
 }
 

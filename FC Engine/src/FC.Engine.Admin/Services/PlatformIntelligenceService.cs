@@ -1336,11 +1336,35 @@ public sealed class PlatformIntelligenceService : IPlatformIntelligenceWorkspace
     public Task<ModelApprovalWorkflowState> GetModelApprovalWorkflowStateAsync(CancellationToken ct = default) =>
         _modelApprovalWorkflowStore.LoadAsync(ct);
 
+    public async Task<ModelRiskSnapshot> GetModelRiskSnapshotAsync(CancellationToken ct = default) =>
+        (await GetWorkspaceAsync(ct)).ModelRisk;
+
     public Task RecordModelApprovalStageAsync(ModelApprovalWorkflowCommand command, CancellationToken ct = default) =>
         _modelApprovalWorkflowStore.RecordStageChangeAsync(command, ct);
 
+    public async Task<PlatformIntelligenceRefreshSnapshot> GetRefreshSnapshotAsync(CancellationToken ct = default) =>
+        (await GetWorkspaceAsync(ct)).Refresh;
+
+    public async Task<IReadOnlyList<InterventionQueueRow>> GetInterventionsAsync(CancellationToken ct = default) =>
+        (await GetWorkspaceAsync(ct)).Interventions;
+
+    public async Task<IReadOnlyList<ActivityTimelineRow>> GetActivityTimelineAsync(CancellationToken ct = default) =>
+        (await GetWorkspaceAsync(ct)).ActivityTimeline;
+
+    public async Task<IReadOnlyList<InstitutionScorecardRow>> GetInstitutionScorecardsAsync(CancellationToken ct = default) =>
+        (await GetWorkspaceAsync(ct)).InstitutionScorecards;
+
+    public async Task<InstitutionIntelligenceDetail?> GetInstitutionIntelligenceDetailAsync(int institutionId, CancellationToken ct = default)
+    {
+        var workspace = await GetWorkspaceAsync(ct);
+        return workspace.InstitutionDetails.FirstOrDefault(x => x.InstitutionId == institutionId);
+    }
+
     public Task<ResilienceAssessmentState> GetResilienceAssessmentStateAsync(CancellationToken ct = default) =>
         _resilienceAssessmentStore.LoadAsync(ct);
+
+    public async Task<OperationalResilienceSnapshot> GetResilienceSnapshotAsync(CancellationToken ct = default) =>
+        (await GetWorkspaceAsync(ct)).Resilience;
 
     public Task RecordResilienceAssessmentResponseAsync(ResilienceAssessmentResponseCommand command, CancellationToken ct = default) =>
         _resilienceAssessmentStore.RecordResponseAsync(command, ct);
@@ -1350,6 +1374,19 @@ public sealed class PlatformIntelligenceService : IPlatformIntelligenceWorkspace
 
     public Task<CapitalPackCatalogState> GetCapitalPackCatalogStateAsync(CancellationToken ct = default) =>
         _capitalPackCatalog.LoadAsync(ct);
+
+    public async Task<KnowledgeGraphSnapshot> GetKnowledgeGraphSnapshotAsync(CancellationToken ct = default) =>
+        (await GetWorkspaceAsync(ct)).KnowledgeGraph;
+
+    public async Task<MarketplaceRolloutSnapshot> GetMarketplaceRolloutSnapshotAsync(CancellationToken ct = default) =>
+        (await GetWorkspaceAsync(ct)).Rollout;
+
+    public async Task<KnowledgeGraphNavigatorDetail?> GetKnowledgeNavigatorDetailAsync(string navigatorKey, CancellationToken ct = default)
+    {
+        var snapshot = await GetKnowledgeGraphSnapshotAsync(ct);
+        return snapshot.NavigatorDetails.FirstOrDefault(x =>
+            x.NavigatorKey.Equals(navigatorKey, StringComparison.OrdinalIgnoreCase));
+    }
 
     public Task<CapitalPlanningScenarioState?> GetCapitalPlanningScenarioStateAsync(CancellationToken ct = default) =>
         _capitalPlanningScenarioStore.LoadAsync(ct);

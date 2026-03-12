@@ -521,6 +521,623 @@ app.MapPost("/api/session/ping", (HttpContext ctx) =>
         : Results.Unauthorized())
     .RequireAuthorization();
 
+app.MapGet("/api/intelligence/overview", async (
+    FC.Engine.Admin.Services.PlatformIntelligenceService intelligenceService,
+    CancellationToken ct) =>
+{
+    var workspace = await intelligenceService.GetWorkspaceAsync(ct);
+    return Results.Ok(new
+    {
+        workspace.GeneratedAt,
+        workspace.Hero,
+        workspace.Refresh,
+        InstitutionCount = workspace.InstitutionScorecards.Count,
+        InterventionCount = workspace.Interventions.Count,
+        TimelineCount = workspace.ActivityTimeline.Count
+    });
+}).RequireAuthorization("Authenticated");
+
+app.MapGet("/api/intelligence/overview/interventions", async (
+    string? domain,
+    string? priority,
+    string? ownerLane,
+    int? take,
+    FC.Engine.Admin.Services.PlatformIntelligenceService intelligenceService,
+    CancellationToken ct) =>
+{
+    var workspace = await intelligenceService.GetWorkspaceAsync(ct);
+    var normalizedDomain = FC.Engine.Admin.Services.PlatformIntelligenceApiRequestMapper.NormalizeOptionalFilter(domain);
+    var normalizedPriority = FC.Engine.Admin.Services.PlatformIntelligenceApiRequestMapper.NormalizeOptionalFilter(priority);
+    var normalizedOwnerLane = FC.Engine.Admin.Services.PlatformIntelligenceApiRequestMapper.NormalizeOptionalFilter(ownerLane);
+    var size = FC.Engine.Admin.Services.PlatformIntelligenceApiRequestMapper.NormalizeTake(take, 25, 100);
+
+    var rows = workspace.Interventions
+        .Where(x => normalizedDomain is null || x.Domain.Equals(normalizedDomain, StringComparison.OrdinalIgnoreCase))
+        .Where(x => normalizedPriority is null || x.Priority.Equals(normalizedPriority, StringComparison.OrdinalIgnoreCase))
+        .Where(x => normalizedOwnerLane is null || x.OwnerLane.Equals(normalizedOwnerLane, StringComparison.OrdinalIgnoreCase))
+        .Take(size)
+        .ToList();
+
+    return Results.Ok(new
+    {
+        workspace.OperationsCatalogMaterializedAt,
+        Total = rows.Count,
+        Rows = rows
+    });
+}).RequireAuthorization("Authenticated");
+
+app.MapGet("/api/intelligence/overview/timeline", async (
+    string? domain,
+    string? severity,
+    int? institutionId,
+    int? take,
+    FC.Engine.Admin.Services.PlatformIntelligenceService intelligenceService,
+    CancellationToken ct) =>
+{
+    var workspace = await intelligenceService.GetWorkspaceAsync(ct);
+    var normalizedDomain = FC.Engine.Admin.Services.PlatformIntelligenceApiRequestMapper.NormalizeOptionalFilter(domain);
+    var normalizedSeverity = FC.Engine.Admin.Services.PlatformIntelligenceApiRequestMapper.NormalizeOptionalFilter(severity);
+    var size = FC.Engine.Admin.Services.PlatformIntelligenceApiRequestMapper.NormalizeTake(take, 25, 100);
+
+    var rows = workspace.ActivityTimeline
+        .Where(x => normalizedDomain is null || x.Domain.Equals(normalizedDomain, StringComparison.OrdinalIgnoreCase))
+        .Where(x => normalizedSeverity is null || x.Severity.Equals(normalizedSeverity, StringComparison.OrdinalIgnoreCase))
+        .Where(x => !institutionId.HasValue || x.InstitutionId == institutionId.Value)
+        .Take(size)
+        .ToList();
+
+    return Results.Ok(new
+    {
+        workspace.OperationsCatalogMaterializedAt,
+        Total = rows.Count,
+        Rows = rows
+    });
+}).RequireAuthorization("Authenticated");
+
+app.MapGet("/api/intelligence/institutions/scorecards", async (
+    string? priority,
+    string? licenceType,
+    int? take,
+    FC.Engine.Admin.Services.PlatformIntelligenceService intelligenceService,
+    CancellationToken ct) =>
+{
+    var workspace = await intelligenceService.GetWorkspaceAsync(ct);
+    var normalizedPriority = FC.Engine.Admin.Services.PlatformIntelligenceApiRequestMapper.NormalizeOptionalFilter(priority);
+    var normalizedLicenceType = FC.Engine.Admin.Services.PlatformIntelligenceApiRequestMapper.NormalizeOptionalFilter(licenceType);
+    var size = FC.Engine.Admin.Services.PlatformIntelligenceApiRequestMapper.NormalizeTake(take, 25, 100);
+
+    var rows = workspace.InstitutionScorecards
+        .Where(x => normalizedPriority is null || x.Priority.Equals(normalizedPriority, StringComparison.OrdinalIgnoreCase))
+        .Where(x => normalizedLicenceType is null || x.LicenceType.Equals(normalizedLicenceType, StringComparison.OrdinalIgnoreCase))
+        .Take(size)
+        .ToList();
+
+    return Results.Ok(new
+    {
+        workspace.InstitutionCatalogMaterializedAt,
+        Total = rows.Count,
+        Rows = rows
+    });
+}).RequireAuthorization("Authenticated");
+
+app.MapGet("/api/intelligence/institutions/{institutionId:int}", async (
+    int institutionId,
+    FC.Engine.Admin.Services.PlatformIntelligenceService intelligenceService,
+    CancellationToken ct) =>
+{
+    if (institutionId <= 0)
+    {
+        return Results.BadRequest(new { error = "InstitutionId must be greater than zero." });
+    }
+
+    var detail = await intelligenceService.GetInstitutionIntelligenceDetailAsync(institutionId, ct);
+    return detail is null ? Results.NotFound() : Results.Ok(detail);
+}).RequireAuthorization("Authenticated");
+
+app.MapGet("/api/intelligence/rollout/overview", async (
+    FC.Engine.Admin.Services.PlatformIntelligenceService intelligenceService,
+    CancellationToken ct) =>
+{
+    var snapshot = await intelligenceService.GetMarketplaceRolloutSnapshotAsync(ct);
+    return Results.Ok(snapshot);
+}).RequireAuthorization("Authenticated");
+
+app.MapGet("/api/intelligence/rollout/plan-coverage", async (
+    string? moduleCode,
+    string? planCode,
+    string? signal,
+    int? take,
+    FC.Engine.Admin.Services.PlatformIntelligenceService intelligenceService,
+    CancellationToken ct) =>
+{
+    var snapshot = await intelligenceService.GetMarketplaceRolloutSnapshotAsync(ct);
+    var normalizedModuleCode = FC.Engine.Admin.Services.PlatformIntelligenceApiRequestMapper.NormalizeOptionalFilter(moduleCode);
+    var normalizedPlanCode = FC.Engine.Admin.Services.PlatformIntelligenceApiRequestMapper.NormalizeOptionalFilter(planCode);
+    var normalizedSignal = FC.Engine.Admin.Services.PlatformIntelligenceApiRequestMapper.NormalizeOptionalFilter(signal);
+    var size = FC.Engine.Admin.Services.PlatformIntelligenceApiRequestMapper.NormalizeTake(take, 25, 100);
+
+    var rows = snapshot.PlanCoverage
+        .Where(x => normalizedModuleCode is null || x.ModuleCode.Equals(normalizedModuleCode, StringComparison.OrdinalIgnoreCase))
+        .Where(x => normalizedPlanCode is null || x.PlanCode.Equals(normalizedPlanCode, StringComparison.OrdinalIgnoreCase))
+        .Where(x => normalizedSignal is null || x.Signal.Equals(normalizedSignal, StringComparison.OrdinalIgnoreCase))
+        .Take(size)
+        .ToList();
+
+    return Results.Ok(new
+    {
+        snapshot.CatalogMaterializedAt,
+        Total = rows.Count,
+        Rows = rows
+    });
+}).RequireAuthorization("Authenticated");
+
+app.MapGet("/api/intelligence/rollout/reconciliation-queue", async (
+    string? state,
+    string? signal,
+    int? take,
+    FC.Engine.Admin.Services.PlatformIntelligenceService intelligenceService,
+    CancellationToken ct) =>
+{
+    var snapshot = await intelligenceService.GetMarketplaceRolloutSnapshotAsync(ct);
+    var normalizedState = FC.Engine.Admin.Services.PlatformIntelligenceApiRequestMapper.NormalizeOptionalFilter(state);
+    var normalizedSignal = FC.Engine.Admin.Services.PlatformIntelligenceApiRequestMapper.NormalizeOptionalFilter(signal);
+    var size = FC.Engine.Admin.Services.PlatformIntelligenceApiRequestMapper.NormalizeTake(take, 25, 100);
+
+    var rows = snapshot.ReconciliationQueue
+        .Where(x => normalizedState is null || x.State.Equals(normalizedState, StringComparison.OrdinalIgnoreCase))
+        .Where(x => normalizedSignal is null || x.Signal.Equals(normalizedSignal, StringComparison.OrdinalIgnoreCase))
+        .Take(size)
+        .ToList();
+
+    return Results.Ok(new
+    {
+        snapshot.CatalogMaterializedAt,
+        Total = rows.Count,
+        Rows = rows
+    });
+}).RequireAuthorization("Authenticated");
+
+app.MapGet("/api/intelligence/dashboards/briefing-pack", async (
+    string? lens,
+    int? institutionId,
+    FC.Engine.Admin.Services.PlatformIntelligenceService intelligenceService,
+    FC.Engine.Admin.Services.DashboardBriefingPackBuilder briefingPackBuilder,
+    CancellationToken ct) =>
+{
+    if (!FC.Engine.Admin.Services.PlatformIntelligenceApiRequestMapper.TryNormalizeDashboardBriefingPackQuery(
+            lens,
+            institutionId,
+            out var query,
+            out var error))
+    {
+        return Results.BadRequest(new { error });
+    }
+
+    var state = await intelligenceService.GetDashboardBriefingPackCatalogStateAsync(query.Lens, query.InstitutionId, ct);
+    if (state.Sections.Count > 0)
+    {
+        return Results.Ok(state);
+    }
+
+    var workspace = await intelligenceService.GetWorkspaceAsync(ct);
+    var screeningSession = await intelligenceService.GetSanctionsScreeningSessionStateAsync(ct);
+    var workflowState = await intelligenceService.GetSanctionsWorkflowStateAsync(ct);
+    var strDraftCatalog = await intelligenceService.GetSanctionsStrDraftCatalogStateAsync(ct);
+    var sections = briefingPackBuilder.Build(workspace, query.Lens, query.InstitutionId, screeningSession, workflowState, strDraftCatalog);
+
+    if (query.Lens == "executive" && sections.Count == 0)
+    {
+        return Results.NotFound();
+    }
+
+    state = await intelligenceService.MaterializeDashboardBriefingPackAsync(query.Lens, query.InstitutionId, sections, ct);
+    return Results.Ok(state);
+}).RequireAuthorization("Authenticated");
+
+app.MapGet("/api/intelligence/knowledge/obligations", async (
+    int? institutionId,
+    string? status,
+    string? regulatorCode,
+    string? moduleCode,
+    int? take,
+    FC.Engine.Admin.Services.PlatformIntelligenceService intelligenceService,
+    CancellationToken ct) =>
+{
+    var snapshot = await intelligenceService.GetKnowledgeGraphSnapshotAsync(ct);
+    var normalizedStatus = FC.Engine.Admin.Services.PlatformIntelligenceApiRequestMapper.NormalizeOptionalFilter(status);
+    var normalizedRegulator = FC.Engine.Admin.Services.PlatformIntelligenceApiRequestMapper.NormalizeOptionalFilter(regulatorCode);
+    var normalizedModule = FC.Engine.Admin.Services.PlatformIntelligenceApiRequestMapper.NormalizeOptionalFilter(moduleCode);
+    var size = FC.Engine.Admin.Services.PlatformIntelligenceApiRequestMapper.NormalizeTake(take, 50);
+
+    var rows = snapshot.InstitutionObligations
+        .Where(x => !institutionId.HasValue || x.InstitutionId == institutionId.Value)
+        .Where(x => normalizedStatus is null || x.Status.Equals(normalizedStatus, StringComparison.OrdinalIgnoreCase))
+        .Where(x => normalizedRegulator is null || x.RegulatorCode.Equals(normalizedRegulator, StringComparison.OrdinalIgnoreCase))
+        .Where(x => normalizedModule is null || x.ModuleCode.Equals(normalizedModule, StringComparison.OrdinalIgnoreCase))
+        .Take(size)
+        .ToList();
+
+    return Results.Ok(rows);
+}).RequireAuthorization("Authenticated");
+
+app.MapGet("/api/intelligence/knowledge/impact-propagation", async (
+    int? institutionId,
+    string? signal,
+    int? take,
+    FC.Engine.Admin.Services.PlatformIntelligenceService intelligenceService,
+    CancellationToken ct) =>
+{
+    var snapshot = await intelligenceService.GetKnowledgeGraphSnapshotAsync(ct);
+    var normalizedSignal = FC.Engine.Admin.Services.PlatformIntelligenceApiRequestMapper.NormalizeOptionalFilter(signal);
+    var size = FC.Engine.Admin.Services.PlatformIntelligenceApiRequestMapper.NormalizeTake(take, 25);
+
+    HashSet<string>? institutionReturns = null;
+    if (institutionId.HasValue)
+    {
+        institutionReturns = snapshot.InstitutionObligations
+            .Where(x => x.InstitutionId == institutionId.Value)
+            .Select(x => x.ReturnCode)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+    }
+
+    var rows = snapshot.ImpactPropagation
+        .Where(x => institutionReturns is null || institutionReturns.Contains(x.PrimaryReturnCode))
+        .Where(x => normalizedSignal is null || x.Signal.Equals(normalizedSignal, StringComparison.OrdinalIgnoreCase))
+        .Take(size)
+        .ToList();
+
+    return Results.Ok(rows);
+}).RequireAuthorization("Authenticated");
+
+app.MapGet("/api/intelligence/knowledge/dossier", async (
+    FC.Engine.Admin.Services.PlatformIntelligenceService intelligenceService,
+    CancellationToken ct) =>
+{
+    var snapshot = await intelligenceService.GetKnowledgeGraphSnapshotAsync(ct);
+    return Results.Ok(snapshot.DossierPack);
+}).RequireAuthorization("Authenticated");
+
+app.MapGet("/api/intelligence/knowledge/navigator", async (
+    string? key,
+    FC.Engine.Admin.Services.PlatformIntelligenceService intelligenceService,
+    CancellationToken ct) =>
+{
+    if (!FC.Engine.Admin.Services.PlatformIntelligenceApiRequestMapper.TryNormalizeKnowledgeNavigatorKey(
+            key,
+            out var normalizedKey,
+            out var error))
+    {
+        return Results.BadRequest(new { error });
+    }
+
+    var detail = await intelligenceService.GetKnowledgeNavigatorDetailAsync(normalizedKey, ct);
+    return detail is null ? Results.NotFound() : Results.Ok(detail);
+}).RequireAuthorization("Authenticated");
+
+app.MapGet("/api/intelligence/resilience/overview", async (
+    FC.Engine.Admin.Services.PlatformIntelligenceService intelligenceService,
+    CancellationToken ct) =>
+{
+    var snapshot = await intelligenceService.GetResilienceSnapshotAsync(ct);
+    return Results.Ok(snapshot);
+}).RequireAuthorization("Authenticated");
+
+app.MapGet("/api/intelligence/resilience/pack", async (
+    FC.Engine.Admin.Services.PlatformIntelligenceService intelligenceService,
+    CancellationToken ct) =>
+{
+    var snapshot = await intelligenceService.GetResilienceSnapshotAsync(ct);
+    return Results.Ok(snapshot.ReturnPack);
+}).RequireAuthorization("Authenticated");
+
+app.MapGet("/api/intelligence/resilience/incidents", async (
+    int? take,
+    FC.Engine.Admin.Services.PlatformIntelligenceService intelligenceService,
+    CancellationToken ct) =>
+{
+    var snapshot = await intelligenceService.GetResilienceSnapshotAsync(ct);
+    var size = FC.Engine.Admin.Services.PlatformIntelligenceApiRequestMapper.NormalizeTake(take, 12, 50);
+    return Results.Ok(snapshot.IncidentTimelines.Take(size).ToList());
+}).RequireAuthorization("Authenticated");
+
+app.MapGet("/api/intelligence/resilience/self-assessment", async (
+    FC.Engine.Admin.Services.PlatformIntelligenceService intelligenceService,
+    CancellationToken ct) =>
+{
+    var state = await intelligenceService.GetResilienceAssessmentStateAsync(ct);
+    return Results.Ok(state);
+}).RequireAuthorization("Authenticated");
+
+app.MapPost("/api/intelligence/resilience/self-assessment", async (
+    FC.Engine.Admin.Services.ResilienceAssessmentApiRequest request,
+    HttpContext context,
+    FC.Engine.Admin.Services.PlatformIntelligenceService intelligenceService,
+    IAuditLogger auditLogger) =>
+{
+    if (!FC.Engine.Admin.Services.PlatformIntelligenceApiRequestMapper.TryNormalizeResilienceAssessmentRequest(
+            request,
+            out var command,
+            out var error))
+    {
+        return Results.BadRequest(new { error });
+    }
+
+    await intelligenceService.RecordResilienceAssessmentResponseAsync(command, context.RequestAborted);
+    var performedBy = context.User.FindFirstValue(ClaimTypes.NameIdentifier)
+                      ?? context.User.Identity?.Name
+                      ?? "platform-intelligence-api";
+
+    await auditLogger.Log(
+        "ResilienceAssessment",
+        0,
+        "SelfAssessmentResponseRecorded",
+        null,
+        new
+        {
+            command.QuestionId,
+            command.Domain,
+            command.Score,
+            command.AnsweredAtUtc
+        },
+        performedBy,
+        context.RequestAborted);
+
+    return Results.Ok(command);
+}).RequireAuthorization("Authenticated");
+
+app.MapDelete("/api/intelligence/resilience/self-assessment", async (
+    HttpContext context,
+    FC.Engine.Admin.Services.PlatformIntelligenceService intelligenceService,
+    IAuditLogger auditLogger) =>
+{
+    await intelligenceService.ResetResilienceAssessmentAsync(context.RequestAborted);
+    var performedBy = context.User.FindFirstValue(ClaimTypes.NameIdentifier)
+                      ?? context.User.Identity?.Name
+                      ?? "platform-intelligence-api";
+
+    await auditLogger.Log(
+        "ResilienceAssessment",
+        0,
+        "SelfAssessmentReset",
+        null,
+        new { ResetAtUtc = DateTime.UtcNow },
+        performedBy,
+        context.RequestAborted);
+
+    return Results.Ok(new { reset = true, utc = DateTimeOffset.UtcNow });
+}).RequireAuthorization("Authenticated");
+
+app.MapGet("/api/intelligence/model-risk/overview", async (
+    FC.Engine.Admin.Services.PlatformIntelligenceService intelligenceService,
+    CancellationToken ct) =>
+{
+    var snapshot = await intelligenceService.GetModelRiskSnapshotAsync(ct);
+    return Results.Ok(snapshot);
+}).RequireAuthorization("Authenticated");
+
+app.MapGet("/api/intelligence/model-risk/pack", async (
+    FC.Engine.Admin.Services.PlatformIntelligenceService intelligenceService,
+    CancellationToken ct) =>
+{
+    var snapshot = await intelligenceService.GetModelRiskSnapshotAsync(ct);
+    return Results.Ok(snapshot.ReturnPack);
+}).RequireAuthorization("Authenticated");
+
+app.MapGet("/api/intelligence/model-risk/inventory", async (
+    int? take,
+    FC.Engine.Admin.Services.PlatformIntelligenceService intelligenceService,
+    CancellationToken ct) =>
+{
+    var snapshot = await intelligenceService.GetModelRiskSnapshotAsync(ct);
+    var size = FC.Engine.Admin.Services.PlatformIntelligenceApiRequestMapper.NormalizeTake(take, 25, 100);
+    return Results.Ok(snapshot.Inventory.Take(size).ToList());
+}).RequireAuthorization("Authenticated");
+
+app.MapGet("/api/intelligence/model-risk/backtesting", async (
+    int? take,
+    FC.Engine.Admin.Services.PlatformIntelligenceService intelligenceService,
+    CancellationToken ct) =>
+{
+    var snapshot = await intelligenceService.GetModelRiskSnapshotAsync(ct);
+    var size = FC.Engine.Admin.Services.PlatformIntelligenceApiRequestMapper.NormalizeTake(take, 25, 100);
+    return Results.Ok(snapshot.Backtesting.Take(size).ToList());
+}).RequireAuthorization("Authenticated");
+
+app.MapGet("/api/intelligence/model-risk/monitoring", async (
+    int? take,
+    FC.Engine.Admin.Services.PlatformIntelligenceService intelligenceService,
+    CancellationToken ct) =>
+{
+    var snapshot = await intelligenceService.GetModelRiskSnapshotAsync(ct);
+    var size = FC.Engine.Admin.Services.PlatformIntelligenceApiRequestMapper.NormalizeTake(take, 25, 100);
+    return Results.Ok(snapshot.MonitoringSummary.Take(size).ToList());
+}).RequireAuthorization("Authenticated");
+
+app.MapGet("/api/intelligence/model-risk/approval-queue", async (
+    FC.Engine.Admin.Services.PlatformIntelligenceService intelligenceService,
+    CancellationToken ct) =>
+{
+    var snapshot = await intelligenceService.GetModelRiskSnapshotAsync(ct);
+    return Results.Ok(snapshot.ApprovalQueue);
+}).RequireAuthorization("Authenticated");
+
+app.MapGet("/api/intelligence/model-risk/approval-workflow", async (
+    FC.Engine.Admin.Services.PlatformIntelligenceService intelligenceService,
+    CancellationToken ct) =>
+{
+    var state = await intelligenceService.GetModelApprovalWorkflowStateAsync(ct);
+    return Results.Ok(state);
+}).RequireAuthorization("Authenticated");
+
+app.MapPost("/api/intelligence/model-risk/approval-workflow", async (
+    FC.Engine.Admin.Services.ModelApprovalStageApiRequest request,
+    HttpContext context,
+    FC.Engine.Admin.Services.PlatformIntelligenceService intelligenceService,
+    IAuditLogger auditLogger) =>
+{
+    if (!FC.Engine.Admin.Services.PlatformIntelligenceApiRequestMapper.TryNormalizeModelApprovalStageRequest(
+            request,
+            out var command,
+            out var error))
+    {
+        return Results.BadRequest(new { error });
+    }
+
+    await intelligenceService.RecordModelApprovalStageAsync(command, context.RequestAborted);
+    var performedBy = context.User.FindFirstValue(ClaimTypes.NameIdentifier)
+                      ?? context.User.Identity?.Name
+                      ?? "platform-intelligence-api";
+
+    await auditLogger.Log(
+        "ModelRisk",
+        0,
+        "ModelApprovalStageChanged",
+        null,
+        new
+        {
+            command.WorkflowKey,
+            command.ModelCode,
+            command.PreviousStage,
+            command.Stage,
+            command.ChangedAtUtc
+        },
+        performedBy,
+        context.RequestAborted);
+
+    return Results.Ok(command);
+}).RequireAuthorization("Authenticated");
+
+app.MapGet("/api/intelligence/capital/scenario", async (
+    FC.Engine.Admin.Services.PlatformIntelligenceService intelligenceService,
+    CancellationToken ct) =>
+{
+    var state = await intelligenceService.GetCapitalPlanningScenarioStateAsync(ct);
+    return state is null ? Results.NotFound() : Results.Ok(state);
+}).RequireAuthorization("Authenticated");
+
+app.MapGet("/api/intelligence/capital/scenario/history", async (
+    int? take,
+    FC.Engine.Admin.Services.PlatformIntelligenceService intelligenceService,
+    CancellationToken ct) =>
+{
+    var size = take.GetValueOrDefault(8);
+    size = Math.Clamp(size, 1, 50);
+    var history = await intelligenceService.GetCapitalPlanningScenarioHistoryAsync(size, ct);
+    return Results.Ok(history);
+}).RequireAuthorization("Authenticated");
+
+app.MapPost("/api/intelligence/capital/scenario", async (
+    FC.Engine.Admin.Services.CapitalPlanningScenarioApiRequest request,
+    HttpContext context,
+    FC.Engine.Admin.Services.PlatformIntelligenceService intelligenceService,
+    IAuditLogger auditLogger) =>
+{
+    if (!FC.Engine.Admin.Services.PlatformIntelligenceApiRequestMapper.TryNormalizeCapitalScenarioRequest(
+            request,
+            out var command,
+            out var error))
+    {
+        return Results.BadRequest(new { error });
+    }
+
+    var state = await intelligenceService.RecordCapitalPlanningScenarioAsync(command, context.RequestAborted);
+    var performedBy = context.User.FindFirstValue(ClaimTypes.NameIdentifier)
+                      ?? context.User.Identity?.Name
+                      ?? "platform-intelligence-api";
+
+    await auditLogger.Log(
+        "CapitalPlanning",
+        0,
+        "CapitalScenarioSaved",
+        null,
+        new
+        {
+            state.CurrentCarPercent,
+            state.TargetCarPercent,
+            state.CurrentRwaBn,
+            state.CapitalActionBn,
+            state.RwaOptimisationPercent,
+            state.SavedAtUtc
+        },
+        performedBy,
+        context.RequestAborted);
+
+    return Results.Ok(state);
+}).RequireAuthorization("Authenticated");
+
+app.MapPost("/api/intelligence/sanctions/screen", async (
+    FC.Engine.Admin.Services.SanctionsBatchScreeningApiRequest request,
+    HttpContext context,
+    FC.Engine.Admin.Services.PlatformIntelligenceService intelligenceService,
+    IAuditLogger auditLogger) =>
+{
+    if (!FC.Engine.Admin.Services.PlatformIntelligenceApiRequestMapper.TryNormalizeBatchScreeningRequest(
+            request,
+            out var command,
+            out var error))
+    {
+        return Results.BadRequest(new { error });
+    }
+
+    var run = await intelligenceService.ScreenSubjectsAsync(command.Subjects, command.Threshold, context.RequestAborted);
+    var performedBy = context.User.FindFirstValue(ClaimTypes.NameIdentifier)
+                      ?? context.User.Identity?.Name
+                      ?? "platform-intelligence-api";
+
+    await auditLogger.Log(
+        "Sanctions",
+        0,
+        "BatchScreeningRunRequested",
+        null,
+        new
+        {
+            SubjectCount = command.Subjects.Count,
+            ThresholdPercent = run.ThresholdPercent,
+            MatchCount = run.MatchCount
+        },
+        performedBy,
+        context.RequestAborted);
+
+    return Results.Ok(run);
+}).RequireAuthorization("Authenticated");
+
+app.MapPost("/api/intelligence/sanctions/transactions/screen", async (
+    FC.Engine.Admin.Services.SanctionsTransactionScreeningApiRequest request,
+    HttpContext context,
+    FC.Engine.Admin.Services.PlatformIntelligenceService intelligenceService,
+    IAuditLogger auditLogger) =>
+{
+    if (!FC.Engine.Admin.Services.PlatformIntelligenceApiRequestMapper.TryNormalizeTransactionScreeningRequest(
+            request,
+            out var command,
+            out var error))
+    {
+        return Results.BadRequest(new { error });
+    }
+
+    var result = await intelligenceService.ScreenTransactionAsync(command, context.RequestAborted);
+    var performedBy = context.User.FindFirstValue(ClaimTypes.NameIdentifier)
+                      ?? context.User.Identity?.Name
+                      ?? "platform-intelligence-api";
+
+    await auditLogger.Log(
+        "Sanctions",
+        0,
+        "TransactionScreeningRunRequested",
+        null,
+        new
+        {
+            result.TransactionReference,
+            result.ControlDecision,
+            result.RequiresStrDraft,
+            result.ThresholdPercent
+        },
+        performedBy,
+        context.RequestAborted);
+
+    return Results.Ok(result);
+}).RequireAuthorization("Authenticated");
+
 // ── Regulator API Endpoints ──────────────────────────────────────────────────
 
 app.MapGet("/regulator/workspace/{projectId:int}/report", async (
