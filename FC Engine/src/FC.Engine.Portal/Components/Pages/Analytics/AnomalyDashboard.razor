@@ -1,0 +1,180 @@
+@page "/analytics/anomalies"
+@attribute [Authorize]
+@inject IAnomalyDetectionService AnomalyService
+@inject NavigationManager Navigation
+
+<PageTitle>Anomaly Dashboard</PageTitle>
+
+<div class="container-fluid px-4">
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
+        <div>
+            <h1 class="h3 mb-1">Anomaly Dashboard</h1>
+            <p class="text-muted mb-0">Review AI-assisted statistical anomalies before final submission sign-off.</p>
+        </div>
+        <div class="d-flex gap-2">
+            <select class="form-select form-select-sm" style="min-width: 180px;" @bind="_selectedModule">
+                <option value="">All modules</option>
+                @foreach (var module in _reports.Select(x => x.ModuleCode).Distinct().Order())
+                {
+                    <option value="@module">@module</option>
+                }
+            </select>
+            <select class="form-select form-select-sm" style="min-width: 140px;" @bind="_selectedPeriod">
+                <option value="">All periods</option>
+                @foreach (var period in _reports.Select(x => x.PeriodCode).Distinct().OrderDescending())
+                {
+                    <option value="@period">@period</option>
+                }
+            </select>
+        </div>
+    </div>
+
+    @if (_isLoading)
+    {
+        <div class="text-center py-5" role="status" aria-live="polite">
+            <div class="spinner-border text-primary"></div>
+            <p class="text-muted mt-3 mb-0">Loading anomaly reports...</p>
+        </div>
+    }
+    else if (!string.IsNullOrWhiteSpace(_error))
+    {
+        <div class="alert alert-danger">@_error</div>
+    }
+    else if (FilteredReports.Count == 0)
+    {
+        <div class="alert alert-info">
+            No anomaly reports are available for the selected filters yet. Reports are created automatically for accepted submissions.
+        </div>
+    }
+    else
+    {
+        <div class="row g-3 mb-4">
+            <div class="col-md-3">
+                <div class="card border-0 shadow-sm h-100">
+                    <div class="card-body">
+                        <div class="text-muted small">Returns Analysed</div>
+                        <div class="display-6 mb-0">@FilteredReports.Count</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card border-0 shadow-sm h-100">
+                    <div class="card-body">
+                        <div class="text-muted small">Average Quality</div>
+                        <div class="display-6 mb-0">@AverageQuality.ToString("F1")%</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card border-0 shadow-sm h-100">
+                    <div class="card-body">
+                        <div class="text-muted small">Red Reports</div>
+                        <div class="display-6 text-danger mb-0">@FilteredReports.Count(x => x.TrafficLight == "RED")</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card border-0 shadow-sm h-100">
+                    <div class="card-body">
+                        <div class="text-muted small">Outstanding Alerts</div>
+                        <div class="display-6 text-warning mb-0">@FilteredReports.Sum(x => x.AlertCount)</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white">
+                <h2 class="h6 mb-0">Latest anomaly reports</h2>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-hover mb-0" aria-label="Anomaly report list">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Module</th>
+                            <th>Period</th>
+                            <th>Quality</th>
+                            <th>Status</th>
+                            <th>Alerts</th>
+                            <th>Total Findings</th>
+                            <th>Analysed</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var report in FilteredReports.OrderByDescending(x => x.AnalysedAt))
+                        {
+                            <tr>
+                                <td><strong>@report.ModuleCode</strong></td>
+                                <td>@report.PeriodCode</td>
+                                <td>@report.OverallQualityScore.ToString("F1")%</td>
+                                <td>
+                                    <span class="badge @(report.TrafficLight == "RED" ? "bg-danger" : report.TrafficLight == "AMBER" ? "bg-warning text-dark" : "bg-success")">
+                                        @report.TrafficLight
+                                    </span>
+                                </td>
+                                <td>@report.AlertCount</td>
+                                <td>@report.TotalFindings</td>
+                                <td class="text-muted small">@report.AnalysedAt.ToString("dd MMM yyyy HH:mm")</td>
+                                <td class="text-end">
+                                    <button class="btn btn-sm btn-outline-primary" @onclick='() => Navigation.NavigateTo($"/analytics/anomalies/{report.Id}")'>
+                                        Review
+                                    </button>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthenticationStateTask { get; set; } = default!;
+
+    private readonly List<AnomalyReport> _reports = new();
+    private bool _isLoading = true;
+    private string? _error;
+    private string _selectedModule = string.Empty;
+    private string _selectedPeriod = string.Empty;
+
+    private List<AnomalyReport> FilteredReports =>
+        _reports
+            .Where(x => string.IsNullOrWhiteSpace(_selectedModule) || x.ModuleCode == _selectedModule)
+            .Where(x => string.IsNullOrWhiteSpace(_selectedPeriod) || x.PeriodCode == _selectedPeriod)
+            .ToList();
+
+    private decimal AverageQuality => FilteredReports.Count == 0
+        ? 100m
+        : decimal.Round(FilteredReports.Average(x => x.OverallQualityScore), 1);
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _isLoading = true;
+        _error = null;
+        _reports.Clear();
+
+        try
+        {
+            var auth = await AuthenticationStateTask;
+            var tenantValue = auth.User.FindFirst("tenant_id")?.Value
+                ?? throw new InvalidOperationException("Tenant context is missing from the current session.");
+            var tenantId = Guid.Parse(tenantValue);
+            _reports.AddRange(await AnomalyService.GetReportsForTenantAsync(tenantId));
+        }
+        catch (Exception ex)
+        {
+            _error = $"Unable to load anomaly reports: {ex.Message}";
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+}

@@ -183,6 +183,17 @@ public class MetadataDbContext : DbContext
     // Compliance Health Scoring (RG-32)
     public DbSet<ChsScoreSnapshot> ChsScoreSnapshots => Set<ChsScoreSnapshot>();
 
+    // AI-powered anomaly detection (AI-01)
+    public DbSet<AnomalyThresholdConfig> AnomalyThresholdConfigs => Set<AnomalyThresholdConfig>();
+    public DbSet<AnomalyModelVersion> AnomalyModelVersions => Set<AnomalyModelVersion>();
+    public DbSet<AnomalyFieldModel> AnomalyFieldModels => Set<AnomalyFieldModel>();
+    public DbSet<AnomalyCorrelationRule> AnomalyCorrelationRules => Set<AnomalyCorrelationRule>();
+    public DbSet<AnomalyPeerGroupStatistic> AnomalyPeerGroupStatistics => Set<AnomalyPeerGroupStatistic>();
+    public DbSet<AnomalyRuleBaseline> AnomalyRuleBaselines => Set<AnomalyRuleBaseline>();
+    public DbSet<AnomalySeedCorrelationRule> AnomalySeedCorrelationRules => Set<AnomalySeedCorrelationRule>();
+    public DbSet<AnomalyReport> AnomalyReports => Set<AnomalyReport>();
+    public DbSet<AnomalyFinding> AnomalyFindings => Set<AnomalyFinding>();
+
     // Cross-Border Harmonisation (RG-41)
     public DbSet<RegulatoryJurisdiction> RegulatoryJurisdictions => Set<RegulatoryJurisdiction>();
     public DbSet<FinancialGroup> FinancialGroups => Set<FinancialGroup>();

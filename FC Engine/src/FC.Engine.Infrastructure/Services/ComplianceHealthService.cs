@@ -351,7 +351,18 @@ public class ComplianceHealthService : IComplianceHealthService
             .Select(r => new { r.Id })
             .ToListAsync(ct);
 
-        if (reports.Count == 0) return 50m;
+        var anomalyScores = await _db.AnomalyReports
+            .AsNoTracking()
+            .Where(r => r.TenantId == tenantId && r.AnalysedAt >= lookback)
+            .Select(r => r.OverallQualityScore)
+            .ToListAsync(ct);
+
+        if (reports.Count == 0)
+        {
+            return anomalyScores.Count == 0
+                ? 50m
+                : decimal.Round(anomalyScores.Average(), 1);
+        }
 
         var reportIds = reports.Select(r => r.Id).ToList();
 
@@ -385,7 +396,14 @@ public class ComplianceHealthService : IComplianceHealthService
             ? Math.Max(0, 100 - (decimal)crossSheetErrors / reports.Count * 20)
             : 50m;
 
-        return Clamp(passRate * 0.4m + severityScore * 0.35m + consistencyScore * 0.25m);
+        var validationScore = Clamp(passRate * 0.4m + severityScore * 0.35m + consistencyScore * 0.25m);
+        if (anomalyScores.Count == 0)
+        {
+            return validationScore;
+        }
+
+        var anomalyScore = decimal.Round(anomalyScores.Average(), 1);
+        return Clamp((validationScore * 0.6m) + (anomalyScore * 0.4m));
     }
 
     // ── Pillar 3: Regulatory Capital (20%) ──

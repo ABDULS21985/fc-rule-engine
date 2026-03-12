@@ -1,0 +1,310 @@
+@page "/analytics/anomalies/{ReportId:int}"
+@attribute [Authorize]
+@inject IAnomalyDetectionService AnomalyService
+@inject NavigationManager Navigation
+
+<PageTitle>Anomaly Detail</PageTitle>
+
+<div class="container-fluid px-4">
+    <div class="d-flex justify-content-between align-items-center gap-3 mb-4">
+        <div>
+            <button class="btn btn-link px-0 text-decoration-none" @onclick='() => Navigation.NavigateTo("/analytics/anomalies")'>
+                <i class="bi bi-arrow-left me-1"></i> Back to anomaly dashboard
+            </button>
+            <h1 class="h3 mb-1">Anomaly Detail</h1>
+            <p class="text-muted mb-0">Review explanations, acknowledge legitimate outliers, and confirm the return is ready to move forward.</p>
+        </div>
+        @if (_report is not null)
+        {
+            <div class="text-end">
+                <div class="small text-muted">Traffic light</div>
+                <span class="badge fs-6 @(_report.TrafficLight == "RED" ? "bg-danger" : _report.TrafficLight == "AMBER" ? "bg-warning text-dark" : "bg-success")">
+                    @_report.TrafficLight
+                </span>
+            </div>
+        }
+    </div>
+
+    @if (_isLoading)
+    {
+        <div class="text-center py-5" role="status" aria-live="polite">
+            <div class="spinner-border text-primary"></div>
+            <p class="text-muted mt-3 mb-0">Loading anomaly details...</p>
+        </div>
+    }
+    else if (!string.IsNullOrWhiteSpace(_error))
+    {
+        <div class="alert alert-danger">@_error</div>
+    }
+    else if (_report is null)
+    {
+        <div class="alert alert-warning">This anomaly report could not be found.</div>
+    }
+    else
+    {
+        <div class="row g-3 mb-4">
+            <div class="col-md-3">
+                <div class="card border-0 shadow-sm h-100">
+                    <div class="card-body">
+                        <div class="text-muted small">Institution</div>
+                        <div class="fw-semibold">@_report.InstitutionName</div>
+                        <div class="text-muted small mt-1">@_report.ModuleCode · @_report.PeriodCode</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card border-0 shadow-sm h-100">
+                    <div class="card-body">
+                        <div class="text-muted small">Quality Score</div>
+                        <div class="display-6 mb-0">@_report.OverallQualityScore.ToString("F1")%</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card border-0 shadow-sm h-100">
+                    <div class="card-body">
+                        <div class="text-muted small">Findings</div>
+                        <div class="display-6 mb-0">@_report.TotalFindings</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card border-0 shadow-sm h-100">
+                    <div class="card-body">
+                        <div class="text-muted small">Unacknowledged</div>
+                        <div class="display-6 mb-0">@_report.Findings.Count(x => !x.IsAcknowledged)</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-header bg-white">
+                <h2 class="h6 mb-0">Assessment summary</h2>
+            </div>
+            <div class="card-body">
+                <p class="mb-0">@_report.NarrativeSummary</p>
+            </div>
+        </div>
+
+        @if (_activeFindingId.HasValue)
+        {
+            <div class="card border-0 shadow-sm mb-4">
+                <div class="card-header bg-white">
+                    <h2 class="h6 mb-0">Acknowledge finding</h2>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <label class="form-label" for="ack-reason">Reason</label>
+                        <textarea id="ack-reason"
+                                  class="form-control"
+                                  rows="3"
+                                  @bind="_ackReason"
+                                  placeholder="Explain why this anomaly is valid and does not require correction."></textarea>
+                    </div>
+                    <div class="d-flex gap-2">
+                        <button class="btn btn-primary" @onclick="ConfirmAcknowledgementAsync" disabled="@string.IsNullOrWhiteSpace(_ackReason)">Save acknowledgement</button>
+                        <button class="btn btn-outline-secondary" @onclick="CancelAcknowledgement">Cancel</button>
+                    </div>
+                </div>
+            </div>
+        }
+
+        @foreach (var group in _report.Findings.GroupBy(x => x.FindingType).OrderBy(x => x.Key))
+        {
+            <div class="card border-0 shadow-sm mb-4">
+                <div class="card-header bg-white">
+                    <h2 class="h6 mb-0">@group.Key findings</h2>
+                </div>
+                <div class="table-responsive">
+                    <table class="table align-middle mb-0" aria-label="@($"{group.Key} findings")">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Field</th>
+                                <th>Reported</th>
+                                <th>Expected</th>
+                                <th>Severity</th>
+                                <th>Explanation</th>
+                                <th>Status</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var finding in group.OrderByDescending(x => SeverityRank(x.Severity)).ThenBy(x => x.FieldLabel))
+                            {
+                                <tr>
+                                    <td>
+                                        <div class="fw-semibold">@finding.FieldLabel</div>
+                                        @if (!string.IsNullOrWhiteSpace(finding.RelatedFieldLabel))
+                                        {
+                                            <div class="text-muted small">paired with @finding.RelatedFieldLabel</div>
+                                        }
+                                    </td>
+                                    <td>@(finding.ReportedValue?.ToString("N2") ?? "N/A")</td>
+                                    <td>@ResolveExpectedValue(finding)</td>
+                                    <td>
+                                        <span class="badge @(finding.Severity == "ALERT" ? "bg-danger" : finding.Severity == "WARNING" ? "bg-warning text-dark" : "bg-info text-dark")">
+                                            @finding.Severity
+                                        </span>
+                                    </td>
+                                    <td style="min-width: 340px;">@finding.Explanation</td>
+                                    <td>
+                                        @if (finding.IsAcknowledged)
+                                        {
+                                            <div class="badge bg-success">Acknowledged</div>
+                                            <div class="text-muted small mt-1">@finding.AcknowledgedBy · @finding.AcknowledgedAt?.ToString("dd MMM HH:mm")</div>
+                                        }
+                                        else
+                                        {
+                                            <div class="badge bg-secondary">Pending review</div>
+                                        }
+                                    </td>
+                                    <td class="text-end">
+                                        @if (finding.IsAcknowledged)
+                                        {
+                                            <button class="btn btn-sm btn-outline-secondary" @onclick="() => RevokeAcknowledgementAsync(finding.Id)">Revoke</button>
+                                        }
+                                        else
+                                        {
+                                            <button class="btn btn-sm btn-outline-primary" @onclick="() => StartAcknowledgement(finding.Id)">Acknowledge</button>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        }
+    }
+</div>
+
+@code {
+    [Parameter] public int ReportId { get; set; }
+    [CascadingParameter] private Task<AuthenticationState> AuthenticationStateTask { get; set; } = default!;
+
+    private AnomalyReport? _report;
+    private bool _isLoading = true;
+    private string? _error;
+    private int? _activeFindingId;
+    private string _ackReason = string.Empty;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _isLoading = true;
+        _error = null;
+
+        try
+        {
+            var auth = await AuthenticationStateTask;
+            var tenantValue = auth.User.FindFirst("tenant_id")?.Value
+                ?? throw new InvalidOperationException("Tenant context is missing from the current session.");
+            var tenantId = Guid.Parse(tenantValue);
+            _report = await AnomalyService.GetReportByIdAsync(ReportId, tenantId);
+        }
+        catch (Exception ex)
+        {
+            _error = $"Unable to load anomaly report: {ex.Message}";
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private void StartAcknowledgement(int findingId)
+    {
+        _activeFindingId = findingId;
+        _ackReason = string.Empty;
+    }
+
+    private void CancelAcknowledgement()
+    {
+        _activeFindingId = null;
+        _ackReason = string.Empty;
+    }
+
+    private async Task ConfirmAcknowledgementAsync()
+    {
+        if (!_activeFindingId.HasValue)
+        {
+            return;
+        }
+
+        try
+        {
+            var auth = await AuthenticationStateTask;
+            var tenantId = Guid.Parse(auth.User.FindFirst("tenant_id")!.Value);
+            var acknowledgedBy = auth.User.Identity?.Name
+                ?? auth.User.FindFirst(ClaimTypes.Email)?.Value
+                ?? "portal-user";
+
+            await AnomalyService.AcknowledgeFindingAsync(new AnomalyAcknowledgementRequest
+            {
+                FindingId = _activeFindingId.Value,
+                TenantId = tenantId,
+                Reason = _ackReason.Trim(),
+                AcknowledgedBy = acknowledgedBy
+            });
+
+            CancelAcknowledgement();
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            _error = $"Unable to save acknowledgement: {ex.Message}";
+        }
+    }
+
+    private async Task RevokeAcknowledgementAsync(int findingId)
+    {
+        try
+        {
+            var auth = await AuthenticationStateTask;
+            var tenantId = Guid.Parse(auth.User.FindFirst("tenant_id")!.Value);
+            var revokedBy = auth.User.Identity?.Name
+                ?? auth.User.FindFirst(ClaimTypes.Email)?.Value
+                ?? "portal-user";
+
+            await AnomalyService.RevokeAcknowledgementAsync(findingId, tenantId, revokedBy);
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            _error = $"Unable to revoke acknowledgement: {ex.Message}";
+        }
+    }
+
+    private static int SeverityRank(string severity) => severity switch
+    {
+        "ALERT" => 3,
+        "WARNING" => 2,
+        "INFO" => 1,
+        _ => 0
+    };
+
+    private static string ResolveExpectedValue(AnomalyFinding finding)
+    {
+        if (finding.ExpectedRangeLow.HasValue || finding.ExpectedRangeHigh.HasValue)
+        {
+            return $"{finding.ExpectedRangeLow?.ToString("N2") ?? "N/A"} - {finding.ExpectedRangeHigh?.ToString("N2") ?? "N/A"}";
+        }
+
+        if (finding.ExpectedValue.HasValue)
+        {
+            return finding.ExpectedValue.Value.ToString("N2");
+        }
+
+        if (finding.BaselineValue.HasValue)
+        {
+            return finding.BaselineValue.Value.ToString("N2");
+        }
+
+        return "N/A";
+    }
+}

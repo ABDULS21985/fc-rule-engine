@@ -263,6 +263,8 @@ public static class DependencyInjection
         services.AddScoped<IBenchmarkingService, BenchmarkingService>();
         services.AddScoped<IRegulatorInboxService, RegulatorInboxService>();
         services.AddScoped<ISectorAnalyticsService, SectorAnalyticsService>();
+        services.AddScoped<IAnomalyModelTrainingService, AnomalyModelTrainingService>();
+        services.AddScoped<IAnomalyDetectionService, AnomalyDetectionService>();
         services.AddScoped<IEntityBenchmarkingService, EntityBenchmarkingService>();
         services.AddScoped<IEarlyWarningService, EarlyWarningService>();
         services.AddScoped<ISystemicRiskService, SystemicRiskService>();

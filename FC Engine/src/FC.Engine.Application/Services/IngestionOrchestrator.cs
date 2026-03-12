@@ -29,6 +29,7 @@ public class IngestionOrchestrator
     private readonly IInterModuleDataFlowEngine? _dataFlowEngine;
     private readonly INotificationOrchestrator? _notificationOrchestrator;
     private readonly IDomainEventPublisher? _domainEventPublisher;
+    private readonly IAnomalyDetectionService? _anomalyDetectionService;
 
     public IngestionOrchestrator(
         ITemplateMetadataCache cache,
@@ -41,7 +42,8 @@ public class IngestionOrchestrator
         ITenantContext? tenantContext = null,
         IInterModuleDataFlowEngine? dataFlowEngine = null,
         INotificationOrchestrator? notificationOrchestrator = null,
-        IDomainEventPublisher? domainEventPublisher = null)
+        IDomainEventPublisher? domainEventPublisher = null,
+        IAnomalyDetectionService? anomalyDetectionService = null)
     {
         _cache = cache;
         _xsdGenerator = xsdGenerator;
@@ -54,6 +56,7 @@ public class IngestionOrchestrator
         _dataFlowEngine = dataFlowEngine;
         _notificationOrchestrator = notificationOrchestrator;
         _domainEventPublisher = domainEventPublisher;
+        _anomalyDetectionService = anomalyDetectionService;
     }
 
     public Task<SubmissionResultDto> Process(
@@ -181,6 +184,18 @@ public class IngestionOrchestrator
             report.FinalizeAt(DateTime.UtcNow);
             submission.ProcessingDurationMs = (int)sw.ElapsedMilliseconds;
             await _submissionRepo.Update(submission, ct);
+
+            if (_anomalyDetectionService != null
+                && tenantId.HasValue
+                && (submission.Status == SubmissionStatus.Accepted || submission.Status == SubmissionStatus.AcceptedWithWarnings))
+            {
+                var anomalyPerformedBy = reviewNotificationContext?.SubmittedByName ?? "system";
+                await _anomalyDetectionService.AnalyzeSubmissionAsync(
+                    submission.Id,
+                    tenantId.Value,
+                    anomalyPerformedBy,
+                    ct);
+            }
 
             if ((submission.Status == SubmissionStatus.Accepted
                     || submission.Status == SubmissionStatus.AcceptedWithWarnings)

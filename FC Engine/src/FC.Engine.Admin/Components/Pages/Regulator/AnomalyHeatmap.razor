@@ -1,0 +1,151 @@
+@page "/regulator/anomalies"
+@attribute [Authorize(Policy = "RegulatorOnly")]
+@inject IAnomalyDetectionService AnomalyService
+
+<PageHeader Title="Anomaly Intelligence"
+            Subtitle="Rank institutions by anomaly density, quality score, and unresolved outliers." />
+
+<div class="fc-card" style="margin-bottom: 1rem;">
+    <div class="fc-card__body">
+        <div style="display:flex; flex-wrap:wrap; gap:0.75rem; align-items:end;">
+            <div>
+                <label class="form-label">Regulator</label>
+                <select class="form-select" style="min-width: 160px;" @bind="_regulatorCode">
+                    <option value="CBN">CBN</option>
+                    <option value="NDIC">NDIC</option>
+                    <option value="NAICOM">NAICOM</option>
+                    <option value="SEC">SEC</option>
+                </select>
+            </div>
+            <div>
+                <label class="form-label">Module code</label>
+                <input class="form-control" style="min-width: 180px;" @bind="_moduleCode" placeholder="Optional" />
+            </div>
+            <div>
+                <label class="form-label">Period code</label>
+                <input class="form-control" style="min-width: 140px;" @bind="_periodCode" placeholder="2026-Q1" />
+            </div>
+            <button class="fc-btn fc-btn--primary" @onclick="LoadAsync">Refresh</button>
+        </div>
+    </div>
+</div>
+
+@if (_isLoading)
+{
+    <div class="fc-card">
+        <div class="fc-card__body">Loading anomaly intelligence...</div>
+    </div>
+}
+else if (!string.IsNullOrWhiteSpace(_error))
+{
+    <div class="fc-card">
+        <div class="fc-card__body" style="color: var(--cbn-danger);">@_error</div>
+    </div>
+}
+else if (_rows.Count == 0)
+{
+    <div class="fc-card">
+        <div class="fc-card__body">No anomaly reports matched the current filter.</div>
+    </div>
+}
+else
+{
+    <div class="fc-grid fc-grid--4" style="margin-bottom: 1rem;">
+        <div class="fc-kpi-card">
+            <span class="fc-kpi-card__label">Institutions</span>
+            <strong class="fc-kpi-card__value">@_rows.Count</strong>
+        </div>
+        <div class="fc-kpi-card">
+            <span class="fc-kpi-card__label">Average quality</span>
+            <strong class="fc-kpi-card__value">@_rows.Average(x => x.QualityScore).ToString("F1")%</strong>
+        </div>
+        <div class="fc-kpi-card">
+            <span class="fc-kpi-card__label">Red entities</span>
+            <strong class="fc-kpi-card__value" style="color: var(--cbn-danger);">@_rows.Count(x => x.TrafficLight == "RED")</strong>
+        </div>
+        <div class="fc-kpi-card">
+            <span class="fc-kpi-card__label">Outstanding findings</span>
+            <strong class="fc-kpi-card__value">@_rows.Sum(x => x.UnacknowledgedCount)</strong>
+        </div>
+    </div>
+
+    <div class="fc-card">
+        <div class="fc-card__header">
+            <h2 class="fc-card__title">Sector anomaly heatmap</h2>
+        </div>
+        <div class="fc-card__body" style="padding:0;">
+            <table class="fc-table">
+                <thead>
+                    <tr>
+                        <th>Institution</th>
+                        <th>Licence</th>
+                        <th>Module</th>
+                        <th>Period</th>
+                        <th>Quality</th>
+                        <th>Status</th>
+                        <th>Alerts</th>
+                        <th>Total findings</th>
+                        <th>Unacknowledged</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var row in _rows.OrderBy(x => x.QualityScore).ThenByDescending(x => x.AlertCount))
+                    {
+                        <tr>
+                            <td>@row.InstitutionName</td>
+                            <td>@row.LicenceType</td>
+                            <td>@row.ModuleCode</td>
+                            <td>@row.PeriodCode</td>
+                            <td>@row.QualityScore.ToString("F1")%</td>
+                            <td>
+                                <span class="badge @(row.TrafficLight == "RED" ? "bg-danger" : row.TrafficLight == "AMBER" ? "bg-warning text-dark" : "bg-success")">
+                                    @row.TrafficLight
+                                </span>
+                            </td>
+                            <td>@row.AlertCount</td>
+                            <td>@row.TotalFindings</td>
+                            <td>@row.UnacknowledgedCount</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+}
+
+@code {
+    private readonly List<AnomalySectorSummary> _rows = new();
+    private bool _isLoading = true;
+    private string? _error;
+    private string _regulatorCode = "CBN";
+    private string _moduleCode = string.Empty;
+    private string _periodCode = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _isLoading = true;
+        _error = null;
+        _rows.Clear();
+
+        try
+        {
+            _rows.AddRange(await AnomalyService.GetSectorSummaryAsync(
+                _regulatorCode,
+                string.IsNullOrWhiteSpace(_moduleCode) ? null : _moduleCode,
+                string.IsNullOrWhiteSpace(_periodCode) ? null : _periodCode));
+        }
+        catch (Exception ex)
+        {
+            _error = $"Unable to load anomaly intelligence: {ex.Message}";
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+}
