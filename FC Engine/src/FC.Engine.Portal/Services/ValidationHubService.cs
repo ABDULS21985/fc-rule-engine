@@ -11,17 +11,20 @@ public class ValidationHubService
     private readonly IInstitutionRepository _institutionRepo;
     private readonly IInstitutionUserRepository _userRepo;
     private readonly ITenantBrandingService _brandingService;
+    private readonly ITemplateMetadataCache _templateCache;
 
     public ValidationHubService(
         ISubmissionRepository submissionRepo,
         IInstitutionRepository institutionRepo,
         IInstitutionUserRepository userRepo,
-        ITenantBrandingService brandingService)
+        ITenantBrandingService brandingService,
+        ITemplateMetadataCache templateCache)
     {
         _submissionRepo = submissionRepo;
         _institutionRepo = institutionRepo;
         _userRepo = userRepo;
         _brandingService = brandingService;
+        _templateCache = templateCache;
     }
 
     public async Task<ValidationHubData?> GetHubDataAsync(
@@ -42,6 +45,8 @@ public class ValidationHubService
             submittedByName = user?.DisplayName ?? "Unknown";
         }
 
+        var template = await _templateCache.GetPublishedTemplate(submission.ReturnCode, ct);
+        var moduleCode = template?.ModuleCode;
         var report = submission.ValidationReport;
         var errors = report?.Errors ?? (IReadOnlyList<ValidationError>)[];
 
@@ -67,6 +72,11 @@ public class ValidationHubService
             ReturnCode = submission.ReturnCode,
             PeriodName = FormatPeriod(submission.ReturnPeriod),
             InstitutionName = institution.InstitutionName,
+            ModuleCode = moduleCode,
+            ModuleName = PortalSubmissionLinkBuilder.ResolveModuleName(moduleCode),
+            WorkspaceHref = PortalSubmissionLinkBuilder.ResolveWorkspaceHref(moduleCode),
+            SubmitHref = PortalSubmissionLinkBuilder.BuildSubmitHref(submission.ReturnCode, moduleCode),
+            FixSubmissionHref = PortalSubmissionLinkBuilder.BuildSubmitHref(submission.ReturnCode, moduleCode, submission.ReturnPeriodId),
             SubmittedBy = submittedByName,
             ValidatedAt = report?.FinalizedAt ?? submission.SubmittedAt,
             Status = submission.Status,
@@ -254,6 +264,11 @@ public class ValidationHubData
     public string          ReturnCode        { get; set; } = "";
     public string          PeriodName        { get; set; } = "";
     public string          InstitutionName   { get; set; } = "";
+    public string?         ModuleCode        { get; set; }
+    public string?         ModuleName        { get; set; }
+    public string?         WorkspaceHref     { get; set; }
+    public string          SubmitHref        { get; set; } = "/submit";
+    public string          FixSubmissionHref { get; set; } = "/submit";
     public string          SubmittedBy       { get; set; } = "";
     public DateTime        ValidatedAt       { get; set; }
     public SubmissionStatus Status           { get; set; }

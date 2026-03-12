@@ -56,6 +56,10 @@
                     <span class="portal-badge portal-badge-lg @GetStatusBadgeClass(submission.Status.ToString())">
                         @GetStatusIcon(submission.Status.ToString()) @GetStatusLabel(submission.Status.ToString())
                     </span>
+                    @if (!string.IsNullOrWhiteSpace(moduleCode))
+                    {
+                        <span class="portal-badge portal-badge-neutral">@moduleCode</span>
+                    }
                 </div>
                 <p class="portal-detail-hero-subtitle">@templateName</p>
                 <div class="portal-detail-hero-meta">
@@ -93,6 +97,18 @@
                 }
             </div>
             <div class="portal-detail-hero-actions">
+                @if (!string.IsNullOrWhiteSpace(moduleWorkspaceHref))
+                {
+                    <a href="@moduleWorkspaceHref" class="portal-btn portal-btn-outline portal-btn-sm">
+                        Module Workspace
+                    </a>
+                }
+                @if (!string.IsNullOrWhiteSpace(moduleSubmitHref))
+                {
+                    <a href="@moduleSubmitHref" class="portal-btn portal-btn-outline portal-btn-sm">
+                        File Another
+                    </a>
+                }
                 <div class="portal-download-wrap" @onkeydown="HandleDownloadKeyDown">
                     <button class="portal-btn portal-btn-primary portal-btn-sm"
                             @onclick="ToggleDownloadMenu"
@@ -727,6 +743,9 @@
     private bool isLoading = true;
     private Submission? submission;
     private string templateName = "";
+    private string? moduleCode;
+    private string? moduleWorkspaceHref;
+    private string moduleSubmitHref = "/submit";
     private string periodLabel = "";
     private string submitterName = "";
     private SubmissionApproval? approval;
@@ -816,8 +835,17 @@
         {
             var template = await TemplateCache.GetPublishedTemplate(submission.ReturnCode);
             templateName = template.Name;
+            moduleCode = template.ModuleCode;
+            moduleWorkspaceHref = PortalSubmissionLinkBuilder.ResolveWorkspaceHref(moduleCode);
+            moduleSubmitHref = PortalSubmissionLinkBuilder.BuildSubmitHref(submission.ReturnCode, moduleCode, submission.ReturnPeriodId);
         }
-        catch { templateName = submission.ReturnCode; }
+        catch
+        {
+            templateName = submission.ReturnCode;
+            moduleCode = null;
+            moduleWorkspaceHref = null;
+            moduleSubmitHref = PortalSubmissionLinkBuilder.BuildSubmitHref(submission.ReturnCode, null, submission.ReturnPeriodId);
+        }
 
         periodLabel = submission.ReturnPeriod is not null
             ? new DateTime(submission.ReturnPeriod.Year, submission.ReturnPeriod.Month, 1).ToString("MMM yyyy")

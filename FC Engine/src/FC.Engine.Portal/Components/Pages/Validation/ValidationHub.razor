@@ -53,16 +53,37 @@ else
          BREADCRUMB HEADER
          ══════════════════════════════════════════════════════════════════ -->
     <PortalPageHeader Breadcrumb="@BreadcrumbItems" BackUrl="@($"/submissions/{_data!.SubmissionId}")">
+        <SecondaryActions>
+            @if (!string.IsNullOrWhiteSpace(_data.ModuleCode))
+            {
+                <span class="portal-badge portal-badge-neutral">@_data.ModuleCode</span>
+            }
+            @if (!string.IsNullOrWhiteSpace(_data.ModuleName))
+            {
+                <span class="portal-badge portal-badge-outline">@_data.ModuleName</span>
+            }
+        </SecondaryActions>
         <PrimaryAction>
-            <button class="portal-btn portal-btn-outline portal-btn-sm portal-vh-print-btn"
-                    @onclick="PrintHub" title="Export PDF validation report">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                    <polyline points="6 9 6 2 18 2 18 9"/>
-                    <path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/>
-                    <rect x="6" y="14" width="12" height="8"/>
-                </svg>
-                Export PDF
-            </button>
+            <div class="portal-vh-header-actions">
+                @if (!string.IsNullOrWhiteSpace(_data.WorkspaceHref))
+                {
+                    <a href="@_data.WorkspaceHref" class="portal-btn portal-btn-outline portal-btn-sm">
+                        Module Workspace
+                    </a>
+                }
+                <a href="@_data.FixSubmissionHref" class="portal-btn portal-btn-primary portal-btn-sm">
+                    Fix This Return
+                </a>
+                <button class="portal-btn portal-btn-outline portal-btn-sm portal-vh-print-btn"
+                        @onclick="PrintHub" title="Export PDF validation report">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                        <polyline points="6 9 6 2 18 2 18 9"/>
+                        <path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/>
+                        <rect x="6" y="14" width="12" height="8"/>
+                    </svg>
+                    Export PDF
+                </button>
+            </div>
         </PrimaryAction>
     </PortalPageHeader>
 
