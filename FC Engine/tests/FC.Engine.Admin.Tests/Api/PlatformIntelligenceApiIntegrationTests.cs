@@ -47,12 +47,14 @@ public sealed class PlatformIntelligenceApiIntegrationTests : IClassFixture<Plat
         using var json = JsonDocument.Parse(payload, JsonOptions);
         TryGetProperty(json.RootElement, "generatedAt", out var generatedAt).Should().BeTrue();
         generatedAt.ValueKind.Should().Be(JsonValueKind.String);
-        TryGetProperty(json.RootElement, "knowledgeGraph", out _).Should().BeTrue();
-        TryGetProperty(json.RootElement, "capital", out _).Should().BeTrue();
-        TryGetProperty(json.RootElement, "sanctions", out _).Should().BeTrue();
-        TryGetProperty(json.RootElement, "resilience", out _).Should().BeTrue();
-        TryGetProperty(json.RootElement, "modelRisk", out _).Should().BeTrue();
+        TryGetProperty(json.RootElement, "hero", out _).Should().BeTrue();
         TryGetProperty(json.RootElement, "refresh", out _).Should().BeTrue();
+        TryGetProperty(json.RootElement, "institutionCount", out var institutionCount).Should().BeTrue();
+        TryGetProperty(json.RootElement, "interventionCount", out var interventionCount).Should().BeTrue();
+        TryGetProperty(json.RootElement, "timelineCount", out var timelineCount).Should().BeTrue();
+        institutionCount.GetInt32().Should().BeGreaterThanOrEqualTo(0);
+        interventionCount.GetInt32().Should().BeGreaterThanOrEqualTo(0);
+        timelineCount.GetInt32().Should().BeGreaterThanOrEqualTo(0);
     }
 
     [Fact]

@@ -16,7 +16,7 @@ namespace FC.Engine.Portal.Services;
 public class OnboardingWizardService
 {
     private const decimal VatRate = 0.075m;
-    private readonly MetadataDbContext _db;
+    private readonly IDbContextFactory<MetadataDbContext> _dbFactory;
     private readonly ITenantOnboardingService _tenantOnboardingService;
     private readonly ISubscriptionService _subscriptionService;
     private readonly ITenantBrandingService _brandingService;
@@ -26,7 +26,7 @@ public class OnboardingWizardService
     private readonly ILogger<OnboardingWizardService> _logger;
 
     public OnboardingWizardService(
-        MetadataDbContext db,
+        IDbContextFactory<MetadataDbContext> dbFactory,
         ITenantOnboardingService tenantOnboardingService,
         ISubscriptionService subscriptionService,
         ITenantBrandingService brandingService,
@@ -35,7 +35,7 @@ public class OnboardingWizardService
         INotificationOrchestrator? notificationOrchestrator = null,
         IAuditLogger? auditLogger = null)
     {
-        _db = db;
+        _dbFactory = dbFactory;
         _tenantOnboardingService = tenantOnboardingService;
         _subscriptionService = subscriptionService;
         _brandingService = brandingService;
@@ -47,7 +47,8 @@ public class OnboardingWizardService
 
     public async Task<OnboardingLookupData> GetLookupData(CancellationToken ct = default)
     {
-        var licences = await _db.LicenceTypes
+        await using var db = await _dbFactory.CreateDbContextAsync();
+        var licences = await db.LicenceTypes
             .AsNoTracking()
             .Where(x => x.IsActive)
             .OrderBy(x => x.DisplayOrder)
@@ -60,7 +61,7 @@ public class OnboardingWizardService
             })
             .ToListAsync(ct);
 
-        var plans = await _db.SubscriptionPlans
+        var plans = await db.SubscriptionPlans
             .AsNoTracking()
             .Where(x => x.IsActive)
             .OrderBy(x => x.DisplayOrder)
@@ -89,6 +90,7 @@ public class OnboardingWizardService
         string? planCode,
         CancellationToken ct = default)
     {
+        await using var db = await _dbFactory.CreateDbContextAsync();
         var normalizedCodes = licenceTypeCodes
             .Where(x => !string.IsNullOrWhiteSpace(x))
             .Select(x => x.Trim())
@@ -106,7 +108,7 @@ public class OnboardingWizardService
             return Array.Empty<OnboardingModuleOption>();
         }
 
-        var matrixRows = await _db.LicenceModuleMatrix
+        var matrixRows = await db.LicenceModuleMatrix
             .AsNoTracking()
             .Include(x => x.LicenceType)
             .Include(x => x.Module)
@@ -122,7 +124,7 @@ public class OnboardingWizardService
             .Distinct()
             .ToList();
 
-        var planPricing = await _db.PlanModulePricing
+        var planPricing = await db.PlanModulePricing
             .AsNoTracking()
             .Where(x => x.PlanId == plan.Id && moduleIds.Contains(x.ModuleId))
             .ToDictionaryAsync(x => x.ModuleId, x => x, ct);
@@ -311,7 +313,8 @@ public class OnboardingWizardService
 
     public async Task<OnboardingChecklistSnapshot?> GetChecklist(Guid tenantId, CancellationToken ct = default)
     {
-        var tenant = await _db.Tenants
+        await using var db = await _dbFactory.CreateDbContextAsync();
+        var tenant = await db.Tenants
             .AsNoTracking()
             .FirstOrDefaultAsync(x => x.TenantId == tenantId, ct);
 
@@ -320,30 +323,30 @@ public class OnboardingWizardService
             return null;
         }
 
-        var institution = await _db.Institutions
+        var institution = await db.Institutions
             .AsNoTracking()
             .Where(x => x.TenantId == tenantId)
             .OrderBy(x => x.Id)
             .FirstOrDefaultAsync(ct);
 
         var branding = tenant.GetBrandingConfig();
-        var usersCount = await _db.InstitutionUsers
+        var usersCount = await db.InstitutionUsers
             .AsNoTracking()
             .CountAsync(x => x.TenantId == tenantId && x.IsActive, ct);
 
-        var hasSubmission = await _db.Submissions
+        var hasSubmission = await db.Submissions
             .AsNoTracking()
             .AnyAsync(x => x.TenantId == tenantId, ct);
 
-        var hasNotificationsConfig = await _db.NotificationPreferences
+        var hasNotificationsConfig = await db.NotificationPreferences
             .AsNoTracking()
             .AnyAsync(x => x.TenantId == tenantId, ct);
 
-        var hasCalendar = await _db.ReturnPeriods
+        var hasCalendar = await db.ReturnPeriods
             .AsNoTracking()
             .AnyAsync(x => x.TenantId == tenantId, ct);
 
-        var hasGuidedTourAudit = await _db.AuditLog
+        var hasGuidedTourAudit = await db.AuditLog
             .AsNoTracking()
             .AnyAsync(x => x.TenantId == tenantId && x.Action == "GUIDED_TOUR_COMPLETED", ct);
 
@@ -504,7 +507,8 @@ public class OnboardingWizardService
         OnboardingWizardRequest request,
         CancellationToken ct)
     {
-        var headOffice = await _db.Institutions
+        await using var db = await _dbFactory.CreateDbContextAsync();
+        var headOffice = await db.Institutions
             .FirstOrDefaultAsync(x => x.Id == headOfficeInstitutionId && x.TenantId == tenantId, ct);
 
         if (headOffice is null)
@@ -518,7 +522,7 @@ public class OnboardingWizardService
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
 
-        var existingBranchNames = await _db.Institutions
+        var existingBranchNames = await db.Institutions
             .Where(x => x.TenantId == tenantId && x.ParentInstitutionId == headOfficeInstitutionId)
             .Select(x => x.InstitutionName)
             .ToListAsync(ct);
@@ -526,7 +530,7 @@ public class OnboardingWizardService
         foreach (var branchName in branchNames.Where(x => !existingBranchNames.Contains(x, StringComparer.OrdinalIgnoreCase)))
         {
             var branchCode = BuildBranchCode(headOffice.InstitutionCode, branchName);
-            _db.Institutions.Add(new Institution
+            db.Institutions.Add(new Institution
             {
                 TenantId = tenantId,
                 JurisdictionId = headOffice.JurisdictionId,
@@ -542,7 +546,7 @@ public class OnboardingWizardService
             });
         }
 
-        await _db.SaveChangesAsync(ct);
+        await db.SaveChangesAsync(ct);
     }
 
     private async Task<List<int>> CreateAdditionalUsers(
@@ -586,7 +590,8 @@ public class OnboardingWizardService
 
     private async Task ApplyWorkflowConfiguration(int institutionId, OnboardingWizardRequest request, CancellationToken ct)
     {
-        var institution = await _db.Institutions
+        await using var db = await _dbFactory.CreateDbContextAsync();
+        var institution = await db.Institutions
             .FirstOrDefaultAsync(x => x.Id == institutionId, ct);
         if (institution is null)
         {
@@ -603,7 +608,7 @@ public class OnboardingWizardService
         };
 
         institution.SettingsJson = JsonSerializer.Serialize(workflowSettings);
-        await _db.SaveChangesAsync(ct);
+        await db.SaveChangesAsync(ct);
     }
 
     private async Task ApplyBranding(Guid tenantId, OnboardingWizardRequest request, CancellationToken ct)
@@ -635,7 +640,8 @@ public class OnboardingWizardService
 
     private async Task EnsurePeriodsForActivatedModules(Guid tenantId, CancellationToken ct)
     {
-        var activeModuleIds = await _db.SubscriptionModules
+        await using var db = await _dbFactory.CreateDbContextAsync();
+        var activeModuleIds = await db.SubscriptionModules
             .AsNoTracking()
             .Where(x => x.Subscription != null
                         && x.Subscription.TenantId == tenantId
@@ -649,7 +655,7 @@ public class OnboardingWizardService
             return;
         }
 
-        var existingModuleIds = await _db.ReturnPeriods
+        var existingModuleIds = await db.ReturnPeriods
             .AsNoTracking()
             .Where(x => x.TenantId == tenantId && x.ModuleId != null)
             .Select(x => x.ModuleId!.Value)
@@ -665,7 +671,7 @@ public class OnboardingWizardService
             return;
         }
 
-        var modules = await _db.Modules
+        var modules = await db.Modules
             .AsNoTracking()
             .Where(x => missingModuleIds.Contains(x.Id))
             .ToListAsync(ct);
@@ -680,7 +686,7 @@ public class OnboardingWizardService
                 var frequency = NormalizeFrequency(module.DefaultFrequency);
                 var deadline = ComputeDeadline(date, frequency, module.DeadlineOffsetDays);
 
-                _db.ReturnPeriods.Add(new ReturnPeriod
+                db.ReturnPeriods.Add(new ReturnPeriod
                 {
                     TenantId = tenantId,
                     ModuleId = module.Id,
@@ -698,7 +704,7 @@ public class OnboardingWizardService
             }
         }
 
-        await _db.SaveChangesAsync(ct);
+        await db.SaveChangesAsync(ct);
     }
 
     private async Task NotifyInvitedUsers(Guid tenantId, IReadOnlyCollection<int> invitedUserIds, CancellationToken ct)
@@ -722,11 +728,12 @@ public class OnboardingWizardService
 
     private async Task<SubscriptionPlan?> ResolvePlan(string? planCode, CancellationToken ct)
     {
+        await using var db = await _dbFactory.CreateDbContextAsync();
         var effectivePlan = string.IsNullOrWhiteSpace(planCode)
             ? "STARTER"
             : planCode.Trim().ToUpperInvariant();
 
-        return await _db.SubscriptionPlans
+        return await db.SubscriptionPlans
             .AsNoTracking()
             .FirstOrDefaultAsync(x => x.IsActive && x.PlanCode == effectivePlan, ct);
     }

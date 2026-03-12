@@ -9,7 +9,7 @@ namespace FC.Engine.Admin.Services;
 
 public class TenantManagementService
 {
-    private readonly MetadataDbContext _db;
+    private readonly IDbContextFactory<MetadataDbContext> _dbFactory;
     private readonly ITenantOnboardingService _onboardingService;
     private readonly IEntitlementService _entitlementService;
     private readonly SubscriptionModuleEntitlementBootstrapService _subscriptionModuleEntitlementBootstrapService;
@@ -17,14 +17,14 @@ public class TenantManagementService
     private readonly ITenantContext _tenantContext;
 
     public TenantManagementService(
-        MetadataDbContext db,
+        IDbContextFactory<MetadataDbContext> dbFactory,
         ITenantOnboardingService onboardingService,
         IEntitlementService entitlementService,
         SubscriptionModuleEntitlementBootstrapService subscriptionModuleEntitlementBootstrapService,
         IAuditLogger auditLogger,
         ITenantContext tenantContext)
     {
-        _db = db;
+        _dbFactory = dbFactory;
         _onboardingService = onboardingService;
         _entitlementService = entitlementService;
         _subscriptionModuleEntitlementBootstrapService = subscriptionModuleEntitlementBootstrapService;
@@ -34,19 +34,22 @@ public class TenantManagementService
 
     public async Task<List<Tenant>> GetAllTenantsAsync(CancellationToken ct = default)
     {
-        return await _db.Tenants
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+        return await db.Tenants
             .OrderBy(t => t.TenantName)
             .ToListAsync(ct);
     }
 
     public async Task<Tenant?> GetTenantByIdAsync(Guid tenantId, CancellationToken ct = default)
     {
-        return await _db.Tenants.FindAsync(new object[] { tenantId }, ct);
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+        return await db.Tenants.FindAsync(new object[] { tenantId }, ct);
     }
 
     public async Task<TenantDashboardStats> GetDashboardStatsAsync(CancellationToken ct = default)
     {
-        var tenants = await _db.Tenants.ToListAsync(ct);
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+        var tenants = await db.Tenants.ToListAsync(ct);
         return new TenantDashboardStats
         {
             TotalTenants = tenants.Count,
@@ -63,43 +66,45 @@ public class TenantManagementService
 
     public async Task ActivateTenantAsync(Guid tenantId, CancellationToken ct = default)
     {
-        var tenant = await _db.Tenants.FindAsync(new object[] { tenantId }, ct)
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+        var tenant = await db.Tenants.FindAsync(new object[] { tenantId }, ct)
             ?? throw new InvalidOperationException("Tenant not found");
         tenant.Activate();
-        await _db.SaveChangesAsync(ct);
+        await db.SaveChangesAsync(ct);
         await LogPlatformAction("TenantActivated", tenantId, ct);
     }
 
     public async Task SuspendTenantAsync(Guid tenantId, CancellationToken ct = default)
     {
-        var tenant = await _db.Tenants.FindAsync(new object[] { tenantId }, ct)
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+        var tenant = await db.Tenants.FindAsync(new object[] { tenantId }, ct)
             ?? throw new InvalidOperationException("Tenant not found");
         tenant.Suspend("Admin action");
-        await _db.SaveChangesAsync(ct);
+        await db.SaveChangesAsync(ct);
         await LogPlatformAction("TenantSuspended", tenantId, ct);
     }
 
     public async Task ReactivateTenantAsync(Guid tenantId, CancellationToken ct = default)
     {
-        var tenant = await _db.Tenants.FindAsync(new object[] { tenantId }, ct)
+        var tenant = await db.Tenants.FindAsync(new object[] { tenantId }, ct)
             ?? throw new InvalidOperationException("Tenant not found");
         tenant.Reactivate();
-        await _db.SaveChangesAsync(ct);
+        await db.SaveChangesAsync(ct);
         await LogPlatformAction("TenantReactivated", tenantId, ct);
     }
 
     public async Task DeactivateTenantAsync(Guid tenantId, CancellationToken ct = default)
     {
-        var tenant = await _db.Tenants.FindAsync(new object[] { tenantId }, ct)
+        var tenant = await db.Tenants.FindAsync(new object[] { tenantId }, ct)
             ?? throw new InvalidOperationException("Tenant not found");
         tenant.Deactivate();
-        await _db.SaveChangesAsync(ct);
+        await db.SaveChangesAsync(ct);
         await LogPlatformAction("TenantDeactivated", tenantId, ct);
     }
 
     public async Task<List<TenantLicenceType>> GetTenantLicencesAsync(Guid tenantId, CancellationToken ct = default)
     {
-        return await _db.TenantLicenceTypes
+        return await db.TenantLicenceTypes
             .Include(tlt => tlt.LicenceType)
             .Where(tlt => tlt.TenantId == tenantId)
             .OrderByDescending(tlt => tlt.IsActive)
@@ -121,14 +126,14 @@ public class TenantManagementService
         DateTime? effectiveDate = null,
         CancellationToken ct = default)
     {
-        _ = await _db.Tenants.FindAsync(new object[] { tenantId }, ct)
+        _ = await db.Tenants.FindAsync(new object[] { tenantId }, ct)
             ?? throw new InvalidOperationException("Tenant not found");
 
-        var licenceType = await _db.LicenceTypes
+        var licenceType = await db.LicenceTypes
             .FirstOrDefaultAsync(x => x.Id == licenceTypeId && x.IsActive, ct)
             ?? throw new InvalidOperationException("Licence type not found or inactive");
 
-        var tenantLicence = await _db.TenantLicenceTypes
+        var tenantLicence = await db.TenantLicenceTypes
             .FirstOrDefaultAsync(x => x.TenantId == tenantId && x.LicenceTypeId == licenceTypeId, ct);
 
         var changed = false;
@@ -142,7 +147,7 @@ public class TenantManagementService
                 EffectiveDate = effectiveDate ?? DateTime.UtcNow.Date,
                 IsActive = true
             };
-            _db.TenantLicenceTypes.Add(tenantLicence);
+            db.TenantLicenceTypes.Add(tenantLicence);
             changed = true;
         }
         else
@@ -171,7 +176,7 @@ public class TenantManagementService
         var reconciliation = new SubscriptionModuleEntitlementBootstrapResult();
         if (changed)
         {
-            await _db.SaveChangesAsync(ct);
+            await db.SaveChangesAsync(ct);
             reconciliation = await _subscriptionModuleEntitlementBootstrapService.EnsureIncludedModulesForTenantAsync(tenantId, ct);
             await _entitlementService.InvalidateCache(tenantId);
             await LogPlatformAction("TenantLicenceAssigned", tenantId, ct);
@@ -187,13 +192,13 @@ public class TenantManagementService
 
     public async Task<TenantLicenceChangeResult> RemoveLicenceAsync(Guid tenantId, int licenceTypeId, CancellationToken ct = default)
     {
-        var tenantLicence = await _db.TenantLicenceTypes
+        var tenantLicence = await db.TenantLicenceTypes
             .FirstOrDefaultAsync(x => x.TenantId == tenantId && x.LicenceTypeId == licenceTypeId && x.IsActive, ct)
             ?? throw new InvalidOperationException("Active tenant licence not found");
 
         tenantLicence.IsActive = false;
         tenantLicence.ExpiryDate = tenantLicence.ExpiryDate ?? DateTime.UtcNow.Date;
-        await _db.SaveChangesAsync(ct);
+        await db.SaveChangesAsync(ct);
 
         var reconciliation = await _subscriptionModuleEntitlementBootstrapService.EnsureIncludedModulesForTenantAsync(tenantId, ct);
         await _entitlementService.InvalidateCache(tenantId);
@@ -210,7 +215,7 @@ public class TenantManagementService
         Guid tenantId,
         CancellationToken ct = default)
     {
-        _ = await _db.Tenants.FindAsync(new object[] { tenantId }, ct)
+        _ = await db.Tenants.FindAsync(new object[] { tenantId }, ct)
             ?? throw new InvalidOperationException("Tenant not found");
 
         var reconciliation = await _subscriptionModuleEntitlementBootstrapService.EnsureIncludedModulesForTenantAsync(tenantId, ct);
@@ -233,7 +238,7 @@ public class TenantManagementService
             return new TenantModuleReconciliationBatchResult();
         }
 
-        var existingTenantIds = await _db.Tenants
+        var existingTenantIds = await db.Tenants
             .AsNoTracking()
             .Where(x => requestedTenantIds.Contains(x.TenantId))
             .Select(x => x.TenantId)
@@ -270,7 +275,7 @@ public class TenantManagementService
 
     public async Task<List<LicenceType>> GetAllLicenceTypesAsync(CancellationToken ct = default)
     {
-        return await _db.LicenceTypes
+        return await db.LicenceTypes
             .Where(lt => lt.IsActive)
             .OrderBy(lt => lt.DisplayOrder)
             .ToListAsync(ct);
@@ -278,7 +283,7 @@ public class TenantManagementService
 
     public async Task<List<Module>> GetAllModulesAsync(CancellationToken ct = default)
     {
-        return await _db.Modules
+        return await db.Modules
             .Where(m => m.IsActive)
             .OrderBy(m => m.DisplayOrder)
             .ToListAsync(ct);
@@ -286,7 +291,7 @@ public class TenantManagementService
 
     public async Task<string?> GetTenantName(Guid tenantId, CancellationToken ct = default)
     {
-        return await _db.Tenants
+        return await db.Tenants
             .AsNoTracking()
             .Where(t => t.TenantId == tenantId)
             .Select(t => t.TenantName)
@@ -299,15 +304,15 @@ public class TenantManagementService
         bool activate,
         CancellationToken ct)
     {
-        _ = await _db.Tenants.FindAsync(new object[] { tenantId }, ct)
+        _ = await db.Tenants.FindAsync(new object[] { tenantId }, ct)
             ?? throw new InvalidOperationException("Tenant not found");
 
-        var licenceType = await _db.LicenceTypes
+        var licenceType = await db.LicenceTypes
             .AsNoTracking()
             .FirstOrDefaultAsync(x => x.Id == licenceTypeId, ct)
             ?? throw new InvalidOperationException("Licence type not found");
 
-        var subscription = await _db.Subscriptions
+        var subscription = await db.Subscriptions
             .AsNoTracking()
             .Where(x => x.TenantId == tenantId)
             .Where(x => x.Status != SubscriptionStatus.Cancelled && x.Status != SubscriptionStatus.Expired)
@@ -316,7 +321,7 @@ public class TenantManagementService
             .FirstOrDefaultAsync(ct)
             ?? throw new InvalidOperationException("Active subscription not found");
 
-        var currentLicenceIds = await _db.TenantLicenceTypes
+        var currentLicenceIds = await db.TenantLicenceTypes
             .AsNoTracking()
             .Where(x => x.TenantId == tenantId && x.IsActive)
             .Select(x => x.LicenceTypeId)
@@ -334,16 +339,16 @@ public class TenantManagementService
             targetLicenceIds.Remove(licenceTypeId);
         }
 
-        var pricingRows = await _db.PlanModulePricing
+        var pricingRows = await db.PlanModulePricing
             .AsNoTracking()
             .Include(x => x.Module)
             .Where(x => x.PlanId == subscription.PlanId && x.Module != null && x.Module.IsActive)
             .ToListAsync(ct);
 
         var eligibleModuleIds = await (
-            from licenceModule in _db.LicenceModuleMatrix.AsNoTracking()
-            join pricing in _db.PlanModulePricing.AsNoTracking() on licenceModule.ModuleId equals pricing.ModuleId
-            join module in _db.Modules.AsNoTracking() on licenceModule.ModuleId equals module.Id
+            from licenceModule in db.LicenceModuleMatrix.AsNoTracking()
+            join pricing in db.PlanModulePricing.AsNoTracking() on licenceModule.ModuleId equals pricing.ModuleId
+            join module in db.Modules.AsNoTracking() on licenceModule.ModuleId equals module.Id
             where targetLicenceIds.Contains(licenceModule.LicenceTypeId)
                   && pricing.PlanId == subscription.PlanId
                   && module.IsActive
@@ -356,7 +361,7 @@ public class TenantManagementService
             .Where(x => eligibleModuleIds.Contains(x.ModuleId))
             .ToList();
 
-        var subscriptionModules = await _db.SubscriptionModules
+        var subscriptionModules = await db.SubscriptionModules
             .AsNoTracking()
             .Include(x => x.Module)
             .Where(x => x.SubscriptionId == subscription.Id)

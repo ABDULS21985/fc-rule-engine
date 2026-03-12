@@ -6,23 +6,24 @@ namespace FC.Engine.Admin.Services;
 
 public class JurisdictionManagementService
 {
-    private readonly MetadataDbContext _db;
+    private readonly IDbContextFactory<MetadataDbContext> _dbFactory;
 
-    public JurisdictionManagementService(MetadataDbContext db) => _db = db;
+    public JurisdictionManagementService(IDbContextFactory<MetadataDbContext> dbFactory) => _dbFactory = dbFactory;
 
     public async Task<List<JurisdictionListItem>> GetAllAsync(CancellationToken ct = default)
     {
-        var jurisdictions = await _db.Jurisdictions
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+        var jurisdictions = await db.Jurisdictions
             .OrderBy(j => j.Id)
             .ToListAsync(ct);
 
-        var moduleCounts = await _db.Modules
+        var moduleCounts = await db.Modules
             .Where(m => m.JurisdictionId != null)
             .GroupBy(m => m.JurisdictionId!.Value)
             .Select(g => new { JurisdictionId = g.Key, Count = g.Count() })
             .ToDictionaryAsync(x => x.JurisdictionId, x => x.Count, ct);
 
-        var institutionCounts = await _db.Institutions
+        var institutionCounts = await db.Institutions
             .GroupBy(i => i.JurisdictionId)
             .Select(g => new { JurisdictionId = g.Key, Count = g.Count() })
             .ToDictionaryAsync(x => x.JurisdictionId, x => x.Count, ct);
@@ -46,20 +47,23 @@ public class JurisdictionManagementService
 
     public async Task<Jurisdiction?> GetByIdAsync(int id, CancellationToken ct = default)
     {
-        return await _db.Jurisdictions.FindAsync(new object[] { id }, ct);
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+        return await db.Jurisdictions.FindAsync(new object[] { id }, ct);
     }
 
     public async Task ToggleActiveAsync(int id, CancellationToken ct = default)
     {
-        var jurisdiction = await _db.Jurisdictions.FindAsync(new object[] { id }, ct)
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+        var jurisdiction = await db.Jurisdictions.FindAsync(new object[] { id }, ct)
             ?? throw new InvalidOperationException("Jurisdiction not found.");
         jurisdiction.IsActive = !jurisdiction.IsActive;
-        await _db.SaveChangesAsync(ct);
+        await db.SaveChangesAsync(ct);
     }
 
     public async Task UpdateAsync(int id, JurisdictionUpdateRequest request, CancellationToken ct = default)
     {
-        var jurisdiction = await _db.Jurisdictions.FindAsync(new object[] { id }, ct)
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+        var jurisdiction = await db.Jurisdictions.FindAsync(new object[] { id }, ct)
             ?? throw new InvalidOperationException("Jurisdiction not found.");
 
         jurisdiction.CountryName = request.CountryName;
@@ -70,12 +74,13 @@ public class JurisdictionManagementService
         jurisdiction.DataProtectionLaw = request.DataProtectionLaw;
         jurisdiction.DataResidencyRegion = request.DataResidencyRegion;
 
-        await _db.SaveChangesAsync(ct);
+        await db.SaveChangesAsync(ct);
     }
 
     public async Task<JurisdictionDashboardStats> GetStatsAsync(CancellationToken ct = default)
     {
-        var jurisdictions = await _db.Jurisdictions.ToListAsync(ct);
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+        var jurisdictions = await db.Jurisdictions.ToListAsync(ct);
         return new JurisdictionDashboardStats
         {
             Total = jurisdictions.Count,
@@ -88,7 +93,8 @@ public class JurisdictionManagementService
 
     public async Task<List<JurisdictionFxRate>> GetFxRatesAsync(CancellationToken ct = default)
     {
-        return await _db.JurisdictionFxRates
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+        return await db.JurisdictionFxRates
             .OrderByDescending(r => r.RateDate)
             .ThenBy(r => r.BaseCurrency)
             .ThenBy(r => r.QuoteCurrency)
@@ -97,7 +103,8 @@ public class JurisdictionManagementService
 
     public async Task UpsertFxRateAsync(JurisdictionFxRate rate, CancellationToken ct = default)
     {
-        var existing = await _db.JurisdictionFxRates
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+        var existing = await db.JurisdictionFxRates
             .FirstOrDefaultAsync(r =>
                 r.BaseCurrency == rate.BaseCurrency &&
                 r.QuoteCurrency == rate.QuoteCurrency &&
@@ -110,19 +117,20 @@ public class JurisdictionManagementService
         }
         else
         {
-            _db.JurisdictionFxRates.Add(rate);
+            db.JurisdictionFxRates.Add(rate);
         }
 
-        await _db.SaveChangesAsync(ct);
+        await db.SaveChangesAsync(ct);
     }
 
     public async Task DeleteFxRateAsync(int id, CancellationToken ct = default)
     {
-        var rate = await _db.JurisdictionFxRates.FindAsync(new object[] { id }, ct);
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+        var rate = await db.JurisdictionFxRates.FindAsync(new object[] { id }, ct);
         if (rate is not null)
         {
-            _db.JurisdictionFxRates.Remove(rate);
-            await _db.SaveChangesAsync(ct);
+            db.JurisdictionFxRates.Remove(rate);
+            await db.SaveChangesAsync(ct);
         }
     }
 }

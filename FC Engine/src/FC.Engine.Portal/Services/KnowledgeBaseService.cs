@@ -6,11 +6,11 @@ namespace FC.Engine.Portal.Services;
 
 public class KnowledgeBaseService
 {
-    private readonly MetadataDbContext _db;
+    private readonly IDbContextFactory<MetadataDbContext> _dbFactory;
 
-    public KnowledgeBaseService(MetadataDbContext db)
+    public KnowledgeBaseService(IDbContextFactory<MetadataDbContext> dbFactory)
     {
-        _db = db;
+        _dbFactory = dbFactory;
     }
 
     public async Task<IReadOnlyList<KnowledgeBaseArticleView>> Search(
@@ -22,11 +22,12 @@ public class KnowledgeBaseService
     {
         await EnsureSeedData(ct);
 
+        await using var db = await _dbFactory.CreateDbContextAsync();
         var normalizedQuery = (query ?? string.Empty).Trim();
         var normalizedModule = Normalize(moduleCode);
         var normalizedCategory = Normalize(category);
 
-        var articlesQuery = _db.KnowledgeBaseArticles
+        var articlesQuery = db.KnowledgeBaseArticles
             .AsNoTracking()
             .Where(x => x.IsPublished);
 
@@ -71,7 +72,8 @@ public class KnowledgeBaseService
     {
         await EnsureSeedData(ct);
 
-        return await _db.KnowledgeBaseArticles
+        await using var db = await _dbFactory.CreateDbContextAsync();
+        return await db.KnowledgeBaseArticles
             .AsNoTracking()
             .Where(x => x.IsPublished && x.ModuleCode != null)
             .Select(x => x.ModuleCode!)
@@ -84,7 +86,8 @@ public class KnowledgeBaseService
     {
         await EnsureSeedData(ct);
 
-        return await _db.KnowledgeBaseArticles
+        await using var db = await _dbFactory.CreateDbContextAsync();
+        return await db.KnowledgeBaseArticles
             .AsNoTracking()
             .Where(x => x.IsPublished)
             .Select(x => x.Category)
@@ -95,7 +98,8 @@ public class KnowledgeBaseService
 
     private async Task EnsureSeedData(CancellationToken ct)
     {
-        if (await _db.KnowledgeBaseArticles.AnyAsync(ct))
+        await using var db = await _dbFactory.CreateDbContextAsync();
+        if (await db.KnowledgeBaseArticles.AnyAsync(ct))
         {
             return;
         }
@@ -166,8 +170,8 @@ public class KnowledgeBaseService
             }
         };
 
-        _db.KnowledgeBaseArticles.AddRange(seed);
-        await _db.SaveChangesAsync(ct);
+        db.KnowledgeBaseArticles.AddRange(seed);
+        await db.SaveChangesAsync(ct);
     }
 
     private static string? Normalize(string? value)

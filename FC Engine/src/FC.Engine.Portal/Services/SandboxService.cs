@@ -16,7 +16,7 @@ namespace FC.Engine.Portal.Services;
 
 public class SandboxService
 {
-    private readonly MetadataDbContext _db;
+    private readonly IDbContextFactory<MetadataDbContext> _dbFactory;
     private readonly ITenantOnboardingService _tenantOnboardingService;
     private readonly ISubscriptionService _subscriptionService;
     private readonly ITenantBrandingService _brandingService;
@@ -27,7 +27,7 @@ public class SandboxService
     private readonly ILogger<SandboxService> _logger;
 
     public SandboxService(
-        MetadataDbContext db,
+        IDbContextFactory<MetadataDbContext> dbFactory,
         ITenantOnboardingService tenantOnboardingService,
         ISubscriptionService subscriptionService,
         ITenantBrandingService brandingService,
@@ -37,7 +37,7 @@ public class SandboxService
         ILogger<SandboxService> logger,
         INotificationOrchestrator? notificationOrchestrator = null)
     {
-        _db = db;
+        _dbFactory = dbFactory;
         _tenantOnboardingService = tenantOnboardingService;
         _subscriptionService = subscriptionService;
         _brandingService = brandingService;
@@ -50,7 +50,8 @@ public class SandboxService
 
     public async Task<SandboxContext?> GetContext(Guid tenantId, CancellationToken ct = default)
     {
-        var tenant = await _db.Tenants
+        await using var db = await _dbFactory.CreateDbContextAsync();
+        var tenant = await db.Tenants
             .AsNoTracking()
             .FirstOrDefaultAsync(x => x.TenantId == tenantId, ct);
         if (tenant is null)
@@ -84,9 +85,10 @@ public class SandboxService
 
     public async Task<SandboxProvisionResult> CreateSandbox(Guid productionTenantId, CancellationToken ct = default)
     {
+        await using var db = await _dbFactory.CreateDbContextAsync();
         var result = new SandboxProvisionResult();
 
-        var productionTenant = await _db.Tenants
+        var productionTenant = await db.Tenants
             .AsNoTracking()
             .FirstOrDefaultAsync(x => x.TenantId == productionTenantId, ct);
         if (productionTenant is null)
@@ -96,13 +98,13 @@ public class SandboxService
         }
 
         var sandboxSlug = BuildSandboxSlug(productionTenant.TenantSlug);
-        var existingSandbox = await _db.Tenants
+        var existingSandbox = await db.Tenants
             .AsNoTracking()
             .FirstOrDefaultAsync(x => x.TenantSlug == sandboxSlug, ct);
 
         if (existingSandbox is null)
         {
-            var licenceCodes = await _db.TenantLicenceTypes
+            var licenceCodes = await db.TenantLicenceTypes
                 .AsNoTracking()
                 .Where(x => x.TenantId == productionTenantId && x.IsActive && x.LicenceType != null)
                 .Select(x => x.LicenceType!.Code)
@@ -115,14 +117,14 @@ public class SandboxService
                 return result;
             }
 
-            var activePlanCode = await _db.Subscriptions
+            var activePlanCode = await db.Subscriptions
                 .AsNoTracking()
                 .Where(x => x.TenantId == productionTenantId && x.Status != SubscriptionStatus.Cancelled && x.Plan != null)
                 .OrderByDescending(x => x.CreatedAt)
                 .Select(x => x.Plan!.PlanCode)
                 .FirstOrDefaultAsync(ct) ?? "STARTER";
 
-            var productionInstitution = await _db.Institutions
+            var productionInstitution = await db.Institutions
                 .AsNoTracking()
                 .Where(x => x.TenantId == productionTenantId)
                 .OrderBy(x => x.EntityType)
@@ -135,7 +137,7 @@ public class SandboxService
                 return result;
             }
 
-            var productionAdmin = await _db.InstitutionUsers
+            var productionAdmin = await db.InstitutionUsers
                 .AsNoTracking()
                 .Where(x => x.TenantId == productionTenantId && x.Role == InstitutionRole.Admin && x.IsActive)
                 .OrderBy(x => x.Id)
@@ -216,7 +218,8 @@ public class SandboxService
 
     public async Task ResetSandbox(Guid sandboxTenantId, CancellationToken ct = default)
     {
-        var sandbox = await _db.Tenants
+        await using var db = await _dbFactory.CreateDbContextAsync();
+        var sandbox = await db.Tenants
             .AsNoTracking()
             .FirstOrDefaultAsync(x => x.TenantId == sandboxTenantId, ct);
         if (sandbox is null || sandbox.TenantType != TenantType.Sandbox)
@@ -224,7 +227,7 @@ public class SandboxService
             throw new InvalidOperationException("Only sandbox tenants can be reset.");
         }
 
-        var submissions = await _db.Submissions
+        var submissions = await db.Submissions
             .AsNoTracking()
             .Where(x => x.TenantId == sandboxTenantId)
             .Select(x => new { x.Id, x.ReturnCode })
@@ -233,7 +236,7 @@ public class SandboxService
         var submissionIds = submissions.Select(x => x.Id).ToList();
         if (submissionIds.Count > 0)
         {
-            var templateTables = await _db.ReturnTemplates
+            var templateTables = await db.ReturnTemplates
                 .AsNoTracking()
                 .Where(x => submissions.Select(s => s.ReturnCode).Contains(x.ReturnCode))
                 .ToDictionaryAsync(x => x.ReturnCode, x => x.PhysicalTableName, StringComparer.OrdinalIgnoreCase, ct);
@@ -245,23 +248,23 @@ public class SandboxService
                 await conn.ExecuteAsync(new CommandDefinition(sql, new { submissionIds, tenantId = sandboxTenantId }, cancellationToken: ct));
             }
 
-            var reportIds = await _db.ValidationReports
+            var reportIds = await db.ValidationReports
                 .Where(x => x.TenantId == sandboxTenantId)
                 .Select(x => x.Id)
                 .ToListAsync(ct);
 
             if (reportIds.Count > 0)
             {
-                await _db.ValidationErrors
+                await db.ValidationErrors
                     .Where(x => reportIds.Contains(x.ValidationReportId))
                     .ExecuteDeleteAsync(ct);
             }
 
-            await _db.ValidationReports
+            await db.ValidationReports
                 .Where(x => x.TenantId == sandboxTenantId)
                 .ExecuteDeleteAsync(ct);
 
-            await _db.Submissions
+            await db.Submissions
                 .Where(x => x.TenantId == sandboxTenantId)
                 .ExecuteDeleteAsync(ct);
         }
@@ -271,7 +274,8 @@ public class SandboxService
 
     public async Task LoadSampleData(Guid sandboxTenantId, CancellationToken ct = default)
     {
-        var tenant = await _db.Tenants
+        await using var db = await _dbFactory.CreateDbContextAsync();
+        var tenant = await db.Tenants
             .AsNoTracking()
             .FirstOrDefaultAsync(x => x.TenantId == sandboxTenantId, ct);
         if (tenant is null || tenant.TenantType != TenantType.Sandbox)
@@ -279,7 +283,7 @@ public class SandboxService
             throw new InvalidOperationException("Sample data can only be loaded for sandbox tenants.");
         }
 
-        var institution = await _db.Institutions
+        var institution = await db.Institutions
             .AsNoTracking()
             .Where(x => x.TenantId == sandboxTenantId)
             .OrderBy(x => x.EntityType)
@@ -291,7 +295,7 @@ public class SandboxService
             return;
         }
 
-        var activeModuleIds = await _db.SubscriptionModules
+        var activeModuleIds = await db.SubscriptionModules
             .AsNoTracking()
             .Where(x => x.IsActive && x.Subscription != null && x.Subscription.TenantId == sandboxTenantId)
             .Select(x => x.ModuleId)
@@ -303,7 +307,7 @@ public class SandboxService
             return;
         }
 
-        var periodsByModule = await _db.ReturnPeriods
+        var periodsByModule = await db.ReturnPeriods
             .AsNoTracking()
             .Where(x => x.TenantId == sandboxTenantId && x.ModuleId != null && activeModuleIds.Contains(x.ModuleId.Value))
             .GroupBy(x => x.ModuleId!.Value)
@@ -312,7 +316,7 @@ public class SandboxService
                 x => x.OrderByDescending(p => p.ReportingDate).ToList(),
                 ct);
 
-        var templates = await _db.ReturnTemplates
+        var templates = await db.ReturnTemplates
             .AsNoTracking()
             .Where(x => x.ModuleId != null && activeModuleIds.Contains(x.ModuleId.Value))
             .OrderBy(x => x.ModuleId)
@@ -320,7 +324,7 @@ public class SandboxService
             .ToListAsync(ct);
 
         var templateIds = templates.Select(x => x.Id).ToList();
-        var versions = await _db.TemplateVersions
+        var versions = await db.TemplateVersions
             .AsNoTracking()
             .Where(x => templateIds.Contains(x.TemplateId))
             .Include(x => x.Fields)
@@ -333,7 +337,7 @@ public class SandboxService
                 x => x.Key,
                 x => x.OrderByDescending(v => v.VersionNumber).First());
 
-        var moduleLookup = await _db.Modules
+        var moduleLookup = await db.Modules
             .AsNoTracking()
             .Where(x => activeModuleIds.Contains(x.Id))
             .ToDictionaryAsync(x => x.Id, ct);
@@ -365,8 +369,8 @@ public class SandboxService
                 ApprovalRequired = false
             };
 
-            _db.Submissions.Add(submission);
-            await _db.SaveChangesAsync(ct);
+            db.Submissions.Add(submission);
+            await db.SaveChangesAsync(ct);
 
             var sampleRows = BuildSampleRows(module, template.StructuralCategory, version.Fields, version.ItemCodes);
             foreach (var sampleRow in sampleRows)
@@ -381,14 +385,14 @@ public class SandboxService
             }
 
             submission.ParsedDataJson = JsonSerializer.Serialize(BuildSummaryJson(version.Fields, sampleRows));
-            _db.ValidationReports.Add(new ValidationReport
+            db.ValidationReports.Add(new ValidationReport
             {
                 TenantId = sandboxTenantId,
                 SubmissionId = submission.Id,
                 CreatedAt = DateTime.UtcNow,
                 FinalizedAt = DateTime.UtcNow
             });
-            await _db.SaveChangesAsync(ct);
+            await db.SaveChangesAsync(ct);
         }
     }
 
@@ -400,7 +404,8 @@ public class SandboxService
 
     private async Task CopyModuleActivation(Guid sourceTenantId, Guid targetTenantId, CancellationToken ct)
     {
-        var sourceModules = await _db.SubscriptionModules
+        await using var db = await _dbFactory.CreateDbContextAsync();
+        var sourceModules = await db.SubscriptionModules
             .AsNoTracking()
             .Where(x => x.IsActive && x.Subscription != null && x.Subscription.TenantId == sourceTenantId && x.Module != null)
             .Select(x => x.Module!.ModuleCode)
@@ -422,14 +427,15 @@ public class SandboxService
 
     private async Task CopyInstitutionSettings(Guid sourceTenantId, Guid targetTenantId, CancellationToken ct)
     {
-        var source = await _db.Institutions
+        await using var db = await _dbFactory.CreateDbContextAsync();
+        var source = await db.Institutions
             .AsNoTracking()
             .Where(x => x.TenantId == sourceTenantId)
             .OrderBy(x => x.EntityType)
             .ThenBy(x => x.Id)
             .FirstOrDefaultAsync(ct);
 
-        var target = await _db.Institutions
+        var target = await db.Institutions
             .FirstOrDefaultAsync(x => x.TenantId == targetTenantId, ct);
 
         if (source is null || target is null)
@@ -443,19 +449,20 @@ public class SandboxService
         target.ContactEmail = source.ContactEmail;
         target.ContactPhone = source.ContactPhone;
         target.SubscriptionTier = source.SubscriptionTier;
-        await _db.SaveChangesAsync(ct);
+        await db.SaveChangesAsync(ct);
     }
 
     private async Task CopyUsers(Guid sourceTenantId, Guid targetTenantId, CancellationToken ct)
     {
-        var sourceInstitution = await _db.Institutions
+        await using var db = await _dbFactory.CreateDbContextAsync();
+        var sourceInstitution = await db.Institutions
             .AsNoTracking()
             .Where(x => x.TenantId == sourceTenantId)
             .OrderBy(x => x.EntityType)
             .ThenBy(x => x.Id)
             .FirstOrDefaultAsync(ct);
 
-        var targetInstitution = await _db.Institutions
+        var targetInstitution = await db.Institutions
             .AsNoTracking()
             .Where(x => x.TenantId == targetTenantId)
             .OrderBy(x => x.EntityType)
@@ -467,13 +474,13 @@ public class SandboxService
             return;
         }
 
-        var existingTargetEmails = await _db.InstitutionUsers
+        var existingTargetEmails = await db.InstitutionUsers
             .AsNoTracking()
             .Where(x => x.TenantId == targetTenantId)
             .Select(x => x.Email)
             .ToListAsync(ct);
 
-        var usersToClone = await _db.InstitutionUsers
+        var usersToClone = await db.InstitutionUsers
             .AsNoTracking()
             .Where(x => x.TenantId == sourceTenantId && x.InstitutionId == sourceInstitution.Id && x.IsActive)
             .OrderBy(x => x.Id)
@@ -508,14 +515,15 @@ public class SandboxService
 
     private async Task CopyPeriods(Guid sourceTenantId, Guid targetTenantId, CancellationToken ct)
     {
-        var targetModuleIds = await _db.SubscriptionModules
+        await using var db = await _dbFactory.CreateDbContextAsync();
+        var targetModuleIds = await db.SubscriptionModules
             .AsNoTracking()
             .Where(x => x.IsActive && x.Subscription != null && x.Subscription.TenantId == targetTenantId)
             .Select(x => x.ModuleId)
             .Distinct()
             .ToListAsync(ct);
 
-        var sourcePeriods = await _db.ReturnPeriods
+        var sourcePeriods = await db.ReturnPeriods
             .AsNoTracking()
             .Where(x => x.TenantId == sourceTenantId
                         && x.ModuleId != null
@@ -529,7 +537,7 @@ public class SandboxService
             return;
         }
 
-        var targetKeys = await _db.ReturnPeriods
+        var targetKeys = await db.ReturnPeriods
             .AsNoTracking()
             .Where(x => x.TenantId == targetTenantId && x.ModuleId != null)
             .Select(x => new { x.ModuleId, x.Year, x.Month, x.Quarter, x.Frequency })
@@ -549,7 +557,7 @@ public class SandboxService
                 continue;
             }
 
-            _db.ReturnPeriods.Add(new ReturnPeriod
+            db.ReturnPeriods.Add(new ReturnPeriod
             {
                 TenantId = targetTenantId,
                 ModuleId = sourcePeriod.ModuleId,
@@ -569,7 +577,7 @@ public class SandboxService
             });
         }
 
-        await _db.SaveChangesAsync(ct);
+        await db.SaveChangesAsync(ct);
     }
 
     private static List<ReturnDataRow> BuildSampleRows(
@@ -702,8 +710,9 @@ public class SandboxService
             return null;
         }
 
+        await using var db = await _dbFactory.CreateDbContextAsync();
         var productionSlug = sandboxTenant.TenantSlug[..^"-sandbox".Length];
-        return await _db.Tenants
+        return await db.Tenants
             .AsNoTracking()
             .FirstOrDefaultAsync(x => x.TenantSlug == productionSlug, ct);
     }

@@ -6,11 +6,11 @@ namespace FC.Engine.Admin.Services;
 
 public sealed class PlatformIntelligenceExportAuditService
 {
-    private readonly MetadataDbContext _db;
+    private readonly IDbContextFactory<MetadataDbContext> _dbFactory;
 
-    public PlatformIntelligenceExportAuditService(MetadataDbContext db)
+    public PlatformIntelligenceExportAuditService(IDbContextFactory<MetadataDbContext> dbFactory)
     {
-        _db = db;
+        _dbFactory = dbFactory;
     }
 
     public async Task<IReadOnlyList<PlatformIntelligenceExportAuditRow>> GetRecentExportsAsync(
@@ -25,7 +25,8 @@ public sealed class PlatformIntelligenceExportAuditService
         var normalizedAction = PlatformIntelligenceApiRequestMapper.NormalizeOptionalFilter(action);
         var size = Math.Clamp(take, 1, 100);
 
-        var auditRows = await _db.AuditLog
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+        var auditRows = await db.AuditLog
             .AsNoTracking()
             .Where(x => x.EntityType == "PlatformIntelligence" && x.Action.EndsWith("Exported"))
             .OrderByDescending(x => x.PerformedAt)

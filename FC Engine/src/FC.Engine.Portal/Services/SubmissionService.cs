@@ -129,14 +129,15 @@ public class SubmissionService
         int? submittedByUserId = null, string? submitterNotes = null,
         int? originalSubmissionId = null)
     {
+        await using var db = await _dbFactory.CreateDbContextAsync();
         var makerCheckerEnabled = submittedByUserId.HasValue && await IsMakerCheckerEnabled(institutionId);
         SubmissionReviewNotificationContext? reviewNotificationContext = null;
 
         if (makerCheckerEnabled && submittedByUserId.HasValue)
         {
-            var submitter = await _db.InstitutionUsers.FindAsync(submittedByUserId.Value);
-            var institution = await _db.Institutions.FindAsync(institutionId);
-            var period = await _db.ReturnPeriods.FindAsync(returnPeriodId);
+            var submitter = await db.InstitutionUsers.FindAsync(submittedByUserId.Value);
+            var institution = await db.Institutions.FindAsync(institutionId);
+            var period = await db.ReturnPeriods.FindAsync(returnPeriodId);
 
             reviewNotificationContext = new SubmissionReviewNotificationContext
             {
@@ -171,7 +172,7 @@ public class SubmissionService
             {
                 try
                 {
-                    var period = await _db.ReturnPeriods.FindAsync(returnPeriodId);
+                    var period = await db.ReturnPeriods.FindAsync(returnPeriodId);
                     var periodStr = period is not null
                         ? new DateTime(period.Year, period.Month, 1).ToString("MMM yyyy") : "";
                     var status = Enum.TryParse<SubmissionStatus>(result.Status, out var s) ? s : SubmissionStatus.Rejected;
@@ -199,7 +200,7 @@ public class SubmissionService
             // Notify of direct acceptance
             try
             {
-                var period = await _db.ReturnPeriods.FindAsync(returnPeriodId);
+                var period = await db.ReturnPeriods.FindAsync(returnPeriodId);
                 var periodStr = period is not null
                     ? new DateTime(period.Year, period.Month, 1).ToString("MMM yyyy") : "";
                 var status = Enum.TryParse<SubmissionStatus>(result.Status, out var s) ? s : SubmissionStatus.Accepted;

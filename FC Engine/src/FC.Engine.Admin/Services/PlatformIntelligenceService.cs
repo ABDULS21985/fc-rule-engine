@@ -40,7 +40,7 @@ public sealed class PlatformIntelligenceService : IPlatformIntelligenceWorkspace
         new("CLIMATE", "Climate Risk Scenario Model", "Tier 2", "Climate Risk", "RG-11", ["climate", "esg", "transition", "stranded"])
     ];
 
-    private readonly MetadataDbContext _db;
+    private readonly IDbContextFactory<MetadataDbContext> _dbFactory;
     private readonly KnowledgeGraphCatalogService _knowledgeGraphCatalog;
     private readonly KnowledgeGraphDossierCatalogService _knowledgeGraphDossierCatalog;
     private readonly DashboardBriefingPackCatalogService _dashboardBriefingPackCatalog;
@@ -65,7 +65,7 @@ public sealed class PlatformIntelligenceService : IPlatformIntelligenceWorkspace
     private readonly TimeSpan _refreshStaleAfter;
 
     public PlatformIntelligenceService(
-        MetadataDbContext db,
+        IDbContextFactory<MetadataDbContext> dbFactory,
         IConfiguration configuration,
         KnowledgeGraphCatalogService knowledgeGraphCatalog,
         KnowledgeGraphDossierCatalogService knowledgeGraphDossierCatalog,
@@ -89,7 +89,7 @@ public sealed class PlatformIntelligenceService : IPlatformIntelligenceWorkspace
         InstitutionSupervisoryCatalogService institutionSupervisoryCatalog,
         MarketplaceRolloutCatalogService marketplaceRolloutCatalog)
     {
-        _db = db;
+        _dbFactory = dbFactory;
         _knowledgeGraphCatalog = knowledgeGraphCatalog;
         _knowledgeGraphDossierCatalog = knowledgeGraphDossierCatalog;
         _dashboardBriefingPackCatalog = dashboardBriefingPackCatalog;
@@ -117,15 +117,17 @@ public sealed class PlatformIntelligenceService : IPlatformIntelligenceWorkspace
 
     public async Task<PlatformIntelligenceWorkspace> GetWorkspaceAsync(CancellationToken ct = default)
     {
-        var modules = await _db.Modules
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+
+        var modules = await db.Modules
             .AsNoTracking()
             .ToListAsync(ct);
 
-        var templates = await _db.ReturnTemplates
+        var templates = await db.ReturnTemplates
             .AsNoTracking()
             .ToListAsync(ct);
 
-        var versions = await _db.TemplateVersions
+        var versions = await db.TemplateVersions
             .AsNoTracking()
             .ToListAsync(ct);
 
@@ -137,96 +139,96 @@ public sealed class PlatformIntelligenceService : IPlatformIntelligenceWorkspace
                 .First().Id)
             .ToHashSet();
 
-        var fields = await _db.TemplateFields
+        var fields = await db.TemplateFields
             .AsNoTracking()
             .Where(x => activeVersionIds.Contains(x.TemplateVersionId))
             .ToListAsync(ct);
 
-        var formulas = await _db.IntraSheetFormulas
+        var formulas = await db.IntraSheetFormulas
             .AsNoTracking()
             .Where(x => activeVersionIds.Contains(x.TemplateVersionId) && x.IsActive)
             .ToListAsync(ct);
 
-        var crossSheetRules = await _db.CrossSheetRules
+        var crossSheetRules = await db.CrossSheetRules
             .AsNoTracking()
             .Where(x => x.IsActive)
             .ToListAsync(ct);
 
-        var businessRules = await _db.BusinessRules
+        var businessRules = await db.BusinessRules
             .AsNoTracking()
             .Where(x => x.IsActive)
             .ToListAsync(ct);
 
-        var licenceTypes = await _db.LicenceTypes
+        var licenceTypes = await db.LicenceTypes
             .AsNoTracking()
             .Where(x => x.IsActive)
             .ToListAsync(ct);
 
-        var licenceModules = await _db.LicenceModuleMatrix
+        var licenceModules = await db.LicenceModuleMatrix
             .AsNoTracking()
             .ToListAsync(ct);
 
-        var tenantLicences = await _db.TenantLicenceTypes
+        var tenantLicences = await db.TenantLicenceTypes
             .AsNoTracking()
             .Where(x => x.IsActive)
             .ToListAsync(ct);
 
-        var tenants = await _db.Tenants
+        var tenants = await db.Tenants
             .AsNoTracking()
             .ToListAsync(ct);
 
-        var subscriptions = await _db.Subscriptions
+        var subscriptions = await db.Subscriptions
             .AsNoTracking()
             .Include(x => x.Plan)
             .Include(x => x.Modules)
             .ToListAsync(ct);
 
-        var planModulePricing = await _db.PlanModulePricing
+        var planModulePricing = await db.PlanModulePricing
             .AsNoTracking()
             .ToListAsync(ct);
 
-        var returnPeriods = await _db.ReturnPeriods
+        var returnPeriods = await db.ReturnPeriods
             .AsNoTracking()
             .ToListAsync(ct);
 
-        var institutions = await _db.Institutions
+        var institutions = await db.Institutions
             .AsNoTracking()
             .Where(x => x.IsActive)
             .ToListAsync(ct);
 
         var latestChs = await GetLatestChsSnapshotsAsync(ct);
 
-        var incidents = await _db.DataBreachIncidents
+        var incidents = await db.DataBreachIncidents
             .AsNoTracking()
             .OrderByDescending(x => x.DetectedAt)
             .Take(12)
             .ToListAsync(ct);
 
-        var cyberAssets = await _db.CyberAssets
+        var cyberAssets = await db.CyberAssets
             .AsNoTracking()
             .ToListAsync(ct);
 
-        var dependencies = await _db.CyberAssetDependencies
+        var dependencies = await db.CyberAssetDependencies
             .AsNoTracking()
             .ToListAsync(ct);
 
-        var rcaRecords = await _db.RootCauseAnalysisRecords
+        var rcaRecords = await db.RootCauseAnalysisRecords
             .AsNoTracking()
             .ToListAsync(ct);
 
-        var securityAlerts = await _db.SecurityAlerts
+        var securityAlerts = await db.SecurityAlerts
             .AsNoTracking()
             .OrderByDescending(x => x.CreatedAt)
             .Take(12)
             .ToListAsync(ct);
 
-        var auditLog = await _db.AuditLog
+        var auditLog = await db.AuditLog
             .AsNoTracking()
             .OrderByDescending(x => x.PerformedAt)
             .Take(400)
             .ToListAsync(ct);
 
-        var entitlementAuditRows = await _db.AuditLog
+        var entitlementAuditRows = await db.AuditLog
             .AsNoTracking()
             .Where(x => x.Action == "TenantModulesReconciled"
                      || x.Action == "TenantLicenceAssigned"
@@ -234,31 +236,31 @@ public sealed class PlatformIntelligenceService : IPlatformIntelligenceWorkspace
             .OrderByDescending(x => x.PerformedAt)
             .ToListAsync(ct);
 
-        var fieldChanges = await _db.FieldChangeHistory
+        var fieldChanges = await db.FieldChangeHistory
             .AsNoTracking()
             .OrderByDescending(x => x.ChangedAt)
             .Take(400)
             .ToListAsync(ct);
 
-        var submissions = await _db.Submissions
+        var submissions = await db.Submissions
             .AsNoTracking()
             .Include(x => x.ValidationReport)
             .OrderByDescending(x => x.SubmittedAt)
             .Take(2500)
             .ToListAsync(ct);
 
-        var policyScenarios = await _db.PolicyScenarios
+        var policyScenarios = await db.PolicyScenarios
             .AsNoTracking()
             .ToListAsync(ct);
 
-        var impactRuns = await _db.ImpactAssessmentRuns
+        var impactRuns = await db.ImpactAssessmentRuns
             .AsNoTracking()
             .Include(x => x.Scenario)
             .OrderByDescending(x => x.CreatedAt)
             .Take(400)
             .ToListAsync(ct);
 
-        var historicalImpact = await _db.HistoricalImpactTracking
+        var historicalImpact = await db.HistoricalImpactTracking
             .AsNoTracking()
             .ToListAsync(ct);
 
@@ -1565,7 +1567,9 @@ public sealed class PlatformIntelligenceService : IPlatformIntelligenceWorkspace
 
     private async Task<List<ChsScoreSnapshot>> GetLatestChsSnapshotsAsync(CancellationToken ct)
     {
-        var snapshots = await _db.ChsScoreSnapshots
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+
+        var snapshots = await db.ChsScoreSnapshots
             .AsNoTracking()
             .OrderByDescending(x => x.ComputedAt)
             .ToListAsync(ct);
