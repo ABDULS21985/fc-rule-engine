@@ -554,6 +554,51 @@ app.MapGet("/api/intelligence/overview/export.pdf", async (
     return Results.File(file.Content, file.ContentType, file.FileName);
 }).RequireAuthorization("Authenticated");
 
+app.MapGet("/api/intelligence/export-bundle.zip", async (
+    string? lens,
+    int? institutionId,
+    HttpContext context,
+    FC.Engine.Admin.Services.PlatformIntelligenceExportService exportService,
+    IAuditLogger auditLogger,
+    CancellationToken ct) =>
+{
+    if (!FC.Engine.Admin.Services.PlatformIntelligenceApiRequestMapper.TryNormalizeDashboardBriefingPackQuery(
+            lens,
+            institutionId,
+            out var query,
+            out var error))
+    {
+        return Results.BadRequest(new { error });
+    }
+
+    var file = await exportService.ExportBundleAsync(query.Lens, query.InstitutionId, ct);
+    if (file is null)
+    {
+        return Results.NotFound();
+    }
+
+    var performedBy = context.User.FindFirstValue(ClaimTypes.NameIdentifier)
+                      ?? context.User.Identity?.Name
+                      ?? "platform-intelligence-api";
+
+    await auditLogger.Log(
+        "PlatformIntelligence",
+        0,
+        "BundleExported",
+        null,
+        new
+        {
+            query.Lens,
+            query.InstitutionId,
+            file.FileName,
+            SizeBytes = file.Content.Length
+        },
+        performedBy,
+        ct);
+
+    return Results.File(file.Content, file.ContentType, file.FileName);
+}).RequireAuthorization("Authenticated");
+
 app.MapGet("/api/intelligence/refresh/status", async (
     FC.Engine.Admin.Services.PlatformIntelligenceService intelligenceService,
     CancellationToken ct) =>

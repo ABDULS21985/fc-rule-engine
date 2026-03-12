@@ -70,7 +70,7 @@ public sealed class SubscriptionModuleEntitlementBootstrapService
         var subscriptionIds = subscriptions.Select(x => x.Id).ToList();
         var tenantIdsBySubscription = subscriptions.ToDictionary(x => x.Id, x => x.TenantId);
 
-        var candidateQuery =
+        var candidateBaseQuery =
             from subscription in _db.Subscriptions
             join tenantLicence in _db.TenantLicenceTypes on subscription.TenantId equals tenantLicence.TenantId
             join licenceModule in _db.LicenceModuleMatrix on tenantLicence.LicenceTypeId equals licenceModule.LicenceTypeId
@@ -84,27 +84,31 @@ public sealed class SubscriptionModuleEntitlementBootstrapService
                   && tenantLicence.IsActive
                   && pricing.IsIncludedInBase
                   && module.IsActive
-            select new IncludedModuleCandidate(
-                subscription.Id,
+            select new
+            {
+                SubscriptionId = subscription.Id,
                 subscription.TenantId,
                 licenceModule.ModuleId,
                 pricing.PriceMonthly,
-                pricing.PriceAnnual,
-                true);
+                pricing.PriceAnnual
+            };
 
         if (subscriptionId.HasValue)
         {
-            candidateQuery = candidateQuery.Where(x => x.SubscriptionId == subscriptionId.Value);
+            candidateBaseQuery = candidateBaseQuery.Where(x => x.SubscriptionId == subscriptionId.Value);
         }
 
         if (tenantId.HasValue)
         {
-            candidateQuery = candidateQuery.Where(x => x.TenantId == tenantId.Value);
+            candidateBaseQuery = candidateBaseQuery.Where(x => x.TenantId == tenantId.Value);
         }
 
-        var candidates = (await candidateQuery
+        var candidates = (await candidateBaseQuery
                 .AsNoTracking()
                 .ToListAsync(ct))
+            .Select(x => new IncludedModuleCandidate(
+                x.SubscriptionId, x.TenantId, x.ModuleId,
+                x.PriceMonthly, x.PriceAnnual, true))
             .GroupBy(x => new { x.SubscriptionId, x.ModuleId })
             .Select(g => g.First())
             .ToList();
@@ -114,7 +118,7 @@ public sealed class SubscriptionModuleEntitlementBootstrapService
             .ToListAsync(ct);
 
         var existingByKey = existingRows.ToDictionary(x => (x.SubscriptionId, x.ModuleId));
-        var eligibleModuleQuery =
+        var eligibleBaseQuery =
             from subscription in _db.Subscriptions
             join tenantLicence in _db.TenantLicenceTypes on subscription.TenantId equals tenantLicence.TenantId
             join licenceModule in _db.LicenceModuleMatrix on tenantLicence.LicenceTypeId equals licenceModule.LicenceTypeId
@@ -124,17 +128,22 @@ public sealed class SubscriptionModuleEntitlementBootstrapService
             where subscriptionIds.Contains(subscription.Id)
                   && tenantLicence.IsActive
                   && module.IsActive
-            select new IncludedModuleCandidate(
-                subscription.Id,
+            select new
+            {
+                SubscriptionId = subscription.Id,
                 subscription.TenantId,
                 licenceModule.ModuleId,
                 pricing.PriceMonthly,
                 pricing.PriceAnnual,
-                pricing.IsIncludedInBase);
+                pricing.IsIncludedInBase
+            };
 
-        var eligibleCandidates = (await eligibleModuleQuery
+        var eligibleCandidates = (await eligibleBaseQuery
                 .AsNoTracking()
                 .ToListAsync(ct))
+            .Select(x => new IncludedModuleCandidate(
+                x.SubscriptionId, x.TenantId, x.ModuleId,
+                x.PriceMonthly, x.PriceAnnual, x.IsIncludedInBase))
             .GroupBy(x => new { x.SubscriptionId, x.ModuleId })
             .Select(g => g.First())
             .ToList();
