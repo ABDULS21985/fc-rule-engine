@@ -134,6 +134,96 @@ public class KnowledgeGraphCatalogServiceTests
             && x.TargetNodeKey == "RETURN:BDCFXV");
     }
 
+    [Fact]
+    public async Task LoadAsync_Returns_Persisted_Node_And_Edge_State()
+    {
+        await using var db = CreateDb();
+        var sut = new KnowledgeGraphCatalogService(db);
+
+        var now = DateTime.UtcNow.Date.AddDays(7);
+        await sut.MaterializeAsync(new KnowledgeGraphCatalogMaterializationRequest
+        {
+            Regulators =
+            [
+                new KnowledgeGraphCatalogRegulatorInput
+                {
+                    RegulatorCode = "CBN",
+                    DisplayName = "Central Bank of Nigeria",
+                    ModuleCount = 1,
+                    RequirementCount = 1,
+                    InstitutionCount = 1,
+                    ModuleCodes = ["RG08"]
+                }
+            ],
+            Requirements =
+            [
+                new KnowledgeGraphCatalogRequirementInput
+                {
+                    RegulatoryReference = "RG-08.1",
+                    RegulationFamily = "RG-08",
+                    RegulatorCode = "CBN",
+                    ModuleCode = "RG08",
+                    FiledViaReturns = ["BDC_FXV"],
+                    InstitutionCount = 1,
+                    FieldCount = 1,
+                    FrequencyProfile = "Monthly",
+                    NextDeadline = now
+                }
+            ],
+            Lineage =
+            [
+                new KnowledgeGraphCatalogLineageInput
+                {
+                    RegulatorCode = "CBN",
+                    ModuleCode = "RG08",
+                    ReturnCode = "BDC_FXV",
+                    TemplateName = "BDC FX Position",
+                    FieldName = "Net Open Position",
+                    FieldCode = "net_open_position",
+                    RegulatoryReference = "RG-08.1"
+                }
+            ],
+            Obligations =
+            [
+                new KnowledgeGraphCatalogObligationInput
+                {
+                    LicenceType = "BDC",
+                    RegulatorCode = "CBN",
+                    ModuleCode = "RG08",
+                    ReturnCode = "BDC_FXV",
+                    Frequency = "Monthly",
+                    NextDeadline = now
+                }
+            ],
+            InstitutionObligations =
+            [
+                new KnowledgeGraphCatalogInstitutionObligationInput
+                {
+                    InstitutionKey = "11",
+                    InstitutionName = "Sample Bureau De Change",
+                    LicenceType = "BDC",
+                    RegulatorCode = "CBN",
+                    ReturnCode = "BDC_FXV",
+                    Status = "Filed",
+                    NextDeadline = now
+                }
+            ]
+        });
+
+        var loaded = await sut.LoadAsync();
+
+        loaded.MaterializedAt.Should().NotBeNull();
+        loaded.NodeCount.Should().Be(7);
+        loaded.EdgeCount.Should().Be(9);
+        loaded.NodeTypes.Should().ContainEquivalentOf(new KnowledgeGraphCatalogTypeCount("Requirement", 1));
+        loaded.EdgeTypes.Should().ContainEquivalentOf(new KnowledgeGraphCatalogTypeCount("CAPTURED_BY", 1));
+        loaded.Nodes.Should().ContainSingle(x => x.NodeKey == "FIELD:BDCFXVNETOPENPOSITION" && x.NodeType == "Field");
+        loaded.Edges.Should().ContainSingle(x =>
+            x.EdgeType == "FILED_VIA"
+            && x.SourceNodeKey == "REQUIREMENT:RG081"
+            && x.TargetNodeKey == "RETURN:BDCFXV");
+    }
+
     private static MetadataDbContext CreateDb()
     {
         var options = new DbContextOptionsBuilder<MetadataDbContext>()

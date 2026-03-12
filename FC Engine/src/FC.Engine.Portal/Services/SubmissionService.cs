@@ -19,7 +19,7 @@ public class SubmissionService
     private readonly ISubmissionRepository _submissionRepo;
     private readonly ISubmissionApprovalRepository _approvalRepo;
     private readonly IngestionOrchestrator _orchestrator;
-    private readonly MetadataDbContext _db;
+    private readonly IDbContextFactory<MetadataDbContext> _dbFactory;
     private readonly NotificationService _notificationSvc;
     private readonly IFilingCalendarService _filingCalendarService;
 
@@ -28,7 +28,7 @@ public class SubmissionService
         ISubmissionRepository submissionRepo,
         ISubmissionApprovalRepository approvalRepo,
         IngestionOrchestrator orchestrator,
-        MetadataDbContext db,
+        IDbContextFactory<MetadataDbContext> dbFactory,
         NotificationService notificationSvc,
         IFilingCalendarService filingCalendarService)
     {
@@ -36,7 +36,7 @@ public class SubmissionService
         _submissionRepo = submissionRepo;
         _approvalRepo = approvalRepo;
         _orchestrator = orchestrator;
-        _db = db;
+        _dbFactory = dbFactory;
         _notificationSvc = notificationSvc;
         _filingCalendarService = filingCalendarService;
     }
@@ -76,7 +76,8 @@ public class SubmissionService
     /// </summary>
     public async Task<List<PeriodSelectItem>> GetOpenPeriods(int institutionId, string returnCode)
     {
-        var periods = await _db.ReturnPeriods
+        await using var db = await _dbFactory.CreateDbContextAsync();
+        var periods = await db.ReturnPeriods
             .Where(rp => rp.IsOpen)
             .OrderByDescending(rp => rp.Year)
             .ThenByDescending(rp => rp.Month)
@@ -114,7 +115,8 @@ public class SubmissionService
     /// </summary>
     public async Task<bool> IsMakerCheckerEnabled(int institutionId)
     {
-        var inst = await _db.Institutions.FindAsync(institutionId);
+        await using var db = await _dbFactory.CreateDbContextAsync();
+        var inst = await db.Institutions.FindAsync(institutionId);
         return inst?.MakerCheckerEnabled ?? false;
     }
 

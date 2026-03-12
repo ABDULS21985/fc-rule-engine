@@ -22,6 +22,15 @@ public static class PlatformIntelligenceApiRequestMapper
         "Rejected"
     };
 
+    private static readonly HashSet<string> AllowedSanctionsDecisions = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "Clear",
+        "Review",
+        "Confirm Match",
+        "False Positive",
+        "Escalate"
+    };
+
     public static int NormalizeTake(int? take, int defaultValue, int maxValue = 100)
     {
         if (!take.HasValue)
@@ -393,6 +402,102 @@ public static class PlatformIntelligenceApiRequestMapper
         error = string.Empty;
         return true;
     }
+
+    public static bool TryNormalizeSanctionsWorkflowDecisionRequest(
+        SanctionsWorkflowDecisionApiRequest? request,
+        out SanctionsWorkflowDecisionCommand command,
+        out string error)
+    {
+        var matchKey = request?.MatchKey?.Trim() ?? string.Empty;
+        var subject = request?.Subject?.Trim() ?? string.Empty;
+        var matchedName = request?.MatchedName?.Trim() ?? string.Empty;
+        var sourceCode = request?.SourceCode?.Trim().ToUpperInvariant() ?? string.Empty;
+        var riskLevel = request?.RiskLevel?.Trim() ?? string.Empty;
+        var previousDecision = request?.PreviousDecision?.Trim() ?? string.Empty;
+        var decision = request?.Decision?.Trim() ?? string.Empty;
+
+        if (string.IsNullOrWhiteSpace(matchKey))
+        {
+            command = new SanctionsWorkflowDecisionCommand();
+            error = "MatchKey is required.";
+            return false;
+        }
+
+        if (string.IsNullOrWhiteSpace(subject))
+        {
+            command = new SanctionsWorkflowDecisionCommand();
+            error = "Subject is required.";
+            return false;
+        }
+
+        if (string.IsNullOrWhiteSpace(matchedName))
+        {
+            command = new SanctionsWorkflowDecisionCommand();
+            error = "MatchedName is required.";
+            return false;
+        }
+
+        if (string.IsNullOrWhiteSpace(sourceCode))
+        {
+            command = new SanctionsWorkflowDecisionCommand();
+            error = "SourceCode is required.";
+            return false;
+        }
+
+        if (string.IsNullOrWhiteSpace(riskLevel))
+        {
+            command = new SanctionsWorkflowDecisionCommand();
+            error = "RiskLevel is required.";
+            return false;
+        }
+
+        if (!AllowedSanctionsDecisions.Contains(decision))
+        {
+            command = new SanctionsWorkflowDecisionCommand();
+            error = "Decision is not valid for sanctions workflow.";
+            return false;
+        }
+
+        command = new SanctionsWorkflowDecisionCommand
+        {
+            MatchKey = matchKey,
+            Subject = subject,
+            MatchedName = matchedName,
+            SourceCode = sourceCode,
+            RiskLevel = riskLevel,
+            PreviousDecision = string.IsNullOrWhiteSpace(previousDecision) ? "Clear" : previousDecision,
+            Decision = decision,
+            ReviewedAtUtc = DateTime.UtcNow
+        };
+        error = string.Empty;
+        return true;
+    }
+
+    public static bool TryNormalizeRolloutReconciliationRequest(
+        RolloutReconciliationApiRequest? request,
+        out IReadOnlyList<Guid> tenantIds,
+        out string error)
+    {
+        tenantIds = (request?.TenantIds ?? [])
+            .Where(x => x != Guid.Empty)
+            .Distinct()
+            .ToList();
+
+        if (tenantIds.Count == 0)
+        {
+            error = "At least one TenantId is required.";
+            return false;
+        }
+
+        if (tenantIds.Count > 200)
+        {
+            error = "A maximum of 200 tenants can be reconciled per request.";
+            return false;
+        }
+
+        error = string.Empty;
+        return true;
+    }
 }
 
 public sealed class SanctionsBatchScreeningApiRequest
@@ -462,4 +567,20 @@ public sealed class SanctionsTransactionScreeningApiRequest
     public string BeneficiaryName { get; set; } = string.Empty;
     public string CounterpartyName { get; set; } = string.Empty;
     public bool HighRisk { get; set; }
+}
+
+public sealed class SanctionsWorkflowDecisionApiRequest
+{
+    public string MatchKey { get; set; } = string.Empty;
+    public string Subject { get; set; } = string.Empty;
+    public string MatchedName { get; set; } = string.Empty;
+    public string SourceCode { get; set; } = string.Empty;
+    public string RiskLevel { get; set; } = string.Empty;
+    public string PreviousDecision { get; set; } = string.Empty;
+    public string Decision { get; set; } = string.Empty;
+}
+
+public sealed class RolloutReconciliationApiRequest
+{
+    public List<Guid> TenantIds { get; set; } = [];
 }

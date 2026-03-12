@@ -318,4 +318,90 @@ public class PlatformIntelligenceApiRequestMapperTests
         command.CounterpartyName.Should().BeEmpty();
         command.HighRisk.Should().BeTrue();
     }
+
+    [Fact]
+    public void TryNormalizeSanctionsWorkflowDecisionRequest_Maps_Valid_Request()
+    {
+        var request = new SanctionsWorkflowDecisionApiRequest
+        {
+            MatchKey = "  alpha|ofac|92.0 ",
+            Subject = "  Alpha Bank Plc ",
+            MatchedName = " Alpha Bank Holdings ",
+            SourceCode = " ofac ",
+            RiskLevel = " high ",
+            PreviousDecision = " Review ",
+            Decision = " False Positive "
+        };
+
+        var success = PlatformIntelligenceApiRequestMapper.TryNormalizeSanctionsWorkflowDecisionRequest(
+            request,
+            out var command,
+            out var error);
+
+        success.Should().BeTrue();
+        error.Should().BeEmpty();
+        command.MatchKey.Should().Be("alpha|ofac|92.0");
+        command.Subject.Should().Be("Alpha Bank Plc");
+        command.MatchedName.Should().Be("Alpha Bank Holdings");
+        command.SourceCode.Should().Be("OFAC");
+        command.RiskLevel.Should().Be("high");
+        command.PreviousDecision.Should().Be("Review");
+        command.Decision.Should().Be("False Positive");
+        command.ReviewedAtUtc.Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromSeconds(5));
+    }
+
+    [Fact]
+    public void TryNormalizeSanctionsWorkflowDecisionRequest_Rejects_Invalid_Decision()
+    {
+        var request = new SanctionsWorkflowDecisionApiRequest
+        {
+            MatchKey = "alpha|ofac|92.0",
+            Subject = "Alpha Bank Plc",
+            MatchedName = "Alpha Bank Holdings",
+            SourceCode = "OFAC",
+            RiskLevel = "high",
+            Decision = "Freeze"
+        };
+
+        var success = PlatformIntelligenceApiRequestMapper.TryNormalizeSanctionsWorkflowDecisionRequest(
+            request,
+            out _,
+            out var error);
+
+        success.Should().BeFalse();
+        error.Should().Be("Decision is not valid for sanctions workflow.");
+    }
+
+    [Fact]
+    public void TryNormalizeRolloutReconciliationRequest_Maps_Distinct_Tenants()
+    {
+        var tenantA = Guid.NewGuid();
+        var tenantB = Guid.NewGuid();
+        var request = new RolloutReconciliationApiRequest
+        {
+            TenantIds = [tenantA, Guid.Empty, tenantA, tenantB]
+        };
+
+        var success = PlatformIntelligenceApiRequestMapper.TryNormalizeRolloutReconciliationRequest(
+            request,
+            out var tenantIds,
+            out var error);
+
+        success.Should().BeTrue();
+        error.Should().BeEmpty();
+        tenantIds.Should().Equal(tenantA, tenantB);
+    }
+
+    [Fact]
+    public void TryNormalizeRolloutReconciliationRequest_Rejects_Empty_Request()
+    {
+        var success = PlatformIntelligenceApiRequestMapper.TryNormalizeRolloutReconciliationRequest(
+            new RolloutReconciliationApiRequest(),
+            out var tenantIds,
+            out var error);
+
+        success.Should().BeFalse();
+        error.Should().Be("At least one TenantId is required.");
+        tenantIds.Should().BeEmpty();
+    }
 }

@@ -53,6 +53,75 @@ public sealed class KnowledgeGraphCatalogService
         };
     }
 
+    public async Task<KnowledgeGraphCatalogState> LoadAsync(CancellationToken ct = default)
+    {
+        await EnsureStoreAsync(ct);
+
+        var nodes = await _db.KnowledgeGraphNodes
+            .AsNoTracking()
+            .OrderBy(x => x.NodeType)
+            .ThenBy(x => x.DisplayName)
+            .ToListAsync(ct);
+
+        var edges = await _db.KnowledgeGraphEdges
+            .AsNoTracking()
+            .OrderBy(x => x.EdgeType)
+            .ThenBy(x => x.SourceNodeKey)
+            .ThenBy(x => x.TargetNodeKey)
+            .ToListAsync(ct);
+
+        var materializedAt = nodes.Select(x => (DateTime?)x.MaterializedAt)
+            .Concat(edges.Select(x => (DateTime?)x.MaterializedAt))
+            .OrderByDescending(x => x)
+            .FirstOrDefault();
+
+        return new KnowledgeGraphCatalogState
+        {
+            MaterializedAt = materializedAt,
+            NodeCount = nodes.Count,
+            EdgeCount = edges.Count,
+            NodeTypes = nodes
+                .GroupBy(x => x.NodeType, StringComparer.OrdinalIgnoreCase)
+                .OrderByDescending(x => x.Count())
+                .ThenBy(x => x.Key, StringComparer.OrdinalIgnoreCase)
+                .Select(x => new KnowledgeGraphCatalogTypeCount(x.Key, x.Count()))
+                .ToList(),
+            EdgeTypes = edges
+                .GroupBy(x => x.EdgeType, StringComparer.OrdinalIgnoreCase)
+                .OrderByDescending(x => x.Count())
+                .ThenBy(x => x.Key, StringComparer.OrdinalIgnoreCase)
+                .Select(x => new KnowledgeGraphCatalogTypeCount(x.Key, x.Count()))
+                .ToList(),
+            Nodes = nodes
+                .Select(x => new KnowledgeGraphCatalogNodeState
+                {
+                    NodeKey = x.NodeKey,
+                    NodeType = x.NodeType,
+                    DisplayName = x.DisplayName,
+                    Code = x.Code,
+                    RegulatorCode = x.RegulatorCode,
+                    SourceReference = x.SourceReference,
+                    MetadataJson = x.MetadataJson,
+                    MaterializedAt = x.MaterializedAt
+                })
+                .ToList(),
+            Edges = edges
+                .Select(x => new KnowledgeGraphCatalogEdgeState
+                {
+                    EdgeKey = x.EdgeKey,
+                    EdgeType = x.EdgeType,
+                    SourceNodeKey = x.SourceNodeKey,
+                    TargetNodeKey = x.TargetNodeKey,
+                    RegulatorCode = x.RegulatorCode,
+                    SourceReference = x.SourceReference,
+                    Weight = x.Weight,
+                    MetadataJson = x.MetadataJson,
+                    MaterializedAt = x.MaterializedAt
+                })
+                .ToList()
+        };
+    }
+
     private async Task EnsureStoreAsync(CancellationToken ct)
     {
         if (!_db.Database.IsSqlServer())
@@ -567,6 +636,42 @@ public sealed class KnowledgeGraphCatalogMaterializationResult
     public DateTime MaterializedAt { get; init; }
     public List<KnowledgeGraphCatalogTypeCount> NodeTypes { get; init; } = [];
     public List<KnowledgeGraphCatalogTypeCount> EdgeTypes { get; init; } = [];
+}
+
+public sealed class KnowledgeGraphCatalogState
+{
+    public DateTime? MaterializedAt { get; init; }
+    public int NodeCount { get; init; }
+    public int EdgeCount { get; init; }
+    public List<KnowledgeGraphCatalogTypeCount> NodeTypes { get; init; } = [];
+    public List<KnowledgeGraphCatalogTypeCount> EdgeTypes { get; init; } = [];
+    public List<KnowledgeGraphCatalogNodeState> Nodes { get; init; } = [];
+    public List<KnowledgeGraphCatalogEdgeState> Edges { get; init; } = [];
+}
+
+public sealed class KnowledgeGraphCatalogNodeState
+{
+    public string NodeKey { get; init; } = string.Empty;
+    public string NodeType { get; init; } = string.Empty;
+    public string DisplayName { get; init; } = string.Empty;
+    public string? Code { get; init; }
+    public string? RegulatorCode { get; init; }
+    public string? SourceReference { get; init; }
+    public string? MetadataJson { get; init; }
+    public DateTime MaterializedAt { get; init; }
+}
+
+public sealed class KnowledgeGraphCatalogEdgeState
+{
+    public string EdgeKey { get; init; } = string.Empty;
+    public string EdgeType { get; init; } = string.Empty;
+    public string SourceNodeKey { get; init; } = string.Empty;
+    public string TargetNodeKey { get; init; } = string.Empty;
+    public string? RegulatorCode { get; init; }
+    public string? SourceReference { get; init; }
+    public int Weight { get; init; }
+    public string? MetadataJson { get; init; }
+    public DateTime MaterializedAt { get; init; }
 }
 
 public sealed record KnowledgeGraphCatalogTypeCount(string Type, int Count);

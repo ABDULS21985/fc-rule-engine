@@ -1342,6 +1342,12 @@ public sealed class PlatformIntelligenceService : IPlatformIntelligenceWorkspace
     public async Task<ModelRiskSnapshot> GetModelRiskSnapshotAsync(CancellationToken ct = default) =>
         (await GetWorkspaceAsync(ct)).ModelRisk;
 
+    public async Task<CapitalManagementSnapshot> GetCapitalSnapshotAsync(CancellationToken ct = default) =>
+        (await GetWorkspaceAsync(ct)).Capital;
+
+    public async Task<SanctionsSnapshot> GetSanctionsSnapshotAsync(CancellationToken ct = default) =>
+        (await GetWorkspaceAsync(ct)).Sanctions;
+
     public Task RecordModelApprovalStageAsync(ModelApprovalWorkflowCommand command, CancellationToken ct = default) =>
         _modelApprovalWorkflowStore.RecordStageChangeAsync(command, ct);
 
@@ -1384,6 +1390,9 @@ public sealed class PlatformIntelligenceService : IPlatformIntelligenceWorkspace
     public async Task<KnowledgeGraphSnapshot> GetKnowledgeGraphSnapshotAsync(CancellationToken ct = default) =>
         (await GetWorkspaceAsync(ct)).KnowledgeGraph;
 
+    public Task<KnowledgeGraphCatalogState> GetKnowledgeGraphCatalogStateAsync(CancellationToken ct = default) =>
+        _knowledgeGraphCatalog.LoadAsync(ct);
+
     public async Task<MarketplaceRolloutSnapshot> GetMarketplaceRolloutSnapshotAsync(CancellationToken ct = default) =>
         (await GetWorkspaceAsync(ct)).Rollout;
 
@@ -1404,6 +1413,9 @@ public sealed class PlatformIntelligenceService : IPlatformIntelligenceWorkspace
         CapitalPlanningScenarioCommand command,
         CancellationToken ct = default) =>
         _capitalPlanningScenarioStore.SaveAsync(command, ct);
+
+    public Task<CapitalActionCatalogState> GetCapitalActionCatalogStateAsync(CancellationToken ct = default) =>
+        LoadCapitalActionCatalogAsync(ct);
 
     public Task<CapitalPackCatalogState> MaterializeCapitalPackAsync(
         IReadOnlyList<CapitalPackSectionInput> sections,
@@ -1431,6 +1443,9 @@ public sealed class PlatformIntelligenceService : IPlatformIntelligenceWorkspace
         CancellationToken ct = default) =>
         _sanctionsPackCatalog.MaterializeAsync(sections, ct);
 
+    public Task<SanctionsCatalogState> GetSanctionsCatalogStateAsync(CancellationToken ct = default) =>
+        LoadSanctionsCatalogAsync(ct);
+
     public Task<SanctionsStrDraftCatalogState> GetSanctionsStrDraftCatalogStateAsync(CancellationToken ct = default) =>
         _sanctionsStrDraftCatalog.LoadAsync(ct);
 
@@ -1438,6 +1453,9 @@ public sealed class PlatformIntelligenceService : IPlatformIntelligenceWorkspace
         IReadOnlyList<SanctionsStrDraftInput> drafts,
         CancellationToken ct = default) =>
         _sanctionsStrDraftCatalog.MaterializeAsync(drafts, ct);
+
+    public Task<ModelInventoryCatalogState> GetModelInventoryCatalogStateAsync(CancellationToken ct = default) =>
+        LoadModelInventoryCatalogAsync(ct);
 
     private async Task<SanctionsCatalogState> LoadSanctionsCatalogAsync(CancellationToken ct)
     {

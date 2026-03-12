@@ -856,6 +856,81 @@ app.MapGet("/api/intelligence/rollout/reconciliation-queue", async (
     });
 }).RequireAuthorization("Authenticated");
 
+app.MapPost("/api/intelligence/rollout/reconcile/{tenantId:guid}", async (
+    Guid tenantId,
+    HttpContext context,
+    FC.Engine.Admin.Services.TenantManagementService tenantService,
+    IAuditLogger auditLogger) =>
+{
+    if (tenantId == Guid.Empty)
+    {
+        return Results.BadRequest(new { error = "TenantId is required." });
+    }
+
+    var result = await tenantService.ReconcileTenantModulesAsync(tenantId, context.RequestAborted);
+    var performedBy = context.User.FindFirstValue(ClaimTypes.NameIdentifier)
+                      ?? context.User.Identity?.Name
+                      ?? "platform-intelligence-api";
+
+    await auditLogger.Log(
+        "MarketplaceRollout",
+        0,
+        "RolloutTenantReconciliationRequested",
+        null,
+        new
+        {
+            TenantId = tenantId,
+            result.ModulesCreated,
+            result.ModulesReactivated,
+            result.ModulesUpdated,
+            result.ModulesDeactivated,
+            result.TenantsTouched
+        },
+        performedBy,
+        context.RequestAborted);
+
+    return Results.Ok(result);
+}).RequireAuthorization("PlatformAdmin");
+
+app.MapPost("/api/intelligence/rollout/reconcile", async (
+    FC.Engine.Admin.Services.RolloutReconciliationApiRequest request,
+    HttpContext context,
+    FC.Engine.Admin.Services.TenantManagementService tenantService,
+    IAuditLogger auditLogger) =>
+{
+    if (!FC.Engine.Admin.Services.PlatformIntelligenceApiRequestMapper.TryNormalizeRolloutReconciliationRequest(
+            request,
+            out var tenantIds,
+            out var error))
+    {
+        return Results.BadRequest(new { error });
+    }
+
+    var result = await tenantService.ReconcileTenantModulesAsync(tenantIds, context.RequestAborted);
+    var performedBy = context.User.FindFirstValue(ClaimTypes.NameIdentifier)
+                      ?? context.User.Identity?.Name
+                      ?? "platform-intelligence-api";
+
+    await auditLogger.Log(
+        "MarketplaceRollout",
+        0,
+        "RolloutBatchReconciliationRequested",
+        null,
+        new
+        {
+            RequestedTenantCount = tenantIds.Count,
+            result.ProcessedTenants,
+            result.Reconciliation.ModulesCreated,
+            result.Reconciliation.ModulesReactivated,
+            result.Reconciliation.ModulesUpdated,
+            result.Reconciliation.ModulesDeactivated
+        },
+        performedBy,
+        context.RequestAborted);
+
+    return Results.Ok(result);
+}).RequireAuthorization("PlatformAdmin");
+
 app.MapGet("/api/intelligence/dashboards/briefing-pack", async (
     string? lens,
     int? institutionId,
@@ -973,6 +1048,56 @@ app.MapGet("/api/intelligence/knowledge/obligations", async (
     return Results.Ok(rows);
 }).RequireAuthorization("Authenticated");
 
+app.MapGet("/api/intelligence/knowledge/catalog", async (
+    FC.Engine.Admin.Services.PlatformIntelligenceService intelligenceService,
+    CancellationToken ct) =>
+{
+    var state = await intelligenceService.GetKnowledgeGraphCatalogStateAsync(ct);
+    return Results.Ok(new
+    {
+        state.MaterializedAt,
+        state.NodeCount,
+        state.EdgeCount,
+        NodeTypes = state.NodeTypes,
+        EdgeTypes = state.EdgeTypes
+    });
+}).RequireAuthorization("Authenticated");
+
+app.MapGet("/api/intelligence/knowledge/catalog/nodes", async (
+    string? nodeType,
+    string? regulatorCode,
+    string? sourceReference,
+    string? search,
+    int? take,
+    FC.Engine.Admin.Services.PlatformIntelligenceService intelligenceService,
+    CancellationToken ct) =>
+{
+    var state = await intelligenceService.GetKnowledgeGraphCatalogStateAsync(ct);
+    var normalizedNodeType = FC.Engine.Admin.Services.PlatformIntelligenceApiRequestMapper.NormalizeOptionalFilter(nodeType);
+    var normalizedRegulatorCode = FC.Engine.Admin.Services.PlatformIntelligenceApiRequestMapper.NormalizeOptionalFilter(regulatorCode);
+    var normalizedSourceReference = FC.Engine.Admin.Services.PlatformIntelligenceApiRequestMapper.NormalizeOptionalFilter(sourceReference);
+    var normalizedSearch = FC.Engine.Admin.Services.PlatformIntelligenceApiRequestMapper.NormalizeOptionalFilter(search);
+    var size = FC.Engine.Admin.Services.PlatformIntelligenceApiRequestMapper.NormalizeTake(take, 25, 100);
+
+    var rows = state.Nodes
+        .Where(x => normalizedNodeType is null || x.NodeType.Equals(normalizedNodeType, StringComparison.OrdinalIgnoreCase))
+        .Where(x => normalizedRegulatorCode is null || string.Equals(x.RegulatorCode, normalizedRegulatorCode, StringComparison.OrdinalIgnoreCase))
+        .Where(x => normalizedSourceReference is null || string.Equals(x.SourceReference, normalizedSourceReference, StringComparison.OrdinalIgnoreCase))
+        .Where(x => normalizedSearch is null
+            || x.NodeKey.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase)
+            || x.DisplayName.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase)
+            || (!string.IsNullOrWhiteSpace(x.Code) && x.Code.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase)))
+        .Take(size)
+        .ToList();
+
+    return Results.Ok(new
+    {
+        state.MaterializedAt,
+        Total = rows.Count,
+        Rows = rows
+    });
+}).RequireAuthorization("Authenticated");
+
 app.MapGet("/api/intelligence/knowledge/impact-propagation", async (
     int? institutionId,
     string? signal,
@@ -1000,6 +1125,38 @@ app.MapGet("/api/intelligence/knowledge/impact-propagation", async (
         .ToList();
 
     return Results.Ok(rows);
+}).RequireAuthorization("Authenticated");
+
+app.MapGet("/api/intelligence/knowledge/catalog/edges", async (
+    string? edgeType,
+    string? regulatorCode,
+    string? sourceNodeKey,
+    string? targetNodeKey,
+    int? take,
+    FC.Engine.Admin.Services.PlatformIntelligenceService intelligenceService,
+    CancellationToken ct) =>
+{
+    var state = await intelligenceService.GetKnowledgeGraphCatalogStateAsync(ct);
+    var normalizedEdgeType = FC.Engine.Admin.Services.PlatformIntelligenceApiRequestMapper.NormalizeOptionalFilter(edgeType);
+    var normalizedRegulatorCode = FC.Engine.Admin.Services.PlatformIntelligenceApiRequestMapper.NormalizeOptionalFilter(regulatorCode);
+    var normalizedSourceNodeKey = FC.Engine.Admin.Services.PlatformIntelligenceApiRequestMapper.NormalizeOptionalFilter(sourceNodeKey);
+    var normalizedTargetNodeKey = FC.Engine.Admin.Services.PlatformIntelligenceApiRequestMapper.NormalizeOptionalFilter(targetNodeKey);
+    var size = FC.Engine.Admin.Services.PlatformIntelligenceApiRequestMapper.NormalizeTake(take, 25, 100);
+
+    var rows = state.Edges
+        .Where(x => normalizedEdgeType is null || x.EdgeType.Equals(normalizedEdgeType, StringComparison.OrdinalIgnoreCase))
+        .Where(x => normalizedRegulatorCode is null || string.Equals(x.RegulatorCode, normalizedRegulatorCode, StringComparison.OrdinalIgnoreCase))
+        .Where(x => normalizedSourceNodeKey is null || x.SourceNodeKey.Equals(normalizedSourceNodeKey, StringComparison.OrdinalIgnoreCase))
+        .Where(x => normalizedTargetNodeKey is null || x.TargetNodeKey.Equals(normalizedTargetNodeKey, StringComparison.OrdinalIgnoreCase))
+        .Take(size)
+        .ToList();
+
+    return Results.Ok(new
+    {
+        state.MaterializedAt,
+        Total = rows.Count,
+        Rows = rows
+    });
 }).RequireAuthorization("Authenticated");
 
 app.MapGet("/api/intelligence/knowledge/dossier", async (
@@ -1150,6 +1307,35 @@ app.MapGet("/api/intelligence/model-risk/overview", async (
     return Results.Ok(snapshot);
 }).RequireAuthorization("Authenticated");
 
+app.MapGet("/api/intelligence/model-risk/catalog", async (
+    string? owner,
+    string? tier,
+    string? returnHint,
+    int? take,
+    FC.Engine.Admin.Services.PlatformIntelligenceService intelligenceService,
+    CancellationToken ct) =>
+{
+    var state = await intelligenceService.GetModelInventoryCatalogStateAsync(ct);
+    var normalizedOwner = FC.Engine.Admin.Services.PlatformIntelligenceApiRequestMapper.NormalizeOptionalFilter(owner);
+    var normalizedTier = FC.Engine.Admin.Services.PlatformIntelligenceApiRequestMapper.NormalizeOptionalFilter(tier);
+    var normalizedReturnHint = FC.Engine.Admin.Services.PlatformIntelligenceApiRequestMapper.NormalizeOptionalFilter(returnHint);
+    var size = FC.Engine.Admin.Services.PlatformIntelligenceApiRequestMapper.NormalizeTake(take, 25, 100);
+
+    var rows = state.Definitions
+        .Where(x => normalizedOwner is null || x.Owner.Equals(normalizedOwner, StringComparison.OrdinalIgnoreCase))
+        .Where(x => normalizedTier is null || x.Tier.Equals(normalizedTier, StringComparison.OrdinalIgnoreCase))
+        .Where(x => normalizedReturnHint is null || x.ReturnHint.Contains(normalizedReturnHint, StringComparison.OrdinalIgnoreCase))
+        .Take(size)
+        .ToList();
+
+    return Results.Ok(new
+    {
+        state.MaterializedAt,
+        Total = rows.Count,
+        Rows = rows
+    });
+}).RequireAuthorization("Authenticated");
+
 app.MapGet("/api/intelligence/model-risk/pack", async (
     FC.Engine.Admin.Services.PlatformIntelligenceService intelligenceService,
     CancellationToken ct) =>
@@ -1261,6 +1447,48 @@ app.MapGet("/api/intelligence/capital/scenario", async (
     return state is null ? Results.NotFound() : Results.Ok(state);
 }).RequireAuthorization("Authenticated");
 
+app.MapGet("/api/intelligence/capital/overview", async (
+    FC.Engine.Admin.Services.PlatformIntelligenceService intelligenceService,
+    CancellationToken ct) =>
+{
+    var snapshot = await intelligenceService.GetCapitalSnapshotAsync(ct);
+    return Results.Ok(snapshot);
+}).RequireAuthorization("Authenticated");
+
+app.MapGet("/api/intelligence/capital/pack", async (
+    FC.Engine.Admin.Services.PlatformIntelligenceService intelligenceService,
+    CancellationToken ct) =>
+{
+    var snapshot = await intelligenceService.GetCapitalSnapshotAsync(ct);
+    return Results.Ok(snapshot.ReturnPack);
+}).RequireAuthorization("Authenticated");
+
+app.MapGet("/api/intelligence/capital/action-catalog", async (
+    string? lever,
+    string? code,
+    int? take,
+    FC.Engine.Admin.Services.PlatformIntelligenceService intelligenceService,
+    CancellationToken ct) =>
+{
+    var state = await intelligenceService.GetCapitalActionCatalogStateAsync(ct);
+    var normalizedLever = FC.Engine.Admin.Services.PlatformIntelligenceApiRequestMapper.NormalizeOptionalFilter(lever);
+    var normalizedCode = FC.Engine.Admin.Services.PlatformIntelligenceApiRequestMapper.NormalizeOptionalFilter(code);
+    var size = FC.Engine.Admin.Services.PlatformIntelligenceApiRequestMapper.NormalizeTake(take, 25, 100);
+
+    var rows = state.Templates
+        .Where(x => normalizedLever is null || x.PrimaryLever.Equals(normalizedLever, StringComparison.OrdinalIgnoreCase))
+        .Where(x => normalizedCode is null || x.Code.Equals(normalizedCode, StringComparison.OrdinalIgnoreCase))
+        .Take(size)
+        .ToList();
+
+    return Results.Ok(new
+    {
+        state.MaterializedAt,
+        Total = rows.Count,
+        Rows = rows
+    });
+}).RequireAuthorization("Authenticated");
+
 app.MapGet("/api/intelligence/capital/pack/export.csv", async (
     HttpContext context,
     FC.Engine.Admin.Services.PlatformIntelligenceExportService exportService,
@@ -1356,6 +1584,142 @@ app.MapPost("/api/intelligence/sanctions/screen", async (
         context.RequestAborted);
 
     return Results.Ok(run);
+}).RequireAuthorization("Authenticated");
+
+app.MapGet("/api/intelligence/sanctions/overview", async (
+    FC.Engine.Admin.Services.PlatformIntelligenceService intelligenceService,
+    CancellationToken ct) =>
+{
+    var snapshot = await intelligenceService.GetSanctionsSnapshotAsync(ct);
+    return Results.Ok(snapshot);
+}).RequireAuthorization("Authenticated");
+
+app.MapGet("/api/intelligence/sanctions/catalog/sources", async (
+    string? status,
+    int? take,
+    FC.Engine.Admin.Services.PlatformIntelligenceService intelligenceService,
+    CancellationToken ct) =>
+{
+    var state = await intelligenceService.GetSanctionsCatalogStateAsync(ct);
+    var normalizedStatus = FC.Engine.Admin.Services.PlatformIntelligenceApiRequestMapper.NormalizeOptionalFilter(status);
+    var size = FC.Engine.Admin.Services.PlatformIntelligenceApiRequestMapper.NormalizeTake(take, 25, 100);
+
+    var rows = state.Sources
+        .Where(x => normalizedStatus is null || x.Status.Equals(normalizedStatus, StringComparison.OrdinalIgnoreCase))
+        .Take(size)
+        .ToList();
+
+    return Results.Ok(new
+    {
+        state.MaterializedAt,
+        Total = rows.Count,
+        Rows = rows
+    });
+}).RequireAuthorization("Authenticated");
+
+app.MapGet("/api/intelligence/sanctions/catalog/entries", async (
+    string? sourceCode,
+    string? category,
+    string? riskLevel,
+    string? search,
+    int? take,
+    FC.Engine.Admin.Services.PlatformIntelligenceService intelligenceService,
+    CancellationToken ct) =>
+{
+    var state = await intelligenceService.GetSanctionsCatalogStateAsync(ct);
+    var normalizedSourceCode = FC.Engine.Admin.Services.PlatformIntelligenceApiRequestMapper.NormalizeOptionalFilter(sourceCode);
+    var normalizedCategory = FC.Engine.Admin.Services.PlatformIntelligenceApiRequestMapper.NormalizeOptionalFilter(category);
+    var normalizedRiskLevel = FC.Engine.Admin.Services.PlatformIntelligenceApiRequestMapper.NormalizeOptionalFilter(riskLevel);
+    var normalizedSearch = FC.Engine.Admin.Services.PlatformIntelligenceApiRequestMapper.NormalizeOptionalFilter(search);
+    var size = FC.Engine.Admin.Services.PlatformIntelligenceApiRequestMapper.NormalizeTake(take, 25, 100);
+
+    var rows = state.Entries
+        .Where(x => normalizedSourceCode is null || x.SourceCode.Equals(normalizedSourceCode, StringComparison.OrdinalIgnoreCase))
+        .Where(x => normalizedCategory is null || x.Category.Equals(normalizedCategory, StringComparison.OrdinalIgnoreCase))
+        .Where(x => normalizedRiskLevel is null || x.RiskLevel.Equals(normalizedRiskLevel, StringComparison.OrdinalIgnoreCase))
+        .Where(x => normalizedSearch is null
+            || x.PrimaryName.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase)
+            || x.Aliases.Any(alias => alias.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase)))
+        .Take(size)
+        .ToList();
+
+    return Results.Ok(new
+    {
+        state.MaterializedAt,
+        Total = rows.Count,
+        Rows = rows
+    });
+}).RequireAuthorization("Authenticated");
+
+app.MapGet("/api/intelligence/sanctions/pack", async (
+    FC.Engine.Admin.Services.PlatformIntelligenceService intelligenceService,
+    CancellationToken ct) =>
+{
+    var snapshot = await intelligenceService.GetSanctionsSnapshotAsync(ct);
+    return Results.Ok(snapshot.ReturnPack);
+}).RequireAuthorization("Authenticated");
+
+app.MapGet("/api/intelligence/sanctions/workflow", async (
+    FC.Engine.Admin.Services.PlatformIntelligenceService intelligenceService,
+    CancellationToken ct) =>
+{
+    var state = await intelligenceService.GetSanctionsWorkflowStateAsync(ct);
+    return Results.Ok(state);
+}).RequireAuthorization("Authenticated");
+
+app.MapPost("/api/intelligence/sanctions/workflow", async (
+    FC.Engine.Admin.Services.SanctionsWorkflowDecisionApiRequest request,
+    HttpContext context,
+    FC.Engine.Admin.Services.PlatformIntelligenceService intelligenceService,
+    IAuditLogger auditLogger) =>
+{
+    if (!FC.Engine.Admin.Services.PlatformIntelligenceApiRequestMapper.TryNormalizeSanctionsWorkflowDecisionRequest(
+            request,
+            out var command,
+            out var error))
+    {
+        return Results.BadRequest(new { error });
+    }
+
+    await intelligenceService.RecordSanctionsDecisionAsync(command, context.RequestAborted);
+    var performedBy = context.User.FindFirstValue(ClaimTypes.NameIdentifier)
+                      ?? context.User.Identity?.Name
+                      ?? "platform-intelligence-api";
+
+    await auditLogger.Log(
+        "Sanctions",
+        0,
+        "SanctionsWorkflowDecisionRecorded",
+        null,
+        new
+        {
+            command.MatchKey,
+            command.Subject,
+            command.SourceCode,
+            command.PreviousDecision,
+            command.Decision,
+            command.ReviewedAtUtc
+        },
+        performedBy,
+        context.RequestAborted);
+
+    return Results.Ok(command);
+}).RequireAuthorization("Authenticated");
+
+app.MapGet("/api/intelligence/sanctions/session", async (
+    FC.Engine.Admin.Services.PlatformIntelligenceService intelligenceService,
+    CancellationToken ct) =>
+{
+    var state = await intelligenceService.GetSanctionsScreeningSessionStateAsync(ct);
+    return Results.Ok(state);
+}).RequireAuthorization("Authenticated");
+
+app.MapGet("/api/intelligence/sanctions/str-drafts", async (
+    FC.Engine.Admin.Services.PlatformIntelligenceService intelligenceService,
+    CancellationToken ct) =>
+{
+    var state = await intelligenceService.GetSanctionsStrDraftCatalogStateAsync(ct);
+    return Results.Ok(state);
 }).RequireAuthorization("Authenticated");
 
 app.MapGet("/api/intelligence/sanctions/pack/export.csv", async (
@@ -1539,3 +1903,7 @@ app.MapRazorComponents<FC.Engine.Admin.Components.App>()
     .AddInteractiveServerRenderMode();
 
 app.Run();
+
+public partial class Program
+{
+}
