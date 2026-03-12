@@ -8,6 +8,10 @@ public interface IPlatformIntelligenceWorkspaceLoader
     Task<SanctionsScreeningSessionState> GetSanctionsScreeningSessionStateAsync(CancellationToken ct = default);
     Task<SanctionsWorkflowState> GetSanctionsWorkflowStateAsync(CancellationToken ct = default);
     Task<SanctionsStrDraftCatalogState> GetSanctionsStrDraftCatalogStateAsync(CancellationToken ct = default);
+    Task<DashboardBriefingPackCatalogState> GetDashboardBriefingPackCatalogStateAsync(
+        string lens,
+        int? institutionId,
+        CancellationToken ct = default);
     Task<DashboardBriefingPackCatalogState> MaterializeDashboardBriefingPackAsync(
         string lens,
         int? institutionId,

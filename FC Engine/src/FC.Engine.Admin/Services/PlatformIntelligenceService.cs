@@ -1345,6 +1345,9 @@ public sealed class PlatformIntelligenceService : IPlatformIntelligenceWorkspace
     public async Task<PlatformIntelligenceRefreshSnapshot> GetRefreshSnapshotAsync(CancellationToken ct = default) =>
         (await GetWorkspaceAsync(ct)).Refresh;
 
+    public Task<IReadOnlyList<PlatformIntelligenceRefreshRunState>> GetRecentRefreshRunsAsync(int take = 8, CancellationToken ct = default) =>
+        _platformIntelligenceRefreshRunStore.LoadRecentAsync(take, ct);
+
     public async Task<IReadOnlyList<InterventionQueueRow>> GetInterventionsAsync(CancellationToken ct = default) =>
         (await GetWorkspaceAsync(ct)).Interventions;
 
