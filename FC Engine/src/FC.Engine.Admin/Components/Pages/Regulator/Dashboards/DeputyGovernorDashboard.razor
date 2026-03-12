@@ -1,0 +1,167 @@
+@page "/regulator/dashboards/deputy"
+@attribute [Authorize(Policy = "RegulatorOnly")]
+@inject FC.Engine.Admin.Services.Dashboards.StakeholderDashboardService DashboardService
+@inject IJSRuntime JS
+
+<PageTitle>Deputy Governor Dashboard</PageTitle>
+
+<PageHeader Title="Deputy Governor Dashboard"
+            Subtitle="Portfolio oversight, unresolved issues, escalation tracking, and remediation progress."
+            BackUrl="/regulator/dashboards/governor">
+    <PrimaryAction><button class="fc-btn fc-btn--primary" @onclick="ReloadAsync" disabled="@_loading">Refresh</button></PrimaryAction>
+</PageHeader>
+
+<div class="fc-page">
+    <SectionErrorBoundary Title="Failed to load deputy dashboard" ExternalError="@_loadException" OnRetry="ReloadAsync">
+        @if (_loading)
+        {
+            <div class="rg-dash-kpi-strip">
+                @for (var i = 0; i < 4; i++)
+                {
+                    <div class="rg-dash-kpi"><SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Block" Height="88px" /></div>
+                }
+            </div>
+        }
+        else if (_data is null)
+        {
+            <EmptyState Context="data" Heading="No dashboard data" Description="Refresh the Intelligence Hub to generate stakeholder data." />
+        }
+        else
+        {
+            <div class="rg-dash-kpi-strip">
+                <div class="rg-dash-kpi">
+                    <div class="rg-dash-kpi-value">@_data.PortfolioSize</div>
+                    <div class="rg-dash-kpi-label">Portfolio Size</div>
+                </div>
+                <div class="rg-dash-kpi">
+                    <div class="rg-dash-kpi-value @(_data.UnresolvedIssues > 0 ? "rg-dash-kpi-value--amber" : "")">@_data.UnresolvedIssues</div>
+                    <div class="rg-dash-kpi-label">Unresolved Issues</div>
+                </div>
+                <div class="rg-dash-kpi">
+                    <div class="rg-dash-kpi-value @(_data.Escalations > 0 ? "rg-dash-kpi-value--red" : "")">@_data.Escalations</div>
+                    <div class="rg-dash-kpi-label">Escalations</div>
+                </div>
+                <div class="rg-dash-kpi">
+                    <div class="rg-dash-kpi-value @(_data.RemediationRatePercent >= 80 ? "rg-dash-kpi-value--green" : "rg-dash-kpi-value--amber")">@_data.RemediationRatePercent%</div>
+                    <div class="rg-dash-kpi-label">Remediation Rate</div>
+                </div>
+            </div>
+
+            @* Domain Distribution Chart *@
+            <div class="fc-card fc-card--mb" style="margin-top:var(--space-4);">
+                <div class="fc-card__header"><h2 class="fc-card__title">Issue Distribution by Domain</h2></div>
+                <div class="fc-card__body"><canvas id="deputyDomainChart" style="max-height:260px;"></canvas></div>
+            </div>
+
+            @* Intervention Queue *@
+            <div class="fc-card fc-card--mb">
+                <div class="fc-card__header"><h2 class="fc-card__title">Intervention Queue</h2></div>
+                <div class="fc-card__body">
+                    @if (_data.InterventionQueue.Count == 0)
+                    {
+                        <p class="fc-text-muted">No active interventions.</p>
+                    }
+                    else
+                    {
+                        <DataTable TItem="InterventionQueueRow" Items="@_data.InterventionQueue" PageSize="20" Sortable="true" ShowExport="true" ExportFileName="deputy-interventions">
+                            <ChildContent>
+                                <DataColumn TItem="InterventionQueueRow" Title="Domain" Width="120px" SortKey="@(x => x.Domain)">
+                                    <CellTemplate><span class="fc-badge fc-badge--neutral">@context.Domain</span></CellTemplate>
+                                </DataColumn>
+                                <DataColumn TItem="InterventionQueueRow" Title="Subject" SortKey="@(x => x.Subject)">
+                                    <CellTemplate><strong>@context.Subject</strong></CellTemplate>
+                                </DataColumn>
+                                <DataColumn TItem="InterventionQueueRow" Title="Signal" Width="90px" SortKey="@(x => x.Signal)">
+                                    <CellTemplate><span class="fc-badge @SignalBadge(context.Signal)">@context.Signal</span></CellTemplate>
+                                </DataColumn>
+                                <DataColumn TItem="InterventionQueueRow" Title="Priority" Width="100px" SortKey="@(x => x.Priority)">
+                                    <CellTemplate><span class="fc-badge @PriorityBadge(context.Priority)">@context.Priority</span></CellTemplate>
+                                </DataColumn>
+                                <DataColumn TItem="InterventionQueueRow" Title="Next Action" SortKey="@(x => x.NextAction)">
+                                    <CellTemplate>@context.NextAction</CellTemplate>
+                                </DataColumn>
+                                <DataColumn TItem="InterventionQueueRow" Title="Owner" Width="110px" SortKey="@(x => x.OwnerLane)">
+                                    <CellTemplate>@context.OwnerLane</CellTemplate>
+                                </DataColumn>
+                                <DataColumn TItem="InterventionQueueRow" Title="Due" Width="120px" SortKey="@(x => x.DueDate)">
+                                    <CellTemplate>@context.DueDate.ToString("dd MMM yyyy")</CellTemplate>
+                                </DataColumn>
+                            </ChildContent>
+                        </DataTable>
+                    }
+                </div>
+            </div>
+
+            @* Institution Scorecards *@
+            <div class="fc-card">
+                <div class="fc-card__header"><h2 class="fc-card__title">Institution Scorecards</h2></div>
+                <div class="fc-card__body">
+                    <DataTable TItem="InstitutionScorecardRow" Items="@_data.InstitutionScorecards" PageSize="15" Sortable="true" ShowExport="true" ExportFileName="deputy-scorecards">
+                        <ChildContent>
+                            <DataColumn TItem="InstitutionScorecardRow" Title="Institution" SortKey="@(x => x.InstitutionName)">
+                                <CellTemplate><strong>@context.InstitutionName</strong></CellTemplate>
+                            </DataColumn>
+                            <DataColumn TItem="InstitutionScorecardRow" Title="Licence" Width="120px" SortKey="@(x => x.LicenceType)">
+                                <CellTemplate><span class="fc-badge fc-badge--neutral">@context.LicenceType</span></CellTemplate>
+                            </DataColumn>
+                            <DataColumn TItem="InstitutionScorecardRow" Title="Overdue" Width="90px" SortKey="@(x => x.OverdueObligations)">
+                                <CellTemplate><span class="@(context.OverdueObligations > 0 ? "fc-text-danger" : "")">@context.OverdueObligations</span></CellTemplate>
+                            </DataColumn>
+                            <DataColumn TItem="InstitutionScorecardRow" Title="Due Soon" Width="90px" SortKey="@(x => x.DueSoonObligations)">
+                                <CellTemplate><span class="@(context.DueSoonObligations > 0 ? "fc-text-warning" : "")">@context.DueSoonObligations</span></CellTemplate>
+                            </DataColumn>
+                            <DataColumn TItem="InstitutionScorecardRow" Title="Capital" Width="90px" SortKey="@(x => x.CapitalScore)">
+                                <CellTemplate>@(context.CapitalScore?.ToString("F1") ?? "—")</CellTemplate>
+                            </DataColumn>
+                            <DataColumn TItem="InstitutionScorecardRow" Title="Incidents" Width="90px" SortKey="@(x => x.OpenResilienceIncidents)">
+                                <CellTemplate>@context.OpenResilienceIncidents</CellTemplate>
+                            </DataColumn>
+                            <DataColumn TItem="InstitutionScorecardRow" Title="Priority" Width="100px" SortKey="@(x => x.Priority)">
+                                <CellTemplate><span class="fc-badge @PriorityBadge(context.Priority)">@context.Priority</span></CellTemplate>
+                            </DataColumn>
+                        </ChildContent>
+                    </DataTable>
+                </div>
+            </div>
+        }
+    </SectionErrorBoundary>
+</div>
+
+@code {
+    private bool _loading = true, _chartsRendered;
+    private Exception? _loadException;
+    private FC.Engine.Admin.Services.Dashboards.DeputyGovernorDashboardData? _data;
+
+    protected override async Task OnInitializedAsync() => await ReloadAsync();
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!_chartsRendered && _data is not null && _data.DomainDistribution.Count > 0)
+        {
+            _chartsRendered = true;
+            try
+            {
+                await JS.InvokeVoidAsync("fcCharts.renderBar", "deputyDomainChart", new
+                {
+                    labels = _data.DomainDistribution.Select(d => d.Label).ToArray(),
+                    datasets = new object[]
+                    {
+                        new { label = "Issues", data = _data.DomainDistribution.Select(d => d.Count).ToArray(), backgroundColor = "#006B3F" }
+                    }
+                });
+            }
+            catch { }
+        }
+    }
+
+    private async Task ReloadAsync()
+    {
+        _loading = true; _loadException = null; _chartsRendered = false;
+        try { _data = await DashboardService.GetDeputyGovernorDashboardAsync(); }
+        catch (Exception ex) { _loadException = ex; }
+        finally { _loading = false; }
+    }
+
+    private static string PriorityBadge(string p) => p switch { "Critical" => "fc-badge--danger", "High" => "fc-badge--warning", "Medium" => "fc-badge--info", _ => "fc-badge--neutral" };
+    private static string SignalBadge(string s) => s switch { "Critical" or "Alert" => "fc-badge--danger", "Warning" or "Watch" => "fc-badge--warning", "Resolved" => "fc-badge--success", _ => "fc-badge--neutral" };
+}

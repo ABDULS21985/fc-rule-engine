@@ -84,6 +84,9 @@ builder.Services.AddScoped<FC.Engine.Admin.Services.Resilience.ResilienceOrchest
 // Model Risk Management
 builder.Services.AddScoped<FC.Engine.Admin.Services.ModelRisk.ModelGovernanceService>();
 
+// Stakeholder Dashboards
+builder.Services.AddScoped<FC.Engine.Admin.Services.Dashboards.StakeholderDashboardService>();
+
 // Platform Admin services
 builder.Services.AddScoped<FC.Engine.Admin.Services.TenantManagementService>();
 builder.Services.AddScoped<FC.Engine.Admin.Services.PlatformAdminService>();

@@ -2510,20 +2510,7 @@ public sealed class PlatformIntelligenceService : IPlatformIntelligenceWorkspace
         return history
             .Select(row =>
             {
-                var projectionRows = BuildProjectionRows(new CapitalProjectionInput
-                {
-                    CurrentCarPercent = row.CurrentCarPercent,
-                    CurrentRwaBn = row.CurrentRwaBn,
-                    QuarterlyRwaGrowthPercent = row.QuarterlyRwaGrowthPercent,
-                    QuarterlyRetainedEarningsBn = row.QuarterlyRetainedEarningsBn,
-                    CapitalActionBn = row.CapitalActionBn,
-                    MinimumRequirementPercent = row.MinimumRequirementPercent,
-                    ConservationBufferPercent = row.ConservationBufferPercent,
-                    CountercyclicalBufferPercent = row.CountercyclicalBufferPercent,
-                    DsibBufferPercent = row.DsibBufferPercent,
-                    RwaOptimisationPercent = row.RwaOptimisationPercent
-                });
-                var q8 = projectionRows.LastOrDefault();
+                var projection = CalculateCapitalScenarioProjection(row);
 
                 return new CapitalPlanningScenarioHistoryRow
                 {
@@ -2532,17 +2519,61 @@ public sealed class PlatformIntelligenceService : IPlatformIntelligenceWorkspace
                     CurrentCarPercent = row.CurrentCarPercent,
                     TargetCarPercent = row.TargetCarPercent,
                     CurrentRwaBn = row.CurrentRwaBn,
+                    QuarterlyRwaGrowthPercent = row.QuarterlyRwaGrowthPercent,
+                    QuarterlyRetainedEarningsBn = row.QuarterlyRetainedEarningsBn,
                     CapitalActionBn = row.CapitalActionBn,
+                    MinimumRequirementPercent = row.MinimumRequirementPercent,
+                    ConservationBufferPercent = row.ConservationBufferPercent,
+                    CountercyclicalBufferPercent = row.CountercyclicalBufferPercent,
+                    DsibBufferPercent = row.DsibBufferPercent,
                     RwaOptimisationPercent = row.RwaOptimisationPercent,
-                    ProjectedQuarter8CarPercent = q8?.ProjectedCarPercent ?? row.CurrentCarPercent,
-                    WorstBufferHeadroomPercent = projectionRows.Count == 0 ? 0m : projectionRows.Min(x => x.BufferHeadroomPercent),
-                    Signal = q8?.Signal ?? "Current",
+                    Cet1CostPercent = row.Cet1CostPercent,
+                    At1CostPercent = row.At1CostPercent,
+                    Tier2CostPercent = row.Tier2CostPercent,
+                    MaxAt1SharePercent = row.MaxAt1SharePercent,
+                    MaxTier2SharePercent = row.MaxTier2SharePercent,
+                    StepPercent = row.StepPercent,
+                    ProjectedQuarter8CarPercent = projection.ProjectedQuarter8CarPercent,
+                    WorstBufferHeadroomPercent = projection.WorstBufferHeadroomPercent,
+                    Signal = projection.Signal,
                     Summary = $"Capital action {row.CapitalActionBn.ToString("0.0", CultureInfo.InvariantCulture)} bn | RWA optimisation {row.RwaOptimisationPercent.ToString("0.0", CultureInfo.InvariantCulture)}%"
                 };
             })
             .OrderByDescending(x => x.SavedAtUtc)
             .ThenByDescending(x => x.HistoryId)
             .ToList();
+    }
+
+    private static (decimal ProjectedQuarter8CarPercent, decimal WorstBufferHeadroomPercent, string Signal) CalculateCapitalScenarioProjection(
+        CapitalPlanningScenarioHistoryState row)
+    {
+        var rwa = row.CurrentRwaBn;
+        var capital = row.CurrentCarPercent / 100m * rwa;
+        var totalBuffer = row.ConservationBufferPercent + row.CountercyclicalBufferPercent + row.DsibBufferPercent;
+        var requiredThreshold = row.MinimumRequirementPercent + totalBuffer;
+        var worstHeadroom = decimal.MaxValue;
+        var finalCar = row.CurrentCarPercent;
+        var finalSignal = "Current";
+
+        for (var quarter = 1; quarter <= 8; quarter++)
+        {
+            rwa *= 1m + row.QuarterlyRwaGrowthPercent / 100m;
+            rwa *= 1m - row.RwaOptimisationPercent / 100m;
+
+            capital += row.QuarterlyRetainedEarningsBn;
+            if (quarter == 1)
+            {
+                capital += row.CapitalActionBn;
+            }
+
+            var car = rwa == 0m ? 0m : capital / rwa * 100m;
+            var headroom = car - requiredThreshold;
+            finalCar = Math.Round(car, 2);
+            worstHeadroom = Math.Min(worstHeadroom, Math.Round(headroom, 2));
+            finalSignal = headroom < 0m ? "Breach" : headroom < 1.5m ? "Watch" : "Healthy";
+        }
+
+        return (finalCar, worstHeadroom == decimal.MaxValue ? 0m : worstHeadroom, finalSignal);
     }
 
     private static List<ImpactToleranceRow> BuildImpactToleranceRows(
@@ -6362,8 +6393,20 @@ public sealed class CapitalPlanningScenarioHistoryRow
     public decimal CurrentCarPercent { get; set; }
     public decimal TargetCarPercent { get; set; }
     public decimal CurrentRwaBn { get; set; }
+    public decimal QuarterlyRwaGrowthPercent { get; set; }
+    public decimal QuarterlyRetainedEarningsBn { get; set; }
     public decimal CapitalActionBn { get; set; }
+    public decimal MinimumRequirementPercent { get; set; }
+    public decimal ConservationBufferPercent { get; set; }
+    public decimal CountercyclicalBufferPercent { get; set; }
+    public decimal DsibBufferPercent { get; set; }
     public decimal RwaOptimisationPercent { get; set; }
+    public decimal Cet1CostPercent { get; set; }
+    public decimal At1CostPercent { get; set; }
+    public decimal Tier2CostPercent { get; set; }
+    public decimal MaxAt1SharePercent { get; set; }
+    public decimal MaxTier2SharePercent { get; set; }
+    public decimal StepPercent { get; set; }
     public decimal ProjectedQuarter8CarPercent { get; set; }
     public decimal WorstBufferHeadroomPercent { get; set; }
     public string Signal { get; set; } = string.Empty;

@@ -1,0 +1,198 @@
+@page "/regulator/dashboards/governor"
+@attribute [Authorize(Policy = "RegulatorOnly")]
+@inject FC.Engine.Admin.Services.Dashboards.StakeholderDashboardService DashboardService
+@inject IJSRuntime JS
+
+<PageTitle>Governor Dashboard</PageTitle>
+
+<PageHeader Title="Governor Dashboard"
+            Subtitle="Systemic stability overview, sector capital adequacy, compliance rates, and priority warnings."
+            BackUrl="/regulator">
+    <PrimaryAction><button class="fc-btn fc-btn--primary" @onclick="ReloadAsync" disabled="@_loading">Refresh</button></PrimaryAction>
+</PageHeader>
+
+<div class="fc-page">
+    <SectionErrorBoundary Title="Failed to load governor dashboard" ExternalError="@_loadException" OnRetry="ReloadAsync">
+        @if (_loading)
+        {
+            <div class="rg-dash-kpi-strip">
+                @for (var i = 0; i < 4; i++)
+                {
+                    <div class="rg-dash-kpi"><SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Block" Height="88px" /></div>
+                }
+            </div>
+        }
+        else if (_data is null)
+        {
+            <EmptyState Context="data" Heading="No dashboard data" Description="Refresh the Intelligence Hub to generate stakeholder data." />
+        }
+        else
+        {
+            <div class="rg-dash-kpi-strip">
+                <div class="rg-dash-kpi">
+                    <div class="rg-dash-kpi-value">@_data.TotalInstitutions</div>
+                    <div class="rg-dash-kpi-label">Institutions</div>
+                </div>
+                <div class="rg-dash-kpi">
+                    <div class="rg-dash-kpi-value">@_data.AverageCapitalScore</div>
+                    <div class="rg-dash-kpi-label">Avg Capital Score</div>
+                </div>
+                <div class="rg-dash-kpi">
+                    <div class="rg-dash-kpi-value @(_data.ComplianceRatePercent < 80 ? "rg-dash-kpi-value--red" : _data.ComplianceRatePercent < 95 ? "rg-dash-kpi-value--amber" : "rg-dash-kpi-value--green")">@_data.ComplianceRatePercent%</div>
+                    <div class="rg-dash-kpi-label">Compliance Rate</div>
+                </div>
+                <div class="rg-dash-kpi">
+                    <div class="rg-dash-kpi-value @(_data.OpenWarnings > 0 ? "rg-dash-kpi-value--red" : "")">@_data.OpenWarnings</div>
+                    <div class="rg-dash-kpi-label">Open Warnings</div>
+                </div>
+            </div>
+
+            <div class="rg-dash-kpi-strip" style="margin-top:var(--space-2);">
+                <div class="rg-dash-kpi">
+                    <div class="rg-dash-kpi-value">@_data.CapitalWatchlistCount</div>
+                    <div class="rg-dash-kpi-label">Capital Watchlist</div>
+                </div>
+                <div class="rg-dash-kpi">
+                    <div class="rg-dash-kpi-value">@_data.ActiveInterventions</div>
+                    <div class="rg-dash-kpi-label">Active Interventions</div>
+                </div>
+                <div class="rg-dash-kpi">
+                    <div class="rg-dash-kpi-value">@_data.OpenResilienceIncidents</div>
+                    <div class="rg-dash-kpi-label">Resilience Incidents</div>
+                </div>
+                <div class="rg-dash-kpi">
+                    <div class="rg-dash-kpi-value">@_data.ModelsUnderReview</div>
+                    <div class="rg-dash-kpi-label">Model Reviews</div>
+                </div>
+            </div>
+
+            @* Charts Row *@
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--space-4);margin-top:var(--space-4);">
+                <div class="fc-card">
+                    <div class="fc-card__header"><h2 class="fc-card__title">Priority Distribution</h2></div>
+                    <div class="fc-card__body"><canvas id="govPriorityChart" style="max-height:260px;"></canvas></div>
+                </div>
+                <div class="fc-card">
+                    <div class="fc-card__header"><h2 class="fc-card__title">Licence Distribution</h2></div>
+                    <div class="fc-card__body"><canvas id="govLicenceChart" style="max-height:260px;"></canvas></div>
+                </div>
+            </div>
+
+            @* Top Risk Institutions *@
+            <div class="fc-card fc-card--mb" style="margin-top:var(--space-4);">
+                <div class="fc-card__header"><h2 class="fc-card__title">Top Risk Institutions</h2></div>
+                <div class="fc-card__body">
+                    <DataTable TItem="InstitutionScorecardRow" Items="@_data.TopRiskInstitutions" PageSize="10" Sortable="true" ShowExport="true" ExportFileName="governor-top-risk">
+                        <ChildContent>
+                            <DataColumn TItem="InstitutionScorecardRow" Title="Institution" SortKey="@(x => x.InstitutionName)">
+                                <CellTemplate><strong>@context.InstitutionName</strong></CellTemplate>
+                            </DataColumn>
+                            <DataColumn TItem="InstitutionScorecardRow" Title="Licence" Width="120px" SortKey="@(x => x.LicenceType)">
+                                <CellTemplate><span class="fc-badge fc-badge--neutral">@context.LicenceType</span></CellTemplate>
+                            </DataColumn>
+                            <DataColumn TItem="InstitutionScorecardRow" Title="Priority" Width="100px" SortKey="@(x => x.Priority)">
+                                <CellTemplate><span class="fc-badge @PriorityBadge(context.Priority)">@context.Priority</span></CellTemplate>
+                            </DataColumn>
+                            <DataColumn TItem="InstitutionScorecardRow" Title="Capital" Width="90px" SortKey="@(x => x.CapitalScore)">
+                                <CellTemplate>@(context.CapitalScore?.ToString("F1") ?? "—")</CellTemplate>
+                            </DataColumn>
+                            <DataColumn TItem="InstitutionScorecardRow" Title="Overdue" Width="90px" SortKey="@(x => x.OverdueObligations)">
+                                <CellTemplate>
+                                    <span class="@(context.OverdueObligations > 0 ? "fc-text-danger" : "")">@context.OverdueObligations</span>
+                                </CellTemplate>
+                            </DataColumn>
+                            <DataColumn TItem="InstitutionScorecardRow" Title="Incidents" Width="90px" SortKey="@(x => x.OpenResilienceIncidents)">
+                                <CellTemplate>@context.OpenResilienceIncidents</CellTemplate>
+                            </DataColumn>
+                            <DataColumn TItem="InstitutionScorecardRow" Title="Alerts" Width="80px" SortKey="@(x => x.OpenSecurityAlerts)">
+                                <CellTemplate>@context.OpenSecurityAlerts</CellTemplate>
+                            </DataColumn>
+                        </ChildContent>
+                    </DataTable>
+                </div>
+            </div>
+
+            @* Recent Activity *@
+            <div class="fc-card">
+                <div class="fc-card__header"><h2 class="fc-card__title">Recent Activity</h2></div>
+                <div class="fc-card__body">
+                    <DataTable TItem="ActivityTimelineRow" Items="@_data.RecentActivity" PageSize="10" Sortable="true">
+                        <ChildContent>
+                            <DataColumn TItem="ActivityTimelineRow" Title="Domain" Width="120px" SortKey="@(x => x.Domain)">
+                                <CellTemplate><span class="fc-badge fc-badge--neutral">@context.Domain</span></CellTemplate>
+                            </DataColumn>
+                            <DataColumn TItem="ActivityTimelineRow" Title="Event" SortKey="@(x => x.Title)">
+                                <CellTemplate>
+                                    <strong>@context.Title</strong>
+                                    <div class="fc-text-muted-sm">@context.Detail</div>
+                                </CellTemplate>
+                            </DataColumn>
+                            <DataColumn TItem="ActivityTimelineRow" Title="Severity" Width="100px" SortKey="@(x => x.Severity)">
+                                <CellTemplate><span class="fc-badge @SeverityBadge(context.Severity)">@context.Severity</span></CellTemplate>
+                            </DataColumn>
+                            <DataColumn TItem="ActivityTimelineRow" Title="When" Width="150px" SortKey="@(x => x.HappenedAt)">
+                                <CellTemplate>@context.HappenedAt.ToString("dd MMM yyyy HH:mm")</CellTemplate>
+                            </DataColumn>
+                        </ChildContent>
+                    </DataTable>
+                </div>
+            </div>
+        }
+    </SectionErrorBoundary>
+</div>
+
+@code {
+    private bool _loading = true, _chartsRendered;
+    private Exception? _loadException;
+    private FC.Engine.Admin.Services.Dashboards.GovernorDashboardData? _data;
+
+    protected override async Task OnInitializedAsync() => await ReloadAsync();
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!_chartsRendered && _data is not null)
+        {
+            _chartsRendered = true;
+            await RenderChartsAsync();
+        }
+    }
+
+    private async Task ReloadAsync()
+    {
+        _loading = true; _loadException = null; _chartsRendered = false;
+        try { _data = await DashboardService.GetGovernorDashboardAsync(); }
+        catch (Exception ex) { _loadException = ex; }
+        finally { _loading = false; }
+    }
+
+    private async Task RenderChartsAsync()
+    {
+        if (_data is null) return;
+        try
+        {
+            if (_data.PriorityDistribution.Count > 0)
+            {
+                await JS.InvokeVoidAsync("fcCharts.renderDoughnut", "govPriorityChart", new
+                {
+                    labels = _data.PriorityDistribution.Select(p => p.Label).ToArray(),
+                    data = _data.PriorityDistribution.Select(p => p.Count).ToArray(),
+                    colors = _data.PriorityDistribution.Select(p => PriorityColor(p.Label)).ToArray()
+                });
+            }
+            if (_data.LicenceDistribution.Count > 0)
+            {
+                await JS.InvokeVoidAsync("fcCharts.renderDoughnut", "govLicenceChart", new
+                {
+                    labels = _data.LicenceDistribution.Select(l => l.Label).ToArray(),
+                    data = _data.LicenceDistribution.Select(l => l.Count).ToArray(),
+                    colors = new[] { "#006B3F", "#C8A415", "#2563EB", "#7C3AED", "#9CA3AF", "#E07C24" }
+                });
+            }
+        }
+        catch { }
+    }
+
+    private static string PriorityBadge(string p) => p switch { "Critical" => "fc-badge--danger", "High" => "fc-badge--warning", "Medium" => "fc-badge--info", _ => "fc-badge--neutral" };
+    private static string PriorityColor(string p) => p switch { "Critical" => "#D32F2F", "High" => "#E07C24", "Medium" => "#C8A415", _ => "#9CA3AF" };
+    private static string SeverityBadge(string s) => s switch { "Critical" => "fc-badge--danger", "High" or "Warning" => "fc-badge--warning", "Info" => "fc-badge--info", _ => "fc-badge--neutral" };
+}

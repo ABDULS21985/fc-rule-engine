@@ -7689,6 +7689,15 @@
                 x.Recommendation,
                 $"{x.Commentary} Weighted cost {x.WeightedAverageCostPercent.ToString("0.0", CultureInfo.InvariantCulture)}% | Annual carry {x.AnnualCarryingCostBn.ToString("0.0", CultureInfo.InvariantCulture)} bn.")));
 
+        rows.AddRange(_workspace?.Capital.ScenarioHistory.Select(x =>
+            new CapitalExportRow(
+                "Scenario History",
+                $"{x.SavedAtUtc:dd MMM yyyy HH:mm} UTC",
+                $"Current CAR {x.CurrentCarPercent.ToString("0.0", CultureInfo.InvariantCulture)}% | Target {x.TargetCarPercent.ToString("0.0", CultureInfo.InvariantCulture)}%",
+                x.Signal,
+                $"Q8 CAR {x.ProjectedQuarter8CarPercent.ToString("0.0", CultureInfo.InvariantCulture)}% | Worst headroom {x.WorstBufferHeadroomPercent.ToString("0.0", CultureInfo.InvariantCulture)}% | {x.Summary}")) 
+            ?? []);
+
         return rows;
     }
 
@@ -7898,46 +7907,25 @@
                     _workspace.Capital.LastScenarioUpdatedAt = null;
                 }
 
+                await SyncCapitalScenarioHistoryAsync();
                 return;
             }
 
-            _projectionInput = new CapitalProjectionInput
-            {
-                CurrentCarPercent = state.CurrentCarPercent,
-                CurrentRwaBn = state.CurrentRwaBn,
-                QuarterlyRwaGrowthPercent = state.QuarterlyRwaGrowthPercent,
-                QuarterlyRetainedEarningsBn = state.QuarterlyRetainedEarningsBn,
-                CapitalActionBn = state.CapitalActionBn,
-                MinimumRequirementPercent = state.MinimumRequirementPercent,
-                ConservationBufferPercent = state.ConservationBufferPercent,
-                CountercyclicalBufferPercent = state.CountercyclicalBufferPercent,
-                DsibBufferPercent = state.DsibBufferPercent,
-                RwaOptimisationPercent = state.RwaOptimisationPercent
-            };
-
-            _capitalStackInput = new CapitalStackOptimiserInput
-            {
-                TargetCarPercent = state.TargetCarPercent,
-                Cet1CostPercent = state.Cet1CostPercent,
-                At1CostPercent = state.At1CostPercent,
-                Tier2CostPercent = state.Tier2CostPercent,
-                MaxAt1SharePercent = state.MaxAt1SharePercent,
-                MaxTier2SharePercent = state.MaxTier2SharePercent,
-                StepPercent = state.StepPercent
-            };
-
-            RecalculateProjection();
+            ApplyCapitalScenarioState(state);
 
             if (_workspace is not null)
             {
                 _workspace.Capital.LastScenarioUpdatedAt = state.SavedAtUtc;
             }
+
+            await SyncCapitalScenarioHistoryAsync();
         }
         catch
         {
             if (_workspace is not null)
             {
                 _workspace.Capital.LastScenarioUpdatedAt = null;
+                _workspace.Capital.ScenarioHistory = [];
             }
         }
     }
@@ -7974,11 +7962,145 @@
             });
 
             _workspace.Capital.LastScenarioUpdatedAt = state.SavedAtUtc;
+            await SyncCapitalScenarioHistoryAsync();
         }
         catch
         {
             // Keep the live scenario interactive even if persistence is temporarily unavailable.
         }
+    }
+
+    private void ApplyCapitalScenarioState(CapitalPlanningScenarioState state)
+    {
+        _projectionInput = new CapitalProjectionInput
+        {
+            CurrentCarPercent = state.CurrentCarPercent,
+            CurrentRwaBn = state.CurrentRwaBn,
+            QuarterlyRwaGrowthPercent = state.QuarterlyRwaGrowthPercent,
+            QuarterlyRetainedEarningsBn = state.QuarterlyRetainedEarningsBn,
+            CapitalActionBn = state.CapitalActionBn,
+            MinimumRequirementPercent = state.MinimumRequirementPercent,
+            ConservationBufferPercent = state.ConservationBufferPercent,
+            CountercyclicalBufferPercent = state.CountercyclicalBufferPercent,
+            DsibBufferPercent = state.DsibBufferPercent,
+            RwaOptimisationPercent = state.RwaOptimisationPercent
+        };
+
+        _capitalStackInput = new CapitalStackOptimiserInput
+        {
+            TargetCarPercent = state.TargetCarPercent,
+            Cet1CostPercent = state.Cet1CostPercent,
+            At1CostPercent = state.At1CostPercent,
+            Tier2CostPercent = state.Tier2CostPercent,
+            MaxAt1SharePercent = state.MaxAt1SharePercent,
+            MaxTier2SharePercent = state.MaxTier2SharePercent,
+            StepPercent = state.StepPercent
+        };
+
+        RecalculateProjection();
+    }
+
+    private void ApplyCapitalScenarioHistoryRow(CapitalPlanningScenarioHistoryRow row)
+    {
+        _projectionInput = new CapitalProjectionInput
+        {
+            CurrentCarPercent = row.CurrentCarPercent,
+            CurrentRwaBn = row.CurrentRwaBn,
+            QuarterlyRwaGrowthPercent = row.QuarterlyRwaGrowthPercent,
+            QuarterlyRetainedEarningsBn = row.QuarterlyRetainedEarningsBn,
+            CapitalActionBn = row.CapitalActionBn,
+            MinimumRequirementPercent = row.MinimumRequirementPercent,
+            ConservationBufferPercent = row.ConservationBufferPercent,
+            CountercyclicalBufferPercent = row.CountercyclicalBufferPercent,
+            DsibBufferPercent = row.DsibBufferPercent,
+            RwaOptimisationPercent = row.RwaOptimisationPercent
+        };
+
+        _capitalStackInput = new CapitalStackOptimiserInput
+        {
+            TargetCarPercent = row.TargetCarPercent,
+            Cet1CostPercent = row.Cet1CostPercent,
+            At1CostPercent = row.At1CostPercent,
+            Tier2CostPercent = row.Tier2CostPercent,
+            MaxAt1SharePercent = row.MaxAt1SharePercent,
+            MaxTier2SharePercent = row.MaxTier2SharePercent,
+            StepPercent = row.StepPercent
+        };
+
+        RecalculateProjection();
+    }
+
+    private static CapitalPlanningScenarioHistoryRow MapCapitalScenarioHistoryRow(CapitalPlanningScenarioHistoryState row)
+    {
+        var projectionRows = BuildProjectionRows(new CapitalProjectionInput
+        {
+            CurrentCarPercent = row.CurrentCarPercent,
+            CurrentRwaBn = row.CurrentRwaBn,
+            QuarterlyRwaGrowthPercent = row.QuarterlyRwaGrowthPercent,
+            QuarterlyRetainedEarningsBn = row.QuarterlyRetainedEarningsBn,
+            CapitalActionBn = row.CapitalActionBn,
+            MinimumRequirementPercent = row.MinimumRequirementPercent,
+            ConservationBufferPercent = row.ConservationBufferPercent,
+            CountercyclicalBufferPercent = row.CountercyclicalBufferPercent,
+            DsibBufferPercent = row.DsibBufferPercent,
+            RwaOptimisationPercent = row.RwaOptimisationPercent
+        });
+        var q8 = projectionRows.LastOrDefault();
+
+        return new CapitalPlanningScenarioHistoryRow
+        {
+            HistoryId = row.HistoryId,
+            SavedAtUtc = row.SavedAtUtc,
+            CurrentCarPercent = row.CurrentCarPercent,
+            TargetCarPercent = row.TargetCarPercent,
+            CurrentRwaBn = row.CurrentRwaBn,
+            QuarterlyRwaGrowthPercent = row.QuarterlyRwaGrowthPercent,
+            QuarterlyRetainedEarningsBn = row.QuarterlyRetainedEarningsBn,
+            CapitalActionBn = row.CapitalActionBn,
+            MinimumRequirementPercent = row.MinimumRequirementPercent,
+            ConservationBufferPercent = row.ConservationBufferPercent,
+            CountercyclicalBufferPercent = row.CountercyclicalBufferPercent,
+            DsibBufferPercent = row.DsibBufferPercent,
+            RwaOptimisationPercent = row.RwaOptimisationPercent,
+            Cet1CostPercent = row.Cet1CostPercent,
+            At1CostPercent = row.At1CostPercent,
+            Tier2CostPercent = row.Tier2CostPercent,
+            MaxAt1SharePercent = row.MaxAt1SharePercent,
+            MaxTier2SharePercent = row.MaxTier2SharePercent,
+            StepPercent = row.StepPercent,
+            ProjectedQuarter8CarPercent = q8?.ProjectedCarPercent ?? row.CurrentCarPercent,
+            WorstBufferHeadroomPercent = projectionRows.Count == 0 ? 0m : projectionRows.Min(x => x.BufferHeadroomPercent),
+            Signal = q8?.Signal ?? "Current",
+            Summary = $"Capital action {row.CapitalActionBn.ToString("0.0", CultureInfo.InvariantCulture)} bn | RWA optimisation {row.RwaOptimisationPercent.ToString("0.0", CultureInfo.InvariantCulture)}%"
+        };
+    }
+
+    private async Task SyncCapitalScenarioHistoryAsync()
+    {
+        if (_workspace is null)
+        {
+            return;
+        }
+
+        try
+        {
+            var history = await IntelligenceService.GetCapitalPlanningScenarioHistoryAsync();
+            _workspace.Capital.ScenarioHistory = history
+                .Select(MapCapitalScenarioHistoryRow)
+                .ToList();
+        }
+        catch
+        {
+            _workspace.Capital.ScenarioHistory = [];
+        }
+    }
+
+    private async Task RestoreCapitalScenarioAsync(CapitalPlanningScenarioHistoryRow row)
+    {
+        ApplyCapitalScenarioHistoryRow(row);
+        await SaveCapitalScenarioAsync();
+        await SyncCapitalPackAsync();
+        Toast.Success($"Capital scenario from {row.SavedAtUtc:dd MMM yyyy HH:mm} UTC restored.");
     }
 
     private async Task LoadSanctionsScreeningStateAsync()
