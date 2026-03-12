@@ -6,7 +6,7 @@
 @using Microsoft.EntityFrameworkCore
 @inject IEntitlementService EntitlementSvc
 @inject ITenantContext TenantContext
-@inject MetadataDbContext Db
+@inject IDbContextFactory<MetadataDbContext> DbFactory
 @inject DragDropInterop DragDrop
 
 <PageTitle>Modules — RegOS™ Portal</PageTitle>
@@ -185,7 +185,8 @@
                 .Select(m => m.ModuleCode)
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-            var tenantJurisdictionIds = await Db.Institutions
+            await using var db = await DbFactory.CreateDbContextAsync();
+            var tenantJurisdictionIds = await db.Institutions
                 .AsNoTracking()
                 .Where(i => i.TenantId == tenantId.Value)
                 .Select(i => i.JurisdictionId)
@@ -194,7 +195,7 @@
 
             if (tenantJurisdictionIds.Count == 0)
             {
-                var nigeriaId = await Db.Jurisdictions
+                var nigeriaId = await db.Jurisdictions
                     .AsNoTracking()
                     .Where(j => j.CountryCode == "NG")
                     .Select(j => j.Id)
@@ -206,7 +207,7 @@
                 }
             }
 
-            _allModules = await Db.Modules
+            _allModules = await db.Modules
                 .AsNoTracking()
                 .Include(m => m.Jurisdiction)
                 .Where(m => m.IsActive

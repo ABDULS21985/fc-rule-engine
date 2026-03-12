@@ -5,7 +5,7 @@
 @using FC.Engine.Infrastructure.Metadata
 @using FC.Engine.Admin.Services
 @using Microsoft.EntityFrameworkCore
-@inject MetadataDbContext Db
+@inject IDbContextFactory<MetadataDbContext> DbFactory
 @inject ToastService Toast
 @inject DialogService Dialog
 
@@ -307,13 +307,14 @@
 
     private async Task LoadData()
     {
-        var types = await Db.LicenceTypes
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var types = await db.LicenceTypes
             .AsNoTracking()
             .OrderBy(lt => lt.DisplayOrder)
             .ThenBy(lt => lt.Code)
             .ToListAsync();
 
-        var moduleCounts = await Db.LicenceModuleMatrix
+        var moduleCounts = await db.LicenceModuleMatrix
             .AsNoTracking()
             .GroupBy(m => m.LicenceTypeId)
             .Select(g => new
@@ -324,7 +325,7 @@
             })
             .ToListAsync();
 
-        var tenantCounts = await Db.TenantLicenceTypes
+        var tenantCounts = await db.TenantLicenceTypes
             .AsNoTracking()
             .Where(t => t.IsActive)
             .GroupBy(t => t.LicenceTypeId)
@@ -357,7 +358,7 @@
             .OrderBy(r => r)
             .ToList();
 
-        _allModules = await Db.Modules
+        _allModules = await db.Modules
             .AsNoTracking()
             .Where(m => m.IsActive)
             .OrderBy(m => m.DisplayOrder)
@@ -388,7 +389,8 @@
             Description = row.Description,
             DisplayOrder = row.DisplayOrder
         };
-        _matrixEntries = await Db.LicenceModuleMatrix
+        await using var db = await DbFactory.CreateDbContextAsync();
+        _matrixEntries = await db.LicenceModuleMatrix
             .AsNoTracking()
             .Where(m => m.LicenceTypeId == row.Id)
             .Select(m => new MatrixEntry { ModuleId = m.ModuleId, IsRequired = m.IsRequired, IsOptional = m.IsOptional })
@@ -430,6 +432,7 @@
         _saving = true;
         try
         {
+            await using var db = await DbFactory.CreateDbContextAsync();
             LicenceType entity;
             if (_isNew)
             {
@@ -443,30 +446,30 @@
                     IsActive = true,
                     CreatedAt = DateTime.UtcNow
                 };
-                Db.LicenceTypes.Add(entity);
-                await Db.SaveChangesAsync();
+                db.LicenceTypes.Add(entity);
+                await db.SaveChangesAsync();
             }
             else
             {
-                entity = await Db.LicenceTypes.FindAsync(_editId)
+                entity = await db.LicenceTypes.FindAsync(_editId)
                     ?? throw new InvalidOperationException("Licence type not found.");
                 entity.Code = _form.Code.Trim();
                 entity.Name = _form.Name.Trim();
                 entity.Regulator = _form.Regulator?.Trim() ?? string.Empty;
                 entity.Description = _form.Description?.Trim();
                 entity.DisplayOrder = _form.DisplayOrder;
-                await Db.SaveChangesAsync();
+                await db.SaveChangesAsync();
             }
 
             // Sync module matrix
-            var existing = await Db.LicenceModuleMatrix
+            var existing = await db.LicenceModuleMatrix
                 .Where(m => m.LicenceTypeId == entity.Id)
                 .ToListAsync();
-            Db.LicenceModuleMatrix.RemoveRange(existing);
+            db.LicenceModuleMatrix.RemoveRange(existing);
 
             foreach (var entry in _matrixEntries.Where(e => e.IsRequired || e.IsOptional))
             {
-                Db.LicenceModuleMatrix.Add(new LicenceModuleMatrix
+                db.LicenceModuleMatrix.Add(new LicenceModuleMatrix
                 {
                     LicenceTypeId = entity.Id,
                     ModuleId = entry.ModuleId,
@@ -474,7 +477,7 @@
                     IsOptional = entry.IsOptional
                 });
             }
-            await Db.SaveChangesAsync();
+            await db.SaveChangesAsync();
 
             Toast.Success(_isNew ? $"Licence type '{entity.Code}' created successfully." : $"Licence type '{entity.Code}' updated successfully.");
             _showModal = false;
@@ -506,11 +509,12 @@
 
         if (!confirmed) return;
 
-        var entity = await Db.LicenceTypes.FindAsync(row.Id);
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var entity = await db.LicenceTypes.FindAsync(row.Id);
         if (entity is null) return;
 
         entity.IsActive = !row.IsActive;
-        await Db.SaveChangesAsync();
+        await db.SaveChangesAsync();
         Toast.Success($"Licence type '{entity.Code}' {(entity.IsActive ? "activated" : "deactivated")}.");
         await LoadData();
     }

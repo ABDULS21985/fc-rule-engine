@@ -7,7 +7,7 @@
 @using FC.Engine.Admin.Services
 @using FC.Engine.Infrastructure.Metadata
 @using Microsoft.EntityFrameworkCore
-@inject MetadataDbContext Db
+@inject IDbContextFactory<MetadataDbContext> DbFactory
 @inject IModuleImportService ModuleImportService
 @inject NavigationManager Navigation
 @inject ToastService Toast
@@ -156,41 +156,42 @@
     protected override async Task OnParametersSetAsync()
     {
         _loading = true;
+        await using var db = await DbFactory.CreateDbContextAsync();
 
-        _module = await Db.Modules
+        _module = await db.Modules
             .AsNoTracking()
             .FirstOrDefaultAsync(m => m.ModuleCode == ModuleCode);
 
         if (_module != null)
         {
-            _moduleVersions = await Db.ModuleVersions
+            _moduleVersions = await db.ModuleVersions
                 .AsNoTracking()
                 .Where(v => v.ModuleId == _module.Id)
                 .OrderByDescending(v => v.Id)
                 .ToListAsync();
 
-            var templates = await Db.ReturnTemplates
+            var templates = await db.ReturnTemplates
                 .AsNoTracking()
                 .Where(t => t.ModuleId == _module.Id)
                 .OrderBy(t => t.ReturnCode)
                 .ToListAsync();
 
             var templateIds = templates.Select(t => t.Id).ToList();
-            var versions = await Db.TemplateVersions
+            var versions = await db.TemplateVersions
                 .AsNoTracking()
                 .Where(v => templateIds.Contains(v.TemplateId))
                 .OrderByDescending(v => v.VersionNumber)
                 .ToListAsync();
             var versionIds = versions.Select(v => v.Id).ToList();
 
-            var fieldCounts = await Db.TemplateFields
+            var fieldCounts = await db.TemplateFields
                 .AsNoTracking()
                 .Where(f => versionIds.Contains(f.TemplateVersionId))
                 .GroupBy(f => f.TemplateVersionId)
                 .Select(g => new { VersionId = g.Key, Count = g.Count() })
                 .ToDictionaryAsync(x => x.VersionId, x => x.Count);
 
-            var formulaCounts = await Db.IntraSheetFormulas
+            var formulaCounts = await db.IntraSheetFormulas
                 .AsNoTracking()
                 .Where(f => versionIds.Contains(f.TemplateVersionId) && f.IsActive)
                 .GroupBy(f => f.TemplateVersionId)

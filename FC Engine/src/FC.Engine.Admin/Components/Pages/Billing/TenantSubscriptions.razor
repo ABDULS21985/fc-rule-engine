@@ -7,7 +7,7 @@
 @using FC.Engine.Admin.Services
 @using Microsoft.EntityFrameworkCore
 @attribute [Authorize(Policy = "PlatformAdmin")]
-@inject MetadataDbContext Db
+@inject IDbContextFactory<MetadataDbContext> DbFactory
 @inject ISubscriptionService SubscriptionService
 @inject ToastService Toast
 @inject DialogService Dialog
@@ -141,7 +141,8 @@
 
     private async Task LoadData()
     {
-        _planOptions = await Db.SubscriptionPlans
+        await using var db = await DbFactory.CreateDbContextAsync();
+        _planOptions = await db.SubscriptionPlans
             .AsNoTracking()
             .Where(p => p.IsActive)
             .OrderBy(p => p.Tier)
@@ -155,7 +156,7 @@
             })
             .ToListAsync();
 
-        _subscriptions = await Db.Subscriptions
+        _subscriptions = await db.Subscriptions
             .AsNoTracking()
             .Include(s => s.Tenant)
             .Include(s => s.Plan)
@@ -171,7 +172,7 @@
                 BillingFrequency = s.BillingFrequency,
                 CurrentPeriodStart = s.CurrentPeriodStart,
                 CurrentPeriodEnd = s.CurrentPeriodEnd,
-                ActiveModuleCount = Db.SubscriptionModules.Count(sm => sm.SubscriptionId == s.Id && sm.IsActive),
+                ActiveModuleCount = db.SubscriptionModules.Count(sm => sm.SubscriptionId == s.Id && sm.IsActive),
                 UpdatedAt = s.UpdatedAt
             })
             .ToListAsync();

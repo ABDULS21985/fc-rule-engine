@@ -6,7 +6,7 @@
 @using FC.Engine.Admin.Services
 @using Microsoft.EntityFrameworkCore
 @attribute [Authorize(Policy = "PlatformAdmin")]
-@inject MetadataDbContext Db
+@inject IDbContextFactory<MetadataDbContext> DbFactory
 @inject ToastService Toast
 @inject DialogService Dialog
 
@@ -212,7 +212,8 @@
 
     private async Task LoadPlans()
     {
-        _plans = await Db.SubscriptionPlans
+        await using var db = await DbFactory.CreateDbContextAsync();
+        _plans = await db.SubscriptionPlans
             .AsNoTracking()
             .OrderBy(p => p.DisplayOrder)
             .ThenBy(p => p.PlanCode)
@@ -256,7 +257,8 @@
 
         try
         {
-            var plan = await Db.SubscriptionPlans.FirstOrDefaultAsync(p => p.Id == _editing.Id);
+            await using var db = await DbFactory.CreateDbContextAsync();
+            var plan = await db.SubscriptionPlans.FirstOrDefaultAsync(p => p.Id == _editing.Id);
             if (plan is null)
             {
                 _formError = "Selected plan no longer exists.";
@@ -277,7 +279,7 @@
             plan.Features = string.IsNullOrWhiteSpace(_editing.Features) ? "[]" : _editing.Features.Trim();
             plan.IsActive = _editing.IsActive;
 
-            await Db.SaveChangesAsync();
+            await db.SaveChangesAsync();
             await LoadPlans();
 
             Toast.Success($"Updated plan {plan.PlanCode}.");

@@ -104,6 +104,11 @@
                     <strong>@_workspace.Hero.PriorityInterventions</strong>
                     <span class="fc-intel-stat__meta">critical and high-priority actions</span>
                 </article>
+                <article class="fc-intel-stat fc-intel-stat--teal">
+                    <span class="fc-intel-stat__label">Recent Exports</span>
+                    <strong>@_workspace.Hero.RecentExports</strong>
+                    <span class="fc-intel-stat__meta">intelligence packs and briefings distributed</span>
+                </article>
                 <article class="fc-intel-stat fc-intel-stat--ink">
                     <span class="fc-intel-stat__label">Refresh Health</span>
                     <strong>@_workspace.Refresh.Status</strong>
@@ -4523,7 +4528,103 @@
                             <p>Monitor rollout coverage, stale reconciliation, and tenant drift for newly launched supervisory packs.</p>
                             <a class="fc-btn fc-btn--outline fc-btn--sm" href="/platform/tenants?needsReconciliation=true">Open tenant ops</a>
                         </article>
+                        <article class="fc-intel-card fc-intel-card--feature">
+                            <span class="fc-intel-card__label">Distribution & Exports</span>
+                            <h2>@_workspace.Exports.RecentExportCount recent pack export(s)</h2>
+                            <p>@(_workspace.Exports.LatestExportAt.HasValue ? $"Latest {(_workspace.Exports.RecentExports.FirstOrDefault()?.Area ?? "intelligence")} export at {FormatTimestamp(_workspace.Exports.LatestExportAt.Value)}." : "No recent platform-intelligence export activity has been recorded yet.")</p>
+                            <span class="fc-intel-chip">@_workspace.Exports.DominantArea</span>
+                        </article>
                     </div>
+
+                    <article class="fc-intel-card fc-intel-card--table">
+                        <header class="fc-intel-card__header">
+                            <div>
+                                <span class="fc-intel-card__label">Distribution Ops</span>
+                                <h2>Recent intelligence exports and briefing-pack circulation</h2>
+                            </div>
+                            <div class="fc-intel-inline-chips">
+                                <span class="fc-intel-chip">@_workspace.Exports.RecentExportCount export(s)</span>
+                                <span class="fc-intel-chip">@(_workspace.Exports.LatestExportAt.HasValue ? FormatTimestamp(_workspace.Exports.LatestExportAt.Value) : "No recent export")</span>
+                            </div>
+                        </header>
+
+                        <div class="fc-intel-pill-grid">
+                            <article class="fc-intel-metric-tile">
+                                <span class="fc-intel-card__label">CSV Exports</span>
+                                <strong>@_workspace.Exports.CsvExportCount</strong>
+                                <p>Structured registers downloaded for offline analysis and regulatory circulation.</p>
+                            </article>
+                            <article class="fc-intel-metric-tile">
+                                <span class="fc-intel-card__label">PDF Briefs</span>
+                                <strong>@_workspace.Exports.PdfExportCount</strong>
+                                <p>Board and stakeholder briefing packs produced as presentation-grade documents.</p>
+                            </article>
+                            <article class="fc-intel-metric-tile">
+                                <span class="fc-intel-card__label">Bundle Packages</span>
+                                <strong>@_workspace.Exports.BundleExportCount</strong>
+                                <p>Full intelligence bundles packaged for downstream delivery and archival.</p>
+                            </article>
+                            <article class="fc-intel-metric-tile">
+                                <span class="fc-intel-card__label">Dominant Area</span>
+                                <strong>@_workspace.Exports.DominantArea</strong>
+                                <p>The most frequently exported intelligence surface in the current audit window.</p>
+                            </article>
+                        </div>
+
+                        @if (_workspace.Exports.RecentExports.Count == 0)
+                        {
+                            <div class="fc-intel-empty">
+                                <h3>No recent export activity</h3>
+                                <p>Use the intelligence export endpoints or workspace export controls to generate auditable distribution events.</p>
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="fc-intel-table-wrap">
+                                <table class="fc-intel-table">
+                                    <thead>
+                                        <tr>
+                                            <th>When</th>
+                                            <th>Area</th>
+                                            <th>Format</th>
+                                            <th>Artifact</th>
+                                            <th>Context</th>
+                                            <th>Actor</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach (var row in _workspace.Exports.RecentExports)
+                                        {
+                                            <tr>
+                                                <td>@FormatTimestamp(row.PerformedAt)</td>
+                                                <td>@row.Area</td>
+                                                <td><span class="fc-intel-status fc-intel-status--@StatusClass(row.Format.Equals("zip", StringComparison.OrdinalIgnoreCase) ? "Watch" : "Current")">@row.Format.ToUpperInvariant()</span></td>
+                                                <td>
+                                                    <strong>@row.FileName</strong>
+                                                    <div class="fc-intel-table__sub">@((row.SizeBytes ?? 0).ToString("N0", CultureInfo.InvariantCulture)) bytes</div>
+                                                </td>
+                                                <td class="fc-intel-table__sub">
+                                                    @if (!string.IsNullOrWhiteSpace(row.Lens))
+                                                    {
+                                                        <span>@row.Lens</span>
+                                                    }
+                                                    else
+                                                    {
+                                                        <span>platform</span>
+                                                    }
+                                                    @if (row.InstitutionId.HasValue)
+                                                    {
+                                                        <span> · institution @row.InstitutionId.Value</span>
+                                                    }
+                                                </td>
+                                                <td>@row.PerformedBy</td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </table>
+                            </div>
+                        }
+                    </article>
 
                     <article class="fc-intel-card fc-intel-card--table">
                         <header class="fc-intel-card__header">
@@ -6116,7 +6217,8 @@
                     $"{_workspace.Capital.CapitalWatchlistCount} capital watchlist",
                     $"{ReviewedTfsPreview.MatchesFound} screening flags",
                     $"{_workspace.Resilience.OpenIncidentCount} open incidents",
-                    $"{_workspace.ModelRisk.DueValidationCount} due validations"
+                    $"{_workspace.ModelRisk.DueValidationCount} due validations",
+                    $"{_workspace.Exports.RecentExportCount} exports"
                 };
 
     private InstitutionIntelligenceDetail? DashboardInstitutionProfile =>
@@ -6184,7 +6286,8 @@
                     new DashboardMetricRow("Pressure institutions", _workspace.InstitutionScorecards.Count(x => x.Priority is "Critical" or "High").ToString(CultureInfo.InvariantCulture), "Institutions carrying the heaviest combined filing, capital, resilience, or model-risk load.", _workspace.InstitutionScorecards.Any(x => x.Priority is "Critical" or "High") ? "Watch" : "Current"),
                     new DashboardMetricRow("Capital watchlist", _workspace.Capital.CapitalWatchlistCount.ToString(CultureInfo.InvariantCulture), "Institutions already tripping prudential concern thresholds.", _workspace.Capital.CapitalWatchlistCount > 0 ? "Watch" : "Current"),
                     new DashboardMetricRow("Open incidents", _workspace.Resilience.OpenIncidentCount.ToString(CultureInfo.InvariantCulture), "Operational resilience incidents still unresolved in the population.", _workspace.Resilience.OpenIncidentCount > 0 ? "Watch" : "Current"),
-                    new DashboardMetricRow("Stale rollout tenants", _workspace.Rollout.StaleTenantCount.ToString(CultureInfo.InvariantCulture), "Eligible tenants whose new pack entitlement drift has remained untouched for more than seven days.", _workspace.Rollout.StaleTenantCount > 0 ? "Critical" : "Current")
+                    new DashboardMetricRow("Stale rollout tenants", _workspace.Rollout.StaleTenantCount.ToString(CultureInfo.InvariantCulture), "Eligible tenants whose new pack entitlement drift has remained untouched for more than seven days.", _workspace.Rollout.StaleTenantCount > 0 ? "Critical" : "Current"),
+                    new DashboardMetricRow("Recent exports", _workspace.Exports.RecentExportCount.ToString(CultureInfo.InvariantCulture), "Audited intelligence exports produced across overview, packs, and bundles.", _workspace.Exports.BundleExportCount > 0 ? "Watch" : "Current")
                 ],
                 "deputy" =>
                 [
@@ -6193,7 +6296,8 @@
                     new DashboardMetricRow("Capital watchlist", _workspace.Capital.CapitalWatchlistCount.ToString(CultureInfo.InvariantCulture), "Institutions needing prudential follow-up planning.", _workspace.Capital.CapitalWatchlistCount > 0 ? "Watch" : "Current"),
                     new DashboardMetricRow("Due validations", _workspace.ModelRisk.DueValidationCount.ToString(CultureInfo.InvariantCulture), "Regulatory models approaching or exceeding validation due dates.", _workspace.ModelRisk.DueValidationCount > 0 ? "Watch" : "Current"),
                     new DashboardMetricRow("Board-critical resilience issues", _workspace.Resilience.BoardSummary.CriticalIssues.ToString(CultureInfo.InvariantCulture), "Critical resilience items already requiring leadership reporting.", _workspace.Resilience.BoardSummary.CriticalIssues > 0 ? "Critical" : "Current"),
-                    new DashboardMetricRow("Rollout gaps", _workspace.Rollout.PendingEntitlementCount.ToString(CultureInfo.InvariantCulture), "Included-base pack entitlements still missing on active eligible subscriptions.", _workspace.Rollout.PendingEntitlementCount > 0 ? "Watch" : "Current")
+                    new DashboardMetricRow("Rollout gaps", _workspace.Rollout.PendingEntitlementCount.ToString(CultureInfo.InvariantCulture), "Included-base pack entitlements still missing on active eligible subscriptions.", _workspace.Rollout.PendingEntitlementCount > 0 ? "Watch" : "Current"),
+                    new DashboardMetricRow("Briefing exports", _workspace.Exports.RecentExportCount.ToString(CultureInfo.InvariantCulture), "Current distribution tempo of intelligence packs and supervisory briefs.", _workspace.Exports.RecentExportCount > 0 ? "Current" : "Monitor")
                 ],
                 _ =>
                 [
@@ -6202,7 +6306,8 @@
                     new DashboardMetricRow("Pending sanctions reviews", ReviewedTfsPreview.PotentialMatches.ToString(CultureInfo.InvariantCulture), "Screening results still awaiting analyst decisioning.", ReviewedTfsPreview.PotentialMatches > 0 ? "Watch" : "Current"),
                     new DashboardMetricRow("Open resilience actions", _workspace.Resilience.ActionTracker.Count(x => x.Status != "Complete").ToString(CultureInfo.InvariantCulture), "Remediation items that still need evidence or closure.", _workspace.Resilience.ActionTracker.Any(x => x.Status == "Overdue") ? "Critical" : "Watch"),
                     new DashboardMetricRow("Model review items", _workspace.ModelRisk.ChangeReviewCount.ToString(CultureInfo.InvariantCulture), "Recent model changes that need governance review or challenge.", _workspace.ModelRisk.ChangeReviewCount > 0 ? "Watch" : "Current"),
-                    new DashboardMetricRow("Rollout actions", _workspace.Rollout.PendingTenantCount.ToString(CultureInfo.InvariantCulture), "Tenants currently needing entitlement reconciliation on the newly launched packs.", _workspace.Rollout.PendingTenantCount > 0 ? "Watch" : "Current")
+                    new DashboardMetricRow("Rollout actions", _workspace.Rollout.PendingTenantCount.ToString(CultureInfo.InvariantCulture), "Tenants currently needing entitlement reconciliation on the newly launched packs.", _workspace.Rollout.PendingTenantCount > 0 ? "Watch" : "Current"),
+                    new DashboardMetricRow("Recent exports", _workspace.Exports.RecentExportCount.ToString(CultureInfo.InvariantCulture), "Recent intelligence artifacts distributed out of the workspace.", _workspace.Exports.RecentExportCount > 0 ? "Current" : "Monitor")
                 ]
             };
         }
@@ -6269,7 +6374,16 @@
                         ? $"{rollout.ModuleCode}: {rollout.Commentary}"
                         : "Tracked pack rollout is currently synchronized.",
                     "Close missing included-base entitlements and reconcile stale tenant drift before the next operational review.",
-                    _workspace.Rollout.StaleTenantCount > 0 ? "Critical" : _workspace.Rollout.PendingTenantCount > 0 ? "Watch" : "Current")
+                    _workspace.Rollout.StaleTenantCount > 0 ? "Critical" : _workspace.Rollout.PendingTenantCount > 0 ? "Watch" : "Current"),
+                new DashboardDomainSummaryRow(
+                    "Distribution",
+                    _workspace.Exports.RecentExportCount,
+                    _workspace.Exports.BundleExportCount,
+                    _workspace.Exports.RecentExports.FirstOrDefault() is { } export
+                        ? $"{export.Area}: {export.FileName} exported by {export.PerformedBy}."
+                        : "No recent intelligence export activity is currently recorded.",
+                    "Confirm briefing circulation, bundle integrity, and external distribution controls remain traceable.",
+                    _workspace.Exports.BundleExportCount > 0 ? "Watch" : _workspace.Exports.RecentExportCount > 0 ? "Current" : "Monitor")
             ];
         }
     }
@@ -7514,6 +7628,7 @@
         var topModelPackAttention = _workspace.ModelRisk.ReturnPack.FirstOrDefault(x => x.Signal == "Critical")
                                    ?? _workspace.ModelRisk.ReturnPack.FirstOrDefault(x => x.Signal == "Watch");
         var topModel = _workspace.ModelRisk.Inventory.OrderBy(x => x.NextValidationDue).FirstOrDefault();
+        var latestExport = _workspace.Exports.RecentExports.FirstOrDefault();
 
         return
         [
@@ -7526,7 +7641,8 @@
             new ExecutiveBriefRow("Capital Watchlist", _workspace.Capital.CapitalWatchlistCount.ToString(CultureInfo.InvariantCulture), topCapitalPackAttention is not null ? $"{topCapitalPackAttention.SectionName} is currently {topCapitalPackAttention.Signal.ToLowerInvariant()}; {topCapitalPackAttention.RecommendedAction}" : topCapitalAction is null ? "No action scenarios available." : $"{topCapitalAction.Title} yields the strongest projected headroom improvement at {topCapitalAction.ImprovementBps:+0;-0;0} bps."),
             new ExecutiveBriefRow("Sanctions / TFS", ReviewedTfsPreview.MatchesFound.ToString(CultureInfo.InvariantCulture), topSanctionsPackAttention is not null ? $"{topSanctionsPackAttention.SectionName} is currently {topSanctionsPackAttention.Signal.ToLowerInvariant()}; {topSanctionsPackAttention.RecommendedAction}" : ReviewedTfsPreview.Narrative),
             new ExecutiveBriefRow("Operational Resilience", _workspace.Resilience.OpenIncidentCount.ToString(CultureInfo.InvariantCulture), topCyberAssessment is not null ? $"{topCyberAssessment.Domain} is currently {topCyberAssessment.Signal.ToLowerInvariant()} at {topCyberAssessment.Score.ToString("0.0", CultureInfo.InvariantCulture)}; {topCyberAssessment.RecommendedAction}" : topRecoveryBreach is not null ? $"{topRecoveryBreach.ServiceName} is currently above its RTO threshold; next test due {topRecoveryBreach.NextTestDue:dd MMM yyyy}." : topHotspot is null ? "No dependency hotspot currently registered." : $"{topHotspot.AssetName} has {topHotspot.DependentCount} dependent asset(s), making it the leading concentration proxy."),
-            new ExecutiveBriefRow("Model Risk", _workspace.ModelRisk.DueValidationCount.ToString(CultureInfo.InvariantCulture), topModelPackAttention is not null ? $"{topModelPackAttention.SheetName} is currently {topModelPackAttention.Signal.ToLowerInvariant()}; {topModelPackAttention.RecommendedAction}" : topModel is null ? "No model inventory baseline loaded." : $"{topModel.ModelCode} is the nearest validation due item ({topModel.NextValidationDue:dd MMM yyyy}).")
+            new ExecutiveBriefRow("Model Risk", _workspace.ModelRisk.DueValidationCount.ToString(CultureInfo.InvariantCulture), topModelPackAttention is not null ? $"{topModelPackAttention.SheetName} is currently {topModelPackAttention.Signal.ToLowerInvariant()}; {topModelPackAttention.RecommendedAction}" : topModel is null ? "No model inventory baseline loaded." : $"{topModel.ModelCode} is the nearest validation due item ({topModel.NextValidationDue:dd MMM yyyy})."),
+            new ExecutiveBriefRow("Distribution & Exports", _workspace.Exports.RecentExportCount.ToString(CultureInfo.InvariantCulture), latestExport is null ? "No recent intelligence export activity is currently recorded." : $"{latestExport.Area} exported as {latestExport.Format.ToUpperInvariant()} by {latestExport.PerformedBy} at {FormatTimestamp(latestExport.PerformedAt)}. Dominant area: {_workspace.Exports.DominantArea}.")
         ];
     }
 
@@ -7587,6 +7703,13 @@
                 x.Domain,
                 $"{x.PriorityItems} priority / {x.HighSeverityEvents} high severity",
                 $"{x.LeadSignal} Action: {x.RecommendedAction}")));
+
+        rows.AddRange(_workspace.Exports.RecentExports.Take(6).Select(x =>
+            new DashboardExportRow(
+                "Distribution",
+                $"{x.Area} · {x.Format.ToUpperInvariant()}",
+                x.PerformedBy,
+                $"{x.FileName} at {FormatTimestamp(x.PerformedAt)}")));
 
         rows.AddRange(FilteredInterventions.Take(8).Select(x =>
             new DashboardExportRow(

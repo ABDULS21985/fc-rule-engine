@@ -10,7 +10,7 @@
 @inject NavigationManager Navigation
 @inject ITenantBrandingService BrandingService
 @inject ITenantContext TenantContext
-@inject MetadataDbContext Db
+@inject IDbContextFactory<MetadataDbContext> DbFactory
 @inject CommandPaletteService PaletteService
 @inject SidebarStateService SidebarState
 @inject HelpService HelpSvc
@@ -356,7 +356,8 @@
         }
 
         var tenantId = TenantContext.ImpersonatingTenantId!.Value;
-        _impersonatedTenantName = await Db.Tenants
+        await using var db = await DbFactory.CreateDbContextAsync();
+        _impersonatedTenantName = await db.Tenants
             .AsNoTracking()
             .Where(t => t.TenantId == tenantId)
             .Select(t => t.TenantName)

@@ -279,6 +279,7 @@ public sealed class PlatformIntelligenceService : IPlatformIntelligenceWorkspace
         var referencedRows = fieldRows
             .Where(x => !string.IsNullOrWhiteSpace(x.Field.RegulatoryReference))
             .ToList();
+        var exportActivity = BuildExportSnapshot(auditLog);
 
         var obligationRows = BuildObligationRows(modules, templates, licenceTypes, licenceModules, tenantLicences, returnPeriods);
         var institutionObligationRows = BuildInstitutionObligationRows(modules, templates, licenceTypes, licenceModules, institutions, returnPeriods, submissions);
@@ -540,7 +541,7 @@ public sealed class PlatformIntelligenceService : IPlatformIntelligenceWorkspace
                         OwnerLane = x.OwnerLane
                     })
                     .ToList(),
-                Timeline = BuildActivityTimeline(submissions, institutions, incidents, securityAlerts, auditLog, entitlementAuditRows, fieldChanges, operationalFreshnessRows)
+                Timeline = BuildActivityTimeline(submissions, institutions, incidents, securityAlerts, auditLog, entitlementAuditRows, fieldChanges, exportActivity.RecentExports, operationalFreshnessRows)
                     .Select(x => new PlatformActivityTimelineInput
                     {
                         TenantId = x.TenantId,
@@ -697,8 +698,10 @@ public sealed class PlatformIntelligenceService : IPlatformIntelligenceWorkspace
                 WatchlistSources = sanctionsCatalog.Sources.Count,
                 OpenResilienceIncidents = incidents.Count(x => !x.RemediatedAt.HasValue),
                 ModelsUnderGovernance = modelInventory.Count,
-                PriorityInterventions = interventions.Count(x => x.Priority is "Critical" or "High")
+                PriorityInterventions = interventions.Count(x => x.Priority is "Critical" or "High"),
+                RecentExports = exportActivity.RecentExportCount
             },
+            Exports = exportActivity,
             Rollout = new MarketplaceRolloutSnapshot
             {
                 TrackedModuleCount = rollout.TrackedModuleCount,
@@ -4404,6 +4407,7 @@ public sealed class PlatformIntelligenceService : IPlatformIntelligenceWorkspace
         IReadOnlyList<AuditLogEntry> auditLog,
         IReadOnlyList<AuditLogEntry> entitlementAuditRows,
         IReadOnlyList<FieldChangeHistory> fieldChanges,
+        IReadOnlyList<PlatformIntelligenceExportActivityRow> exportActivity,
         IReadOnlyList<PlatformIntelligenceCatalogFreshnessRow> freshnessRows)
     {
         var institutionById = institutions.ToDictionary(x => x.Id);
@@ -4456,18 +4460,20 @@ public sealed class PlatformIntelligenceService : IPlatformIntelligenceWorkspace
             Severity = Capitalize(alert.Severity)
         });
 
-        var auditItems = auditLog.Select(entry => new ActivityTimelineRow
-        {
-            TenantId = entry.TenantId,
-            Domain = "Governance",
-            Title = $"{entry.EntityType} {entry.Action}",
-            Detail = $"Performed by {entry.PerformedBy}",
-            HappenedAt = entry.PerformedAt,
-            Severity = entry.Action.Contains("delete", StringComparison.OrdinalIgnoreCase)
-                || entry.Action.Contains("rollback", StringComparison.OrdinalIgnoreCase)
-                ? "High"
-                : "Medium"
-        });
+        var auditItems = auditLog
+            .Where(entry => !(entry.EntityType == "PlatformIntelligence" && entry.Action.EndsWith("Exported", StringComparison.OrdinalIgnoreCase)))
+            .Select(entry => new ActivityTimelineRow
+            {
+                TenantId = entry.TenantId,
+                Domain = "Governance",
+                Title = $"{entry.EntityType} {entry.Action}",
+                Detail = $"Performed by {entry.PerformedBy}",
+                HappenedAt = entry.PerformedAt,
+                Severity = entry.Action.Contains("delete", StringComparison.OrdinalIgnoreCase)
+                    || entry.Action.Contains("rollback", StringComparison.OrdinalIgnoreCase)
+                    ? "High"
+                    : "Medium"
+            });
 
         var rolloutItems = entitlementAuditRows.Select(entry => new ActivityTimelineRow
         {
@@ -4494,6 +4500,16 @@ public sealed class PlatformIntelligenceService : IPlatformIntelligenceWorkspace
             Severity = change.ChangeSource.Equals("System", StringComparison.OrdinalIgnoreCase) ? "Medium" : "Low"
         });
 
+        var exportItems = exportActivity.Select(row => new ActivityTimelineRow
+        {
+            InstitutionId = row.InstitutionId,
+            Domain = "Distribution",
+            Title = $"{row.Area} {row.Format.ToUpperInvariant()} export",
+            Detail = BuildExportTimelineDetail(row),
+            HappenedAt = row.PerformedAt,
+            Severity = row.Format.Equals("zip", StringComparison.OrdinalIgnoreCase) ? "Medium" : "Low"
+        });
+
         var freshnessItems = freshnessRows
             .Where(x => x.Status is "Stale" or "Watch" or "Pending")
             .Select(row => new ActivityTimelineRow
@@ -4516,10 +4532,175 @@ public sealed class PlatformIntelligenceService : IPlatformIntelligenceWorkspace
             .Concat(auditItems)
             .Concat(rolloutItems)
             .Concat(fieldItems)
+            .Concat(exportItems)
             .Concat(freshnessItems)
             .OrderByDescending(x => x.HappenedAt)
             .Take(24)
             .ToList();
+    }
+
+    private static PlatformIntelligenceExportSnapshot BuildExportSnapshot(IReadOnlyList<AuditLogEntry> auditLog)
+    {
+        var rows = auditLog
+            .Where(x => x.EntityType == "PlatformIntelligence" && x.Action.EndsWith("Exported", StringComparison.OrdinalIgnoreCase))
+            .Select(MapExportAuditRow)
+            .Where(x => x is not null)
+            .Select(x => x!)
+            .OrderByDescending(x => x.PerformedAt)
+            .Take(16)
+            .ToList();
+
+        return new PlatformIntelligenceExportSnapshot
+        {
+            RecentExportCount = rows.Count,
+            CsvExportCount = rows.Count(x => x.Format.Equals("csv", StringComparison.OrdinalIgnoreCase)),
+            PdfExportCount = rows.Count(x => x.Format.Equals("pdf", StringComparison.OrdinalIgnoreCase)),
+            BundleExportCount = rows.Count(x => x.Format.Equals("zip", StringComparison.OrdinalIgnoreCase)),
+            LatestExportAt = rows.FirstOrDefault()?.PerformedAt,
+            DominantArea = rows
+                .GroupBy(x => x.Area, StringComparer.OrdinalIgnoreCase)
+                .OrderByDescending(x => x.Count())
+                .ThenBy(x => x.Key, StringComparer.OrdinalIgnoreCase)
+                .Select(x => x.Key)
+                .FirstOrDefault()
+                ?? "No recent exports",
+            RecentExports = rows
+        };
+    }
+
+    private static PlatformIntelligenceExportActivityRow? MapExportAuditRow(AuditLogEntry entry)
+    {
+        string? area = null;
+        string? format = null;
+        string? fileName = null;
+        string? lens = null;
+        int? institutionId = null;
+        long? sizeBytes = null;
+
+        if (!string.IsNullOrWhiteSpace(entry.NewValues))
+        {
+            try
+            {
+                using var document = JsonDocument.Parse(entry.NewValues);
+                var root = document.RootElement;
+                area = TryReadAuditString(root, "Area");
+                format = TryReadAuditString(root, "Format");
+                fileName = TryReadAuditString(root, "FileName");
+                lens = TryReadAuditString(root, "Lens");
+                institutionId = TryReadAuditInt32(root, "InstitutionId");
+                sizeBytes = TryReadAuditInt64(root, "SizeBytes");
+            }
+            catch (JsonException)
+            {
+                // Ignore malformed payloads and fall back to action-derived metadata.
+            }
+        }
+
+        area ??= entry.Action switch
+        {
+            "OverviewExported" => "Overview",
+            "DashboardBriefingPackExported" => "Dashboards",
+            "KnowledgeDossierExported" => "Knowledge",
+            "CapitalPackExported" => "Capital",
+            "SanctionsPackExported" => "Sanctions",
+            "ResiliencePackExported" => "Resilience",
+            "ModelRiskPackExported" => "Model Risk",
+            "BundleExported" => "Bundle",
+            _ => null
+        };
+
+        format ??= !string.IsNullOrWhiteSpace(fileName)
+            ? Path.GetExtension(fileName).TrimStart('.').ToLowerInvariant()
+            : entry.Action == "BundleExported" ? "zip" : null;
+
+        if (string.IsNullOrWhiteSpace(area) || string.IsNullOrWhiteSpace(format))
+        {
+            return null;
+        }
+
+        return new PlatformIntelligenceExportActivityRow
+        {
+            Action = entry.Action,
+            Area = area,
+            Format = format,
+            FileName = fileName ?? $"platform-intelligence-{area.ToLowerInvariant().Replace(' ', '-')}.{format}",
+            Lens = lens,
+            InstitutionId = institutionId,
+            SizeBytes = sizeBytes,
+            PerformedBy = entry.PerformedBy,
+            PerformedAt = entry.PerformedAt
+        };
+    }
+
+    private static string? TryReadAuditString(JsonElement root, string propertyName)
+    {
+        if (!root.TryGetProperty(propertyName, out var property))
+        {
+            return null;
+        }
+
+        return property.ValueKind == JsonValueKind.String ? property.GetString()?.Trim() : null;
+    }
+
+    private static int? TryReadAuditInt32(JsonElement root, string propertyName)
+    {
+        if (!root.TryGetProperty(propertyName, out var property))
+        {
+            return null;
+        }
+
+        if (property.ValueKind == JsonValueKind.Number && property.TryGetInt32(out var numeric))
+        {
+            return numeric;
+        }
+
+        if (property.ValueKind == JsonValueKind.String && int.TryParse(property.GetString(), out numeric))
+        {
+            return numeric;
+        }
+
+        return null;
+    }
+
+    private static long? TryReadAuditInt64(JsonElement root, string propertyName)
+    {
+        if (!root.TryGetProperty(propertyName, out var property))
+        {
+            return null;
+        }
+
+        if (property.ValueKind == JsonValueKind.Number && property.TryGetInt64(out var numeric))
+        {
+            return numeric;
+        }
+
+        if (property.ValueKind == JsonValueKind.String && long.TryParse(property.GetString(), out numeric))
+        {
+            return numeric;
+        }
+
+        return null;
+    }
+
+    private static string BuildExportTimelineDetail(PlatformIntelligenceExportActivityRow row)
+    {
+        var details = new List<string> { row.FileName, row.PerformedBy };
+        if (!string.IsNullOrWhiteSpace(row.Lens))
+        {
+            details.Add(row.Lens);
+        }
+
+        if (row.InstitutionId.HasValue)
+        {
+            details.Add($"institution {row.InstitutionId.Value.ToString(CultureInfo.InvariantCulture)}");
+        }
+
+        if (row.SizeBytes.HasValue)
+        {
+            details.Add($"{row.SizeBytes.Value.ToString("N0", CultureInfo.InvariantCulture)} bytes");
+        }
+
+        return string.Join(" · ", details);
     }
 
     private static List<InstitutionIntelligenceDetail> BuildInstitutionDetails(
@@ -6072,6 +6253,7 @@ public sealed class PlatformIntelligenceWorkspace
     public DateTime GeneratedAt { get; set; }
     public PlatformIntelligenceRefreshSnapshot Refresh { get; set; } = new();
     public PlatformIntelligenceHero Hero { get; set; } = new();
+    public PlatformIntelligenceExportSnapshot Exports { get; set; } = new();
     public MarketplaceRolloutSnapshot Rollout { get; set; } = new();
     public KnowledgeGraphSnapshot KnowledgeGraph { get; set; } = new();
     public CapitalManagementSnapshot Capital { get; set; } = new();
@@ -6141,6 +6323,31 @@ public sealed class PlatformIntelligenceHero
     public int OpenResilienceIncidents { get; set; }
     public int ModelsUnderGovernance { get; set; }
     public int PriorityInterventions { get; set; }
+    public int RecentExports { get; set; }
+}
+
+public sealed class PlatformIntelligenceExportSnapshot
+{
+    public int RecentExportCount { get; set; }
+    public int CsvExportCount { get; set; }
+    public int PdfExportCount { get; set; }
+    public int BundleExportCount { get; set; }
+    public DateTime? LatestExportAt { get; set; }
+    public string DominantArea { get; set; } = string.Empty;
+    public List<PlatformIntelligenceExportActivityRow> RecentExports { get; set; } = [];
+}
+
+public sealed class PlatformIntelligenceExportActivityRow
+{
+    public string Action { get; set; } = string.Empty;
+    public string Area { get; set; } = string.Empty;
+    public string Format { get; set; } = string.Empty;
+    public string FileName { get; set; } = string.Empty;
+    public string? Lens { get; set; }
+    public int? InstitutionId { get; set; }
+    public long? SizeBytes { get; set; }
+    public string PerformedBy { get; set; } = string.Empty;
+    public DateTime PerformedAt { get; set; }
 }
 
 public sealed class MarketplaceRolloutSnapshot

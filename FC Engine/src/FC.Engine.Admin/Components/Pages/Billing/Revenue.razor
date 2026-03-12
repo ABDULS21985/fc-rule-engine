@@ -4,7 +4,7 @@
 @using FC.Engine.Infrastructure.Metadata
 @using Microsoft.EntityFrameworkCore
 @attribute [Authorize(Policy = "PlatformAdmin")]
-@inject MetadataDbContext Db
+@inject IDbContextFactory<MetadataDbContext> DbFactory
 
 <PageTitle>Revenue Dashboard</PageTitle>
 
@@ -495,6 +495,7 @@
 
     private async Task LoadDashboard()
     {
+        await using var db = await DbFactory.CreateDbContextAsync();
         var revenueStatuses = new[]
         {
             SubscriptionStatus.Active,
@@ -503,52 +504,52 @@
             SubscriptionStatus.Trial
         };
 
-        _mrr = await Db.Subscriptions
+        _mrr = await db.Subscriptions
             .AsNoTracking()
             .Where(s => revenueStatuses.Contains(s.Status))
-            .Join(Db.SubscriptionPlans, s => s.PlanId, p => p.Id, (_, p) => (decimal?)p.BasePriceMonthly)
+            .Join(db.SubscriptionPlans, s => s.PlanId, p => p.Id, (_, p) => (decimal?)p.BasePriceMonthly)
             .SumAsync(x => x ?? 0m);
 
         _arr = _mrr * 12;
 
         var monthStart = new DateTime(DateTime.UtcNow.Year, DateTime.UtcNow.Month, 1);
-        _paidThisMonth = await Db.Invoices
+        _paidThisMonth = await db.Invoices
             .AsNoTracking()
             .Where(i => i.Status == InvoiceStatus.Paid && i.PaidAt.HasValue && i.PaidAt.Value >= monthStart)
             .SumAsync(i => (decimal?)i.TotalAmount) ?? 0m;
 
-        _outstanding = await Db.Invoices
+        _outstanding = await db.Invoices
             .AsNoTracking()
             .Where(i => i.Status == InvoiceStatus.Issued || i.Status == InvoiceStatus.Overdue)
             .SumAsync(i => (decimal?)i.TotalAmount) ?? 0m;
 
         var yearStart = new DateTime(DateTime.UtcNow.Year, 1, 1);
-        _ytdPaid = await Db.Invoices
+        _ytdPaid = await db.Invoices
             .AsNoTracking()
             .Where(i => i.Status == InvoiceStatus.Paid && i.PaidAt.HasValue && i.PaidAt.Value >= yearStart)
             .SumAsync(i => (decimal?)i.TotalAmount) ?? 0m;
 
-        _paidInvoiceCount = await Db.Invoices
+        _paidInvoiceCount = await db.Invoices
             .AsNoTracking()
             .CountAsync(i => i.Status == InvoiceStatus.Paid && i.PaidAt.HasValue && i.PaidAt.Value >= yearStart);
 
-        _activeSubscriptionCount = await Db.Subscriptions
+        _activeSubscriptionCount = await db.Subscriptions
             .AsNoTracking()
             .CountAsync(s => s.Status != SubscriptionStatus.Cancelled && s.Status != SubscriptionStatus.Expired);
 
-        await LoadMonthlyTrend();
-        await LoadPlanMix();
-        await LoadTopTenants(yearStart);
+        await LoadMonthlyTrend(db);
+        await LoadPlanMix(db);
+        await LoadTopTenants(db, yearStart);
 
         _snapshotUtc = DateTime.UtcNow;
     }
 
-    private async Task LoadMonthlyTrend()
+    private async Task LoadMonthlyTrend(MetadataDbContext db)
     {
         var currentMonth = new DateTime(DateTime.UtcNow.Year, DateTime.UtcNow.Month, 1);
         var firstMonth = currentMonth.AddMonths(-11); // 12 months rolling window
 
-        var paidRows = await Db.Invoices
+        var paidRows = await db.Invoices
             .AsNoTracking()
             .Where(i => i.Status == InvoiceStatus.Paid
                 && i.PaidAt.HasValue
@@ -574,12 +575,12 @@
         _trendMaxAmount = _monthlyTrend.Any() ? _monthlyTrend.Max(t => t.Amount) : 0;
     }
 
-    private async Task LoadPlanMix()
+    private async Task LoadPlanMix(MetadataDbContext db)
     {
-        _planMix = await Db.Subscriptions
+        _planMix = await db.Subscriptions
             .AsNoTracking()
             .Where(s => s.Status != SubscriptionStatus.Cancelled && s.Status != SubscriptionStatus.Expired)
-            .Join(Db.SubscriptionPlans,
+            .Join(db.SubscriptionPlans,
                 s => s.PlanId,
                 p => p.Id,
                 (_, p) => new { p.PlanCode, p.BasePriceMonthly })
@@ -594,12 +595,12 @@
             .ToListAsync();
     }
 
-    private async Task LoadTopTenants(DateTime yearStart)
+    private async Task LoadTopTenants(MetadataDbContext db, DateTime yearStart)
     {
-        _topTenants = await Db.Invoices
+        _topTenants = await db.Invoices
             .AsNoTracking()
             .Where(i => i.Status == InvoiceStatus.Paid && i.PaidAt.HasValue && i.PaidAt.Value >= yearStart)
-            .Join(Db.Tenants,
+            .Join(db.Tenants,
                 i => i.TenantId,
                 t => t.TenantId,
                 (i, t) => new { t.TenantName, t.TenantSlug, i.TotalAmount })

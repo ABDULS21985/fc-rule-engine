@@ -71,6 +71,12 @@ public static class DependencyInjection
             options.AddInterceptors(interceptor);
         });
 
+        // Factory for Blazor Server components — creates short-lived DbContext instances
+        // per operation instead of sharing one for the entire circuit lifetime.
+        // Resolves DbContextOptions + ITenantContext from the current scope so RLS
+        // interceptor and tenant context propagate correctly.
+        services.AddScoped<IDbContextFactory<MetadataDbContext>, MetadataDbContextFactory>();
+
         // Repositories
         services.AddScoped<ITemplateRepository, TemplateRepository>();
         services.AddScoped<IFormulaRepository, FormulaRepository>();

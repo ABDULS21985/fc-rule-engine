@@ -6,7 +6,7 @@
 @using FC.Engine.Admin.Services
 @using Microsoft.EntityFrameworkCore
 @attribute [Authorize(Policy = "PlatformAdmin")]
-@inject MetadataDbContext Db
+@inject IDbContextFactory<MetadataDbContext> DbFactory
 @inject ISubscriptionService SubscriptionService
 @inject ToastService Toast
 @inject DialogService Dialog
@@ -223,9 +223,10 @@
 
     private async Task LoadData()
     {
-        _invoices = await Db.Invoices
+        await using var db = await DbFactory.CreateDbContextAsync();
+        _invoices = await db.Invoices
             .AsNoTracking()
-            .Join(Db.Tenants,
+            .Join(db.Tenants,
                 i => i.TenantId,
                 t => t.TenantId,
                 (i, t) => new InvoiceRow
@@ -255,7 +256,7 @@
             .Where(i => i.Status is InvoiceStatus.Issued or InvoiceStatus.Overdue)
             .Sum(i => i.TotalAmount);
 
-        var tenantRows = await Db.Subscriptions
+        var tenantRows = await db.Subscriptions
             .AsNoTracking()
             .Include(s => s.Tenant)
             .Include(s => s.Plan)

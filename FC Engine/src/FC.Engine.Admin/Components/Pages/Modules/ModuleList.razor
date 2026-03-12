@@ -4,7 +4,7 @@
 @using FC.Engine.Domain.Entities
 @using FC.Engine.Infrastructure.Metadata
 @using Microsoft.EntityFrameworkCore
-@inject MetadataDbContext Db
+@inject IDbContextFactory<MetadataDbContext> DbFactory
 @inject NavigationManager Navigation
 
 <PageTitle>Module Registry</PageTitle>
@@ -148,22 +148,23 @@
 
     protected override async Task OnInitializedAsync()
     {
-        var modules = await Db.Modules
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var modules = await db.Modules
             .AsNoTracking()
             .OrderBy(m => m.DisplayOrder)
             .ThenBy(m => m.ModuleCode)
             .ToListAsync();
 
-        var versions = await Db.ModuleVersions
+        var versions = await db.ModuleVersions
             .AsNoTracking()
             .GroupBy(v => v.ModuleId)
             .Select(g => g.OrderByDescending(x => x.Id).First())
             .ToListAsync();
 
-        var tenantCounts = await Db.SubscriptionModules
+        var tenantCounts = await db.SubscriptionModules
             .AsNoTracking()
             .Where(sm => sm.IsActive)
-            .Join(Db.Subscriptions.AsNoTracking(), sm => sm.SubscriptionId, s => s.Id,
+            .Join(db.Subscriptions.AsNoTracking(), sm => sm.SubscriptionId, s => s.Id,
                 (sm, s) => new { sm.ModuleId, s.TenantId })
             .GroupBy(x => x.ModuleId)
             .Select(g => new { ModuleId = g.Key, Tenants = g.Select(x => x.TenantId).Distinct().Count() })

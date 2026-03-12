@@ -10,7 +10,7 @@
 @inject ITenantContext TenantContext
 @inject ITemplateMetadataCache TemplateCache
 @inject FC.Engine.Portal.Services.TemplateBrowserService TemplateBrowserService
-@inject FC.Engine.Infrastructure.Metadata.MetadataDbContext Db
+@inject IDbContextFactory<FC.Engine.Infrastructure.Metadata.MetadataDbContext> DbFactory
 @inject NavigationManager Navigation
 
 <PageTitle>Historical Migration — RegOS™ Portal</PageTitle>
@@ -261,7 +261,8 @@
         {
             var template = await TemplateCache.GetPublishedTemplate(tenantId.Value, selectedReturnCode);
             var moduleId = template.ModuleId;
-            IQueryable<ReturnPeriod> query = Db.ReturnPeriods.Where(x => x.TenantId == tenantId.Value);
+            await using var db = await DbFactory.CreateDbContextAsync();
+            IQueryable<ReturnPeriod> query = db.ReturnPeriods.Where(x => x.TenantId == tenantId.Value);
             query = moduleId.HasValue ? query.Where(x => x.ModuleId == moduleId.Value) : query.Where(x => x.ModuleId == null);
             periods = await query.OrderByDescending(x => x.Year).ThenByDescending(x => x.Quarter).ThenByDescending(x => x.Month).Take(120).ToListAsync();
             selectedPeriodId = periods.FirstOrDefault()?.Id ?? 0;
