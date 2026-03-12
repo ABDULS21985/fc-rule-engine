@@ -54,6 +54,10 @@ builder.Services.AddScoped<FC.Engine.Admin.Services.KeyboardShortcutService>();
 builder.Services.AddScoped<FC.Engine.Admin.Services.HealthAlertService>();
 builder.Services.AddScoped<FC.Engine.Admin.Services.RegulatorSessionService>();
 builder.Services.AddScoped<FC.Engine.Admin.Services.PlatformIntelligenceService>();
+builder.Services.AddScoped<FC.Engine.Admin.Services.IPlatformIntelligenceWorkspaceLoader>(sp => sp.GetRequiredService<FC.Engine.Admin.Services.PlatformIntelligenceService>());
+builder.Services.AddScoped<FC.Engine.Admin.Services.DashboardBriefingPackBuilder>();
+builder.Services.AddScoped<FC.Engine.Admin.Services.PlatformIntelligenceRefreshService>();
+builder.Services.AddHostedService<FC.Engine.Admin.Services.PlatformIntelligenceRefreshJob>();
 builder.Services.AddScoped<FC.Engine.Infrastructure.Charts.ChartJsInterop>();
 builder.Services.AddScoped<IAuthorizationHandler, RegulatorTenantAccessHandler>();
 

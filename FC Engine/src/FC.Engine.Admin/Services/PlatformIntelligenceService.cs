@@ -11,8 +11,14 @@ using Microsoft.EntityFrameworkCore;
 
 namespace FC.Engine.Admin.Services;
 
-public sealed class PlatformIntelligenceService
+public sealed class PlatformIntelligenceService : IPlatformIntelligenceWorkspaceLoader
 {
+    private static readonly HashSet<string> RolloutModuleCodes = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "OPS_RESILIENCE",
+        "MODEL_RISK"
+    };
+
     private static readonly IReadOnlyList<CapitalActionTemplate> DefaultCapitalActionTemplates =
     [
         new("COLLATERAL", "Collateral optimisation", "Tighten eligible collateral recognition and credit risk mitigation on existing exposures.", "RWA", 0m, 4.5m, 0m, 0.9m),
@@ -46,9 +52,13 @@ public sealed class PlatformIntelligenceService
     private readonly SanctionsWatchlistRefreshService _sanctionsWatchlistRefresh;
     private readonly SanctionsPackCatalogService _sanctionsPackCatalog;
     private readonly SanctionsScreeningSessionStoreService _sanctionsScreeningSessionStore;
+    private readonly SanctionsStrDraftCatalogService _sanctionsStrDraftCatalog;
     private readonly SanctionsWorkflowStoreService _sanctionsWorkflowStore;
     private readonly ModelApprovalWorkflowStoreService _modelApprovalWorkflowStore;
     private readonly ResilienceAssessmentStoreService _resilienceAssessmentStore;
+    private readonly PlatformOperationsCatalogService _platformOperationsCatalog;
+    private readonly InstitutionSupervisoryCatalogService _institutionSupervisoryCatalog;
+    private readonly MarketplaceRolloutCatalogService _marketplaceRolloutCatalog;
 
     public PlatformIntelligenceService(
         MetadataDbContext db,
@@ -65,9 +75,13 @@ public sealed class PlatformIntelligenceService
         SanctionsWatchlistRefreshService sanctionsWatchlistRefresh,
         SanctionsPackCatalogService sanctionsPackCatalog,
         SanctionsScreeningSessionStoreService sanctionsScreeningSessionStore,
+        SanctionsStrDraftCatalogService sanctionsStrDraftCatalog,
         SanctionsWorkflowStoreService sanctionsWorkflowStore,
         ModelApprovalWorkflowStoreService modelApprovalWorkflowStore,
-        ResilienceAssessmentStoreService resilienceAssessmentStore)
+        ResilienceAssessmentStoreService resilienceAssessmentStore,
+        PlatformOperationsCatalogService platformOperationsCatalog,
+        InstitutionSupervisoryCatalogService institutionSupervisoryCatalog,
+        MarketplaceRolloutCatalogService marketplaceRolloutCatalog)
     {
         _db = db;
         _knowledgeGraphCatalog = knowledgeGraphCatalog;
@@ -83,9 +97,13 @@ public sealed class PlatformIntelligenceService
         _sanctionsWatchlistRefresh = sanctionsWatchlistRefresh;
         _sanctionsPackCatalog = sanctionsPackCatalog;
         _sanctionsScreeningSessionStore = sanctionsScreeningSessionStore;
+        _sanctionsStrDraftCatalog = sanctionsStrDraftCatalog;
         _sanctionsWorkflowStore = sanctionsWorkflowStore;
         _modelApprovalWorkflowStore = modelApprovalWorkflowStore;
         _resilienceAssessmentStore = resilienceAssessmentStore;
+        _platformOperationsCatalog = platformOperationsCatalog;
+        _institutionSupervisoryCatalog = institutionSupervisoryCatalog;
+        _marketplaceRolloutCatalog = marketplaceRolloutCatalog;
     }
 
     public async Task<PlatformIntelligenceWorkspace> GetWorkspaceAsync(CancellationToken ct = default)
@@ -144,6 +162,20 @@ public sealed class PlatformIntelligenceService
             .Where(x => x.IsActive)
             .ToListAsync(ct);
 
+        var tenants = await _db.Tenants
+            .AsNoTracking()
+            .ToListAsync(ct);
+
+        var subscriptions = await _db.Subscriptions
+            .AsNoTracking()
+            .Include(x => x.Plan)
+            .Include(x => x.Modules)
+            .ToListAsync(ct);
+
+        var planModulePricing = await _db.PlanModulePricing
+            .AsNoTracking()
+            .ToListAsync(ct);
+
         var returnPeriods = await _db.ReturnPeriods
             .AsNoTracking()
             .ToListAsync(ct);
@@ -183,6 +215,14 @@ public sealed class PlatformIntelligenceService
             .AsNoTracking()
             .OrderByDescending(x => x.PerformedAt)
             .Take(400)
+            .ToListAsync(ct);
+
+        var entitlementAuditRows = await _db.AuditLog
+            .AsNoTracking()
+            .Where(x => x.Action == "TenantModulesReconciled"
+                     || x.Action == "TenantLicenceAssigned"
+                     || x.Action == "TenantLicenceRemoved")
+            .OrderByDescending(x => x.PerformedAt)
             .ToListAsync(ct);
 
         var fieldChanges = await _db.FieldChangeHistory
@@ -290,6 +330,7 @@ public sealed class PlatformIntelligenceService
         var modelInventoryCatalog = await LoadModelInventoryCatalogAsync(ct);
         var capitalPlanningScenario = await _capitalPlanningScenarioStore.LoadAsync(ct);
         var sanctionsPackCatalog = await _sanctionsPackCatalog.LoadAsync(ct);
+        var sanctionsStrDraftCatalog = await _sanctionsStrDraftCatalog.LoadAsync(ct);
         var sanctionsWorkflowState = await _sanctionsWorkflowStore.LoadAsync(ct);
         var modelApprovalWorkflowState = await _modelApprovalWorkflowStore.LoadAsync(ct);
         var resilienceAssessmentState = await _resilienceAssessmentStore.LoadAsync(ct);
@@ -376,8 +417,138 @@ public sealed class PlatformIntelligenceService
                 .ToList(),
             ct);
         var institutionScorecards = BuildInstitutionScorecards(institutions, institutionObligationRows, capitalRows, incidents, securityAlerts, modelChanges);
-        var activityTimeline = BuildActivityTimeline(submissions, institutions, incidents, securityAlerts, auditLog, fieldChanges);
-        var interventions = BuildInterventionQueue(institutionObligationRows, capitalRows, resilienceActions, modelChanges);
+        var rollout = BuildMarketplaceRolloutSnapshot(
+            modules,
+            tenants,
+            subscriptions,
+            planModulePricing,
+            tenantLicences,
+            licenceModules,
+            entitlementAuditRows);
+        var rolloutCatalog = await _marketplaceRolloutCatalog.MaterializeAsync(
+            new MarketplaceRolloutCatalogInput
+            {
+                Modules = rollout.ModuleRollout
+                    .Select(x => new MarketplaceRolloutModuleInput
+                    {
+                        ModuleCode = x.ModuleCode,
+                        ModuleName = x.ModuleName,
+                        EligibleTenants = x.EligibleTenants,
+                        ActiveEntitlements = x.ActiveEntitlements,
+                        PendingEntitlements = x.PendingEntitlements,
+                        StaleTenants = x.StaleTenants,
+                        IncludedBasePlans = x.IncludedBasePlans,
+                        AddOnPlans = x.AddOnPlans,
+                        AdoptionRatePercent = x.AdoptionRatePercent,
+                        Signal = x.Signal,
+                        Commentary = x.Commentary,
+                        RecommendedAction = x.RecommendedAction
+                    })
+                    .ToList(),
+                PlanCoverage = rollout.PlanCoverage
+                    .Select(x => new MarketplaceRolloutPlanCoverageInput
+                    {
+                        ModuleCode = x.ModuleCode,
+                        ModuleName = x.ModuleName,
+                        PlanCode = x.PlanCode,
+                        PlanName = x.PlanName,
+                        CoverageMode = x.CoverageMode,
+                        EligibleTenants = x.EligibleTenants,
+                        ActiveEntitlements = x.ActiveEntitlements,
+                        PendingEntitlements = x.PendingEntitlements,
+                        PriceMonthly = x.PriceMonthly,
+                        PriceAnnual = x.PriceAnnual,
+                        Signal = x.Signal,
+                        Commentary = x.Commentary
+                    })
+                    .ToList(),
+                ReconciliationQueue = rollout.ReconciliationQueue
+                    .Select(x => new MarketplaceRolloutQueueInput
+                    {
+                        TenantId = x.TenantId,
+                        TenantName = x.TenantName,
+                        PlanCode = x.PlanCode,
+                        PlanName = x.PlanName,
+                        PendingModuleCount = x.PendingModuleCount,
+                        PendingModules = x.PendingModules,
+                        State = x.State,
+                        Signal = x.Signal,
+                        LastEntitlementAction = x.LastEntitlementAction,
+                        LastEntitlementActionAt = x.LastEntitlementActionAt,
+                        RecommendedAction = x.RecommendedAction
+                    })
+                    .ToList()
+            },
+            ct);
+        var rolloutQueueRows = rolloutCatalog.ReconciliationQueue
+            .Select(x => new MarketplaceReconciliationQueueRow
+            {
+                TenantId = x.TenantId,
+                TenantName = x.TenantName,
+                PlanCode = x.PlanCode,
+                PlanName = x.PlanName,
+                PendingModuleCount = x.PendingModuleCount,
+                PendingModules = x.PendingModules,
+                State = x.State,
+                Signal = x.Signal,
+                LastEntitlementAction = x.LastEntitlementAction,
+                LastEntitlementActionAt = x.LastEntitlementActionAt,
+                RecommendedAction = x.RecommendedAction
+            })
+            .ToList();
+        var operationsCatalog = await _platformOperationsCatalog.MaterializeAsync(
+            new PlatformOperationsCatalogInput
+            {
+                Interventions = BuildInterventionQueue(institutionObligationRows, capitalRows, resilienceActions, modelChanges, rolloutQueueRows)
+                    .Select(x => new PlatformInterventionInput
+                    {
+                        Domain = x.Domain,
+                        Subject = x.Subject,
+                        Signal = x.Signal,
+                        Priority = x.Priority,
+                        NextAction = x.NextAction,
+                        DueDate = x.DueDate,
+                        OwnerLane = x.OwnerLane
+                    })
+                    .ToList(),
+                Timeline = BuildActivityTimeline(submissions, institutions, incidents, securityAlerts, auditLog, entitlementAuditRows, fieldChanges)
+                    .Select(x => new PlatformActivityTimelineInput
+                    {
+                        TenantId = x.TenantId,
+                        InstitutionId = x.InstitutionId,
+                        Domain = x.Domain,
+                        Title = x.Title,
+                        Detail = x.Detail,
+                        HappenedAt = x.HappenedAt,
+                        Severity = x.Severity
+                    })
+                    .ToList()
+            },
+            ct);
+        var activityTimeline = operationsCatalog.Timeline
+            .Select(x => new ActivityTimelineRow
+            {
+                TenantId = x.TenantId,
+                InstitutionId = x.InstitutionId,
+                Domain = x.Domain,
+                Title = x.Title,
+                Detail = x.Detail,
+                HappenedAt = x.HappenedAt,
+                Severity = x.Severity
+            })
+            .ToList();
+        var interventions = operationsCatalog.Interventions
+            .Select(x => new InterventionQueueRow
+            {
+                Domain = x.Domain,
+                Subject = x.Subject,
+                Signal = x.Signal,
+                Priority = x.Priority,
+                NextAction = x.NextAction,
+                DueDate = x.DueDate,
+                OwnerLane = x.OwnerLane
+            })
+            .ToList();
         var institutionDetails = BuildInstitutionDetails(
             institutionScorecards,
             institutionObligationRows,
@@ -385,6 +556,89 @@ public sealed class PlatformIntelligenceService
             activityTimeline,
             capitalRows,
             institutions);
+        var institutionCatalog = await _institutionSupervisoryCatalog.MaterializeAsync(
+            new InstitutionSupervisoryCatalogInput
+            {
+                Scorecards = institutionScorecards
+                    .Select(x => new InstitutionSupervisoryScorecardInput
+                    {
+                        InstitutionId = x.InstitutionId,
+                        TenantId = x.TenantId,
+                        InstitutionName = x.InstitutionName,
+                        LicenceType = x.LicenceType,
+                        OverdueObligations = x.OverdueObligations,
+                        DueSoonObligations = x.DueSoonObligations,
+                        CapitalScore = x.CapitalScore,
+                        OpenResilienceIncidents = x.OpenResilienceIncidents,
+                        OpenSecurityAlerts = x.OpenSecurityAlerts,
+                        ModelReviewItems = x.ModelReviewItems,
+                        Priority = x.Priority,
+                        Summary = x.Summary
+                    })
+                    .ToList(),
+                Details = institutionDetails
+                    .Select(x => new InstitutionSupervisoryDetailInput
+                    {
+                        InstitutionId = x.InstitutionId,
+                        TenantId = x.TenantId,
+                        InstitutionName = x.InstitutionName,
+                        InstitutionCode = x.InstitutionCode,
+                        LicenceType = x.LicenceType,
+                        Priority = x.Priority,
+                        Summary = x.Summary,
+                        CapitalScore = x.CapitalScore,
+                        CapitalAlert = x.CapitalAlert,
+                        OverdueObligations = x.OverdueObligations,
+                        DueSoonObligations = x.DueSoonObligations,
+                        OpenResilienceIncidents = x.OpenResilienceIncidents,
+                        OpenSecurityAlerts = x.OpenSecurityAlerts,
+                        ModelReviewItems = x.ModelReviewItems,
+                        TopObligationsJson = SerializeInstitutionCatalogJson(x.TopObligations),
+                        RecentSubmissionsJson = SerializeInstitutionCatalogJson(x.RecentSubmissions),
+                        RecentActivityJson = SerializeInstitutionCatalogJson(x.RecentActivity)
+                    })
+                    .ToList()
+            },
+            ct);
+        institutionScorecards = institutionCatalog.Scorecards
+            .Select(x => new InstitutionScorecardRow
+            {
+                InstitutionId = x.InstitutionId,
+                TenantId = x.TenantId,
+                InstitutionName = x.InstitutionName,
+                LicenceType = x.LicenceType,
+                OverdueObligations = x.OverdueObligations,
+                DueSoonObligations = x.DueSoonObligations,
+                CapitalScore = x.CapitalScore,
+                OpenResilienceIncidents = x.OpenResilienceIncidents,
+                OpenSecurityAlerts = x.OpenSecurityAlerts,
+                ModelReviewItems = x.ModelReviewItems,
+                Priority = x.Priority,
+                Summary = x.Summary
+            })
+            .ToList();
+        institutionDetails = institutionCatalog.Details
+            .Select(x => new InstitutionIntelligenceDetail
+            {
+                InstitutionId = x.InstitutionId,
+                TenantId = x.TenantId,
+                InstitutionName = x.InstitutionName,
+                InstitutionCode = x.InstitutionCode,
+                LicenceType = x.LicenceType,
+                Priority = x.Priority,
+                Summary = x.Summary,
+                CapitalScore = x.CapitalScore,
+                CapitalAlert = x.CapitalAlert,
+                OverdueObligations = x.OverdueObligations,
+                DueSoonObligations = x.DueSoonObligations,
+                OpenResilienceIncidents = x.OpenResilienceIncidents,
+                OpenSecurityAlerts = x.OpenSecurityAlerts,
+                ModelReviewItems = x.ModelReviewItems,
+                TopObligations = DeserializeInstitutionCatalogJson<KnowledgeGraphInstitutionObligationRow>(x.TopObligationsJson),
+                RecentSubmissions = DeserializeInstitutionCatalogJson<InstitutionSubmissionSummaryRow>(x.RecentSubmissionsJson),
+                RecentActivity = DeserializeInstitutionCatalogJson<ActivityTimelineRow>(x.RecentActivityJson)
+            })
+            .ToList();
 
         return new PlatformIntelligenceWorkspace
         {
@@ -397,6 +651,52 @@ public sealed class PlatformIntelligenceService
                 OpenResilienceIncidents = incidents.Count(x => !x.RemediatedAt.HasValue),
                 ModelsUnderGovernance = modelInventory.Count,
                 PriorityInterventions = interventions.Count(x => x.Priority is "Critical" or "High")
+            },
+            Rollout = new MarketplaceRolloutSnapshot
+            {
+                TrackedModuleCount = rollout.TrackedModuleCount,
+                EligibleTenantCount = rollout.EligibleTenantCount,
+                ActiveEntitlementCount = rollout.ActiveEntitlementCount,
+                PendingEntitlementCount = rollout.PendingEntitlementCount,
+                PendingTenantCount = rollout.PendingTenantCount,
+                StaleTenantCount = rollout.StaleTenantCount,
+                LastEntitlementActivityAt = rollout.LastEntitlementActivityAt,
+                CatalogMaterializedAt = rolloutCatalog.MaterializedAt,
+                ModuleRollout = rolloutCatalog.Modules
+                    .Select(x => new MarketplaceModuleRolloutRow
+                    {
+                        ModuleCode = x.ModuleCode,
+                        ModuleName = x.ModuleName,
+                        EligibleTenants = x.EligibleTenants,
+                        ActiveEntitlements = x.ActiveEntitlements,
+                        PendingEntitlements = x.PendingEntitlements,
+                        StaleTenants = x.StaleTenants,
+                        IncludedBasePlans = x.IncludedBasePlans,
+                        AddOnPlans = x.AddOnPlans,
+                        AdoptionRatePercent = x.AdoptionRatePercent,
+                        Signal = x.Signal,
+                        Commentary = x.Commentary,
+                        RecommendedAction = x.RecommendedAction
+                    })
+                    .ToList(),
+                PlanCoverage = rolloutCatalog.PlanCoverage
+                    .Select(x => new MarketplacePlanCoverageRow
+                    {
+                        ModuleCode = x.ModuleCode,
+                        ModuleName = x.ModuleName,
+                        PlanCode = x.PlanCode,
+                        PlanName = x.PlanName,
+                        CoverageMode = x.CoverageMode,
+                        EligibleTenants = x.EligibleTenants,
+                        ActiveEntitlements = x.ActiveEntitlements,
+                        PendingEntitlements = x.PendingEntitlements,
+                        PriceMonthly = x.PriceMonthly,
+                        PriceAnnual = x.PriceAnnual,
+                        Signal = x.Signal,
+                        Commentary = x.Commentary
+                    })
+                    .ToList(),
+                ReconciliationQueue = rolloutQueueRows
             },
             KnowledgeGraph = new KnowledgeGraphSnapshot
             {
@@ -486,6 +786,7 @@ public sealed class PlatformIntelligenceService
                 ReturnPack = sanctionsPackCatalog.Sections.ToList(),
                 ReturnPackAttentionCount = sanctionsPackCatalog.Sections.Count(x => x.Signal is "Critical" or "Watch"),
                 ReturnPackMaterializedAt = sanctionsPackCatalog.MaterializedAt,
+                StrDraftCatalogMaterializedAt = sanctionsStrDraftCatalog.MaterializedAt,
                 Sources = sanctionsCatalog.Sources
                     .Select(x => new SanctionsWatchlistSource(
                         x.SourceCode,
@@ -609,11 +910,33 @@ public sealed class PlatformIntelligenceService
                 RecentChanges = modelChanges,
                 Inventory = modelInventory
             },
+            InstitutionCatalogMaterializedAt = institutionCatalog.MaterializedAt,
             InstitutionScorecards = institutionScorecards,
             InstitutionDetails = institutionDetails,
+            OperationsCatalogMaterializedAt = operationsCatalog.MaterializedAt,
             ActivityTimeline = activityTimeline,
             Interventions = interventions
         };
+    }
+
+    private static string SerializeInstitutionCatalogJson<T>(IReadOnlyList<T> rows) =>
+        JsonSerializer.Serialize(rows ?? []);
+
+    private static List<T> DeserializeInstitutionCatalogJson<T>(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return [];
+        }
+
+        try
+        {
+            return JsonSerializer.Deserialize<List<T>>(json) ?? [];
+        }
+        catch (JsonException)
+        {
+            return [];
+        }
     }
 
     public async Task<SanctionsScreeningRun> ScreenSubjectsAsync(IEnumerable<string> subjects, double threshold, CancellationToken ct = default)
@@ -842,6 +1165,14 @@ public sealed class PlatformIntelligenceService
         IReadOnlyList<SanctionsPackSectionInput> sections,
         CancellationToken ct = default) =>
         _sanctionsPackCatalog.MaterializeAsync(sections, ct);
+
+    public Task<SanctionsStrDraftCatalogState> GetSanctionsStrDraftCatalogStateAsync(CancellationToken ct = default) =>
+        _sanctionsStrDraftCatalog.LoadAsync(ct);
+
+    public Task<SanctionsStrDraftCatalogState> MaterializeSanctionsStrDraftCatalogAsync(
+        IReadOnlyList<SanctionsStrDraftInput> drafts,
+        CancellationToken ct = default) =>
+        _sanctionsStrDraftCatalog.MaterializeAsync(drafts, ct);
 
     private async Task<SanctionsCatalogState> LoadSanctionsCatalogAsync(CancellationToken ct)
     {
@@ -3737,6 +4068,7 @@ public sealed class PlatformIntelligenceService
         IReadOnlyList<DataBreachIncident> incidents,
         IReadOnlyList<SecurityAlert> securityAlerts,
         IReadOnlyList<AuditLogEntry> auditLog,
+        IReadOnlyList<AuditLogEntry> entitlementAuditRows,
         IReadOnlyList<FieldChangeHistory> fieldChanges)
     {
         var institutionById = institutions.ToDictionary(x => x.Id);
@@ -3802,6 +4134,21 @@ public sealed class PlatformIntelligenceService
                 : "Medium"
         });
 
+        var rolloutItems = entitlementAuditRows.Select(entry => new ActivityTimelineRow
+        {
+            TenantId = ResolveEntitlementAuditTenantId(entry),
+            Domain = "Marketplace",
+            Title = DescribeEntitlementAction(entry.Action) ?? entry.Action,
+            Detail = $"Entitlement rollout action by {entry.PerformedBy}",
+            HappenedAt = entry.PerformedAt,
+            Severity = entry.Action switch
+            {
+                "TenantModulesReconciled" => "Medium",
+                "TenantLicenceRemoved" => "High",
+                _ => "Low"
+            }
+        });
+
         var fieldItems = fieldChanges.Select(change => new ActivityTimelineRow
         {
             Domain = "Data",
@@ -3816,6 +4163,7 @@ public sealed class PlatformIntelligenceService
             .Concat(incidentItems)
             .Concat(alertItems)
             .Concat(auditItems)
+            .Concat(rolloutItems)
             .Concat(fieldItems)
             .OrderByDescending(x => x.HappenedAt)
             .Take(24)
@@ -3898,11 +4246,271 @@ public sealed class PlatformIntelligenceService
             .ToList();
     }
 
+    private static MarketplaceRolloutSnapshot BuildMarketplaceRolloutSnapshot(
+        IReadOnlyList<Module> modules,
+        IReadOnlyList<Tenant> tenants,
+        IReadOnlyList<Subscription> subscriptions,
+        IReadOnlyList<PlanModulePricing> planModulePricing,
+        IReadOnlyList<TenantLicenceType> tenantLicences,
+        IReadOnlyList<LicenceModuleMatrix> licenceModules,
+        IReadOnlyList<AuditLogEntry> entitlementAuditRows)
+    {
+        var trackedModules = modules
+            .Where(x => RolloutModuleCodes.Contains(x.ModuleCode))
+            .OrderBy(x => x.ModuleName, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (trackedModules.Count == 0)
+        {
+            return new MarketplaceRolloutSnapshot();
+        }
+
+        var activeSubscriptions = subscriptions
+            .Where(x => x.IsActiveForEntitlement())
+            .GroupBy(x => x.TenantId)
+            .Select(g => g.OrderByDescending(x => x.UpdatedAt).First())
+            .ToList();
+
+        var licenceIdsByTenant = tenantLicences
+            .GroupBy(x => x.TenantId)
+            .ToDictionary(g => g.Key, g => g.Select(x => x.LicenceTypeId).ToHashSet());
+
+        var moduleIdsByLicenceType = licenceModules
+            .GroupBy(x => x.LicenceTypeId)
+            .ToDictionary(g => g.Key, g => g.Select(x => x.ModuleId).ToHashSet());
+
+        var planPricingByPlanAndModule = planModulePricing
+            .GroupBy(x => (x.PlanId, x.ModuleId))
+            .ToDictionary(g => g.Key, g => g.OrderByDescending(x => x.IsIncludedInBase).First());
+
+        var tenantById = tenants.ToDictionary(x => x.TenantId);
+        var latestEntitlementAuditByTenant = entitlementAuditRows
+            .Select(x => new
+            {
+                TenantId = ResolveEntitlementAuditTenantId(x),
+                x.Action,
+                x.PerformedAt
+            })
+            .Where(x => x.TenantId.HasValue)
+            .GroupBy(x => x.TenantId!.Value)
+            .ToDictionary(g => g.Key, g => g.First());
+
+        var tenantStates = activeSubscriptions
+            .Select(subscription =>
+            {
+                tenantById.TryGetValue(subscription.TenantId, out var tenant);
+                latestEntitlementAuditByTenant.TryGetValue(subscription.TenantId, out var latestAudit);
+
+                var licenceIds = licenceIdsByTenant.GetValueOrDefault(subscription.TenantId) ?? [];
+                var eligibleModuleIds = licenceIds
+                    .SelectMany(licenceTypeId => moduleIdsByLicenceType.GetValueOrDefault(licenceTypeId) ?? Enumerable.Empty<int>())
+                    .ToHashSet();
+                var activeModuleIds = subscription.Modules
+                    .Where(x => x.IsActive)
+                    .Select(x => x.ModuleId)
+                    .ToHashSet();
+
+                return new
+                {
+                    subscription.TenantId,
+                    TenantName = tenant?.TenantName ?? subscription.TenantId.ToString(),
+                    PlanId = subscription.PlanId,
+                    PlanCode = subscription.Plan?.PlanCode ?? $"PLAN-{subscription.PlanId}",
+                    PlanName = subscription.Plan?.PlanName ?? $"Plan {subscription.PlanId}",
+                    EligibleModuleIds = eligibleModuleIds,
+                    ActiveModuleIds = activeModuleIds,
+                    LastEntitlementAction = latestAudit?.Action,
+                    LastEntitlementActionAt = latestAudit?.PerformedAt
+                };
+            })
+            .ToList();
+
+        var moduleRollout = new List<MarketplaceModuleRolloutRow>();
+        var planCoverage = new List<MarketplacePlanCoverageRow>();
+        var queueRows = new List<MarketplaceReconciliationQueueRow>();
+        var now = DateTime.UtcNow;
+
+        foreach (var module in trackedModules)
+        {
+            var eligibleTenantStates = tenantStates
+                .Where(x => x.EligibleModuleIds.Contains(module.Id))
+                .ToList();
+
+            var activeCount = eligibleTenantStates.Count(x => x.ActiveModuleIds.Contains(module.Id));
+            var pendingStates = eligibleTenantStates
+                .Where(x =>
+                    !x.ActiveModuleIds.Contains(module.Id)
+                    && planPricingByPlanAndModule.TryGetValue((x.PlanId, module.Id), out var pricing)
+                    && pricing.IsIncludedInBase)
+                .ToList();
+            var staleCount = pendingStates.Count(x => !x.LastEntitlementActionAt.HasValue || x.LastEntitlementActionAt.Value <= now.AddDays(-7));
+            var includedBasePlanCount = planModulePricing.Count(x => x.ModuleId == module.Id && x.IsIncludedInBase);
+            var addOnPlanCount = planModulePricing.Count(x => x.ModuleId == module.Id && !x.IsIncludedInBase);
+            var adoptionRate = eligibleTenantStates.Count == 0
+                ? 0m
+                : Math.Round(activeCount / (decimal)eligibleTenantStates.Count * 100m, 1);
+
+            var signal = pendingStates.Count switch
+            {
+                > 0 when staleCount > 0 => "Critical",
+                > 0 => "Watch",
+                _ when eligibleTenantStates.Count > 0 && adoptionRate < 60m => "Watch",
+                _ => "Current"
+            };
+
+            var commentary = eligibleTenantStates.Count == 0
+                ? "No active tenant licence mix currently makes this pack eligible."
+                : pendingStates.Count > 0
+                    ? $"{pendingStates.Count} eligible tenant(s) are missing included-base activation, including {staleCount} stale reconciliation case(s)."
+                    : addOnPlanCount > 0 && activeCount < eligibleTenantStates.Count
+                        ? $"{eligibleTenantStates.Count - activeCount} eligible tenant(s) still sit on add-on coverage or dormant activation paths."
+                        : "Rollout is currently synchronized across the eligible tenant population.";
+
+            var recommendedAction = signal switch
+            {
+                "Critical" => "Run reconciliation for stale tenants and confirm plan pricing plus licence mappings for this pack.",
+                "Watch" when pendingStates.Count > 0 => "Reconcile affected subscriptions and verify the pack is included where the plan promises base coverage.",
+                "Watch" => "Review add-on conversion and commercial enablement for eligible tenants not yet activated.",
+                _ => "Maintain registry, pricing, and entitlement synchronization."
+            };
+
+            moduleRollout.Add(new MarketplaceModuleRolloutRow
+            {
+                ModuleCode = module.ModuleCode,
+                ModuleName = module.ModuleName,
+                EligibleTenants = eligibleTenantStates.Count,
+                ActiveEntitlements = activeCount,
+                PendingEntitlements = pendingStates.Count,
+                StaleTenants = staleCount,
+                IncludedBasePlans = includedBasePlanCount,
+                AddOnPlans = addOnPlanCount,
+                AdoptionRatePercent = adoptionRate,
+                Signal = signal,
+                Commentary = commentary,
+                RecommendedAction = recommendedAction
+            });
+
+            foreach (var pricing in planModulePricing
+                         .Where(x => x.ModuleId == module.Id)
+                         .OrderByDescending(x => x.IsIncludedInBase)
+                         .ThenBy(x => x.PriceMonthly))
+            {
+                var planTenantStates = tenantStates
+                    .Where(x => x.PlanId == pricing.PlanId && x.EligibleModuleIds.Contains(module.Id))
+                    .ToList();
+                var activeEntitlements = planTenantStates.Count(x => x.ActiveModuleIds.Contains(module.Id));
+                var pendingEntitlements = pricing.IsIncludedInBase
+                    ? planTenantStates.Count(x => !x.ActiveModuleIds.Contains(module.Id))
+                    : 0;
+
+                var planSignal = pendingEntitlements switch
+                {
+                    > 0 => "Watch",
+                    _ when pricing.IsIncludedInBase && planTenantStates.Count == 0 => "Monitor",
+                    _ => "Current"
+                };
+
+                var planName = planTenantStates.FirstOrDefault()?.PlanName ?? $"Plan {pricing.PlanId}";
+                var planCode = planTenantStates.FirstOrDefault()?.PlanCode ?? $"PLAN-{pricing.PlanId}";
+
+                planCoverage.Add(new MarketplacePlanCoverageRow
+                {
+                    ModuleCode = module.ModuleCode,
+                    ModuleName = module.ModuleName,
+                    PlanCode = planCode,
+                    PlanName = planName,
+                    CoverageMode = pricing.IsIncludedInBase ? "Included" : "Add-On",
+                    EligibleTenants = planTenantStates.Count,
+                    ActiveEntitlements = activeEntitlements,
+                    PendingEntitlements = pendingEntitlements,
+                    PriceMonthly = pricing.PriceMonthly,
+                    PriceAnnual = pricing.PriceAnnual,
+                    Signal = planSignal,
+                    Commentary = pricing.IsIncludedInBase
+                        ? pendingEntitlements > 0
+                            ? $"{pendingEntitlements} tenant(s) on this plan still need base-pack activation."
+                            : "Included-base coverage is currently synchronized."
+                        : activeEntitlements > 0
+                            ? $"{activeEntitlements} tenant(s) have already activated this add-on."
+                            : "This pack is available as an add-on on the plan."
+                });
+            }
+        }
+
+        foreach (var tenantState in tenantStates)
+        {
+            var pendingModules = trackedModules
+                .Where(module =>
+                    tenantState.EligibleModuleIds.Contains(module.Id)
+                    && !tenantState.ActiveModuleIds.Contains(module.Id)
+                    && planPricingByPlanAndModule.TryGetValue((tenantState.PlanId, module.Id), out var pricing)
+                    && pricing.IsIncludedInBase)
+                .Select(module => module.ModuleCode)
+                .ToList();
+
+            if (pendingModules.Count == 0)
+            {
+                continue;
+            }
+
+            var state = !tenantState.LastEntitlementActionAt.HasValue || tenantState.LastEntitlementActionAt.Value <= now.AddDays(-7)
+                ? "Stale"
+                : "Action Needed";
+
+            queueRows.Add(new MarketplaceReconciliationQueueRow
+            {
+                TenantId = tenantState.TenantId,
+                TenantName = tenantState.TenantName,
+                PlanCode = tenantState.PlanCode,
+                PlanName = tenantState.PlanName,
+                PendingModuleCount = pendingModules.Count,
+                PendingModules = string.Join(", ", pendingModules),
+                State = state,
+                Signal = state == "Stale" ? "Critical" : "Watch",
+                LastEntitlementAction = DescribeEntitlementAction(tenantState.LastEntitlementAction),
+                LastEntitlementActionAt = tenantState.LastEntitlementActionAt,
+                RecommendedAction = state == "Stale"
+                    ? "Run reconciliation now and confirm the tenant's active licence mix still matches the marketed pack."
+                    : "Reconcile the tenant and verify included-base activation on the current plan."
+            });
+        }
+
+        return new MarketplaceRolloutSnapshot
+        {
+            TrackedModuleCount = trackedModules.Count,
+            EligibleTenantCount = tenantStates.Count(x => trackedModules.Any(module => x.EligibleModuleIds.Contains(module.Id))),
+            ActiveEntitlementCount = moduleRollout.Sum(x => x.ActiveEntitlements),
+            PendingEntitlementCount = moduleRollout.Sum(x => x.PendingEntitlements),
+            PendingTenantCount = queueRows.Count,
+            StaleTenantCount = queueRows.Count(x => x.State == "Stale"),
+            LastEntitlementActivityAt = queueRows
+                .Select(x => x.LastEntitlementActionAt)
+                .Where(x => x.HasValue)
+                .Select(x => x!.Value)
+                .Cast<DateTime?>()
+                .DefaultIfEmpty(null)
+                .Max(),
+            ModuleRollout = moduleRollout,
+            PlanCoverage = planCoverage
+                .OrderByDescending(x => x.CoverageMode == "Included")
+                .ThenByDescending(x => x.PendingEntitlements)
+                .ThenBy(x => x.PlanName, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(x => x.ModuleName, StringComparer.OrdinalIgnoreCase)
+                .ToList(),
+            ReconciliationQueue = queueRows
+                .OrderByDescending(x => x.State == "Stale")
+                .ThenByDescending(x => x.PendingModuleCount)
+                .ThenBy(x => x.TenantName, StringComparer.OrdinalIgnoreCase)
+                .ToList()
+        };
+    }
+
     private static List<InterventionQueueRow> BuildInterventionQueue(
         IReadOnlyList<KnowledgeGraphInstitutionObligationRow> institutionObligations,
         IReadOnlyList<CapitalWatchlistRow> capitalRows,
         IReadOnlyList<ResilienceActionRow> resilienceActions,
-        IReadOnlyList<ModelChangeRow> modelChanges)
+        IReadOnlyList<ModelChangeRow> modelChanges,
+        IReadOnlyList<MarketplaceReconciliationQueueRow> rolloutQueue)
     {
         var filingInterventions = institutionObligations
             .Where(x => x.Status is "Overdue" or "Attention Required" or "Due Soon")
@@ -3970,10 +4578,23 @@ public sealed class PlatformIntelligenceService
                 OwnerLane = "Model Governance"
             });
 
+        var rolloutInterventions = rolloutQueue
+            .Select(x => new InterventionQueueRow
+            {
+                Domain = "Rollout",
+                Subject = x.TenantName,
+                Signal = $"{x.PendingModuleCount} entitlement gap(s) across {x.PendingModules}",
+                Priority = x.State == "Stale" ? "High" : "Medium",
+                NextAction = x.RecommendedAction,
+                DueDate = DateTime.UtcNow.Date.AddDays(x.State == "Stale" ? 3 : 7),
+                OwnerLane = "Platform Ops"
+            });
+
         return filingInterventions
             .Concat(capitalInterventions)
             .Concat(resilienceInterventions)
             .Concat(modelInterventions)
+            .Concat(rolloutInterventions)
             .OrderByDescending(x => InterventionPriorityRank(x.Priority))
             .ThenBy(x => x.DueDate)
             .Take(24)
@@ -4895,6 +5516,44 @@ public sealed class PlatformIntelligenceService
         _ => '0'
     };
 
+    private static Guid? ResolveEntitlementAuditTenantId(AuditLogEntry entry)
+    {
+        if (entry.TenantId.HasValue)
+        {
+            return entry.TenantId.Value;
+        }
+
+        if (string.IsNullOrWhiteSpace(entry.NewValues))
+        {
+            return null;
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(entry.NewValues);
+            if (document.RootElement.TryGetProperty("TenantId", out var tenantIdNode)
+                && tenantIdNode.ValueKind == JsonValueKind.String
+                && Guid.TryParse(tenantIdNode.GetString(), out var parsed))
+            {
+                return parsed;
+            }
+        }
+        catch
+        {
+            // Ignore malformed audit payloads and fall through.
+        }
+
+        return null;
+    }
+
+    private static string? DescribeEntitlementAction(string? actionCode) => actionCode switch
+    {
+        "TenantModulesReconciled" => "Modules Reconciled",
+        "TenantLicenceAssigned" => "Licence Assigned",
+        "TenantLicenceRemoved" => "Licence Removed",
+        _ => actionCode
+    };
+
     private readonly record struct FieldLineageSource(
         TemplateField Field,
         TemplateVersion Version,
@@ -5035,13 +5694,16 @@ public sealed class PlatformIntelligenceWorkspace
 {
     public DateTime GeneratedAt { get; set; }
     public PlatformIntelligenceHero Hero { get; set; } = new();
+    public MarketplaceRolloutSnapshot Rollout { get; set; } = new();
     public KnowledgeGraphSnapshot KnowledgeGraph { get; set; } = new();
     public CapitalManagementSnapshot Capital { get; set; } = new();
     public SanctionsSnapshot Sanctions { get; set; } = new();
     public OperationalResilienceSnapshot Resilience { get; set; } = new();
     public ModelRiskSnapshot ModelRisk { get; set; } = new();
+    public DateTime? InstitutionCatalogMaterializedAt { get; set; }
     public List<InstitutionScorecardRow> InstitutionScorecards { get; set; } = [];
     public List<InstitutionIntelligenceDetail> InstitutionDetails { get; set; } = [];
+    public DateTime? OperationsCatalogMaterializedAt { get; set; }
     public List<ActivityTimelineRow> ActivityTimeline { get; set; } = [];
     public List<InterventionQueueRow> Interventions { get; set; } = [];
 }
@@ -5054,6 +5716,68 @@ public sealed class PlatformIntelligenceHero
     public int OpenResilienceIncidents { get; set; }
     public int ModelsUnderGovernance { get; set; }
     public int PriorityInterventions { get; set; }
+}
+
+public sealed class MarketplaceRolloutSnapshot
+{
+    public int TrackedModuleCount { get; set; }
+    public int EligibleTenantCount { get; set; }
+    public int ActiveEntitlementCount { get; set; }
+    public int PendingEntitlementCount { get; set; }
+    public int PendingTenantCount { get; set; }
+    public int StaleTenantCount { get; set; }
+    public DateTime? LastEntitlementActivityAt { get; set; }
+    public DateTime? CatalogMaterializedAt { get; set; }
+    public List<MarketplaceModuleRolloutRow> ModuleRollout { get; set; } = [];
+    public List<MarketplacePlanCoverageRow> PlanCoverage { get; set; } = [];
+    public List<MarketplaceReconciliationQueueRow> ReconciliationQueue { get; set; } = [];
+}
+
+public sealed class MarketplaceModuleRolloutRow
+{
+    public string ModuleCode { get; set; } = string.Empty;
+    public string ModuleName { get; set; } = string.Empty;
+    public int EligibleTenants { get; set; }
+    public int ActiveEntitlements { get; set; }
+    public int PendingEntitlements { get; set; }
+    public int StaleTenants { get; set; }
+    public int IncludedBasePlans { get; set; }
+    public int AddOnPlans { get; set; }
+    public decimal AdoptionRatePercent { get; set; }
+    public string Signal { get; set; } = string.Empty;
+    public string Commentary { get; set; } = string.Empty;
+    public string RecommendedAction { get; set; } = string.Empty;
+}
+
+public sealed class MarketplacePlanCoverageRow
+{
+    public string ModuleCode { get; set; } = string.Empty;
+    public string ModuleName { get; set; } = string.Empty;
+    public string PlanCode { get; set; } = string.Empty;
+    public string PlanName { get; set; } = string.Empty;
+    public string CoverageMode { get; set; } = string.Empty;
+    public int EligibleTenants { get; set; }
+    public int ActiveEntitlements { get; set; }
+    public int PendingEntitlements { get; set; }
+    public decimal PriceMonthly { get; set; }
+    public decimal PriceAnnual { get; set; }
+    public string Signal { get; set; } = string.Empty;
+    public string Commentary { get; set; } = string.Empty;
+}
+
+public sealed class MarketplaceReconciliationQueueRow
+{
+    public Guid TenantId { get; set; }
+    public string TenantName { get; set; } = string.Empty;
+    public string PlanCode { get; set; } = string.Empty;
+    public string PlanName { get; set; } = string.Empty;
+    public int PendingModuleCount { get; set; }
+    public string PendingModules { get; set; } = string.Empty;
+    public string State { get; set; } = string.Empty;
+    public string Signal { get; set; } = string.Empty;
+    public string? LastEntitlementAction { get; set; }
+    public DateTime? LastEntitlementActionAt { get; set; }
+    public string RecommendedAction { get; set; } = string.Empty;
 }
 
 public sealed class KnowledgeGraphSnapshot
@@ -5320,6 +6044,7 @@ public sealed class SanctionsSnapshot
     public List<SanctionsPackSectionState> ReturnPack { get; set; } = [];
     public int ReturnPackAttentionCount { get; set; }
     public DateTime? ReturnPackMaterializedAt { get; set; }
+    public DateTime? StrDraftCatalogMaterializedAt { get; set; }
     public List<SanctionsWatchlistSource> Sources { get; set; } = [];
 }
 

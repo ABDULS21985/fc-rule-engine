@@ -110,11 +110,19 @@ public class MetadataDbContext : DbContext
     public DbSet<SanctionsScreeningResultRecord> SanctionsScreeningResults => Set<SanctionsScreeningResultRecord>();
     public DbSet<SanctionsTransactionCheckRecord> SanctionsTransactionChecks => Set<SanctionsTransactionCheckRecord>();
     public DbSet<SanctionsTransactionPartyResultRecord> SanctionsTransactionPartyResults => Set<SanctionsTransactionPartyResultRecord>();
+    public DbSet<SanctionsStrDraftRecord> SanctionsStrDrafts => Set<SanctionsStrDraftRecord>();
     public DbSet<SanctionsFalsePositiveEntry> SanctionsFalsePositiveEntries => Set<SanctionsFalsePositiveEntry>();
     public DbSet<SanctionsDecisionAuditRecord> SanctionsDecisionAuditRecords => Set<SanctionsDecisionAuditRecord>();
     public DbSet<ModelApprovalWorkflowStateRecord> ModelApprovalWorkflowStates => Set<ModelApprovalWorkflowStateRecord>();
     public DbSet<ModelApprovalAuditRecord> ModelApprovalAuditRecords => Set<ModelApprovalAuditRecord>();
     public DbSet<ResilienceAssessmentResponseRecord> ResilienceAssessmentResponses => Set<ResilienceAssessmentResponseRecord>();
+    public DbSet<PlatformInterventionRecord> PlatformInterventions => Set<PlatformInterventionRecord>();
+    public DbSet<PlatformActivityTimelineRecord> PlatformActivityTimeline => Set<PlatformActivityTimelineRecord>();
+    public DbSet<InstitutionSupervisoryScorecardRecord> InstitutionSupervisoryScorecards => Set<InstitutionSupervisoryScorecardRecord>();
+    public DbSet<InstitutionSupervisoryDetailRecord> InstitutionSupervisoryDetails => Set<InstitutionSupervisoryDetailRecord>();
+    public DbSet<MarketplaceRolloutModuleRecord> MarketplaceRolloutModules => Set<MarketplaceRolloutModuleRecord>();
+    public DbSet<MarketplaceRolloutPlanCoverageRecord> MarketplaceRolloutPlanCoverage => Set<MarketplaceRolloutPlanCoverageRecord>();
+    public DbSet<MarketplaceRolloutQueueRecord> MarketplaceRolloutReconciliationQueue => Set<MarketplaceRolloutQueueRecord>();
 
     // Direct regulatory submissions (RG-34 legacy)
     public DbSet<DirectSubmission> DirectSubmissions => Set<DirectSubmission>();

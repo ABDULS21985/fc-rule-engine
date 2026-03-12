@@ -178,9 +178,13 @@ public static class DependencyInjection
         services.AddScoped<SanctionsWatchlistRefreshService>();
         services.AddScoped<SanctionsPackCatalogService>();
         services.AddScoped<SanctionsScreeningSessionStoreService>();
+        services.AddScoped<SanctionsStrDraftCatalogService>();
         services.AddScoped<SanctionsWorkflowStoreService>();
         services.AddScoped<ModelApprovalWorkflowStoreService>();
         services.AddScoped<ResilienceAssessmentStoreService>();
+        services.AddScoped<PlatformOperationsCatalogService>();
+        services.AddScoped<InstitutionSupervisoryCatalogService>();
+        services.AddScoped<MarketplaceRolloutCatalogService>();
 
         // ── Authentication evolution (RG-05) ──
         services.Configure<JwtSettings>(configuration.GetSection(JwtSettings.SectionName));

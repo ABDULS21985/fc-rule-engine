@@ -5,6 +5,7 @@
 @using FC.Engine.Admin.Services
 @using FC.Engine.Infrastructure.Services
 @inject PlatformIntelligenceService IntelligenceService
+@inject DashboardBriefingPackBuilder DashboardBriefingPackBuilder
 @inject ToastService Toast
 @inject DataTableExportService ExportService
 @inject IJSRuntime JS
@@ -1697,7 +1698,10 @@
                                         <span class="fc-intel-card__label">STR Draft Centre</span>
                                         <h2>@(SelectedStrDraft?.Subject ?? "No active STR draft")</h2>
                                     </div>
-                                    <span class="fc-intel-chip">RG-34 / goAML</span>
+                                    <div class="fc-intel-inline-chips">
+                                        <span class="fc-intel-chip">RG-34 / goAML</span>
+                                        <span class="fc-intel-chip">@(_strDraftCatalogMaterializedAt?.ToString("dd MMM HH:mm", CultureInfo.InvariantCulture) ?? "Catalog pending")</span>
+                                    </div>
                                 </header>
                                 @if (SelectedStrDraft is null)
                                 {
@@ -4294,7 +4298,214 @@
                             <p>Track validation due dates, performance health, and evidence coverage for material models.</p>
                             <button class="fc-btn fc-btn--outline fc-btn--sm" @onclick='() => _activeTab = "models"'>Open model risk</button>
                         </article>
+                        <article class="fc-intel-card fc-intel-card--feature">
+                            <span class="fc-intel-card__label">Marketplace Rollout</span>
+                            <h2>@_workspace.Rollout.PendingEntitlementCount entitlement gap(s)</h2>
+                            <p>Monitor rollout coverage, stale reconciliation, and tenant drift for newly launched supervisory packs.</p>
+                            <a class="fc-btn fc-btn--outline fc-btn--sm" href="/platform/tenants?needsReconciliation=true">Open tenant ops</a>
+                        </article>
                     </div>
+
+                    <article class="fc-intel-card fc-intel-card--table">
+                        <header class="fc-intel-card__header">
+                            <div>
+                                <span class="fc-intel-card__label">Module Rollout Control</span>
+                                <h2>Adoption, entitlement drift, and plan coverage for the new supervisory packs</h2>
+                            </div>
+                            <div class="fc-intel-inline-chips">
+                                <span class="fc-intel-chip">@_workspace.Rollout.TrackedModuleCount pack(s)</span>
+                                <span class="fc-intel-chip">@(_workspace.Rollout.CatalogMaterializedAt?.ToString("dd MMM HH:mm", CultureInfo.InvariantCulture) ?? "Catalog pending")</span>
+                                <span class="fc-intel-chip">@(_workspace.Rollout.LastEntitlementActivityAt?.ToString("dd MMM HH:mm", CultureInfo.InvariantCulture) ?? "No recent activity")</span>
+                            </div>
+                        </header>
+
+                        <div class="fc-intel-pill-grid">
+                            <article class="fc-intel-metric-tile">
+                                <span class="fc-intel-card__label">Eligible Tenants</span>
+                                <strong>@_workspace.Rollout.EligibleTenantCount</strong>
+                                <p>Tenants whose active licence mix makes at least one tracked pack eligible.</p>
+                            </article>
+                            <article class="fc-intel-metric-tile">
+                                <span class="fc-intel-card__label">Active Entitlements</span>
+                                <strong>@_workspace.Rollout.ActiveEntitlementCount</strong>
+                                <p>Tracked pack activations currently live across active subscriptions.</p>
+                            </article>
+                            <article class="fc-intel-metric-tile">
+                                <span class="fc-intel-card__label">Pending Gaps</span>
+                                <strong>@_workspace.Rollout.PendingEntitlementCount</strong>
+                                <p>Included-base pack activations still missing from active subscriptions.</p>
+                            </article>
+                            <article class="fc-intel-metric-tile">
+                                <span class="fc-intel-card__label">Tenants with Drift</span>
+                                <strong>@_workspace.Rollout.PendingTenantCount</strong>
+                                <p>Tenants currently carrying at least one missing included-base pack.</p>
+                            </article>
+                            <article class="fc-intel-metric-tile">
+                                <span class="fc-intel-card__label">Stale</span>
+                                <strong>@_workspace.Rollout.StaleTenantCount</strong>
+                                <p>Tenants with rollout drift and no entitlement activity in the last seven days.</p>
+                            </article>
+                        </div>
+
+                        <div class="fc-intel-grid fc-intel-grid--two">
+                            <article class="fc-intel-card fc-intel-card--table">
+                                <header class="fc-intel-card__header">
+                                    <div>
+                                        <span class="fc-intel-card__label">Pack Rollout</span>
+                                        <h2>Coverage across eligible tenants</h2>
+                                    </div>
+                                    <span class="fc-intel-chip">@_workspace.Rollout.ModuleRollout.Count row(s)</span>
+                                </header>
+                                <div class="fc-intel-table-wrap">
+                                    <table class="fc-intel-table">
+                                        <thead>
+                                            <tr>
+                                                <th>Pack</th>
+                                                <th>Eligible / Active</th>
+                                                <th>Pending</th>
+                                                <th>Plans</th>
+                                                <th>Adoption</th>
+                                                <th>Signal</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            @foreach (var row in _workspace.Rollout.ModuleRollout)
+                                            {
+                                                <tr>
+                                                    <td>
+                                                        <strong>@row.ModuleCode</strong>
+                                                        <div class="fc-intel-table__sub">@row.ModuleName</div>
+                                                    </td>
+                                                    <td>
+                                                        <strong>@row.EligibleTenants eligible</strong>
+                                                        <div class="fc-intel-table__sub">@row.ActiveEntitlements active</div>
+                                                    </td>
+                                                    <td>
+                                                        <strong>@row.PendingEntitlements gap(s)</strong>
+                                                        <div class="fc-intel-table__sub">@row.StaleTenants stale</div>
+                                                    </td>
+                                                    <td class="fc-intel-table__sub">@row.IncludedBasePlans included · @row.AddOnPlans add-on</td>
+                                                    <td>@row.AdoptionRatePercent.ToString("0.0", CultureInfo.InvariantCulture)%</td>
+                                                    <td>
+                                                        <span class="fc-intel-status fc-intel-status--@StatusClass(row.Signal)">@row.Signal</span>
+                                                        <div class="fc-intel-table__sub">@row.RecommendedAction</div>
+                                                    </td>
+                                                </tr>
+                                            }
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </article>
+
+                            <article class="fc-intel-card fc-intel-card--table">
+                                <header class="fc-intel-card__header">
+                                    <div>
+                                        <span class="fc-intel-card__label">Reconciliation Queue</span>
+                                        <h2>Tenants carrying rollout drift on included-base packs</h2>
+                                    </div>
+                                    <span class="fc-intel-chip">@_workspace.Rollout.ReconciliationQueue.Count row(s)</span>
+                                </header>
+                                @if (_workspace.Rollout.ReconciliationQueue.Count == 0)
+                                {
+                                    <div class="fc-intel-empty">
+                                        <h3>No rollout drift is currently open</h3>
+                                        <p>Tracked pack entitlement coverage is currently synchronized across active tenant subscriptions.</p>
+                                    </div>
+                                }
+                                else
+                                {
+                                    <div class="fc-intel-table-wrap">
+                                        <table class="fc-intel-table">
+                                            <thead>
+                                                <tr>
+                                                    <th>Tenant</th>
+                                                    <th>Plan</th>
+                                                    <th>Pending</th>
+                                                    <th>State</th>
+                                                    <th>Last entitlement activity</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                @foreach (var row in _workspace.Rollout.ReconciliationQueue.Take(10))
+                                                {
+                                                    <tr>
+                                                        <td>
+                                                            <strong>@row.TenantName</strong>
+                                                            <div class="fc-intel-table__sub">@row.PendingModules</div>
+                                                        </td>
+                                                        <td>
+                                                            <strong>@row.PlanCode</strong>
+                                                            <div class="fc-intel-table__sub">@row.PlanName</div>
+                                                        </td>
+                                                        <td>@row.PendingModuleCount gap(s)</td>
+                                                        <td>
+                                                            <span class="fc-intel-status fc-intel-status--@StatusClass(row.State)">@row.State</span>
+                                                            <div class="fc-intel-table__sub">@row.RecommendedAction</div>
+                                                        </td>
+                                                        <td>
+                                                            <strong>@(row.LastEntitlementAction ?? "No activity")</strong>
+                                                            <div class="fc-intel-table__sub">@(row.LastEntitlementActionAt.HasValue ? FormatTimestamp(row.LastEntitlementActionAt.Value) : "Awaiting first reconciliation")</div>
+                                                        </td>
+                                                    </tr>
+                                                }
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                }
+                            </article>
+                        </div>
+
+                        <article class="fc-intel-card fc-intel-card--table">
+                            <header class="fc-intel-card__header">
+                                <div>
+                                    <span class="fc-intel-card__label">Plan Coverage</span>
+                                    <h2>Included-base versus add-on positioning by plan</h2>
+                                </div>
+                                <span class="fc-intel-chip">@_workspace.Rollout.PlanCoverage.Count row(s)</span>
+                            </header>
+                            <div class="fc-intel-table-wrap">
+                                <table class="fc-intel-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Plan</th>
+                                            <th>Pack</th>
+                                            <th>Mode</th>
+                                            <th>Eligible / Active</th>
+                                            <th>Pending</th>
+                                            <th>Pricing</th>
+                                            <th>Signal</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach (var row in _workspace.Rollout.PlanCoverage)
+                                        {
+                                            <tr>
+                                                <td>
+                                                    <strong>@row.PlanCode</strong>
+                                                    <div class="fc-intel-table__sub">@row.PlanName</div>
+                                                </td>
+                                                <td>
+                                                    <strong>@row.ModuleCode</strong>
+                                                    <div class="fc-intel-table__sub">@row.ModuleName</div>
+                                                </td>
+                                                <td>@row.CoverageMode</td>
+                                                <td>
+                                                    <strong>@row.EligibleTenants eligible</strong>
+                                                    <div class="fc-intel-table__sub">@row.ActiveEntitlements active</div>
+                                                </td>
+                                                <td>@row.PendingEntitlements</td>
+                                                <td class="fc-intel-table__sub">₦@row.PriceMonthly.ToString("N0", CultureInfo.InvariantCulture) / mo · ₦@row.PriceAnnual.ToString("N0", CultureInfo.InvariantCulture) / yr</td>
+                                                <td>
+                                                    <span class="fc-intel-status fc-intel-status--@StatusClass(row.Signal)">@row.Signal</span>
+                                                    <div class="fc-intel-table__sub">@row.Commentary</div>
+                                                </td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </table>
+                            </div>
+                        </article>
+                    </article>
 
                     <article class="fc-intel-card fc-intel-card--table">
                         <header class="fc-intel-card__header">
@@ -4302,7 +4513,10 @@
                                 <span class="fc-intel-card__label">Intervention Queue</span>
                                 <h2>@CurrentLensQueueHeading</h2>
                             </div>
-                            <span class="fc-intel-chip">@FilteredInterventions.Count row(s)</span>
+                            <div class="fc-intel-inline-chips">
+                                <span class="fc-intel-chip">@FilteredInterventions.Count row(s)</span>
+                                <span class="fc-intel-chip">@(_workspace.OperationsCatalogMaterializedAt?.ToString("dd MMM HH:mm", CultureInfo.InvariantCulture) ?? "Catalog pending")</span>
+                            </div>
                         </header>
                         <div class="fc-intel-table-wrap">
                             <table class="fc-intel-table">
@@ -4342,7 +4556,10 @@
                                     <span class="fc-intel-card__label">Institution Scorecards</span>
                                     <h2>@CurrentLensScorecardHeading</h2>
                                 </div>
-                                <span class="fc-intel-chip">@FilteredInstitutionScorecards.Count row(s)</span>
+                                <div class="fc-intel-inline-chips">
+                                    <span class="fc-intel-chip">@FilteredInstitutionScorecards.Count row(s)</span>
+                                    <span class="fc-intel-chip">@(_workspace.InstitutionCatalogMaterializedAt?.ToString("dd MMM HH:mm", CultureInfo.InvariantCulture) ?? "Catalog pending")</span>
+                                </div>
                             </header>
                             <div class="fc-intel-table-wrap">
                                 <table class="fc-intel-table">
@@ -4389,7 +4606,10 @@
                                     <span class="fc-intel-card__label">Activity Timeline</span>
                                     <h2>@CurrentLensTimelineHeading</h2>
                                 </div>
-                                <span class="fc-intel-chip">@FilteredTimeline.Count row(s)</span>
+                                <div class="fc-intel-inline-chips">
+                                    <span class="fc-intel-chip">@FilteredTimeline.Count row(s)</span>
+                                    <span class="fc-intel-chip">@(_workspace.OperationsCatalogMaterializedAt?.ToString("dd MMM HH:mm", CultureInfo.InvariantCulture) ?? "Catalog pending")</span>
+                                </div>
                             </header>
                             <div class="fc-intel-table-wrap">
                                 <table class="fc-intel-table">
@@ -4427,9 +4647,12 @@
                             </div>
                             @if (SelectedInstitutionProfile is not null)
                             {
-                                <span class="fc-intel-status fc-intel-status--@StatusClass(SelectedInstitutionProfile.Priority)">
-                                    @SelectedInstitutionProfile.Priority
-                                </span>
+                                <div class="fc-intel-inline-chips">
+                                    <span class="fc-intel-status fc-intel-status--@StatusClass(SelectedInstitutionProfile.Priority)">
+                                        @SelectedInstitutionProfile.Priority
+                                    </span>
+                                    <span class="fc-intel-chip">@(_workspace.InstitutionCatalogMaterializedAt?.ToString("dd MMM HH:mm", CultureInfo.InvariantCulture) ?? "Catalog pending")</span>
+                                </div>
                             }
                         </header>
 
@@ -4648,6 +4871,8 @@
     private readonly Dictionary<string, int> _resilienceAssessmentResponses = new(StringComparer.OrdinalIgnoreCase);
     private List<SanctionsFalsePositiveLibraryEntry> _falsePositiveLibrary = [];
     private List<SanctionsDecisionAuditEntry> _screeningAuditTrail = [];
+    private List<StrDraftRow> _persistedStrDrafts = [];
+    private DateTime? _strDraftCatalogMaterializedAt;
     private List<SanctionsSupervisoryPackRow> _sanctionsPackRows = [];
     private readonly Dictionary<string, string> _modelApprovalStages = new(StringComparer.OrdinalIgnoreCase);
     private List<ModelApprovalAuditEntry> _modelApprovalAuditTrail = [];
@@ -4702,6 +4927,8 @@
         _selectedProfileInstitutionId = _workspace?.InstitutionScorecards.FirstOrDefault()?.InstitutionId;
         _dashboardBriefingPackMaterializedAt = null;
         _selectedStrDraftId = string.Empty;
+        _persistedStrDrafts = [];
+        _strDraftCatalogMaterializedAt = null;
         _screeningDecisions.Clear();
         _screeningInput = string.Join(Environment.NewLine, new[]
         {
@@ -4765,6 +4992,7 @@
         _screeningRun = await IntelligenceService.ScreenSubjectsAsync(lines, _screeningThreshold);
         InitializeScreeningDecisions(_screeningRun.Results);
         ApplyPersistedSanctionsDecisions();
+        await SyncSanctionsStrDraftCatalogAsync();
         NormalizeSelectedStrDraft();
         RebuildSanctionsPack();
         await SyncSanctionsPackAsync();
@@ -4808,6 +5036,7 @@
         }
 
         _transactionScreeningResult = await IntelligenceService.ScreenTransactionAsync(_transactionScreeningInput);
+        await SyncSanctionsStrDraftCatalogAsync();
         RebuildSanctionsPack();
         await SyncSanctionsPackAsync();
         Toast.Success($"Transaction screening complete: {_transactionScreeningResult.ControlDecision}.");
@@ -4895,6 +5124,73 @@
         }
     }
 
+    private async Task SyncSanctionsStrDraftCatalogAsync()
+    {
+        try
+        {
+            SanctionsStrDraftCatalogState state;
+            if (_screeningRun is null)
+            {
+                state = await IntelligenceService.GetSanctionsStrDraftCatalogStateAsync();
+            }
+            else
+            {
+                state = await IntelligenceService.MaterializeSanctionsStrDraftCatalogAsync(
+                    BuildStrDrafts(_screeningRun.Results, _screeningRun.ScreenedAt, GetScreeningDecision, _transactionScreeningResult)
+                        .Select(x => new SanctionsStrDraftInput
+                        {
+                            DraftId = x.DraftId,
+                            Subject = x.Subject,
+                            MatchedName = x.MatchedName,
+                            SourceCode = x.SourceCode,
+                            SourceName = x.SourceName,
+                            RiskLevel = x.RiskLevel,
+                            Decision = x.Decision,
+                            Status = x.Status,
+                            Priority = x.Priority,
+                            ScorePercent = (decimal)x.ScorePercent,
+                            FreezeRecommended = x.FreezeRecommended,
+                            ScreenedAtUtc = x.ScreenedAtUtc,
+                            ReviewDueAtUtc = x.ReviewDueAtUtc,
+                            SuspicionBasis = x.SuspicionBasis,
+                            GoAmlPayloadSummary = x.GoAmlPayloadSummary,
+                            Narrative = x.Narrative,
+                            RecommendedActions = x.RecommendedActions
+                        })
+                        .ToList());
+            }
+
+            _persistedStrDrafts = state.Drafts
+                .Select(x => new StrDraftRow
+                {
+                    DraftId = x.DraftId,
+                    Subject = x.Subject,
+                    MatchedName = x.MatchedName,
+                    SourceCode = x.SourceCode,
+                    SourceName = x.SourceName,
+                    RiskLevel = x.RiskLevel,
+                    Decision = x.Decision,
+                    Status = x.Status,
+                    Priority = x.Priority,
+                    ScorePercent = (double)x.ScorePercent,
+                    FreezeRecommended = x.FreezeRecommended,
+                    ScreenedAtUtc = x.ScreenedAtUtc,
+                    ReviewDueAtUtc = x.ReviewDueAtUtc,
+                    SuspicionBasis = x.SuspicionBasis,
+                    GoAmlPayloadSummary = x.GoAmlPayloadSummary,
+                    Narrative = x.Narrative,
+                    RecommendedActions = x.RecommendedActions
+                })
+                .ToList();
+            _strDraftCatalogMaterializedAt = state.MaterializedAt;
+        }
+        catch
+        {
+            _persistedStrDrafts = [];
+            _strDraftCatalogMaterializedAt = null;
+        }
+    }
+
     private async Task SyncCapitalPackAsync()
     {
         if (_workspace is null)
@@ -4971,17 +5267,7 @@
             var state = await IntelligenceService.MaterializeDashboardBriefingPackAsync(
                 _stakeholderLens,
                 CurrentDashboardPackInstitutionId,
-                CurrentDashboardBriefingPack
-                    .Select(x => new DashboardBriefingPackSectionInput
-                    {
-                        SectionCode = x.SectionCode,
-                        SectionName = x.SectionName,
-                        Coverage = x.Coverage,
-                        Signal = x.Signal,
-                        Commentary = x.Commentary,
-                        RecommendedAction = x.RecommendedAction
-                    })
-                    .ToList());
+                CurrentDashboardBriefingPack.ToList());
 
             _dashboardBriefingPackMaterializedAt = state.MaterializedAt;
         }
@@ -5555,11 +5841,12 @@
             var bestCapitalAction = _capitalActionRows.FirstOrDefault()?.Title ?? "No capital action comparison available";
             var topHotspot = _workspace.Resilience.Hotspots.FirstOrDefault()?.AssetName ?? "No dependency hotspot registered";
             var dueModels = _workspace.ModelRisk.DueValidationCount;
+            var rolloutGaps = _workspace.Rollout.PendingEntitlementCount;
             return _stakeholderLens switch
             {
-                "governor" => $"System signal: prioritize the intervention queue, with {bestCapitalAction} as the strongest current capital lever. Concentration proxy: {topHotspot}. Due model validations: {dueModels}.",
-                "deputy" => $"Operational focus should center on filing breaches, capital follow-up, and resilience remediation. Recommended capital lever: {bestCapitalAction}. Key hotspot: {topHotspot}.",
-                _ => $"Execution focus: clear the intervention queue, validate remediation evidence, and close due model reviews. Capital action most worth testing: {bestCapitalAction}.",
+                "governor" => $"System signal: prioritize the intervention queue, with {bestCapitalAction} as the strongest current capital lever. Concentration proxy: {topHotspot}. Due model validations: {dueModels}. Rollout drift: {rolloutGaps} entitlement gap(s).",
+                "deputy" => $"Operational focus should center on filing breaches, capital follow-up, resilience remediation, and rollout drift closure. Recommended capital lever: {bestCapitalAction}. Key hotspot: {topHotspot}.",
+                _ => $"Execution focus: clear the intervention queue, validate remediation evidence, close due model reviews, and reconcile outstanding pack entitlements. Capital action most worth testing: {bestCapitalAction}.",
             };
         }
     }
@@ -5579,6 +5866,7 @@
                 : new[]
                 {
                     $"{_workspace.KnowledgeGraph.ReferencedFieldCount} referenced fields",
+                    $"{_workspace.Rollout.PendingTenantCount} tenants drifting",
                     $"{_workspace.Capital.CapitalWatchlistCount} capital watchlist",
                     $"{ReviewedTfsPreview.MatchesFound} screening flags",
                     $"{_workspace.Resilience.OpenIncidentCount} open incidents",
@@ -5607,9 +5895,9 @@
         _stakeholderLens switch
         {
             "executive" => ExecutiveBriefNarrative,
-            "governor" => $"System-wide posture spans {_workspace?.InstitutionScorecards.Count ?? 0} institutions, {_workspace?.Resilience.BoardSummary.CriticalIssues ?? 0} board-critical resilience issue(s), and {_workspace?.ModelRisk.BreachCount ?? 0} model-risk appetite breach(es). Best capital lever: {BestCapitalActionHeadline}",
-            "deputy" => $"Portfolio focus should center on filing backlogs, prudential buffer pressure, and overdue validations. Current resilience narrative: {_workspace?.Resilience.BoardSummary.Narrative ?? "No resilience summary available."}",
-            _ => $"Front-line execution should close the highest-priority queue items first, validate remediation evidence, and keep recent submission exceptions moving toward acceptance. Strongest current RWA lever: {BestRwaOpportunityHeadline}"
+            "governor" => $"System-wide posture spans {_workspace?.InstitutionScorecards.Count ?? 0} institutions, {_workspace?.Resilience.BoardSummary.CriticalIssues ?? 0} board-critical resilience issue(s), {_workspace?.ModelRisk.BreachCount ?? 0} model-risk appetite breach(es), and {_workspace?.Rollout.StaleTenantCount ?? 0} stale rollout tenant(s). Best capital lever: {BestCapitalActionHeadline}",
+            "deputy" => $"Portfolio focus should center on filing backlogs, prudential buffer pressure, overdue validations, and {_workspace?.Rollout.PendingTenantCount ?? 0} tenant(s) needing rollout reconciliation. Current resilience narrative: {_workspace?.Resilience.BoardSummary.Narrative ?? "No resilience summary available."}",
+            _ => $"Front-line execution should close the highest-priority queue items first, validate remediation evidence, reconcile outstanding pack drift, and keep recent submission exceptions moving toward acceptance. Strongest current RWA lever: {BestRwaOpportunityHeadline}"
         };
 
     private IReadOnlyList<DashboardMetricRow> CurrentDashboardMetrics
@@ -5649,7 +5937,8 @@
                     new DashboardMetricRow("Critical interventions", _workspace.Interventions.Count(x => x.Priority == "Critical").ToString(CultureInfo.InvariantCulture), "Priority actions that need leadership attention now.", _workspace.Interventions.Any(x => x.Priority == "Critical") ? "Critical" : "Current"),
                     new DashboardMetricRow("Pressure institutions", _workspace.InstitutionScorecards.Count(x => x.Priority is "Critical" or "High").ToString(CultureInfo.InvariantCulture), "Institutions carrying the heaviest combined filing, capital, resilience, or model-risk load.", _workspace.InstitutionScorecards.Any(x => x.Priority is "Critical" or "High") ? "Watch" : "Current"),
                     new DashboardMetricRow("Capital watchlist", _workspace.Capital.CapitalWatchlistCount.ToString(CultureInfo.InvariantCulture), "Institutions already tripping prudential concern thresholds.", _workspace.Capital.CapitalWatchlistCount > 0 ? "Watch" : "Current"),
-                    new DashboardMetricRow("Open incidents", _workspace.Resilience.OpenIncidentCount.ToString(CultureInfo.InvariantCulture), "Operational resilience incidents still unresolved in the population.", _workspace.Resilience.OpenIncidentCount > 0 ? "Watch" : "Current")
+                    new DashboardMetricRow("Open incidents", _workspace.Resilience.OpenIncidentCount.ToString(CultureInfo.InvariantCulture), "Operational resilience incidents still unresolved in the population.", _workspace.Resilience.OpenIncidentCount > 0 ? "Watch" : "Current"),
+                    new DashboardMetricRow("Stale rollout tenants", _workspace.Rollout.StaleTenantCount.ToString(CultureInfo.InvariantCulture), "Eligible tenants whose new pack entitlement drift has remained untouched for more than seven days.", _workspace.Rollout.StaleTenantCount > 0 ? "Critical" : "Current")
                 ],
                 "deputy" =>
                 [
@@ -5657,7 +5946,8 @@
                     new DashboardMetricRow("Due soon obligations", _workspace.InstitutionScorecards.Sum(x => x.DueSoonObligations).ToString(CultureInfo.InvariantCulture), "Population-wide obligations due inside the short-term attention window.", _workspace.InstitutionScorecards.Sum(x => x.DueSoonObligations) > 0 ? "Watch" : "Current"),
                     new DashboardMetricRow("Capital watchlist", _workspace.Capital.CapitalWatchlistCount.ToString(CultureInfo.InvariantCulture), "Institutions needing prudential follow-up planning.", _workspace.Capital.CapitalWatchlistCount > 0 ? "Watch" : "Current"),
                     new DashboardMetricRow("Due validations", _workspace.ModelRisk.DueValidationCount.ToString(CultureInfo.InvariantCulture), "Regulatory models approaching or exceeding validation due dates.", _workspace.ModelRisk.DueValidationCount > 0 ? "Watch" : "Current"),
-                    new DashboardMetricRow("Board-critical resilience issues", _workspace.Resilience.BoardSummary.CriticalIssues.ToString(CultureInfo.InvariantCulture), "Critical resilience items already requiring leadership reporting.", _workspace.Resilience.BoardSummary.CriticalIssues > 0 ? "Critical" : "Current")
+                    new DashboardMetricRow("Board-critical resilience issues", _workspace.Resilience.BoardSummary.CriticalIssues.ToString(CultureInfo.InvariantCulture), "Critical resilience items already requiring leadership reporting.", _workspace.Resilience.BoardSummary.CriticalIssues > 0 ? "Critical" : "Current"),
+                    new DashboardMetricRow("Rollout gaps", _workspace.Rollout.PendingEntitlementCount.ToString(CultureInfo.InvariantCulture), "Included-base pack entitlements still missing on active eligible subscriptions.", _workspace.Rollout.PendingEntitlementCount > 0 ? "Watch" : "Current")
                 ],
                 _ =>
                 [
@@ -5665,7 +5955,8 @@
                     new DashboardMetricRow("Attention-required filings", _workspace.KnowledgeGraph.InstitutionObligations.Count(x => x.Status == "Attention Required").ToString(CultureInfo.InvariantCulture), "Returns blocked by validation, approval, or refiling issues.", _workspace.KnowledgeGraph.InstitutionObligations.Any(x => x.Status == "Attention Required") ? "Critical" : "Current"),
                     new DashboardMetricRow("Pending sanctions reviews", ReviewedTfsPreview.PotentialMatches.ToString(CultureInfo.InvariantCulture), "Screening results still awaiting analyst decisioning.", ReviewedTfsPreview.PotentialMatches > 0 ? "Watch" : "Current"),
                     new DashboardMetricRow("Open resilience actions", _workspace.Resilience.ActionTracker.Count(x => x.Status != "Complete").ToString(CultureInfo.InvariantCulture), "Remediation items that still need evidence or closure.", _workspace.Resilience.ActionTracker.Any(x => x.Status == "Overdue") ? "Critical" : "Watch"),
-                    new DashboardMetricRow("Model review items", _workspace.ModelRisk.ChangeReviewCount.ToString(CultureInfo.InvariantCulture), "Recent model changes that need governance review or challenge.", _workspace.ModelRisk.ChangeReviewCount > 0 ? "Watch" : "Current")
+                    new DashboardMetricRow("Model review items", _workspace.ModelRisk.ChangeReviewCount.ToString(CultureInfo.InvariantCulture), "Recent model changes that need governance review or challenge.", _workspace.ModelRisk.ChangeReviewCount > 0 ? "Watch" : "Current"),
+                    new DashboardMetricRow("Rollout actions", _workspace.Rollout.PendingTenantCount.ToString(CultureInfo.InvariantCulture), "Tenants currently needing entitlement reconciliation on the newly launched packs.", _workspace.Rollout.PendingTenantCount > 0 ? "Watch" : "Current")
                 ]
             };
         }
@@ -5723,7 +6014,16 @@
                     _workspace.ModelRisk.BreachCount + _workspace.ModelRisk.PerformanceAlertCount,
                     topModel is null ? "No model-risk item currently leads the queue." : $"{topModel.ModelCode}: {topModel.NextAction}",
                     "Prioritize overdue validations, backtesting, and governance sign-off on material changes.",
-                    _workspace.ModelRisk.BreachCount > 0 ? "Critical" : _workspace.ModelRisk.DueValidationCount > 0 ? "Watch" : "Current")
+                    _workspace.ModelRisk.BreachCount > 0 ? "Critical" : _workspace.ModelRisk.DueValidationCount > 0 ? "Watch" : "Current"),
+                new DashboardDomainSummaryRow(
+                    "Rollout",
+                    _workspace.Rollout.PendingTenantCount,
+                    _workspace.Rollout.StaleTenantCount,
+                    _workspace.Rollout.ModuleRollout.FirstOrDefault(x => x.Signal is "Critical" or "Watch") is { } rollout
+                        ? $"{rollout.ModuleCode}: {rollout.Commentary}"
+                        : "Tracked pack rollout is currently synchronized.",
+                    "Close missing included-base entitlements and reconcile stale tenant drift before the next operational review.",
+                    _workspace.Rollout.StaleTenantCount > 0 ? "Critical" : _workspace.Rollout.PendingTenantCount > 0 ? "Watch" : "Current")
             ];
         }
     }
@@ -5754,196 +6054,141 @@
         }
     }
 
-    private IReadOnlyList<DashboardBriefingSectionRow> CurrentDashboardBriefingPack
-    {
-        get
+    private IReadOnlyList<DashboardBriefingPackSectionInput> CurrentDashboardBriefingPack =>
+        _workspace is null
+            ? []
+            : DashboardBriefingPackBuilder.Build(
+                _workspace,
+                _stakeholderLens,
+                CurrentDashboardPackInstitutionId,
+                CurrentScreeningSessionState,
+                CurrentSanctionsWorkflowState,
+                CurrentStrDraftCatalogState);
+
+    private SanctionsScreeningSessionState CurrentScreeningSessionState =>
+        new()
         {
-            if (_workspace is null)
-            {
-                return [];
-            }
-
-            var rows = new List<DashboardBriefingSectionRow>();
-
-            if (_stakeholderLens == "executive")
-            {
-                if (DashboardInstitutionProfile is not { } institution)
+            LatestRun = _screeningRun is null
+                ? null
+                : new SanctionsStoredScreeningRun
                 {
-                    return [];
+                    ThresholdPercent = _screeningRun.ThresholdPercent,
+                    ScreenedAt = _screeningRun.ScreenedAt,
+                    TotalSubjects = _screeningRun.TotalSubjects,
+                    MatchCount = _screeningRun.MatchCount,
+                    Results = _screeningRun.Results
+                        .Select(x => new SanctionsStoredScreeningResult
+                        {
+                            Subject = x.Subject,
+                            Disposition = x.Disposition,
+                            MatchScore = x.MatchScore,
+                            MatchedName = x.MatchedName,
+                            SourceCode = x.SourceCode,
+                            SourceName = x.SourceName,
+                            Category = x.Category,
+                            RiskLevel = x.RiskLevel
+                        })
+                        .ToList()
+                },
+            LatestTransaction = _transactionScreeningResult is null
+                ? null
+                : new SanctionsStoredTransactionCheck
+                {
+                    TransactionReference = _transactionScreeningResult.TransactionReference,
+                    Amount = _transactionScreeningResult.Amount,
+                    Currency = _transactionScreeningResult.Currency,
+                    Channel = _transactionScreeningResult.Channel,
+                    ThresholdPercent = _transactionScreeningResult.ThresholdPercent,
+                    HighRisk = _transactionScreeningResult.HighRisk,
+                    ControlDecision = _transactionScreeningResult.ControlDecision,
+                    Narrative = _transactionScreeningResult.Narrative,
+                    RequiresStrDraft = _transactionScreeningResult.RequiresStrDraft,
+                    PartyResults = _transactionScreeningResult.PartyResults
+                        .Select(x => new SanctionsStoredTransactionPartyResult
+                        {
+                            PartyRole = x.PartyRole,
+                            PartyName = x.PartyName,
+                            Disposition = x.Disposition,
+                            MatchScore = x.MatchScore,
+                            MatchedName = x.MatchedName,
+                            SourceCode = x.SourceCode,
+                            RiskLevel = x.RiskLevel
+                        })
+                        .ToList()
                 }
+        };
 
-                var topObligation = institution.TopObligations.FirstOrDefault();
-                var rejectedCount = institution.RecentSubmissions.Count(x => x.Status.Contains("Reject", StringComparison.OrdinalIgnoreCase));
-                var highSeverityActivity = institution.RecentActivity.Count(x => x.Severity is "Critical" or "High");
+    private SanctionsWorkflowState CurrentSanctionsWorkflowState =>
+        new()
+        {
+            FalsePositiveLibrary = _falsePositiveLibrary
+                .Select(x => new SanctionsWorkflowFalsePositiveRecord
+                {
+                    MatchKey = x.MatchKey,
+                    Subject = x.Subject,
+                    MatchedName = x.MatchedName,
+                    SourceCode = x.SourceCode,
+                    RiskLevel = x.RiskLevel,
+                    ReviewedAtUtc = x.ReviewedAtUtc
+                })
+                .ToList(),
+            AuditTrail = _screeningAuditTrail
+                .Select(x => new SanctionsWorkflowAuditRecord
+                {
+                    MatchKey = BuildPersistedSanctionsMatchKey(x),
+                    Subject = x.Subject,
+                    MatchedName = x.MatchedName,
+                    SourceCode = x.SourceCode,
+                    PreviousDecision = x.PreviousDecision,
+                    Decision = x.Decision,
+                    ReviewedAtUtc = x.ReviewedAtUtc
+                })
+                .ToList(),
+            LatestDecisions = _screeningRun is null
+                ? []
+                : _screeningRun.Results
+                    .Select(x => new SanctionsWorkflowDecisionState
+                    {
+                        MatchKey = BuildFalsePositiveMatchKey(x),
+                        Decision = GetScreeningDecision(x.Subject),
+                        ReviewedAtUtc = _screeningAuditTrail
+                            .Where(a => BuildPersistedSanctionsMatchKey(a) == BuildFalsePositiveMatchKey(x))
+                            .OrderByDescending(a => a.ReviewedAtUtc)
+                            .Select(a => a.ReviewedAtUtc)
+                            .FirstOrDefault()
+                            .GetValueOrDefault()
+                    })
+                    .ToList()
+        };
 
-                rows.Add(new DashboardBriefingSectionRow(
-                    "EXE-01",
-                    "Filing Posture",
-                    $"{institution.OverdueObligations} overdue | {institution.DueSoonObligations} due soon",
-                    institution.OverdueObligations > 0 ? "Critical" : institution.DueSoonObligations > 0 ? "Watch" : "Current",
-                    topObligation is null ? "No immediate filing deadline currently leads the institution queue." : $"{topObligation.ReturnCode} is {topObligation.Status.ToLowerInvariant()} for {topObligation.PeriodLabel}.",
-                    topObligation is null ? "Maintain filing readiness and monitor upcoming obligations." : $"Resolve {topObligation.ReturnCode} before {topObligation.NextDeadline:dd MMM yyyy}."));
-                rows.Add(new DashboardBriefingSectionRow(
-                    "EXE-02",
-                    "Submission Outcomes",
-                    $"{institution.RecentSubmissions.Count} recent | {rejectedCount} rejected",
-                    rejectedCount > 0 ? "Critical" : institution.RecentSubmissions.Count > 0 ? "Current" : "Watch",
-                    rejectedCount > 0 ? "Recent submissions include rejected returns that need corrective action." : "Recent filing outcomes are not currently showing rejection pressure.",
-                    rejectedCount > 0 ? "Close rejection findings and resubmit with corrected evidence." : "Maintain current submission quality controls."));
-                rows.Add(new DashboardBriefingSectionRow(
-                    "EXE-03",
-                    "Prudential & Capital",
-                    institution.CapitalScore?.ToString("0.0", CultureInfo.InvariantCulture) ?? "N/A",
-                    institution.CapitalScore is null ? "Watch" : institution.CapitalScore < 45m ? "Critical" : institution.CapitalScore < 60m ? "Watch" : "Current",
-                    string.IsNullOrWhiteSpace(institution.CapitalAlert) ? "No live capital alert is currently attached to this institution." : institution.CapitalAlert,
-                    institution.CapitalScore is null ? "Confirm prudential data freshness and rerun capital analytics." : institution.CapitalScore < 60m ? "Open the capital workspace and test buffer-preserving actions." : "Retain current prudential posture and refresh the forecast each quarter."));
-                rows.Add(new DashboardBriefingSectionRow(
-                    "EXE-04",
-                    "Supervisory Follow-Up",
-                    $"{highSeverityActivity} high-severity activity item(s)",
-                    highSeverityActivity > 0 || institution.OpenResilienceIncidents > 0 || institution.ModelReviewItems > 0 ? "Watch" : "Current",
-                    highSeverityActivity > 0 ? "Recent high-severity supervisory events remain visible in the institution timeline." : "No high-severity supervisory follow-up currently dominates the timeline.",
-                    highSeverityActivity > 0 ? "Assign accountable owners to open supervisory issues and update the response trail." : "Continue monitoring recent supervisory activity for new escalations."));
-                rows.Add(new DashboardBriefingSectionRow(
-                    "EXE-05",
-                    "Peer Benchmark",
-                    $"{ExecutivePeerBenchmarks.Count} peer institution(s)",
-                    ExecutivePeerBenchmarks.Any(x => x.Priority is "Critical" or "High") ? "Watch" : "Current",
-                    "Peer posture compares this institution against the same licence segment using the cross-track pressure model.",
-                    "Benchmark against peer pressure and use deviations to set management actions."));
-
-                return rows;
-            }
-
-            var topConcentration = DashboardPortfolioConcentrationRows.FirstOrDefault();
-            var criticalInterventions = _workspace.Interventions.Count(x => x.Priority == "Critical");
-            var criticalDrafts = ReviewedStrDrafts.Count(x => x.Priority == "Critical");
-            var pressureInstitutionCount = _workspace.InstitutionScorecards.Count(x => x.Priority is "Critical" or "High");
-            var escalatedObligationCount = _workspace.KnowledgeGraph.InstitutionObligations.Count(x => x.Status == "Overdue" || x.Status == "Attention Required");
-            var attentionRequiredFilingCount = _workspace.KnowledgeGraph.InstitutionObligations.Count(x => x.Status == "Attention Required");
-            var openResilienceActionCount = _workspace.Resilience.ActionTracker.Count(x => x.Status != "Complete");
-
-            if (_stakeholderLens == "governor")
-            {
-                rows.Add(new DashboardBriefingSectionRow(
-                    "GOV-01",
-                    "Systemic Posture",
-                    $"{criticalInterventions} critical intervention(s)",
-                    criticalInterventions > 0 ? "Critical" : "Current",
-                    $"{pressureInstitutionCount} institution(s) currently carry material cross-track pressure.",
-                    "Prioritize strategic interventions and confirm owner accountability across the highest-pressure institutions."));
-                rows.Add(new DashboardBriefingSectionRow(
-                    "GOV-02",
-                    "Compliance & Filing",
-                    $"{escalatedObligationCount} escalated obligation(s)",
-                    _workspace.KnowledgeGraph.InstitutionObligations.Any(x => x.Status == "Overdue" || x.Status == "Attention Required") ? "Critical" : "Current",
-                    "Population-wide filing pressure remains the primary source of supervisory friction when overdue records persist.",
-                    "Drive escalation on blocked returns and require recovery plans from affected institutions."));
-                rows.Add(new DashboardBriefingSectionRow(
-                    "GOV-03",
-                    "Capital & Prudential",
-                    $"{_workspace.Capital.CapitalWatchlistCount} watchlist institution(s)",
-                    _workspace.Capital.CapitalWatchlistCount > 0 ? "Watch" : "Current",
-                    BestCapitalActionHeadline,
-                    "Use the capital workspace to validate intervention scenarios for the watchlist population."));
-                rows.Add(new DashboardBriefingSectionRow(
-                    "GOV-04",
-                    "Threat & Resilience",
-                    $"{ReviewedTfsPreview.MatchesFound} screening flag(s) | {_workspace.Resilience.BoardSummary.CriticalIssues} board-critical issue(s)",
-                    ReviewedTfsPreview.ConfirmedMatches > 0 || _workspace.Resilience.BoardSummary.CriticalIssues > 0 ? "Critical" : ReviewedTfsPreview.PotentialMatches > 0 || _workspace.Resilience.OpenIncidentCount > 0 ? "Watch" : "Current",
-                    $"{ReviewedTfsPreview.Narrative} {_workspace.Resilience.BoardSummary.Narrative}",
-                    "Escalate confirmed screening hits and board-critical resilience issues through the strategic agenda."));
-                rows.Add(new DashboardBriefingSectionRow(
-                    "GOV-05",
-                    "Sector Concentration",
-                    topConcentration is null ? "No segment view available" : $"{topConcentration.LicenceType} leads current concentration pressure",
-                    topConcentration?.Signal ?? "Current",
-                    topConcentration?.Commentary ?? "No licence-segment concentration currently leads the supervisory view.",
-                    topConcentration is null ? "Maintain current population segmentation." : $"Review concentration in the {topConcentration.LicenceType} segment and rebalance leadership attention."));
-
-                return rows;
-            }
-
-            if (_stakeholderLens == "deputy")
-            {
-                rows.Add(new DashboardBriefingSectionRow(
-                    "DPY-01",
-                    "Operating Queue",
-                    $"{FilteredInterventions.Count} queued action(s)",
-                    FilteredInterventions.Any(x => x.Priority == "Critical") ? "Critical" : FilteredInterventions.Any(x => x.Priority == "High") ? "Watch" : "Current",
-                    "The deputy operating queue combines filing escalations, prudential follow-up, and resilience remediation.",
-                    "Sequence the queue by due date and confirm ownership for the highest-pressure actions."));
-                rows.Add(new DashboardBriefingSectionRow(
-                    "DPY-02",
-                    "Portfolio Concentration",
-                    topConcentration is null ? "No segment view available" : $"{topConcentration.PriorityInstitutionCount} pressure institution(s) in {topConcentration.LicenceType}",
-                    topConcentration?.Signal ?? "Current",
-                    topConcentration?.Commentary ?? "No licence segment currently dominates the supervisory portfolio.",
-                    topConcentration is null ? "Maintain the existing portfolio cadence." : $"Assign deeper review to the {topConcentration.LicenceType} segment."));
-                rows.Add(new DashboardBriefingSectionRow(
-                    "DPY-03",
-                    "Prudential Follow-Up",
-                    $"{_workspace.Capital.CapitalWatchlistCount} capital watchlist | {_workspace.ModelRisk.DueValidationCount} due validations",
-                    _workspace.Capital.CapitalWatchlistCount > 0 || _workspace.ModelRisk.DueValidationCount > 0 ? "Watch" : "Current",
-                    "Capital watchlist cases and due model validations define the prudential oversight lane.",
-                    "Pair capital follow-up with overdue validation challenge and evidence refresh."));
-                rows.Add(new DashboardBriefingSectionRow(
-                    "DPY-04",
-                    "Resilience & ICT",
-                    $"{_workspace.Resilience.OpenIncidentCount} incident(s) | {_workspace.Resilience.BoardSummary.OverdueActions} overdue action(s)",
-                    _workspace.Resilience.BoardSummary.CriticalIssues > 0 ? "Critical" : _workspace.Resilience.OpenIncidentCount > 0 ? "Watch" : "Current",
-                    _workspace.Resilience.BoardSummary.Narrative,
-                    "Push overdue resilience actions to closure and confirm testing evidence for weak services."));
-                rows.Add(new DashboardBriefingSectionRow(
-                    "DPY-05",
-                    "Sanctions & STR",
-                    $"{ReviewedTfsPreview.PotentialMatches} pending | {criticalDrafts} critical STR draft(s)",
-                    criticalDrafts > 0 ? "Critical" : ReviewedTfsPreview.PotentialMatches > 0 ? "Watch" : "Current",
-                    ReviewedTfsPreview.Narrative,
-                    "Close analyst reviews and escalate critical STR drafts through compliance governance."));
-
-                return rows;
-            }
-
-            rows.Add(new DashboardBriefingSectionRow(
-                "DIR-01",
-                "Execution Queue",
-                $"{FilteredInterventions.Count} queue item(s)",
-                FilteredInterventions.Any(x => x.Priority == "Critical") ? "Critical" : FilteredInterventions.Any(x => x.Priority == "High") ? "Watch" : "Current",
-                "The director / examiner queue emphasizes direct execution, remediation validation, and review closures.",
-                "Start with critical queue items and validate evidence before downgrading priority."));
-            rows.Add(new DashboardBriefingSectionRow(
-                "DIR-02",
-                "Filing Blockers",
-                $"{attentionRequiredFilingCount} attention-required filing(s)",
-                _workspace.KnowledgeGraph.InstitutionObligations.Any(x => x.Status == "Attention Required") ? "Critical" : _workspace.KnowledgeGraph.InstitutionObligations.Any(x => x.Status == "Due Soon") ? "Watch" : "Current",
-                "Blocked or attention-required returns are the main filing workload for examiner follow-up.",
-                "Resolve validation blockers, confirm resubmission plans, and document examiner decisions."));
-            rows.Add(new DashboardBriefingSectionRow(
-                "DIR-03",
-                "Sanctions Reviews",
-                $"{ReviewedTfsPreview.PotentialMatches} pending review(s)",
-                ReviewedTfsPreview.ConfirmedMatches > 0 ? "Critical" : ReviewedTfsPreview.PotentialMatches > 0 ? "Watch" : "Current",
-                ReviewedTfsPreview.Narrative,
-                "Finalize analyst decisions and move confirmed hits into the STR queue."));
-            rows.Add(new DashboardBriefingSectionRow(
-                "DIR-04",
-                "Resilience Remediation",
-                $"{openResilienceActionCount} open action(s)",
-                _workspace.Resilience.ActionTracker.Any(x => x.Status == "Overdue") ? "Critical" : _workspace.Resilience.ActionTracker.Any(x => x.Status != "Complete") ? "Watch" : "Current",
-                "Open resilience actions and recent incidents define the remediation lane for day-to-day supervisory execution.",
-                "Demand evidence for overdue resilience actions and verify recovery-test outcomes."));
-            rows.Add(new DashboardBriefingSectionRow(
-                "DIR-05",
-                "Model Change Reviews",
-                $"{_workspace.ModelRisk.ChangeReviewCount} review item(s)",
-                _workspace.ModelRisk.ChangeReviewCount > 0 ? "Watch" : "Current",
-                "Recent model-affecting changes require governance challenge before closure.",
-                "Complete change review, backtesting challenge, and workflow updates for open model items."));
-
-            return rows;
-        }
-    }
+    private SanctionsStrDraftCatalogState CurrentStrDraftCatalogState =>
+        new()
+        {
+            MaterializedAt = _strDraftCatalogMaterializedAt,
+            Drafts = ReviewedStrDrafts
+                .Select(x => new SanctionsStrDraftState
+                {
+                    DraftId = x.DraftId,
+                    Subject = x.Subject,
+                    MatchedName = x.MatchedName,
+                    SourceCode = x.SourceCode,
+                    SourceName = x.SourceName,
+                    RiskLevel = x.RiskLevel,
+                    Decision = x.Decision,
+                    Status = x.Status,
+                    Priority = x.Priority,
+                    ScorePercent = (decimal)x.ScorePercent,
+                    FreezeRecommended = x.FreezeRecommended,
+                    ScreenedAtUtc = x.ScreenedAtUtc,
+                    ReviewDueAtUtc = x.ReviewDueAtUtc,
+                    SuspicionBasis = x.SuspicionBasis,
+                    GoAmlPayloadSummary = x.GoAmlPayloadSummary,
+                    Narrative = x.Narrative,
+                    RecommendedActions = x.RecommendedActions,
+                    MaterializedAt = _strDraftCatalogMaterializedAt ?? x.ScreenedAtUtc
+                })
+                .ToList()
+        };
 
     private IReadOnlyList<DashboardPortfolioConcentrationRow> DashboardPortfolioConcentrationRows
     {
@@ -6423,6 +6668,7 @@
 
         _screeningDecisions[row.Subject] = decision;
         await LoadSanctionsWorkflowStateAsync();
+        await SyncSanctionsStrDraftCatalogAsync();
         NormalizeSelectedStrDraft();
         RebuildSanctionsPack();
         await SyncSanctionsPackAsync();
@@ -6434,9 +6680,11 @@
             : BuildTfsPreview(_screeningRun.Results, GetScreeningDecision);
 
     private IReadOnlyList<StrDraftRow> ReviewedStrDrafts =>
-        _screeningRun is null
-            ? []
-            : BuildStrDrafts(_screeningRun.Results, _screeningRun.ScreenedAt, GetScreeningDecision);
+        _persistedStrDrafts.Count > 0
+            ? _persistedStrDrafts
+            : _screeningRun is null
+                ? []
+                : BuildStrDrafts(_screeningRun.Results, _screeningRun.ScreenedAt, GetScreeningDecision, _transactionScreeningResult);
 
     private StrDraftRow? SelectedStrDraft =>
         ReviewedStrDrafts.FirstOrDefault(x => x.DraftId == _selectedStrDraftId)
@@ -6492,9 +6740,10 @@
     private static List<StrDraftRow> BuildStrDrafts(
         IReadOnlyList<SanctionsScreeningResultRow> results,
         DateTime screenedAtUtc,
-        Func<string, string> decisionSelector)
+        Func<string, string> decisionSelector,
+        SanctionsTransactionScreeningResult? transactionResult = null)
     {
-        return results
+        var rows = results
             .Select((row, index) => new { Row = row, Index = index, Decision = decisionSelector(row.Subject) })
             .Where(x => x.Decision is "Confirm Match" or "Escalate")
             .Select(x =>
@@ -6539,6 +6788,53 @@
                     ]
                 };
             })
+            .OrderByDescending(x => x.Priority == "Critical")
+            .ThenByDescending(x => x.Priority == "High")
+            .ThenByDescending(x => x.ScorePercent)
+            .ThenBy(x => x.Subject, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (transactionResult is { RequiresStrDraft: true })
+        {
+            var leadHit = transactionResult.PartyResults
+                .OrderByDescending(x => x.RiskLevel == "critical")
+                .ThenByDescending(x => x.RiskLevel == "high")
+                .ThenByDescending(x => x.MatchScore)
+                .FirstOrDefault();
+
+            if (leadHit is not null)
+            {
+                rows.Add(new StrDraftRow
+                {
+                    DraftId = $"STR-TXN-{transactionResult.TransactionReference}",
+                    Subject = $"{leadHit.PartyRole}: {leadHit.PartyName}",
+                    MatchedName = leadHit.MatchedName,
+                    SourceCode = leadHit.SourceCode,
+                    SourceName = leadHit.SourceCode,
+                    RiskLevel = leadHit.RiskLevel,
+                    Decision = "Escalate",
+                    Status = "Escalated",
+                    Priority = leadHit.RiskLevel is "critical" ? "Critical" : "High",
+                    ScorePercent = leadHit.MatchScore,
+                    FreezeRecommended = transactionResult.ControlDecision == "Block",
+                    ScreenedAtUtc = DateTime.UtcNow,
+                    ReviewDueAtUtc = DateTime.UtcNow.AddHours(transactionResult.ControlDecision == "Block" ? 24 : 48),
+                    SuspicionBasis = $"Transaction {transactionResult.TransactionReference} triggered {transactionResult.ControlDecision.ToLowerInvariant()} after matching {leadHit.PartyName} to {leadHit.MatchedName} at {leadHit.MatchScore.ToString("0.0", CultureInfo.InvariantCulture)}% confidence.",
+                    GoAmlPayloadSummary = transactionResult.ControlDecision == "Block"
+                        ? "Urgent STR review tied to a blocked transaction with freeze-control evidence and payment-operations narrative."
+                        : "STR review tied to a flagged transaction with analyst escalation and enhanced due-diligence narrative.",
+                    Narrative = $"Transaction-level screening for {transactionResult.TransactionReference} produced a {transactionResult.ControlDecision.ToLowerInvariant()} decision requiring STR escalation for {leadHit.PartyRole.ToLowerInvariant()} {leadHit.PartyName}.",
+                    RecommendedActions =
+                    [
+                        transactionResult.ControlDecision == "Block" ? "Confirm block/freeze control with operations and treasury." : "Escalate the flagged transaction to AML investigations.",
+                        "Attach transaction screening evidence and payment context.",
+                        "Prepare goAML-aligned STR package for compliance officer sign-off."
+                    ]
+                });
+            }
+        }
+
+        return rows
             .OrderByDescending(x => x.Priority == "Critical")
             .ThenByDescending(x => x.Priority == "High")
             .ThenByDescending(x => x.ScorePercent)
@@ -6961,6 +7257,8 @@
                                         ?? _sanctionsPackRows.FirstOrDefault(x => x.Signal == "Watch");
         var topKnowledgeDossier = _workspace.KnowledgeGraph.DossierPack.FirstOrDefault(x => x.Signal == "Critical")
                                  ?? _workspace.KnowledgeGraph.DossierPack.FirstOrDefault(x => x.Signal == "Watch");
+        var topRolloutGap = _workspace.Rollout.ModuleRollout.FirstOrDefault(x => x.Signal == "Critical")
+                            ?? _workspace.Rollout.ModuleRollout.FirstOrDefault(x => x.Signal == "Watch");
         var topHotspot = _workspace.Resilience.Hotspots.FirstOrDefault();
         var topCyberAssessment = _workspace.Resilience.CyberAssessment.FirstOrDefault(x => x.Signal == "Critical")
                                  ?? _workspace.Resilience.CyberAssessment.FirstOrDefault(x => x.Signal == "Watch");
@@ -6972,6 +7270,7 @@
         return
         [
             new ExecutiveBriefRow("Snapshot Generated", FormatTimestamp(_workspace.GeneratedAt), "Current UTC timestamp for the intelligence pack."),
+            new ExecutiveBriefRow("Rollout & Entitlements", _workspace.Rollout.PendingEntitlementCount.ToString(CultureInfo.InvariantCulture), topRolloutGap is not null ? $"{topRolloutGap.ModuleCode} is currently {topRolloutGap.Signal.ToLowerInvariant()} with {topRolloutGap.PendingEntitlements} pending entitlement gap(s). {topRolloutGap.RecommendedAction}" : _workspace.Rollout.PendingTenantCount == 0 ? "Tracked supervisory pack rollout is currently synchronized across eligible tenants." : $"{_workspace.Rollout.PendingTenantCount} tenant(s) still require reconciliation across the tracked packs."),
             new ExecutiveBriefRow("Knowledge Graph", _workspace.KnowledgeGraph.PersistedNodeCount > 0 ? _workspace.KnowledgeGraph.PersistedNodeCount.ToString(CultureInfo.InvariantCulture) : _workspace.KnowledgeGraph.ReferencedFieldCount.ToString(CultureInfo.InvariantCulture), topKnowledgeDossier is not null ? $"{topKnowledgeDossier.SectionName} is currently {topKnowledgeDossier.Signal.ToLowerInvariant()}; {_workspace.KnowledgeGraph.PersistedEdgeCount} persisted graph edge(s) are available for trace and impact work. {topKnowledgeDossier.RecommendedAction}" : $"{FilteredImpactPropagationRows.Count} prioritized change path(s), {_workspace.KnowledgeGraph.ObligationCount} licence-driven obligations, and {_workspace.KnowledgeGraph.PersistedEdgeCount} persisted graph edge(s) are currently mapped."),
             new ExecutiveBriefRow("Top Filing Signal", topObligation is null ? "No active obligation" : $"{topObligation.InstitutionName} · {topObligation.ReturnCode}", topObligation is null ? "No institution-specific obligation data is currently available." : $"{topObligation.Status} for {topObligation.PeriodLabel}; next deadline {topObligation.NextDeadline:dd MMM yyyy}."),
             new ExecutiveBriefRow("Capital Watchlist", _workspace.Capital.CapitalWatchlistCount.ToString(CultureInfo.InvariantCulture), topCapitalPackAttention is not null ? $"{topCapitalPackAttention.SectionName} is currently {topCapitalPackAttention.Signal.ToLowerInvariant()}; {topCapitalPackAttention.RecommendedAction}" : topCapitalAction is null ? "No action scenarios available." : $"{topCapitalAction.Title} yields the strongest projected headroom improvement at {topCapitalAction.ImprovementBps:+0;-0;0} bps."),
@@ -7329,6 +7628,9 @@
         await LoadCapitalScenarioStateAsync();
         await LoadSanctionsScreeningStateAsync();
         await LoadSanctionsWorkflowStateAsync();
+        await SyncSanctionsStrDraftCatalogAsync();
+        NormalizeSelectedStrDraft();
+        RebuildSanctionsPack();
         await LoadModelApprovalWorkflowStateAsync();
         await LoadResilienceClientStateAsync();
         _clientStateLoaded = true;
@@ -7647,6 +7949,8 @@
         "breach" => "danger",
         "watch" => "warning",
         "healthy" => "success",
+        "stale" => "danger",
+        "action needed" => "warning",
         "priority" => "danger",
         "optimal" => "success",
         "contender" => "warning",
@@ -7948,26 +8252,6 @@
         public string LeadSignal { get; }
         public string RecommendedAction { get; }
         public string Signal { get; }
-    }
-
-    private sealed class DashboardBriefingSectionRow
-    {
-        public DashboardBriefingSectionRow(string sectionCode, string sectionName, string coverage, string signal, string commentary, string recommendedAction)
-        {
-            SectionCode = sectionCode;
-            SectionName = sectionName;
-            Coverage = coverage;
-            Signal = signal;
-            Commentary = commentary;
-            RecommendedAction = recommendedAction;
-        }
-
-        public string SectionCode { get; }
-        public string SectionName { get; }
-        public string Coverage { get; }
-        public string Signal { get; }
-        public string Commentary { get; }
-        public string RecommendedAction { get; }
     }
 
     private sealed class DashboardPortfolioConcentrationRow
