@@ -1,0 +1,67 @@
+@page "/regulator/models/inventory"
+@attribute [Authorize(Policy = "RegulatorOnly")]
+@inject FC.Engine.Admin.Services.ModelRisk.ModelGovernanceService ModelService
+
+<PageTitle>Model Inventory</PageTitle>
+
+<PageHeader Title="Model Inventory" Subtitle="Model codes, tiers, owners, coverage, and validation status." BackUrl="/regulator/models" CountBadge="@(!_loading ? _inventory?.Count : null)">
+    <PrimaryAction><button class="fc-btn fc-btn--primary" @onclick="ReloadAsync" disabled="@_loading">Refresh</button></PrimaryAction>
+</PageHeader>
+
+<div class="fc-page">
+    <SectionErrorBoundary Title="Failed to load inventory" ExternalError="@_loadException" OnRetry="ReloadAsync">
+        @if (_loading) { <SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.TableRows" /> }
+        else if (_inventory is null || _inventory.Count == 0) { <EmptyState Context="data" Heading="No models" Description="Materialise the model inventory via the Intelligence Hub." /> }
+        else
+        {
+            <div class="fc-card">
+                <div class="fc-card__body">
+                    <DataTable TItem="ModelInventoryRow" Items="@_inventory" PageSize="20" Sortable="true" ShowExport="true" ExportFileName="model-inventory">
+                        <ChildContent>
+                            <DataColumn TItem="ModelInventoryRow" Title="Code" Width="110px" SortKey="@(x => x.ModelCode)">
+                                <CellTemplate><span class="fc-badge fc-badge--neutral">@context.ModelCode</span></CellTemplate>
+                            </DataColumn>
+                            <DataColumn TItem="ModelInventoryRow" Title="Model" SortKey="@(x => x.ModelName)">
+                                <CellTemplate><strong>@context.ModelName</strong></CellTemplate>
+                            </DataColumn>
+                            <DataColumn TItem="ModelInventoryRow" Title="Tier" Width="80px" SortKey="@(x => x.Tier)">
+                                <CellTemplate><span class="fc-badge @TierBadge(context.Tier)">@context.Tier</span></CellTemplate>
+                            </DataColumn>
+                            <DataColumn TItem="ModelInventoryRow" Title="Owner" Width="130px" SortKey="@(x => x.Owner)">
+                                <CellTemplate>@context.Owner</CellTemplate>
+                            </DataColumn>
+                            <DataColumn TItem="ModelInventoryRow" Title="Artifacts" Width="90px" SortKey="@(x => x.CoverageArtifacts)">
+                                <CellTemplate>@context.CoverageArtifacts</CellTemplate>
+                            </DataColumn>
+                            <DataColumn TItem="ModelInventoryRow" Title="Validation" Width="120px" SortKey="@(x => x.ValidationStatus)">
+                                <CellTemplate><span class="fc-badge @ValBadge(context.ValidationStatus)">@context.ValidationStatus</span></CellTemplate>
+                            </DataColumn>
+                            <DataColumn TItem="ModelInventoryRow" Title="Performance" Width="120px" SortKey="@(x => x.PerformanceStatus)">
+                                <CellTemplate><span class="fc-badge @PerfBadge(context.PerformanceStatus)">@context.PerformanceStatus</span></CellTemplate>
+                            </DataColumn>
+                            <DataColumn TItem="ModelInventoryRow" Title="Score" Width="80px" SortKey="@(x => x.PerformanceScore)">
+                                <CellTemplate>@(context.PerformanceScore?.ToString("F0") ?? "—")</CellTemplate>
+                            </DataColumn>
+                            <DataColumn TItem="ModelInventoryRow" Title="Next Validation" Width="130px" SortKey="@(x => x.NextValidationDue)">
+                                <CellTemplate>@context.NextValidationDue.ToString("dd MMM yyyy")</CellTemplate>
+                            </DataColumn>
+                        </ChildContent>
+                    </DataTable>
+                </div>
+            </div>
+        }
+    </SectionErrorBoundary>
+</div>
+
+@code {
+    private bool _loading = true;
+    private Exception? _loadException;
+    private List<ModelInventoryRow>? _inventory;
+
+    protected override async Task OnInitializedAsync() => await ReloadAsync();
+    private async Task ReloadAsync() { _loading = true; _loadException = null; try { _inventory = await ModelService.GetInventoryAsync(); } catch (Exception ex) { _loadException = ex; } finally { _loading = false; } }
+
+    private static string TierBadge(string t) => t switch { "T1" => "fc-badge--danger", "T2" => "fc-badge--warning", "T3" => "fc-badge--info", _ => "fc-badge--neutral" };
+    private static string ValBadge(string v) => v switch { "Current" => "fc-badge--success", "Due" or "Due Soon" => "fc-badge--warning", "Overdue" => "fc-badge--danger", _ => "fc-badge--neutral" };
+    private static string PerfBadge(string p) => p switch { "Stable" or "Pass" => "fc-badge--success", "Watch" or "Degraded" => "fc-badge--warning", "Alert" or "Breach" => "fc-badge--danger", _ => "fc-badge--neutral" };
+}

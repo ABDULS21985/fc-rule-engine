@@ -1,0 +1,271 @@
+@page "/regulator/models/changes"
+@attribute [Authorize(Policy = "RegulatorOnly")]
+@inject FC.Engine.Admin.Services.ModelRisk.ModelGovernanceService ModelService
+@inject FC.Engine.Admin.Services.ToastService Toast
+
+<PageTitle>Model Change Management</PageTitle>
+
+<PageHeader Title="Change Management"
+            Subtitle="Model approval queue, workflow stages, recent changes, and decision audit trail."
+            BackUrl="/regulator/models">
+    <PrimaryAction><button class="fc-btn fc-btn--primary" @onclick="ReloadAsync" disabled="@_loading">Refresh</button></PrimaryAction>
+</PageHeader>
+
+<div class="fc-page">
+    <SectionErrorBoundary Title="Failed to load change data" ExternalError="@_loadException" OnRetry="ReloadAsync">
+        @if (_loading)
+        {
+            <SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.TableRows" />
+        }
+        else if (_data is null)
+        {
+            <EmptyState Context="data" Heading="No change data" Description="Materialise model risk data and process approval workflows via the Intelligence Hub." />
+        }
+        else
+        {
+            <div class="rg-mrm-kpi-strip">
+                <div class="rg-mrm-kpi">
+                    <div class="rg-mrm-kpi-value">@_data.ApprovalQueue.Count</div>
+                    <div class="rg-mrm-kpi-label">Pending Approvals</div>
+                </div>
+                <div class="rg-mrm-kpi">
+                    <div class="rg-mrm-kpi-value">@_data.WorkflowStages.Count</div>
+                    <div class="rg-mrm-kpi-label">Active Workflows</div>
+                </div>
+                <div class="rg-mrm-kpi">
+                    <div class="rg-mrm-kpi-value">@_data.RecentChanges.Count</div>
+                    <div class="rg-mrm-kpi-label">Recent Changes</div>
+                </div>
+                <div class="rg-mrm-kpi">
+                    <div class="rg-mrm-kpi-value">@_data.AuditTrail.Count</div>
+                    <div class="rg-mrm-kpi-label">Audit Records</div>
+                </div>
+            </div>
+
+            @* Approval Queue *@
+            <div class="fc-card fc-card--mb">
+                <div class="fc-card__header"><h2 class="fc-card__title">Approval Queue</h2></div>
+                <div class="fc-card__body">
+                    @if (_data.ApprovalQueue.Count == 0)
+                    {
+                        <p class="fc-text-muted">No pending approvals.</p>
+                    }
+                    else
+                    {
+                        <DataTable TItem="ModelApprovalQueueRow" Items="@_data.ApprovalQueue" PageSize="20" Sortable="true" ShowExport="true" ExportFileName="model-approval-queue">
+                            <ChildContent>
+                                <DataColumn TItem="ModelApprovalQueueRow" Title="Code" Width="110px" SortKey="@(x => x.ModelCode)">
+                                    <CellTemplate><span class="fc-badge fc-badge--neutral">@context.ModelCode</span></CellTemplate>
+                                </DataColumn>
+                                <DataColumn TItem="ModelApprovalQueueRow" Title="Model" SortKey="@(x => x.ModelName)">
+                                    <CellTemplate>
+                                        <strong>@context.ModelName</strong>
+                                        <div class="fc-text-muted-sm">@context.Artifact</div>
+                                    </CellTemplate>
+                                </DataColumn>
+                                <DataColumn TItem="ModelApprovalQueueRow" Title="Change" Width="110px" SortKey="@(x => x.ChangeType)">
+                                    <CellTemplate>@context.ChangeType</CellTemplate>
+                                </DataColumn>
+                                <DataColumn TItem="ModelApprovalQueueRow" Title="Stage" Width="130px" SortKey="@(x => x.CurrentStage)">
+                                    <CellTemplate><span class="fc-badge @StageBadge(context.CurrentStage)">@context.CurrentStage</span></CellTemplate>
+                                </DataColumn>
+                                <DataColumn TItem="ModelApprovalQueueRow" Title="Owner" Width="120px" SortKey="@(x => x.Owner)">
+                                    <CellTemplate>@context.Owner</CellTemplate>
+                                </DataColumn>
+                                <DataColumn TItem="ModelApprovalQueueRow" Title="Signal" Width="90px" SortKey="@(x => x.ReviewSignal)">
+                                    <CellTemplate><span class="fc-badge @SignalBadge(context.ReviewSignal)">@context.ReviewSignal</span></CellTemplate>
+                                </DataColumn>
+                                <DataColumn TItem="ModelApprovalQueueRow" Title="Due" Width="120px" SortKey="@(x => x.DueDate)">
+                                    <CellTemplate>@context.DueDate.ToString("dd MMM yyyy")</CellTemplate>
+                                </DataColumn>
+                                <DataColumn TItem="ModelApprovalQueueRow" Title="Actions" Width="200px">
+                                    <CellTemplate>
+                                        <div style="display:flex;gap:var(--space-1);">
+                                            <button class="fc-btn fc-btn--xs fc-btn--success"
+                                                    @onclick="@(() => AdvanceAsync(context, "Approved"))"
+                                                    disabled="@_processing">Approve</button>
+                                            <button class="fc-btn fc-btn--xs fc-btn--danger"
+                                                    @onclick="@(() => AdvanceAsync(context, "Rejected"))"
+                                                    disabled="@_processing">Reject</button>
+                                            <button class="fc-btn fc-btn--xs fc-btn--outline"
+                                                    @onclick="@(() => AdvanceAsync(context, "Revision Requested"))"
+                                                    disabled="@_processing">Revise</button>
+                                        </div>
+                                    </CellTemplate>
+                                </DataColumn>
+                            </ChildContent>
+                        </DataTable>
+                    }
+                </div>
+            </div>
+
+            @* Workflow Stages *@
+            <div class="fc-card fc-card--mb">
+                <div class="fc-card__header"><h2 class="fc-card__title">Workflow Stages</h2></div>
+                <div class="fc-card__body">
+                    @if (_data.WorkflowStages.Count == 0)
+                    {
+                        <p class="fc-text-muted">No active workflow stages.</p>
+                    }
+                    else
+                    {
+                        <DataTable TItem="FC.Engine.Admin.Services.ModelRisk.ModelWorkflowStageItem" Items="@_data.WorkflowStages" PageSize="20" Sortable="true" ShowExport="true" ExportFileName="model-workflow-stages">
+                            <ChildContent>
+                                <DataColumn TItem="FC.Engine.Admin.Services.ModelRisk.ModelWorkflowStageItem" Title="Code" Width="110px" SortKey="@(x => x.ModelCode)">
+                                    <CellTemplate><span class="fc-badge fc-badge--neutral">@context.ModelCode</span></CellTemplate>
+                                </DataColumn>
+                                <DataColumn TItem="FC.Engine.Admin.Services.ModelRisk.ModelWorkflowStageItem" Title="Model" SortKey="@(x => x.ModelName)">
+                                    <CellTemplate><strong>@context.ModelName</strong></CellTemplate>
+                                </DataColumn>
+                                <DataColumn TItem="FC.Engine.Admin.Services.ModelRisk.ModelWorkflowStageItem" Title="Artifact" SortKey="@(x => x.Artifact)">
+                                    <CellTemplate>@context.Artifact</CellTemplate>
+                                </DataColumn>
+                                <DataColumn TItem="FC.Engine.Admin.Services.ModelRisk.ModelWorkflowStageItem" Title="Stage" Width="140px" SortKey="@(x => x.Stage)">
+                                    <CellTemplate><span class="fc-badge @StageBadge(context.Stage)">@context.Stage</span></CellTemplate>
+                                </DataColumn>
+                                <DataColumn TItem="FC.Engine.Admin.Services.ModelRisk.ModelWorkflowStageItem" Title="Changed" Width="150px" SortKey="@(x => x.ChangedAtUtc)">
+                                    <CellTemplate>@context.ChangedAtUtc.ToString("dd MMM yyyy HH:mm")</CellTemplate>
+                                </DataColumn>
+                            </ChildContent>
+                        </DataTable>
+                    }
+                </div>
+            </div>
+
+            @* Recent Changes *@
+            <div class="fc-card fc-card--mb">
+                <div class="fc-card__header"><h2 class="fc-card__title">Recent Changes</h2></div>
+                <div class="fc-card__body">
+                    @if (_data.RecentChanges.Count == 0)
+                    {
+                        <p class="fc-text-muted">No recent changes recorded.</p>
+                    }
+                    else
+                    {
+                        <DataTable TItem="ModelChangeRow" Items="@_data.RecentChanges" PageSize="20" Sortable="true" ShowExport="true" ExportFileName="model-recent-changes">
+                            <ChildContent>
+                                <DataColumn TItem="ModelChangeRow" Title="Area" SortKey="@(x => x.Area)">
+                                    <CellTemplate><strong>@context.Area</strong></CellTemplate>
+                                </DataColumn>
+                                <DataColumn TItem="ModelChangeRow" Title="Artifact" SortKey="@(x => x.Artifact)">
+                                    <CellTemplate>@context.Artifact</CellTemplate>
+                                </DataColumn>
+                                <DataColumn TItem="ModelChangeRow" Title="Type" Width="130px" SortKey="@(x => x.ChangeType)">
+                                    <CellTemplate>@context.ChangeType</CellTemplate>
+                                </DataColumn>
+                                <DataColumn TItem="ModelChangeRow" Title="By" Width="130px" SortKey="@(x => x.PerformedBy)">
+                                    <CellTemplate>@context.PerformedBy</CellTemplate>
+                                </DataColumn>
+                                <DataColumn TItem="ModelChangeRow" Title="Signal" Width="90px" SortKey="@(x => x.ReviewSignal)">
+                                    <CellTemplate><span class="fc-badge @SignalBadge(context.ReviewSignal)">@context.ReviewSignal</span></CellTemplate>
+                                </DataColumn>
+                                <DataColumn TItem="ModelChangeRow" Title="Changed" Width="150px" SortKey="@(x => x.ChangedAt)">
+                                    <CellTemplate>@context.ChangedAt.ToString("dd MMM yyyy HH:mm")</CellTemplate>
+                                </DataColumn>
+                            </ChildContent>
+                        </DataTable>
+                    }
+                </div>
+            </div>
+
+            @* Audit Trail *@
+            <div class="fc-card">
+                <div class="fc-card__header"><h2 class="fc-card__title">Decision Audit Trail</h2></div>
+                <div class="fc-card__body">
+                    @if (_data.AuditTrail.Count == 0)
+                    {
+                        <p class="fc-text-muted">No audit trail records.</p>
+                    }
+                    else
+                    {
+                        <DataTable TItem="FC.Engine.Admin.Services.ModelRisk.ModelWorkflowAuditItem" Items="@_data.AuditTrail" PageSize="20" Sortable="true" ShowExport="true" ExportFileName="model-audit-trail">
+                            <ChildContent>
+                                <DataColumn TItem="FC.Engine.Admin.Services.ModelRisk.ModelWorkflowAuditItem" Title="Code" Width="110px" SortKey="@(x => x.ModelCode)">
+                                    <CellTemplate><span class="fc-badge fc-badge--neutral">@context.ModelCode</span></CellTemplate>
+                                </DataColumn>
+                                <DataColumn TItem="FC.Engine.Admin.Services.ModelRisk.ModelWorkflowAuditItem" Title="Model" SortKey="@(x => x.ModelName)">
+                                    <CellTemplate><strong>@context.ModelName</strong></CellTemplate>
+                                </DataColumn>
+                                <DataColumn TItem="FC.Engine.Admin.Services.ModelRisk.ModelWorkflowAuditItem" Title="Artifact" SortKey="@(x => x.Artifact)">
+                                    <CellTemplate>@context.Artifact</CellTemplate>
+                                </DataColumn>
+                                <DataColumn TItem="FC.Engine.Admin.Services.ModelRisk.ModelWorkflowAuditItem" Title="Previous" Width="140px" SortKey="@(x => x.PreviousStage)">
+                                    <CellTemplate>
+                                        @if (!string.IsNullOrWhiteSpace(context.PreviousStage))
+                                        {
+                                            <span class="fc-badge @StageBadge(context.PreviousStage)">@context.PreviousStage</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="fc-text-muted">—</span>
+                                        }
+                                    </CellTemplate>
+                                </DataColumn>
+                                <DataColumn TItem="FC.Engine.Admin.Services.ModelRisk.ModelWorkflowAuditItem" Title="Stage" Width="140px" SortKey="@(x => x.Stage)">
+                                    <CellTemplate><span class="fc-badge @StageBadge(context.Stage)">@context.Stage</span></CellTemplate>
+                                </DataColumn>
+                                <DataColumn TItem="FC.Engine.Admin.Services.ModelRisk.ModelWorkflowAuditItem" Title="Changed" Width="150px" SortKey="@(x => x.ChangedAtUtc)">
+                                    <CellTemplate>@context.ChangedAtUtc.ToString("dd MMM yyyy HH:mm")</CellTemplate>
+                                </DataColumn>
+                            </ChildContent>
+                        </DataTable>
+                    }
+                </div>
+            </div>
+        }
+    </SectionErrorBoundary>
+</div>
+
+@code {
+    private bool _loading = true, _processing;
+    private Exception? _loadException;
+    private FC.Engine.Admin.Services.ModelRisk.ModelChangeData? _data;
+
+    protected override async Task OnInitializedAsync() => await ReloadAsync();
+
+    private async Task ReloadAsync()
+    {
+        _loading = true; _loadException = null;
+        try { _data = await ModelService.GetChangeDataAsync(); }
+        catch (Exception ex) { _loadException = ex; }
+        finally { _loading = false; }
+    }
+
+    private async Task AdvanceAsync(ModelApprovalQueueRow item, string newStage)
+    {
+        _processing = true;
+        try
+        {
+            await ModelService.AdvanceWorkflowAsync(
+                item.WorkflowKey, item.ModelCode, item.ModelName,
+                item.Artifact, item.CurrentStage, newStage);
+            var verb = newStage switch { "Approved" => "approved", "Rejected" => "rejected", _ => "updated" };
+            Toast.Show(new ToastItem
+            {
+                Variant = newStage == "Approved" ? ToastVariant.Success : newStage == "Rejected" ? ToastVariant.Error : ToastVariant.Warning,
+                Title = newStage,
+                Message = $"{item.ModelName} — {item.Artifact} has been {verb}."
+            });
+            await ReloadAsync();
+        }
+        catch (Exception ex) { Toast.Error("Workflow action failed: " + ex.Message); }
+        finally { _processing = false; }
+    }
+
+    private static string StageBadge(string s) => s switch
+    {
+        "Approved" or "Completed" => "fc-badge--success",
+        "Submitted" or "In Review" or "Under Review" => "fc-badge--info",
+        "Revision Requested" or "Pending" => "fc-badge--warning",
+        "Rejected" => "fc-badge--danger",
+        _ => "fc-badge--neutral"
+    };
+
+    private static string SignalBadge(string s) => s switch
+    {
+        "Pass" or "OK" => "fc-badge--success",
+        "Watch" or "Review" => "fc-badge--warning",
+        "Alert" or "Breach" => "fc-badge--danger",
+        _ => "fc-badge--neutral"
+    };
+}

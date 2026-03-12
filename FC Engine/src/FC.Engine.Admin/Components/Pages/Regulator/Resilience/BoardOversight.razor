@@ -1,0 +1,198 @@
+@page "/regulator/resilience/board"
+@attribute [Authorize(Policy = "RegulatorOnly")]
+@inject FC.Engine.Admin.Services.Resilience.ResilienceOrchestratorService ResService
+@inject IJSRuntime JS
+
+<PageTitle>Board Oversight</PageTitle>
+
+<PageHeader Title="Board Oversight"
+            Subtitle="Executive resilience summary, gap analysis scores, cyber assessment, and action tracker."
+            BackUrl="/regulator/resilience">
+    <PrimaryAction><button class="fc-btn fc-btn--primary" @onclick="ReloadAsync" disabled="@_loading">Refresh</button></PrimaryAction>
+</PageHeader>
+
+<div class="fc-page">
+    <SectionErrorBoundary Title="Failed to load board data" ExternalError="@_loadException" OnRetry="ReloadAsync">
+        @if (_loading)
+        {
+            <div class="rg-res-kpi-strip">
+                @for (var i = 0; i < 4; i++)
+                {
+                    <div class="rg-res-kpi"><SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Block" Height="88px" /></div>
+                }
+            </div>
+        }
+        else if (_data is null)
+        {
+            <EmptyState Context="data" Heading="No board data" Description="Refresh the Intelligence Hub to load board oversight data." />
+        }
+        else
+        {
+            <div class="rg-res-kpi-strip">
+                <div class="rg-res-kpi">
+                    <div class="rg-res-kpi-value @(_data.BoardSummary.GapScore >= 70 ? "rg-res-kpi-value--green" : _data.BoardSummary.GapScore >= 50 ? "rg-res-kpi-value--amber" : "rg-res-kpi-value--red")">
+                        @_data.BoardSummary.GapScore.ToString("F0")
+                    </div>
+                    <div class="rg-res-kpi-label">Resilience Score</div>
+                </div>
+                <div class="rg-res-kpi">
+                    <div class="rg-res-kpi-value @(_data.BoardSummary.CriticalIssues > 0 ? "rg-res-kpi-value--red" : "")">@_data.BoardSummary.CriticalIssues</div>
+                    <div class="rg-res-kpi-label">Critical Issues</div>
+                </div>
+                <div class="rg-res-kpi">
+                    <div class="rg-res-kpi-value @(_data.BoardSummary.OverdueActions > 0 ? "rg-res-kpi-value--amber" : "")">@_data.BoardSummary.OverdueActions</div>
+                    <div class="rg-res-kpi-label">Overdue Actions</div>
+                </div>
+                <div class="rg-res-kpi">
+                    <div class="rg-res-kpi-value">@_data.BoardSummary.DueTests</div>
+                    <div class="rg-res-kpi-label">Tests Due</div>
+                </div>
+            </div>
+
+            @if (!string.IsNullOrWhiteSpace(_data.BoardSummary.Narrative))
+            {
+                <div class="fc-card fc-card--mb">
+                    <div class="fc-card__header"><h2 class="fc-card__title">Executive Summary</h2></div>
+                    <div class="fc-card__body"><p>@_data.BoardSummary.Narrative</p></div>
+                </div>
+            }
+
+            <div class="rg-grid rg-grid-2">
+                <div class="fc-card">
+                    <div class="fc-card__header"><h2 class="fc-card__title">Gap Analysis</h2></div>
+                    <div class="fc-card__body">
+                        <canvas id="gapAnalysisChart"></canvas>
+                        <DataTable TItem="ResilienceGapRow" Items="@_data.GapAnalysis" Sortable="true" ShowExport="true" ExportFileName="gap-analysis">
+                            <ChildContent>
+                                <DataColumn TItem="ResilienceGapRow" Title="Domain" SortKey="@(x => x.Domain)">
+                                    <CellTemplate><strong>@context.Domain</strong></CellTemplate>
+                                </DataColumn>
+                                <DataColumn TItem="ResilienceGapRow" Title="Score" Width="80px" SortKey="@(x => x.Score)">
+                                    <CellTemplate>@context.Score.ToString("F0")</CellTemplate>
+                                </DataColumn>
+                                <DataColumn TItem="ResilienceGapRow" Title="Signal" Width="90px" SortKey="@(x => x.Signal)">
+                                    <CellTemplate><span class="fc-badge @SignalBadge(context.Signal)">@context.Signal</span></CellTemplate>
+                                </DataColumn>
+                                <DataColumn TItem="ResilienceGapRow" Title="Next Action" SortKey="@(x => x.NextAction)">
+                                    <CellTemplate><span class="fc-text-muted-sm">@context.NextAction</span></CellTemplate>
+                                </DataColumn>
+                            </ChildContent>
+                        </DataTable>
+                    </div>
+                </div>
+
+                <div class="fc-card">
+                    <div class="fc-card__header"><h2 class="fc-card__title">Cyber Assessment</h2></div>
+                    <div class="fc-card__body">
+                        <canvas id="cyberAssessmentChart"></canvas>
+                        <DataTable TItem="CyberResilienceAssessmentRow" Items="@_data.CyberAssessment" Sortable="true">
+                            <ChildContent>
+                                <DataColumn TItem="CyberResilienceAssessmentRow" Title="Domain" SortKey="@(x => x.Domain)">
+                                    <CellTemplate><strong>@context.Domain</strong></CellTemplate>
+                                </DataColumn>
+                                <DataColumn TItem="CyberResilienceAssessmentRow" Title="Score" Width="80px" SortKey="@(x => x.Score)">
+                                    <CellTemplate>@context.Score.ToString("F0")</CellTemplate>
+                                </DataColumn>
+                                <DataColumn TItem="CyberResilienceAssessmentRow" Title="Signal" Width="90px" SortKey="@(x => x.Signal)">
+                                    <CellTemplate><span class="fc-badge @SignalBadge(context.Signal)">@context.Signal</span></CellTemplate>
+                                </DataColumn>
+                            </ChildContent>
+                        </DataTable>
+                    </div>
+                </div>
+            </div>
+
+            <div class="fc-card" style="margin-top:var(--space-4);">
+                <div class="fc-card__header"><h2 class="fc-card__title">Action Tracker (@_data.ActionTracker.Count)</h2></div>
+                <div class="fc-card__body">
+                    <DataTable TItem="ResilienceActionRow" Items="@_data.ActionTracker" PageSize="15" Sortable="true" ShowExport="true" ExportFileName="resilience-actions">
+                        <ChildContent>
+                            <DataColumn TItem="ResilienceActionRow" Title="Workstream" Width="130px" SortKey="@(x => x.Workstream)">
+                                <CellTemplate><span class="fc-badge fc-badge--neutral">@context.Workstream</span></CellTemplate>
+                            </DataColumn>
+                            <DataColumn TItem="ResilienceActionRow" Title="Action" SortKey="@(x => x.Title)">
+                                <CellTemplate>
+                                    <strong>@context.Title</strong>
+                                    <div class="fc-text-muted-sm">@context.Action</div>
+                                </CellTemplate>
+                            </DataColumn>
+                            <DataColumn TItem="ResilienceActionRow" Title="Owner" Width="120px" SortKey="@(x => x.OwnerLane)">
+                                <CellTemplate>@context.OwnerLane</CellTemplate>
+                            </DataColumn>
+                            <DataColumn TItem="ResilienceActionRow" Title="Due" Width="120px" SortKey="@(x => x.DueDate)">
+                                <CellTemplate>@context.DueDate.ToString("dd MMM yyyy")</CellTemplate>
+                            </DataColumn>
+                            <DataColumn TItem="ResilienceActionRow" Title="Severity" Width="90px" SortKey="@(x => x.Severity)">
+                                <CellTemplate><span class="fc-badge @SeverityBadge(context.Severity)">@context.Severity</span></CellTemplate>
+                            </DataColumn>
+                            <DataColumn TItem="ResilienceActionRow" Title="Status" Width="100px" SortKey="@(x => x.Status)">
+                                <CellTemplate><span class="fc-badge @ActionStatusBadge(context.Status)">@context.Status</span></CellTemplate>
+                            </DataColumn>
+                        </ChildContent>
+                    </DataTable>
+                </div>
+            </div>
+        }
+    </SectionErrorBoundary>
+</div>
+
+@code {
+    private bool _loading = true;
+    private bool _chartsRendered;
+    private Exception? _loadException;
+    private FC.Engine.Admin.Services.Resilience.ResilienceBoardData? _data;
+
+    protected override async Task OnInitializedAsync() => await ReloadAsync();
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!_loading && !_chartsRendered && _data is not null && _data.GapAnalysis.Count > 0)
+        {
+            _chartsRendered = true;
+            await RenderChartsAsync();
+        }
+    }
+
+    private async Task ReloadAsync()
+    {
+        _loading = true; _loadException = null; _chartsRendered = false;
+        try { _data = await ResService.GetBoardDataAsync(); }
+        catch (Exception ex) { _loadException = ex; }
+        finally { _loading = false; }
+    }
+
+    private async Task RenderChartsAsync()
+    {
+        if (_data is null) return;
+        try
+        {
+            if (_data.GapAnalysis.Count > 0)
+            {
+                await JS.InvokeVoidAsync("fcCharts.renderBar", "gapAnalysisChart", new
+                {
+                    labels = _data.GapAnalysis.Select(g => g.Domain).ToArray(),
+                    datasets = new object[]
+                    {
+                        new { label = "Gap Score", data = _data.GapAnalysis.Select(g => (double)g.Score).ToArray(), backgroundColor = "#006B3F" }
+                    }
+                });
+            }
+            if (_data.CyberAssessment.Count > 0)
+            {
+                await JS.InvokeVoidAsync("fcCharts.renderBar", "cyberAssessmentChart", new
+                {
+                    labels = _data.CyberAssessment.Select(c => c.Domain).ToArray(),
+                    datasets = new object[]
+                    {
+                        new { label = "Cyber Score", data = _data.CyberAssessment.Select(c => (double)c.Score).ToArray(), backgroundColor = "#0284c7" }
+                    }
+                });
+            }
+        }
+        catch { }
+    }
+
+    private static string SignalBadge(string s) => s switch { "green" or "Current" => "fc-badge--success", "amber" or "Watch" => "fc-badge--warning", "red" or "Critical" => "fc-badge--danger", _ => "fc-badge--neutral" };
+    private static string SeverityBadge(string s) => s switch { "Critical" => "fc-badge--danger", "High" => "fc-badge--warning", "Medium" => "fc-badge--info", _ => "fc-badge--neutral" };
+    private static string ActionStatusBadge(string s) => s switch { "Complete" => "fc-badge--success", "In Progress" => "fc-badge--info", "Overdue" => "fc-badge--danger", "Planned" => "fc-badge--neutral", _ => "fc-badge--neutral" };
+}

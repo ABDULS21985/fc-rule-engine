@@ -58,6 +58,7 @@ public class CapitalPlanningScenarioStoreServiceTests
         });
 
         var loaded = await sut.LoadAsync();
+        var history = await sut.LoadHistoryAsync(10);
 
         updated.CurrentCarPercent.Should().Be(18m);
         loaded.Should().NotBeNull();
@@ -65,10 +66,18 @@ public class CapitalPlanningScenarioStoreServiceTests
         loaded.CountercyclicalBufferPercent.Should().Be(1m);
         loaded.TargetCarPercent.Should().Be(20m);
         loaded.SavedAtUtc.Should().Be(new DateTime(2026, 3, 11, 13, 0, 0, DateTimeKind.Utc));
+        history.Should().HaveCount(2);
+        history[0].SavedAtUtc.Should().Be(new DateTime(2026, 3, 11, 13, 0, 0, DateTimeKind.Utc));
+        history[0].TargetCarPercent.Should().Be(20m);
+        history[1].SavedAtUtc.Should().Be(new DateTime(2026, 3, 11, 12, 0, 0, DateTimeKind.Utc));
+        history[1].CurrentCarPercent.Should().Be(17.5m);
 
         var persisted = await db.CapitalPlanningScenarios.AsNoTracking().ToListAsync();
         persisted.Should().HaveCount(1);
         persisted.Single().ScenarioKey.Should().Be("LATEST");
+
+        var persistedHistory = await db.CapitalPlanningScenarioHistory.AsNoTracking().ToListAsync();
+        persistedHistory.Should().HaveCount(2);
     }
 
     private static MetadataDbContext CreateDb()

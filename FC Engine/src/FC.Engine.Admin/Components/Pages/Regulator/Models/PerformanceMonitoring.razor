@@ -1,0 +1,215 @@
+@page "/regulator/models/performance"
+@attribute [Authorize(Policy = "RegulatorOnly")]
+@inject FC.Engine.Admin.Services.ModelRisk.ModelGovernanceService ModelService
+@inject IJSRuntime JS
+
+<PageTitle>Performance Monitoring</PageTitle>
+
+<PageHeader Title="Performance Monitoring"
+            Subtitle="Model accuracy evidence, backtesting results, stability, and calibration metrics."
+            BackUrl="/regulator/models">
+    <PrimaryAction><button class="fc-btn fc-btn--primary" @onclick="ReloadAsync" disabled="@_loading">Refresh</button></PrimaryAction>
+</PageHeader>
+
+<div class="fc-page">
+    <SectionErrorBoundary Title="Failed to load performance data" ExternalError="@_loadException" OnRetry="ReloadAsync">
+        @if (_loading)
+        {
+            <SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.TableRows" />
+        }
+        else if (_data is null)
+        {
+            <EmptyState Context="data" Heading="No performance data" Description="Materialise model risk data via the Intelligence Hub." />
+        }
+        else
+        {
+            <div class="rg-mrm-kpi-strip">
+                <div class="rg-mrm-kpi">
+                    <div class="rg-mrm-kpi-value">@_data.PerformanceEvidence.Count</div>
+                    <div class="rg-mrm-kpi-label">Evidence Records</div>
+                </div>
+                <div class="rg-mrm-kpi">
+                    <div class="rg-mrm-kpi-value">@_data.Backtesting.Count</div>
+                    <div class="rg-mrm-kpi-label">Backtest Results</div>
+                </div>
+                <div class="rg-mrm-kpi">
+                    <div class="rg-mrm-kpi-value">@_data.MonitoringSummary.Count</div>
+                    <div class="rg-mrm-kpi-label">Monitoring Metrics</div>
+                </div>
+                <div class="rg-mrm-kpi">
+                    <div class="rg-mrm-kpi-value @(_alertCount > 0 ? "rg-mrm-kpi-value--red" : "rg-mrm-kpi-value--green")">@_alertCount</div>
+                    <div class="rg-mrm-kpi-label">Alert Signals</div>
+                </div>
+            </div>
+
+            @* Signal Distribution Chart *@
+            <div class="fc-card fc-card--mb">
+                <div class="fc-card__header"><h2 class="fc-card__title">Signal Distribution</h2></div>
+                <div class="fc-card__body">
+                    <canvas id="mrmSignalChart" style="max-height:260px;"></canvas>
+                </div>
+            </div>
+
+            @* Performance Evidence *@
+            <div class="fc-card fc-card--mb">
+                <div class="fc-card__header"><h2 class="fc-card__title">Performance Evidence</h2></div>
+                <div class="fc-card__body">
+                    <DataTable TItem="ModelPerformanceEvidenceRow" Items="@_data.PerformanceEvidence" PageSize="20" Sortable="true" ShowExport="true" ExportFileName="model-performance-evidence">
+                        <ChildContent>
+                            <DataColumn TItem="ModelPerformanceEvidenceRow" Title="Code" Width="110px" SortKey="@(x => x.ModelCode)">
+                                <CellTemplate><span class="fc-badge fc-badge--neutral">@context.ModelCode</span></CellTemplate>
+                            </DataColumn>
+                            <DataColumn TItem="ModelPerformanceEvidenceRow" Title="Model" SortKey="@(x => x.ModelName)">
+                                <CellTemplate><strong>@context.ModelName</strong></CellTemplate>
+                            </DataColumn>
+                            <DataColumn TItem="ModelPerformanceEvidenceRow" Title="Evidence Type" Width="130px" SortKey="@(x => x.EvidenceType)">
+                                <CellTemplate>@context.EvidenceType</CellTemplate>
+                            </DataColumn>
+                            <DataColumn TItem="ModelPerformanceEvidenceRow" Title="Metric" Width="120px" SortKey="@(x => x.MetricLabel)">
+                                <CellTemplate>@context.MetricLabel</CellTemplate>
+                            </DataColumn>
+                            <DataColumn TItem="ModelPerformanceEvidenceRow" Title="Value" Width="90px" SortKey="@(x => x.MetricValue)">
+                                <CellTemplate>@(context.MetricValue?.ToString("F2") ?? "—")</CellTemplate>
+                            </DataColumn>
+                            <DataColumn TItem="ModelPerformanceEvidenceRow" Title="Sample" Width="80px" SortKey="@(x => x.SampleSize)">
+                                <CellTemplate>@context.SampleSize.ToString("N0")</CellTemplate>
+                            </DataColumn>
+                            <DataColumn TItem="ModelPerformanceEvidenceRow" Title="Signal" Width="100px" SortKey="@(x => x.Signal)">
+                                <CellTemplate><span class="fc-badge @SignalBadge(context.Signal)">@context.Signal</span></CellTemplate>
+                            </DataColumn>
+                            <DataColumn TItem="ModelPerformanceEvidenceRow" Title="Measured" Width="130px" SortKey="@(x => x.MeasuredAt)">
+                                <CellTemplate>@(context.MeasuredAt?.ToString("dd MMM yyyy") ?? "—")</CellTemplate>
+                            </DataColumn>
+                        </ChildContent>
+                    </DataTable>
+                </div>
+            </div>
+
+            @* Backtesting *@
+            <div class="fc-card fc-card--mb">
+                <div class="fc-card__header"><h2 class="fc-card__title">Backtesting Results</h2></div>
+                <div class="fc-card__body">
+                    <DataTable TItem="ModelBacktestingRow" Items="@_data.Backtesting" PageSize="20" Sortable="true" ShowExport="true" ExportFileName="model-backtesting">
+                        <ChildContent>
+                            <DataColumn TItem="ModelBacktestingRow" Title="Code" Width="110px" SortKey="@(x => x.ModelCode)">
+                                <CellTemplate><span class="fc-badge fc-badge--neutral">@context.ModelCode</span></CellTemplate>
+                            </DataColumn>
+                            <DataColumn TItem="ModelBacktestingRow" Title="Model" SortKey="@(x => x.ModelName)">
+                                <CellTemplate><strong>@context.ModelName</strong></CellTemplate>
+                            </DataColumn>
+                            <DataColumn TItem="ModelBacktestingRow" Title="Type" Width="120px" SortKey="@(x => x.BacktestType)">
+                                <CellTemplate>@context.BacktestType</CellTemplate>
+                            </DataColumn>
+                            <DataColumn TItem="ModelBacktestingRow" Title="Predicted" Width="110px">
+                                <CellTemplate><span title="@context.PredictedLabel">@context.PredictedValue</span></CellTemplate>
+                            </DataColumn>
+                            <DataColumn TItem="ModelBacktestingRow" Title="Actual" Width="110px">
+                                <CellTemplate><span title="@context.ActualLabel">@context.ActualValue</span></CellTemplate>
+                            </DataColumn>
+                            <DataColumn TItem="ModelBacktestingRow" Title="Variance" Width="120px">
+                                <CellTemplate>@context.VarianceText</CellTemplate>
+                            </DataColumn>
+                            <DataColumn TItem="ModelBacktestingRow" Title="Signal" Width="100px" SortKey="@(x => x.Signal)">
+                                <CellTemplate><span class="fc-badge @SignalBadge(context.Signal)">@context.Signal</span></CellTemplate>
+                            </DataColumn>
+                            <DataColumn TItem="ModelBacktestingRow" Title="Sample" Width="80px" SortKey="@(x => x.SampleSize)">
+                                <CellTemplate>@context.SampleSize.ToString("N0")</CellTemplate>
+                            </DataColumn>
+                        </ChildContent>
+                    </DataTable>
+                </div>
+            </div>
+
+            @* Monitoring Summary *@
+            <div class="fc-card">
+                <div class="fc-card__header"><h2 class="fc-card__title">Monitoring Summary</h2></div>
+                <div class="fc-card__body">
+                    <DataTable TItem="ModelMonitoringSummaryRow" Items="@_data.MonitoringSummary" PageSize="20" Sortable="true" ShowExport="true" ExportFileName="model-monitoring-summary">
+                        <ChildContent>
+                            <DataColumn TItem="ModelMonitoringSummaryRow" Title="Code" Width="110px" SortKey="@(x => x.ModelCode)">
+                                <CellTemplate><span class="fc-badge fc-badge--neutral">@context.ModelCode</span></CellTemplate>
+                            </DataColumn>
+                            <DataColumn TItem="ModelMonitoringSummaryRow" Title="Model" SortKey="@(x => x.ModelName)">
+                                <CellTemplate><strong>@context.ModelName</strong></CellTemplate>
+                            </DataColumn>
+                            <DataColumn TItem="ModelMonitoringSummaryRow" Title="Focus" Width="130px" SortKey="@(x => x.MonitoringFocus)">
+                                <CellTemplate>@context.MonitoringFocus</CellTemplate>
+                            </DataColumn>
+                            <DataColumn TItem="ModelMonitoringSummaryRow" Title="Stability" Width="110px">
+                                <CellTemplate><span title="@context.StabilityLabel">@context.StabilityValue</span></CellTemplate>
+                            </DataColumn>
+                            <DataColumn TItem="ModelMonitoringSummaryRow" Title="Accuracy" Width="110px">
+                                <CellTemplate><span title="@context.AccuracyLabel">@context.AccuracyValue</span></CellTemplate>
+                            </DataColumn>
+                            <DataColumn TItem="ModelMonitoringSummaryRow" Title="Calibration" Width="110px" SortKey="@(x => x.CalibrationStatus)">
+                                <CellTemplate><span class="fc-badge @CalibBadge(context.CalibrationStatus)">@context.CalibrationStatus</span></CellTemplate>
+                            </DataColumn>
+                            <DataColumn TItem="ModelMonitoringSummaryRow" Title="Signal" Width="100px" SortKey="@(x => x.Signal)">
+                                <CellTemplate><span class="fc-badge @SignalBadge(context.Signal)">@context.Signal</span></CellTemplate>
+                            </DataColumn>
+                        </ChildContent>
+                    </DataTable>
+                </div>
+            </div>
+        }
+    </SectionErrorBoundary>
+</div>
+
+@code {
+    private bool _loading = true, _chartsRendered;
+    private Exception? _loadException;
+    private FC.Engine.Admin.Services.ModelRisk.ModelPerformanceData? _data;
+    private int _alertCount;
+
+    protected override async Task OnInitializedAsync() => await ReloadAsync();
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!_chartsRendered && _data is not null)
+        {
+            _chartsRendered = true;
+            await RenderSignalChartAsync();
+        }
+    }
+
+    private async Task ReloadAsync()
+    {
+        _loading = true; _loadException = null;
+        try
+        {
+            _data = await ModelService.GetPerformanceDataAsync();
+            _alertCount = _data.PerformanceEvidence.Count(e => e.Signal is "Alert" or "Breach")
+                        + _data.Backtesting.Count(b => b.Signal is "Alert" or "Breach")
+                        + _data.MonitoringSummary.Count(m => m.Signal is "Alert" or "Breach");
+            _chartsRendered = false;
+        }
+        catch (Exception ex) { _loadException = ex; }
+        finally { _loading = false; }
+    }
+
+    private async Task RenderSignalChartAsync()
+    {
+        if (_data is null) return;
+        var allSignals = _data.PerformanceEvidence.Select(e => e.Signal)
+            .Concat(_data.Backtesting.Select(b => b.Signal))
+            .Concat(_data.MonitoringSummary.Select(m => m.Signal))
+            .ToList();
+        var groups = new[] { "Pass", "Watch", "Alert", "Breach" };
+        var counts = groups.Select(g => allSignals.Count(s => s == g)).ToArray();
+        try
+        {
+            await JS.InvokeVoidAsync("fcCharts.renderBar", "mrmSignalChart", new
+            {
+                labels = groups,
+                datasets = new object[]
+                {
+                    new { label = "Count", data = counts, backgroundColor = new[] { "#006B3F", "#C8A415", "#E07C24", "#D32F2F" } }
+                }
+            });
+        }
+        catch { }
+    }
+
+    private static string SignalBadge(string s) => s switch { "Pass" or "Stable" => "fc-badge--success", "Watch" or "Degraded" => "fc-badge--warning", "Alert" or "Breach" => "fc-badge--danger", _ => "fc-badge--neutral" };
+    private static string CalibBadge(string c) => c switch { "Calibrated" or "In Range" => "fc-badge--success", "Review" or "Marginal" => "fc-badge--warning", "Miscalibrated" or "Out of Range" => "fc-badge--danger", _ => "fc-badge--neutral" };
+}

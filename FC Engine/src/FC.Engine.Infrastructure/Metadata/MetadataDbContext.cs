@@ -99,6 +99,7 @@ public class MetadataDbContext : DbContext
     public DbSet<DashboardBriefingPackSectionRecord> DashboardBriefingPackSections => Set<DashboardBriefingPackSectionRecord>();
     public DbSet<CapitalActionTemplateRecord> CapitalActionTemplates => Set<CapitalActionTemplateRecord>();
     public DbSet<CapitalPlanningScenarioRecord> CapitalPlanningScenarios => Set<CapitalPlanningScenarioRecord>();
+    public DbSet<CapitalPlanningScenarioHistoryRecord> CapitalPlanningScenarioHistory => Set<CapitalPlanningScenarioHistoryRecord>();
     public DbSet<ModelInventoryDefinitionRecord> ModelInventoryDefinitions => Set<ModelInventoryDefinitionRecord>();
     public DbSet<CapitalPackSheetRecord> CapitalPackSheets => Set<CapitalPackSheetRecord>();
     public DbSet<OpsResiliencePackSheetRecord> OpsResiliencePackSheets => Set<OpsResiliencePackSheetRecord>();

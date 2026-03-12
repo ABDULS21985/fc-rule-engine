@@ -338,6 +338,7 @@ public sealed class PlatformIntelligenceService : IPlatformIntelligenceWorkspace
         var capitalActionCatalog = await LoadCapitalActionCatalogAsync(ct);
         var modelInventoryCatalog = await LoadModelInventoryCatalogAsync(ct);
         var capitalPlanningScenario = await _capitalPlanningScenarioStore.LoadAsync(ct);
+        var capitalPlanningHistory = await _capitalPlanningScenarioStore.LoadHistoryAsync(8, ct);
         var sanctionsPackCatalog = await _sanctionsPackCatalog.LoadAsync(ct);
         var sanctionsStrDraftCatalog = await _sanctionsStrDraftCatalog.LoadAsync(ct);
         var sanctionsWorkflowState = await _sanctionsWorkflowStore.LoadAsync(ct);
@@ -812,6 +813,7 @@ public sealed class PlatformIntelligenceService : IPlatformIntelligenceWorkspace
                     .ToList(),
                 Watchlist = capitalRows.Take(10).ToList(),
                 LastScenarioUpdatedAt = capitalPlanningScenario?.SavedAtUtc,
+                ScenarioHistory = BuildCapitalScenarioHistoryRows(capitalPlanningHistory),
                 ReturnPack = capitalPackCatalog.Sections.ToList(),
                 ReturnPackAttentionCount = capitalPackCatalog.Sections.Count(x => x.Signal is "Critical" or "Watch"),
                 ReturnPackMaterializedAt = capitalPackCatalog.MaterializedAt
@@ -1351,6 +1353,9 @@ public sealed class PlatformIntelligenceService : IPlatformIntelligenceWorkspace
 
     public Task<CapitalPlanningScenarioState?> GetCapitalPlanningScenarioStateAsync(CancellationToken ct = default) =>
         _capitalPlanningScenarioStore.LoadAsync(ct);
+
+    public Task<IReadOnlyList<CapitalPlanningScenarioHistoryState>> GetCapitalPlanningScenarioHistoryAsync(int take = 8, CancellationToken ct = default) =>
+        _capitalPlanningScenarioStore.LoadHistoryAsync(take, ct);
 
     public Task<CapitalPlanningScenarioState> RecordCapitalPlanningScenarioAsync(
         CapitalPlanningScenarioCommand command,
@@ -2496,6 +2501,47 @@ public sealed class PlatformIntelligenceService : IPlatformIntelligenceWorkspace
             .ThenByDescending(x => x.DependentAssetCount)
             .ThenBy(x => x.ProviderName, StringComparer.OrdinalIgnoreCase)
             .Take(12)
+            .ToList();
+    }
+
+    private static List<CapitalPlanningScenarioHistoryRow> BuildCapitalScenarioHistoryRows(
+        IReadOnlyList<CapitalPlanningScenarioHistoryState> history)
+    {
+        return history
+            .Select(row =>
+            {
+                var projectionRows = BuildProjectionRows(new CapitalProjectionInput
+                {
+                    CurrentCarPercent = row.CurrentCarPercent,
+                    CurrentRwaBn = row.CurrentRwaBn,
+                    QuarterlyRwaGrowthPercent = row.QuarterlyRwaGrowthPercent,
+                    QuarterlyRetainedEarningsBn = row.QuarterlyRetainedEarningsBn,
+                    CapitalActionBn = row.CapitalActionBn,
+                    MinimumRequirementPercent = row.MinimumRequirementPercent,
+                    ConservationBufferPercent = row.ConservationBufferPercent,
+                    CountercyclicalBufferPercent = row.CountercyclicalBufferPercent,
+                    DsibBufferPercent = row.DsibBufferPercent,
+                    RwaOptimisationPercent = row.RwaOptimisationPercent
+                });
+                var q8 = projectionRows.LastOrDefault();
+
+                return new CapitalPlanningScenarioHistoryRow
+                {
+                    HistoryId = row.HistoryId,
+                    SavedAtUtc = row.SavedAtUtc,
+                    CurrentCarPercent = row.CurrentCarPercent,
+                    TargetCarPercent = row.TargetCarPercent,
+                    CurrentRwaBn = row.CurrentRwaBn,
+                    CapitalActionBn = row.CapitalActionBn,
+                    RwaOptimisationPercent = row.RwaOptimisationPercent,
+                    ProjectedQuarter8CarPercent = q8?.ProjectedCarPercent ?? row.CurrentCarPercent,
+                    WorstBufferHeadroomPercent = projectionRows.Count == 0 ? 0m : projectionRows.Min(x => x.BufferHeadroomPercent),
+                    Signal = q8?.Signal ?? "Current",
+                    Summary = $"Capital action {row.CapitalActionBn.ToString("0.0", CultureInfo.InvariantCulture)} bn | RWA optimisation {row.RwaOptimisationPercent.ToString("0.0", CultureInfo.InvariantCulture)}%"
+                };
+            })
+            .OrderByDescending(x => x.SavedAtUtc)
+            .ThenByDescending(x => x.HistoryId)
             .ToList();
     }
 
@@ -6293,6 +6339,7 @@ public sealed class CapitalManagementSnapshot
     public DateTime? LastScenarioUpdatedAt { get; set; }
     public List<CapitalActionTemplate> ActionTemplates { get; set; } = [];
     public List<CapitalWatchlistRow> Watchlist { get; set; } = [];
+    public List<CapitalPlanningScenarioHistoryRow> ScenarioHistory { get; set; } = [];
     public List<CapitalPackSectionState> ReturnPack { get; set; } = [];
     public int ReturnPackAttentionCount { get; set; }
     public DateTime? ReturnPackMaterializedAt { get; set; }
@@ -6306,6 +6353,21 @@ public sealed class CapitalWatchlistRow
     public decimal CapitalScore { get; set; }
     public decimal OverallScore { get; set; }
     public string Alert { get; set; } = string.Empty;
+}
+
+public sealed class CapitalPlanningScenarioHistoryRow
+{
+    public int HistoryId { get; set; }
+    public DateTime SavedAtUtc { get; set; }
+    public decimal CurrentCarPercent { get; set; }
+    public decimal TargetCarPercent { get; set; }
+    public decimal CurrentRwaBn { get; set; }
+    public decimal CapitalActionBn { get; set; }
+    public decimal RwaOptimisationPercent { get; set; }
+    public decimal ProjectedQuarter8CarPercent { get; set; }
+    public decimal WorstBufferHeadroomPercent { get; set; }
+    public string Signal { get; set; } = string.Empty;
+    public string Summary { get; set; } = string.Empty;
 }
 
 public sealed class CapitalActionTemplate

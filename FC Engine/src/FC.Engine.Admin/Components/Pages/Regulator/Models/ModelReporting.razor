@@ -1,0 +1,186 @@
+@page "/regulator/models/reporting"
+@attribute [Authorize(Policy = "RegulatorOnly")]
+@inject FC.Engine.Admin.Services.ModelRisk.ModelGovernanceService ModelService
+
+<PageTitle>Model Reporting</PageTitle>
+
+<PageHeader Title="Model Reporting"
+            Subtitle="Risk appetite register, supervisory reporting pack, and return status sheets."
+            BackUrl="/regulator/models">
+    <PrimaryAction><button class="fc-btn fc-btn--primary" @onclick="ReloadAsync" disabled="@_loading">Refresh</button></PrimaryAction>
+</PageHeader>
+
+<div class="fc-page">
+    <SectionErrorBoundary Title="Failed to load reporting data" ExternalError="@_loadException" OnRetry="ReloadAsync">
+        @if (_loading)
+        {
+            <SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.TableRows" />
+        }
+        else if (_data is null)
+        {
+            <EmptyState Context="data" Heading="No reporting data" Description="Materialise model risk data via the Intelligence Hub." />
+        }
+        else
+        {
+            <div class="rg-mrm-kpi-strip">
+                <div class="rg-mrm-kpi">
+                    <div class="rg-mrm-kpi-value">@_data.AppetiteRegister.Count</div>
+                    <div class="rg-mrm-kpi-label">Appetite Entries</div>
+                </div>
+                <div class="rg-mrm-kpi">
+                    <div class="rg-mrm-kpi-value @(_data.AppetiteRegister.Count(a => a.AppetiteStatus == "Breach") > 0 ? "rg-mrm-kpi-value--red" : "rg-mrm-kpi-value--green")">@_data.AppetiteRegister.Count(a => a.AppetiteStatus == "Breach")</div>
+                    <div class="rg-mrm-kpi-label">Breaches</div>
+                </div>
+                <div class="rg-mrm-kpi">
+                    <div class="rg-mrm-kpi-value">@_data.ReportingPack.Count</div>
+                    <div class="rg-mrm-kpi-label">Report Sections</div>
+                </div>
+                <div class="rg-mrm-kpi">
+                    <div class="rg-mrm-kpi-value">@_data.ReturnPack.Count</div>
+                    <div class="rg-mrm-kpi-label">Return Sheets</div>
+                </div>
+            </div>
+
+            @* Risk Appetite Register *@
+            <div class="fc-card fc-card--mb">
+                <div class="fc-card__header"><h2 class="fc-card__title">Risk Appetite Register</h2></div>
+                <div class="fc-card__body">
+                    @if (_data.AppetiteRegister.Count == 0)
+                    {
+                        <p class="fc-text-muted">No appetite register entries.</p>
+                    }
+                    else
+                    {
+                        <DataTable TItem="ModelRiskAppetiteRow" Items="@_data.AppetiteRegister" PageSize="20" Sortable="true" ShowExport="true" ExportFileName="model-risk-appetite">
+                            <ChildContent>
+                                <DataColumn TItem="ModelRiskAppetiteRow" Title="Code" Width="110px" SortKey="@(x => x.ModelCode)">
+                                    <CellTemplate><span class="fc-badge fc-badge--neutral">@context.ModelCode</span></CellTemplate>
+                                </DataColumn>
+                                <DataColumn TItem="ModelRiskAppetiteRow" Title="Model" SortKey="@(x => x.ModelName)">
+                                    <CellTemplate><strong>@context.ModelName</strong></CellTemplate>
+                                </DataColumn>
+                                <DataColumn TItem="ModelRiskAppetiteRow" Title="Tier" Width="70px" SortKey="@(x => x.Tier)">
+                                    <CellTemplate><span class="fc-badge @TierBadge(context.Tier)">@context.Tier</span></CellTemplate>
+                                </DataColumn>
+                                <DataColumn TItem="ModelRiskAppetiteRow" Title="Appetite" Width="110px" SortKey="@(x => x.AppetiteStatus)">
+                                    <CellTemplate><span class="fc-badge @AppetiteBadge(context.AppetiteStatus)">@context.AppetiteStatus</span></CellTemplate>
+                                </DataColumn>
+                                <DataColumn TItem="ModelRiskAppetiteRow" Title="Risk Score" Width="100px" SortKey="@(x => x.RiskScore)">
+                                    <CellTemplate>@context.RiskScore.ToString("F1")</CellTemplate>
+                                </DataColumn>
+                                <DataColumn TItem="ModelRiskAppetiteRow" Title="Validation" Width="110px" SortKey="@(x => x.ValidationStatus)">
+                                    <CellTemplate><span class="fc-badge @ValBadge(context.ValidationStatus)">@context.ValidationStatus</span></CellTemplate>
+                                </DataColumn>
+                                <DataColumn TItem="ModelRiskAppetiteRow" Title="Performance" Width="100px" SortKey="@(x => x.PerformanceSignal)">
+                                    <CellTemplate><span class="fc-badge @SignalBadge(context.PerformanceSignal)">@context.PerformanceSignal</span></CellTemplate>
+                                </DataColumn>
+                                <DataColumn TItem="ModelRiskAppetiteRow" Title="Workflow" Width="130px" SortKey="@(x => x.PendingWorkflowStage)">
+                                    <CellTemplate>
+                                        @if (!string.IsNullOrWhiteSpace(context.PendingWorkflowStage))
+                                        {
+                                            <span class="fc-badge fc-badge--info">@context.PendingWorkflowStage</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="fc-text-muted">—</span>
+                                        }
+                                    </CellTemplate>
+                                </DataColumn>
+                                <DataColumn TItem="ModelRiskAppetiteRow" Title="Next Action" SortKey="@(x => x.NextAction)">
+                                    <CellTemplate>@context.NextAction</CellTemplate>
+                                </DataColumn>
+                            </ChildContent>
+                        </DataTable>
+                    }
+                </div>
+            </div>
+
+            @* Supervisory Reporting Pack *@
+            <div class="fc-card fc-card--mb">
+                <div class="fc-card__header"><h2 class="fc-card__title">Supervisory Reporting Pack</h2></div>
+                <div class="fc-card__body">
+                    @if (_data.ReportingPack.Count == 0)
+                    {
+                        <p class="fc-text-muted">No reporting pack data.</p>
+                    }
+                    else
+                    {
+                        <DataTable TItem="ModelRiskReportingRow" Items="@_data.ReportingPack" PageSize="20" Sortable="true" ShowExport="true" ExportFileName="model-risk-reporting">
+                            <ChildContent>
+                                <DataColumn TItem="ModelRiskReportingRow" Title="Section" SortKey="@(x => x.Section)">
+                                    <CellTemplate><strong>@context.Section</strong></CellTemplate>
+                                </DataColumn>
+                                <DataColumn TItem="ModelRiskReportingRow" Title="Metric" Width="130px">
+                                    <CellTemplate>@context.MetricValue</CellTemplate>
+                                </DataColumn>
+                                <DataColumn TItem="ModelRiskReportingRow" Title="Signal" Width="100px" SortKey="@(x => x.Signal)">
+                                    <CellTemplate><span class="fc-badge @SignalBadge(context.Signal)">@context.Signal</span></CellTemplate>
+                                </DataColumn>
+                                <DataColumn TItem="ModelRiskReportingRow" Title="Commentary" SortKey="@(x => x.Commentary)">
+                                    <CellTemplate>@context.Commentary</CellTemplate>
+                                </DataColumn>
+                            </ChildContent>
+                        </DataTable>
+                    }
+                </div>
+            </div>
+
+            @* Return Pack Status *@
+            <div class="fc-card">
+                <div class="fc-card__header"><h2 class="fc-card__title">Return Pack Status</h2></div>
+                <div class="fc-card__body">
+                    @if (_data.ReturnPack.Count == 0)
+                    {
+                        <p class="fc-text-muted">No return pack data.</p>
+                    }
+                    else
+                    {
+                        <DataTable TItem="ModelRiskSheetRow" Items="@_data.ReturnPack" PageSize="20" Sortable="true" ShowExport="true" ExportFileName="model-return-pack">
+                            <ChildContent>
+                                <DataColumn TItem="ModelRiskSheetRow" Title="Sheet Code" Width="120px" SortKey="@(x => x.SheetCode)">
+                                    <CellTemplate><span class="fc-badge fc-badge--neutral">@context.SheetCode</span></CellTemplate>
+                                </DataColumn>
+                                <DataColumn TItem="ModelRiskSheetRow" Title="Sheet Name" SortKey="@(x => x.SheetName)">
+                                    <CellTemplate><strong>@context.SheetName</strong></CellTemplate>
+                                </DataColumn>
+                                <DataColumn TItem="ModelRiskSheetRow" Title="Rows" Width="80px" SortKey="@(x => x.RowCount)">
+                                    <CellTemplate>@context.RowCount</CellTemplate>
+                                </DataColumn>
+                                <DataColumn TItem="ModelRiskSheetRow" Title="Coverage" Width="100px" SortKey="@(x => x.Coverage)">
+                                    <CellTemplate>@context.Coverage</CellTemplate>
+                                </DataColumn>
+                                <DataColumn TItem="ModelRiskSheetRow" Title="Signal" Width="100px" SortKey="@(x => x.Signal)">
+                                    <CellTemplate><span class="fc-badge @SignalBadge(context.Signal)">@context.Signal</span></CellTemplate>
+                                </DataColumn>
+                                <DataColumn TItem="ModelRiskSheetRow" Title="Action" SortKey="@(x => x.RecommendedAction)">
+                                    <CellTemplate>@context.RecommendedAction</CellTemplate>
+                                </DataColumn>
+                            </ChildContent>
+                        </DataTable>
+                    }
+                </div>
+            </div>
+        }
+    </SectionErrorBoundary>
+</div>
+
+@code {
+    private bool _loading = true;
+    private Exception? _loadException;
+    private FC.Engine.Admin.Services.ModelRisk.ModelReportingData? _data;
+
+    protected override async Task OnInitializedAsync() => await ReloadAsync();
+
+    private async Task ReloadAsync()
+    {
+        _loading = true; _loadException = null;
+        try { _data = await ModelService.GetReportingDataAsync(); }
+        catch (Exception ex) { _loadException = ex; }
+        finally { _loading = false; }
+    }
+
+    private static string TierBadge(string t) => t switch { "T1" => "fc-badge--danger", "T2" => "fc-badge--warning", "T3" => "fc-badge--info", _ => "fc-badge--neutral" };
+    private static string AppetiteBadge(string a) => a switch { "In Appetite" => "fc-badge--success", "Watch" => "fc-badge--warning", "Breach" => "fc-badge--danger", _ => "fc-badge--neutral" };
+    private static string ValBadge(string v) => v switch { "Current" => "fc-badge--success", "Due" or "Due Soon" => "fc-badge--warning", "Overdue" => "fc-badge--danger", _ => "fc-badge--neutral" };
+    private static string SignalBadge(string s) => s switch { "Pass" or "OK" or "Ready" => "fc-badge--success", "Watch" or "Review" or "Attention" => "fc-badge--warning", "Alert" or "Breach" => "fc-badge--danger", _ => "fc-badge--neutral" };
+}

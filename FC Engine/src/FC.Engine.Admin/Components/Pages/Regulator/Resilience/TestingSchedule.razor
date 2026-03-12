@@ -1,0 +1,151 @@
+@page "/regulator/resilience/testing"
+@attribute [Authorize(Policy = "RegulatorOnly")]
+@inject FC.Engine.Admin.Services.Resilience.ResilienceOrchestratorService ResService
+
+<PageTitle>Testing Schedule</PageTitle>
+
+<PageHeader Title="Testing Schedule"
+            Subtitle="Scenario testing, recovery time tests, and business continuity plan exercises."
+            BackUrl="/regulator/resilience">
+    <PrimaryAction><button class="fc-btn fc-btn--primary" @onclick="ReloadAsync" disabled="@_loading">Refresh</button></PrimaryAction>
+</PageHeader>
+
+<div class="fc-page">
+    <SectionErrorBoundary Title="Failed to load testing data" ExternalError="@_loadException" OnRetry="ReloadAsync">
+        @if (_loading)
+        {
+            <SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.TableRows" />
+        }
+        else if (_data is null)
+        {
+            <EmptyState Context="data" Heading="No testing data" Description="Refresh the Intelligence Hub to load testing schedule data." />
+        }
+        else
+        {
+            <div class="fc-card fc-card--mb">
+                <div class="fc-card__header"><h2 class="fc-card__title">Scenario Tests (@_data.TestingSchedule.Count)</h2></div>
+                <div class="fc-card__body">
+                    <DataTable TItem="ResilienceTestingRow" Items="@_data.TestingSchedule" Sortable="true" ShowExport="true" ExportFileName="testing-schedule">
+                        <ChildContent>
+                            <DataColumn TItem="ResilienceTestingRow" Title="Scenario" SortKey="@(x => x.ScenarioTitle)">
+                                <CellTemplate><strong>@context.ScenarioTitle</strong></CellTemplate>
+                            </DataColumn>
+                            <DataColumn TItem="ResilienceTestingRow" Title="Type" Width="120px" SortKey="@(x => x.TestType)">
+                                <CellTemplate>@context.TestType</CellTemplate>
+                            </DataColumn>
+                            <DataColumn TItem="ResilienceTestingRow" Title="Scope" Width="120px" SortKey="@(x => x.Scope)">
+                                <CellTemplate>@context.Scope</CellTemplate>
+                            </DataColumn>
+                            <DataColumn TItem="ResilienceTestingRow" Title="Status" Width="100px" SortKey="@(x => x.Status)">
+                                <CellTemplate><span class="fc-badge @TestStatusBadge(context.Status)">@context.Status</span></CellTemplate>
+                            </DataColumn>
+                            <DataColumn TItem="ResilienceTestingRow" Title="Outcome" Width="100px" SortKey="@(x => x.Outcome)">
+                                <CellTemplate><span class="fc-badge @OutcomeBadge(context.Outcome)">@context.Outcome</span></CellTemplate>
+                            </DataColumn>
+                            <DataColumn TItem="ResilienceTestingRow" Title="Last Run" Width="130px" SortKey="@(x => x.LastRunAt)">
+                                <CellTemplate>@(context.LastRunAt?.ToString("dd MMM yyyy") ?? "—")</CellTemplate>
+                            </DataColumn>
+                            <DataColumn TItem="ResilienceTestingRow" Title="Next Due" Width="130px" SortKey="@(x => x.NextDueAt)">
+                                <CellTemplate>@context.NextDueAt.ToString("dd MMM yyyy")</CellTemplate>
+                            </DataColumn>
+                            <DataColumn TItem="ResilienceTestingRow" Title="Entities" Width="90px" SortKey="@(x => x.EntitiesEvaluated)">
+                                <CellTemplate>@context.EntitiesEvaluated</CellTemplate>
+                            </DataColumn>
+                        </ChildContent>
+                    </DataTable>
+                </div>
+            </div>
+
+            <div class="fc-card fc-card--mb">
+                <div class="fc-card__header"><h2 class="fc-card__title">Recovery Time Tests (@_data.RecoveryTimeTests.Count)</h2></div>
+                <div class="fc-card__body">
+                    <DataTable TItem="RecoveryTimeTestingRow" Items="@_data.RecoveryTimeTests" Sortable="true" ShowExport="true" ExportFileName="recovery-time-tests">
+                        <ChildContent>
+                            <DataColumn TItem="RecoveryTimeTestingRow" Title="Service" SortKey="@(x => x.ServiceName)">
+                                <CellTemplate><strong>@context.ServiceName</strong></CellTemplate>
+                            </DataColumn>
+                            <DataColumn TItem="RecoveryTimeTestingRow" Title="Target (min)" Width="110px" SortKey="@(x => x.RecoveryTargetMinutes)">
+                                <CellTemplate>@context.RecoveryTargetMinutes</CellTemplate>
+                            </DataColumn>
+                            <DataColumn TItem="RecoveryTimeTestingRow" Title="Tested (min)" Width="110px" SortKey="@(x => x.TestedRecoveryMinutes)">
+                                <CellTemplate>@(context.TestedRecoveryMinutes?.ToString() ?? "—")</CellTemplate>
+                            </DataColumn>
+                            <DataColumn TItem="RecoveryTimeTestingRow" Title="Variance" Width="100px" SortKey="@(x => x.VarianceMinutes)">
+                                <CellTemplate>
+                                    @if (context.VarianceMinutes.HasValue)
+                                    {
+                                        <span class="@(context.VarianceMinutes > 0 ? "rg-res-kpi-value--red" : "rg-res-kpi-value--green")">@(context.VarianceMinutes > 0 ? "+" : "")@context.VarianceMinutes min</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="fc-text-muted">—</span>
+                                    }
+                                </CellTemplate>
+                            </DataColumn>
+                            <DataColumn TItem="RecoveryTimeTestingRow" Title="Outcome" Width="100px" SortKey="@(x => x.LatestOutcome)">
+                                <CellTemplate><span class="fc-badge @OutcomeBadge(context.LatestOutcome)">@context.LatestOutcome</span></CellTemplate>
+                            </DataColumn>
+                            <DataColumn TItem="RecoveryTimeTestingRow" Title="Signal" Width="90px" SortKey="@(x => x.Signal)">
+                                <CellTemplate><span class="fc-badge @SignalBadge(context.Signal)">@context.Signal</span></CellTemplate>
+                            </DataColumn>
+                            <DataColumn TItem="RecoveryTimeTestingRow" Title="Next Test" Width="130px" SortKey="@(x => x.NextTestDue)">
+                                <CellTemplate>@context.NextTestDue.ToString("dd MMM yyyy")</CellTemplate>
+                            </DataColumn>
+                        </ChildContent>
+                    </DataTable>
+                </div>
+            </div>
+
+            <div class="fc-card">
+                <div class="fc-card__header"><h2 class="fc-card__title">Business Continuity Plans (@_data.BusinessContinuityPlans.Count)</h2></div>
+                <div class="fc-card__body">
+                    <DataTable TItem="BusinessContinuityPlanRow" Items="@_data.BusinessContinuityPlans" Sortable="true" ShowExport="true" ExportFileName="bcp-plans">
+                        <ChildContent>
+                            <DataColumn TItem="BusinessContinuityPlanRow" Title="Service" SortKey="@(x => x.ServiceName)">
+                                <CellTemplate><strong>@context.ServiceName</strong></CellTemplate>
+                            </DataColumn>
+                            <DataColumn TItem="BusinessContinuityPlanRow" Title="Owner" Width="120px" SortKey="@(x => x.OwnerLane)">
+                                <CellTemplate>@context.OwnerLane</CellTemplate>
+                            </DataColumn>
+                            <DataColumn TItem="BusinessContinuityPlanRow" Title="Status" Width="100px" SortKey="@(x => x.Status)">
+                                <CellTemplate><span class="fc-badge @BcpStatusBadge(context.Status)">@context.Status</span></CellTemplate>
+                            </DataColumn>
+                            <DataColumn TItem="BusinessContinuityPlanRow" Title="Last Exercised" Width="130px" SortKey="@(x => x.LastExercisedAt)">
+                                <CellTemplate>@(context.LastExercisedAt?.ToString("dd MMM yyyy") ?? "—")</CellTemplate>
+                            </DataColumn>
+                            <DataColumn TItem="BusinessContinuityPlanRow" Title="Next Review" Width="130px" SortKey="@(x => x.NextReviewDue)">
+                                <CellTemplate>@context.NextReviewDue.ToString("dd MMM yyyy")</CellTemplate>
+                            </DataColumn>
+                            <DataColumn TItem="BusinessContinuityPlanRow" Title="Exercise Outcome" Width="130px" SortKey="@(x => x.LatestExerciseOutcome)">
+                                <CellTemplate><span class="fc-badge @OutcomeBadge(context.LatestExerciseOutcome)">@context.LatestExerciseOutcome</span></CellTemplate>
+                            </DataColumn>
+                            <DataColumn TItem="BusinessContinuityPlanRow" Title="Open Actions" Width="100px" SortKey="@(x => x.OpenActionCount)">
+                                <CellTemplate>@context.OpenActionCount</CellTemplate>
+                            </DataColumn>
+                        </ChildContent>
+                    </DataTable>
+                </div>
+            </div>
+        }
+    </SectionErrorBoundary>
+</div>
+
+@code {
+    private bool _loading = true;
+    private Exception? _loadException;
+    private FC.Engine.Admin.Services.Resilience.ResilienceTestingData? _data;
+
+    protected override async Task OnInitializedAsync() => await ReloadAsync();
+    private async Task ReloadAsync()
+    {
+        _loading = true; _loadException = null;
+        try { _data = await ResService.GetTestingDataAsync(); }
+        catch (Exception ex) { _loadException = ex; }
+        finally { _loading = false; }
+    }
+
+    private static string TestStatusBadge(string s) => s switch { "Completed" => "fc-badge--success", "Scheduled" => "fc-badge--info", "Overdue" => "fc-badge--danger", _ => "fc-badge--neutral" };
+    private static string OutcomeBadge(string o) => o switch { "Pass" => "fc-badge--success", "Fail" => "fc-badge--danger", "Partial" => "fc-badge--warning", _ => "fc-badge--neutral" };
+    private static string SignalBadge(string s) => s switch { "green" or "Current" => "fc-badge--success", "amber" or "Watch" => "fc-badge--warning", "red" or "Critical" => "fc-badge--danger", _ => "fc-badge--neutral" };
+    private static string BcpStatusBadge(string s) => s switch { "Current" => "fc-badge--success", "Review Due" => "fc-badge--warning", "Overdue" => "fc-badge--danger", _ => "fc-badge--neutral" };
+}

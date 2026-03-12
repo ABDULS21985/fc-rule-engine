@@ -1,0 +1,93 @@
+@page "/regulator/models"
+@attribute [Authorize(Policy = "RegulatorOnly")]
+@inject FC.Engine.Admin.Services.ModelRisk.ModelGovernanceService ModelService
+
+<PageTitle>Model Governance</PageTitle>
+
+<PageHeader Title="Model Governance"
+            Subtitle="Manage model inventory, validation schedules, performance monitoring, and approval workflows."
+            BackUrl="/regulator">
+    <PrimaryAction><button class="fc-btn fc-btn--primary" @onclick="ReloadAsync" disabled="@_loading">Refresh</button></PrimaryAction>
+</PageHeader>
+
+<div class="fc-page">
+    <SectionErrorBoundary Title="Failed to load model data" ExternalError="@_loadException" OnRetry="ReloadAsync">
+        @if (_loading)
+        {
+            <div class="rg-mrm-kpi-strip">
+                @for (var i = 0; i < 4; i++)
+                {
+                    <div class="rg-mrm-kpi"><SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Block" Height="88px" /></div>
+                }
+            </div>
+        }
+        else if (_data is null)
+        {
+            <EmptyState Context="data" Heading="No model data" Description="Refresh the Intelligence Hub to load model risk data." />
+        }
+        else
+        {
+            <div class="rg-mrm-kpi-strip">
+                <div class="rg-mrm-kpi">
+                    <div class="rg-mrm-kpi-value">@_data.InventoryCount</div>
+                    <div class="rg-mrm-kpi-label">Total Models</div>
+                </div>
+                <div class="rg-mrm-kpi">
+                    <div class="rg-mrm-kpi-value @(_data.DueValidationCount > 0 ? "rg-mrm-kpi-value--amber" : "")">@_data.DueValidationCount</div>
+                    <div class="rg-mrm-kpi-label">Due Validation</div>
+                </div>
+                <div class="rg-mrm-kpi">
+                    <div class="rg-mrm-kpi-value @(_data.PerformanceAlertCount > 0 ? "rg-mrm-kpi-value--red" : "rg-mrm-kpi-value--green")">@_data.PerformanceAlertCount</div>
+                    <div class="rg-mrm-kpi-label">Performance Alerts</div>
+                </div>
+                <div class="rg-mrm-kpi">
+                    <div class="rg-mrm-kpi-value">@_data.ApprovalQueueCount</div>
+                    <div class="rg-mrm-kpi-label">Pending Approvals</div>
+                </div>
+            </div>
+
+            <div class="rg-hub-grid">
+                <a class="rg-hub-card" href="/regulator/models/inventory" style="--stagger-i:0;">
+                    <div class="rg-hub-card-icon rg-hub-icon--blue"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="24" height="24" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div>
+                    <h3 class="rg-hub-card-title">Model Inventory</h3>
+                    <p class="rg-hub-card-desc">Model codes, tiers, owners, and validation status</p>
+                </a>
+                <a class="rg-hub-card" href="/regulator/models/validation" style="--stagger-i:1;">
+                    <div class="rg-hub-card-icon rg-hub-icon--green"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="24" height="24" aria-hidden="true"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg></div>
+                    <h3 class="rg-hub-card-title">Validation Framework</h3>
+                    <p class="rg-hub-card-desc">Validation schedules, types, and findings</p>
+                </a>
+                <a class="rg-hub-card" href="/regulator/models/performance" style="--stagger-i:2;">
+                    <div class="rg-hub-card-icon rg-hub-icon--amber"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="24" height="24" aria-hidden="true"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></div>
+                    <h3 class="rg-hub-card-title">Performance Monitoring</h3>
+                    <p class="rg-hub-card-desc">PSI, backtesting, stability, and calibration metrics</p>
+                </a>
+                <a class="rg-hub-card" href="/regulator/models/changes" style="--stagger-i:3;">
+                    <div class="rg-hub-card-icon rg-hub-icon--purple"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="24" height="24" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></div>
+                    <h3 class="rg-hub-card-title">Change Management</h3>
+                    <p class="rg-hub-card-desc">Approval queue, workflow stages, and audit trail</p>
+                </a>
+                <a class="rg-hub-card" href="/regulator/models/reporting" style="--stagger-i:4;">
+                    <div class="rg-hub-card-icon rg-hub-icon--red"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="24" height="24" aria-hidden="true"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg></div>
+                    <h3 class="rg-hub-card-title">Model Reporting</h3>
+                    <p class="rg-hub-card-desc">Risk appetite, reporting pack, and return status</p>
+                </a>
+            </div>
+        }
+    </SectionErrorBoundary>
+</div>
+
+@code {
+    private bool _loading = true;
+    private Exception? _loadException;
+    private FC.Engine.Admin.Services.ModelRisk.ModelDashboardData? _data;
+
+    protected override async Task OnInitializedAsync() => await ReloadAsync();
+    private async Task ReloadAsync()
+    {
+        _loading = true; _loadException = null;
+        try { _data = await ModelService.GetDashboardAsync(); }
+        catch (Exception ex) { _loadException = ex; }
+        finally { _loading = false; }
+    }
+}

@@ -1,0 +1,154 @@
+@page "/regulator/resilience/incidents"
+@attribute [Authorize(Policy = "RegulatorOnly")]
+@inject FC.Engine.Admin.Services.Resilience.ResilienceOrchestratorService ResService
+
+<PageTitle>Incident Management</PageTitle>
+
+<PageHeader Title="Incident Management"
+            Subtitle="Track incidents with lifecycle timelines, severity levels, and security alerts."
+            BackUrl="/regulator/resilience">
+    <PrimaryAction><button class="fc-btn fc-btn--primary" @onclick="ReloadAsync" disabled="@_loading">Refresh</button></PrimaryAction>
+</PageHeader>
+
+<div class="fc-page">
+    <SectionErrorBoundary Title="Failed to load incidents" ExternalError="@_loadException" OnRetry="ReloadAsync">
+        @if (_loading)
+        {
+            <SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.TableRows" />
+        }
+        else if (_data is null)
+        {
+            <EmptyState Context="data" Heading="No incident data" Description="Refresh the Intelligence Hub to load incident data." />
+        }
+        else
+        {
+            <div class="fc-card fc-card--mb">
+                <div class="fc-card__header"><h2 class="fc-card__title">Incidents (@_data.Incidents.Count)</h2></div>
+                <div class="fc-card__body">
+                    <DataTable TItem="ResilienceIncidentRow" Items="@_data.Incidents" Sortable="true" ShowExport="true" ExportFileName="incidents" Clickable="true" OnRowClick="@(i => SelectIncident(i))">
+                        <ChildContent>
+                            <DataColumn TItem="ResilienceIncidentRow" Title="Incident" SortKey="@(x => x.Title)">
+                                <CellTemplate>
+                                    <strong>@context.Title</strong>
+                                    <div class="fc-text-muted-sm">@context.IncidentKey</div>
+                                </CellTemplate>
+                            </DataColumn>
+                            <DataColumn TItem="ResilienceIncidentRow" Title="Severity" Width="100px" SortKey="@(x => x.Severity)">
+                                <CellTemplate><span class="fc-badge @SeverityBadge(context.Severity)">@context.Severity</span></CellTemplate>
+                            </DataColumn>
+                            <DataColumn TItem="ResilienceIncidentRow" Title="Status" Width="110px" SortKey="@(x => x.Status)">
+                                <CellTemplate><span class="fc-badge @IncidentStatusBadge(context.Status)">@context.Status</span></CellTemplate>
+                            </DataColumn>
+                            <DataColumn TItem="ResilienceIncidentRow" Title="Detected" Width="140px" SortKey="@(x => x.DetectedAt)">
+                                <CellTemplate>@context.DetectedAt.ToString("dd MMM yyyy HH:mm")</CellTemplate>
+                            </DataColumn>
+                            <DataColumn TItem="ResilienceIncidentRow" Title="Contained" Width="140px" SortKey="@(x => x.ContainedAt)">
+                                <CellTemplate>@(context.ContainedAt?.ToString("dd MMM HH:mm") ?? "—")</CellTemplate>
+                            </DataColumn>
+                            <DataColumn TItem="ResilienceIncidentRow" Title="Remediated" Width="140px" SortKey="@(x => x.RemediatedAt)">
+                                <CellTemplate>@(context.RemediatedAt?.ToString("dd MMM HH:mm") ?? "—")</CellTemplate>
+                            </DataColumn>
+                        </ChildContent>
+                    </DataTable>
+                </div>
+            </div>
+
+            @if (_selectedTimeline is not null)
+            {
+                <div class="fc-card fc-card--mb">
+                    <div class="fc-card__header">
+                        <h2 class="fc-card__title">Timeline: @_selectedTimeline.Title</h2>
+                        <span class="fc-badge @SeverityBadge(_selectedTimeline.Severity)" style="margin-left:var(--space-2);">@_selectedTimeline.Severity</span>
+                    </div>
+                    <div class="fc-card__body">
+                        <div class="rg-res-kpi-strip rg-res-kpi-strip--compact">
+                            <div class="rg-res-kpi">
+                                <div class="rg-res-kpi-value">@_selectedTimeline.CurrentPhase</div>
+                                <div class="rg-res-kpi-label">Current Phase</div>
+                            </div>
+                            @if (_selectedTimeline.DetectionToContainHours.HasValue)
+                            {
+                                <div class="rg-res-kpi">
+                                    <div class="rg-res-kpi-value">@_selectedTimeline.DetectionToContainHours.Value.ToString("F1")h</div>
+                                    <div class="rg-res-kpi-label">Detection to Contain</div>
+                                </div>
+                            }
+                            @if (_selectedTimeline.DetectionToRecoverHours.HasValue)
+                            {
+                                <div class="rg-res-kpi">
+                                    <div class="rg-res-kpi-value">@_selectedTimeline.DetectionToRecoverHours.Value.ToString("F1")h</div>
+                                    <div class="rg-res-kpi-label">Detection to Recover</div>
+                                </div>
+                            }
+                        </div>
+                        <p class="fc-text-muted" style="margin-top:var(--space-3);">@_selectedTimeline.Narrative</p>
+                        @foreach (var step in _selectedTimeline.Steps)
+                        {
+                            <div class="rg-res-timeline-step">
+                                <span class="fc-badge @(step.State == "Complete" ? "fc-badge--success" : step.State == "Active" ? "fc-badge--warning" : "fc-badge--neutral")">@step.Stage</span>
+                                <span class="fc-text-muted-sm" style="margin-left:var(--space-2);">@step.Commentary</span>
+                                @if (step.ElapsedHours.HasValue)
+                                {
+                                    <span class="fc-text-muted-sm" style="margin-left:auto;">@step.ElapsedHours.Value.ToString("F1")h</span>
+                                }
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
+
+            @if (_data.SecurityAlerts.Count > 0)
+            {
+                <div class="fc-card">
+                    <div class="fc-card__header"><h2 class="fc-card__title">Security Alerts (@_data.SecurityAlerts.Count)</h2></div>
+                    <div class="fc-card__body">
+                        <DataTable TItem="SecurityAlertRow" Items="@_data.SecurityAlerts" Sortable="true" ShowExport="true" ExportFileName="security-alerts">
+                            <ChildContent>
+                                <DataColumn TItem="SecurityAlertRow" Title="Alert" SortKey="@(x => x.Title)">
+                                    <CellTemplate><strong>@context.Title</strong></CellTemplate>
+                                </DataColumn>
+                                <DataColumn TItem="SecurityAlertRow" Title="Type" Width="120px" SortKey="@(x => x.AlertType)">
+                                    <CellTemplate>@context.AlertType</CellTemplate>
+                                </DataColumn>
+                                <DataColumn TItem="SecurityAlertRow" Title="Severity" Width="100px" SortKey="@(x => x.Severity)">
+                                    <CellTemplate><span class="fc-badge @SeverityBadge(context.Severity)">@context.Severity</span></CellTemplate>
+                                </DataColumn>
+                                <DataColumn TItem="SecurityAlertRow" Title="Status" Width="100px" SortKey="@(x => x.Status)">
+                                    <CellTemplate><span class="fc-badge @IncidentStatusBadge(context.Status)">@context.Status</span></CellTemplate>
+                                </DataColumn>
+                                <DataColumn TItem="SecurityAlertRow" Title="Created" Width="140px" SortKey="@(x => x.CreatedAt)">
+                                    <CellTemplate>@context.CreatedAt.ToString("dd MMM yyyy HH:mm")</CellTemplate>
+                                </DataColumn>
+                            </ChildContent>
+                        </DataTable>
+                    </div>
+                </div>
+            }
+        }
+    </SectionErrorBoundary>
+</div>
+
+@code {
+    private bool _loading = true;
+    private Exception? _loadException;
+    private FC.Engine.Admin.Services.Resilience.ResilienceIncidentData? _data;
+    private ResilienceIncidentTimelineRow? _selectedTimeline;
+
+    protected override async Task OnInitializedAsync() => await ReloadAsync();
+    private async Task ReloadAsync()
+    {
+        _loading = true; _loadException = null;
+        try { _data = await ResService.GetIncidentDataAsync(); }
+        catch (Exception ex) { _loadException = ex; }
+        finally { _loading = false; }
+    }
+
+    private void SelectIncident(ResilienceIncidentRow incident)
+    {
+        _selectedTimeline = _data?.Timelines.FirstOrDefault(t => t.IncidentKey == incident.IncidentKey);
+        StateHasChanged();
+    }
+
+    private static string SeverityBadge(string s) => s switch { "Critical" => "fc-badge--danger", "High" => "fc-badge--warning", "Medium" => "fc-badge--info", "Low" => "fc-badge--neutral", _ => "fc-badge--neutral" };
+    private static string IncidentStatusBadge(string s) => s switch { "Open" => "fc-badge--danger", "Contained" => "fc-badge--warning", "Remediated" or "Closed" => "fc-badge--success", _ => "fc-badge--neutral" };
+}

@@ -1,0 +1,80 @@
+@page "/regulator/resilience/third-party"
+@attribute [Authorize(Policy = "RegulatorOnly")]
+@inject FC.Engine.Admin.Services.Resilience.ResilienceOrchestratorService ResService
+
+<PageTitle>Third-Party Risk</PageTitle>
+
+<PageHeader Title="Third-Party Risk"
+            Subtitle="Provider concentration, service criticality, dependent assets, and risk tiers."
+            BackUrl="/regulator/resilience"
+            CountBadge="@(!_loading ? _providers?.Count : null)">
+    <PrimaryAction><button class="fc-btn fc-btn--primary" @onclick="ReloadAsync" disabled="@_loading">Refresh</button></PrimaryAction>
+</PageHeader>
+
+<div class="fc-page">
+    <SectionErrorBoundary Title="Failed to load third-party data" ExternalError="@_loadException" OnRetry="ReloadAsync">
+        @if (_loading)
+        {
+            <SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.TableRows" />
+        }
+        else if (_providers is null || _providers.Count == 0)
+        {
+            <EmptyState Context="data" Heading="No third-party data" Description="Refresh the Intelligence Hub to load third-party provider data." />
+        }
+        else
+        {
+            <div class="fc-card">
+                <div class="fc-card__body">
+                    <DataTable TItem="ThirdPartyProviderRiskRow" Items="@_providers" PageSize="20" Sortable="true" ShowExport="true" ExportFileName="third-party-risk">
+                        <ChildContent>
+                            <DataColumn TItem="ThirdPartyProviderRiskRow" Title="Provider" SortKey="@(x => x.ProviderName)">
+                                <CellTemplate>
+                                    <strong>@context.ProviderName</strong>
+                                    <div class="fc-text-muted-sm">@context.ProviderType</div>
+                                </CellTemplate>
+                            </DataColumn>
+                            <DataColumn TItem="ThirdPartyProviderRiskRow" Title="Services" Width="90px" SortKey="@(x => x.ServiceCount)">
+                                <CellTemplate>@context.ServiceCount</CellTemplate>
+                            </DataColumn>
+                            <DataColumn TItem="ThirdPartyProviderRiskRow" Title="Critical" Width="90px" SortKey="@(x => x.CriticalServiceCount)">
+                                <CellTemplate>
+                                    <strong class="@(context.CriticalServiceCount > 0 ? "rg-res-kpi-value--red" : "")">@context.CriticalServiceCount</strong>
+                                </CellTemplate>
+                            </DataColumn>
+                            <DataColumn TItem="ThirdPartyProviderRiskRow" Title="Dependent Assets" Width="120px" SortKey="@(x => x.DependentAssetCount)">
+                                <CellTemplate>@context.DependentAssetCount</CellTemplate>
+                            </DataColumn>
+                            <DataColumn TItem="ThirdPartyProviderRiskRow" Title="Criticality" Width="100px" SortKey="@(x => x.HighestCriticality)">
+                                <CellTemplate><span class="fc-badge @CritBadge(context.HighestCriticality)">@context.HighestCriticality</span></CellTemplate>
+                            </DataColumn>
+                            <DataColumn TItem="ThirdPartyProviderRiskRow" Title="Signal" Width="90px" SortKey="@(x => x.Signal)">
+                                <CellTemplate><span class="fc-badge @SignalBadge(context.Signal)">@context.Signal</span></CellTemplate>
+                            </DataColumn>
+                            <DataColumn TItem="ThirdPartyProviderRiskRow" Title="Linked Services" SortKey="@(x => x.LinkedServices.Count)">
+                                <CellTemplate><span class="fc-text-muted-sm">@string.Join(", ", context.LinkedServices.Take(3))@(context.LinkedServices.Count > 3 ? $" +{context.LinkedServices.Count - 3}" : "")</span></CellTemplate>
+                            </DataColumn>
+                        </ChildContent>
+                    </DataTable>
+                </div>
+            </div>
+        }
+    </SectionErrorBoundary>
+</div>
+
+@code {
+    private bool _loading = true;
+    private Exception? _loadException;
+    private List<ThirdPartyProviderRiskRow>? _providers;
+
+    protected override async Task OnInitializedAsync() => await ReloadAsync();
+    private async Task ReloadAsync()
+    {
+        _loading = true; _loadException = null;
+        try { _providers = await ResService.GetThirdPartyRegisterAsync(); }
+        catch (Exception ex) { _loadException = ex; }
+        finally { _loading = false; }
+    }
+
+    private static string CritBadge(string c) => c switch { "Critical" => "fc-badge--danger", "High" => "fc-badge--warning", "Medium" => "fc-badge--info", _ => "fc-badge--neutral" };
+    private static string SignalBadge(string s) => s switch { "green" or "Current" => "fc-badge--success", "amber" or "Watch" => "fc-badge--warning", "red" or "Critical" => "fc-badge--danger", _ => "fc-badge--neutral" };
+}

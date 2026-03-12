@@ -1,0 +1,86 @@
+@page "/regulator/resilience/services"
+@attribute [Authorize(Policy = "RegulatorOnly")]
+@inject FC.Engine.Admin.Services.Resilience.ResilienceOrchestratorService ResService
+@inject FC.Engine.Admin.Services.ToastService Toast
+
+<PageTitle>Business Services</PageTitle>
+
+<PageHeader Title="Important Business Services"
+            Subtitle="Track service criticality, dependencies, recovery targets, and test outcomes."
+            BackUrl="/regulator/resilience"
+            CountBadge="@(!_loading ? _services?.Count : null)">
+    <PrimaryAction>
+        <button class="fc-btn fc-btn--primary" @onclick="ReloadAsync" disabled="@_loading">Refresh</button>
+    </PrimaryAction>
+</PageHeader>
+
+<div class="fc-page">
+    <SectionErrorBoundary Title="Failed to load business services" ExternalError="@_loadException" OnRetry="ReloadAsync">
+        @if (_loading)
+        {
+            <SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.TableRows" />
+        }
+        else if (_services is null || _services.Count == 0)
+        {
+            <EmptyState Context="data" Heading="No business services" Description="Refresh the Intelligence Hub to load important business service data." />
+        }
+        else
+        {
+            <div class="fc-card">
+                <div class="fc-card__body">
+                    <DataTable TItem="ImportantBusinessServiceRow" Items="@_services" PageSize="20" Sortable="true" ShowExport="true" ExportFileName="business-services">
+                        <ChildContent>
+                            <DataColumn TItem="ImportantBusinessServiceRow" Title="Service" SortKey="@(x => x.ServiceName)">
+                                <CellTemplate>
+                                    <strong>@context.ServiceName</strong>
+                                    <div class="fc-text-muted-sm">@context.ServiceOwner</div>
+                                </CellTemplate>
+                            </DataColumn>
+                            <DataColumn TItem="ImportantBusinessServiceRow" Title="Asset" SortKey="@(x => x.SupportingAsset)">
+                                <CellTemplate>@context.SupportingAsset <span class="fc-text-muted-sm">(@context.AssetType)</span></CellTemplate>
+                            </DataColumn>
+                            <DataColumn TItem="ImportantBusinessServiceRow" Title="Criticality" Width="110px" SortKey="@(x => x.Criticality)">
+                                <CellTemplate><span class="fc-badge @CriticalityBadge(context.Criticality)">@context.Criticality</span></CellTemplate>
+                            </DataColumn>
+                            <DataColumn TItem="ImportantBusinessServiceRow" Title="Dependencies" Width="110px" SortKey="@(x => x.DependencyCount)">
+                                <CellTemplate>@context.DependencyCount</CellTemplate>
+                            </DataColumn>
+                            <DataColumn TItem="ImportantBusinessServiceRow" Title="Max Disruption" Width="120px" SortKey="@(x => x.MaximumDisruptionMinutes)">
+                                <CellTemplate>@context.MaximumDisruptionMinutes min</CellTemplate>
+                            </DataColumn>
+                            <DataColumn TItem="ImportantBusinessServiceRow" Title="Recovery Target" Width="120px" SortKey="@(x => x.RecoveryTargetMinutes)">
+                                <CellTemplate>@context.RecoveryTargetMinutes min</CellTemplate>
+                            </DataColumn>
+                            <DataColumn TItem="ImportantBusinessServiceRow" Title="Test Outcome" Width="110px" SortKey="@(x => x.LatestTestOutcome)">
+                                <CellTemplate><span class="fc-badge @OutcomeBadge(context.LatestTestOutcome)">@context.LatestTestOutcome</span></CellTemplate>
+                            </DataColumn>
+                            <DataColumn TItem="ImportantBusinessServiceRow" Title="Status" Width="100px" SortKey="@(x => x.Status)">
+                                <CellTemplate><span class="fc-badge @StatusBadge(context.Status)">@context.Status</span></CellTemplate>
+                            </DataColumn>
+                        </ChildContent>
+                    </DataTable>
+                </div>
+            </div>
+        }
+    </SectionErrorBoundary>
+</div>
+
+@code {
+    private bool _loading = true;
+    private Exception? _loadException;
+    private List<ImportantBusinessServiceRow>? _services;
+
+    protected override async Task OnInitializedAsync() => await ReloadAsync();
+
+    private async Task ReloadAsync()
+    {
+        _loading = true; _loadException = null;
+        try { _services = await ResService.GetBusinessServicesAsync(); }
+        catch (Exception ex) { _loadException = ex; }
+        finally { _loading = false; }
+    }
+
+    private static string CriticalityBadge(string c) => c switch { "Critical" => "fc-badge--danger", "High" => "fc-badge--warning", "Medium" => "fc-badge--info", _ => "fc-badge--neutral" };
+    private static string OutcomeBadge(string o) => o switch { "Pass" => "fc-badge--success", "Fail" => "fc-badge--danger", "Partial" => "fc-badge--warning", _ => "fc-badge--neutral" };
+    private static string StatusBadge(string s) => s switch { "Active" => "fc-badge--success", "Degraded" => "fc-badge--warning", "Down" => "fc-badge--danger", _ => "fc-badge--neutral" };
+}

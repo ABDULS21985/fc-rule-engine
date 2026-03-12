@@ -78,6 +78,12 @@ builder.Services.AddScoped<FC.Engine.Admin.Services.Compliance.ComplianceGraphSe
 builder.Services.AddScoped<FC.Engine.Admin.Services.Sanctions.ScreeningEngineService>();
 builder.Services.AddScoped<FC.Engine.Admin.Services.Sanctions.AlertWorkflowService>();
 
+// Operational Resilience
+builder.Services.AddScoped<FC.Engine.Admin.Services.Resilience.ResilienceOrchestratorService>();
+
+// Model Risk Management
+builder.Services.AddScoped<FC.Engine.Admin.Services.ModelRisk.ModelGovernanceService>();
+
 // Platform Admin services
 builder.Services.AddScoped<FC.Engine.Admin.Services.TenantManagementService>();
 builder.Services.AddScoped<FC.Engine.Admin.Services.PlatformAdminService>();

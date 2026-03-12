@@ -1,0 +1,92 @@
+@page "/regulator/models/validation"
+@attribute [Authorize(Policy = "RegulatorOnly")]
+@inject FC.Engine.Admin.Services.ModelRisk.ModelGovernanceService ModelService
+
+<PageTitle>Validation Framework</PageTitle>
+
+<PageHeader Title="Validation Framework"
+            Subtitle="Validation schedules, types, focus areas, and due dates across all models."
+            BackUrl="/regulator/models"
+            CountBadge="@(!_loading ? _schedule?.Count : null)">
+    <PrimaryAction><button class="fc-btn fc-btn--primary" @onclick="ReloadAsync" disabled="@_loading">Refresh</button></PrimaryAction>
+</PageHeader>
+
+<div class="fc-page">
+    <SectionErrorBoundary Title="Failed to load validation schedule" ExternalError="@_loadException" OnRetry="ReloadAsync">
+        @if (_loading) { <SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.TableRows" /> }
+        else if (_schedule is null || _schedule.Count == 0) { <EmptyState Context="data" Heading="No validation schedule" Description="Materialise model risk data via the Intelligence Hub." /> }
+        else
+        {
+            <div class="rg-mrm-kpi-strip">
+                <div class="rg-mrm-kpi">
+                    <div class="rg-mrm-kpi-value">@_schedule.Count</div>
+                    <div class="rg-mrm-kpi-label">Total Validations</div>
+                </div>
+                <div class="rg-mrm-kpi">
+                    <div class="rg-mrm-kpi-value rg-mrm-kpi-value--red">@_schedule.Count(v => v.Status is "Overdue")</div>
+                    <div class="rg-mrm-kpi-label">Overdue</div>
+                </div>
+                <div class="rg-mrm-kpi">
+                    <div class="rg-mrm-kpi-value rg-mrm-kpi-value--amber">@_schedule.Count(v => v.Status is "Due Soon" or "Due")</div>
+                    <div class="rg-mrm-kpi-label">Due Soon</div>
+                </div>
+                <div class="rg-mrm-kpi">
+                    <div class="rg-mrm-kpi-value rg-mrm-kpi-value--green">@_schedule.Count(v => v.Status is "Current")</div>
+                    <div class="rg-mrm-kpi-label">Current</div>
+                </div>
+            </div>
+
+            <div class="fc-card">
+                <div class="fc-card__body">
+                    <DataTable TItem="ModelValidationScheduleRow" Items="@_schedule" PageSize="20" Sortable="true" ShowExport="true" ExportFileName="validation-schedule">
+                        <ChildContent>
+                            <DataColumn TItem="ModelValidationScheduleRow" Title="Code" Width="110px" SortKey="@(x => x.ModelCode)">
+                                <CellTemplate><span class="fc-badge fc-badge--neutral">@context.ModelCode</span></CellTemplate>
+                            </DataColumn>
+                            <DataColumn TItem="ModelValidationScheduleRow" Title="Model" SortKey="@(x => x.ModelName)">
+                                <CellTemplate><strong>@context.ModelName</strong></CellTemplate>
+                            </DataColumn>
+                            <DataColumn TItem="ModelValidationScheduleRow" Title="Tier" Width="80px" SortKey="@(x => x.Tier)">
+                                <CellTemplate><span class="fc-badge @TierBadge(context.Tier)">@context.Tier</span></CellTemplate>
+                            </DataColumn>
+                            <DataColumn TItem="ModelValidationScheduleRow" Title="Type" Width="130px" SortKey="@(x => x.ValidationType)">
+                                <CellTemplate>@context.ValidationType</CellTemplate>
+                            </DataColumn>
+                            <DataColumn TItem="ModelValidationScheduleRow" Title="Focus" SortKey="@(x => x.Focus)">
+                                <CellTemplate>@context.Focus</CellTemplate>
+                            </DataColumn>
+                            <DataColumn TItem="ModelValidationScheduleRow" Title="Status" Width="110px" SortKey="@(x => x.Status)">
+                                <CellTemplate><span class="fc-badge @StatusBadge(context.Status)">@context.Status</span></CellTemplate>
+                            </DataColumn>
+                            <DataColumn TItem="ModelValidationScheduleRow" Title="Days Until Due" Width="120px" SortKey="@(x => x.DaysUntilDue)">
+                                <CellTemplate>
+                                    <span class="@(context.DaysUntilDue < 0 ? "fc-text-danger" : context.DaysUntilDue < 30 ? "fc-text-warning" : "")">
+                                        @(context.DaysUntilDue < 0 ? $"{Math.Abs(context.DaysUntilDue)}d overdue" : $"{context.DaysUntilDue}d")
+                                    </span>
+                                </CellTemplate>
+                            </DataColumn>
+                            <DataColumn TItem="ModelValidationScheduleRow" Title="Next Due" Width="130px" SortKey="@(x => x.NextValidationDue)">
+                                <CellTemplate>@context.NextValidationDue.ToString("dd MMM yyyy")</CellTemplate>
+                            </DataColumn>
+                            <DataColumn TItem="ModelValidationScheduleRow" Title="Last Evidence" Width="130px" SortKey="@(x => x.LastEvidenceAt)">
+                                <CellTemplate>@(context.LastEvidenceAt?.ToString("dd MMM yyyy") ?? "—")</CellTemplate>
+                            </DataColumn>
+                        </ChildContent>
+                    </DataTable>
+                </div>
+            </div>
+        }
+    </SectionErrorBoundary>
+</div>
+
+@code {
+    private bool _loading = true;
+    private Exception? _loadException;
+    private List<ModelValidationScheduleRow>? _schedule;
+
+    protected override async Task OnInitializedAsync() => await ReloadAsync();
+    private async Task ReloadAsync() { _loading = true; _loadException = null; try { _schedule = await ModelService.GetValidationScheduleAsync(); } catch (Exception ex) { _loadException = ex; } finally { _loading = false; } }
+
+    private static string TierBadge(string t) => t switch { "T1" => "fc-badge--danger", "T2" => "fc-badge--warning", "T3" => "fc-badge--info", _ => "fc-badge--neutral" };
+    private static string StatusBadge(string s) => s switch { "Current" => "fc-badge--success", "Due" or "Due Soon" => "fc-badge--warning", "Overdue" => "fc-badge--danger", _ => "fc-badge--neutral" };
+}

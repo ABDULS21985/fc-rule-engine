@@ -1,0 +1,75 @@
+@page "/regulator/resilience/tolerances"
+@attribute [Authorize(Policy = "RegulatorOnly")]
+@inject FC.Engine.Admin.Services.Resilience.ResilienceOrchestratorService ResService
+
+<PageTitle>Impact Tolerances</PageTitle>
+
+<PageHeader Title="Impact Tolerances"
+            Subtitle="Service disruption tolerances and recovery targets with breach status indicators."
+            BackUrl="/regulator/resilience"
+            CountBadge="@(!_loading ? _tolerances?.Count : null)">
+    <PrimaryAction><button class="fc-btn fc-btn--primary" @onclick="ReloadAsync" disabled="@_loading">Refresh</button></PrimaryAction>
+</PageHeader>
+
+<div class="fc-page">
+    <SectionErrorBoundary Title="Failed to load tolerances" ExternalError="@_loadException" OnRetry="ReloadAsync">
+        @if (_loading)
+        {
+            <SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.TableRows" />
+        }
+        else if (_tolerances is null || _tolerances.Count == 0)
+        {
+            <EmptyState Context="data" Heading="No tolerance data" Description="Refresh the Intelligence Hub to load impact tolerance data." />
+        }
+        else
+        {
+            <div class="fc-card">
+                <div class="fc-card__body">
+                    <DataTable TItem="ImpactToleranceRow" Items="@_tolerances" Sortable="true" ShowExport="true" ExportFileName="impact-tolerances">
+                        <ChildContent>
+                            <DataColumn TItem="ImpactToleranceRow" Title="Service" SortKey="@(x => x.ServiceName)">
+                                <CellTemplate><strong>@context.ServiceName</strong></CellTemplate>
+                            </DataColumn>
+                            <DataColumn TItem="ImpactToleranceRow" Title="Max Disruption (min)" Width="150px" SortKey="@(x => x.MaximumDisruptionMinutes)">
+                                <CellTemplate>@context.MaximumDisruptionMinutes</CellTemplate>
+                            </DataColumn>
+                            <DataColumn TItem="ImpactToleranceRow" Title="Recovery Target (min)" Width="150px" SortKey="@(x => x.RecoveryTargetMinutes)">
+                                <CellTemplate>@context.RecoveryTargetMinutes</CellTemplate>
+                            </DataColumn>
+                            <DataColumn TItem="ImpactToleranceRow" Title="Dependencies" Width="110px" SortKey="@(x => x.DependencyCount)">
+                                <CellTemplate>@context.DependencyCount</CellTemplate>
+                            </DataColumn>
+                            <DataColumn TItem="ImpactToleranceRow" Title="Test Outcome" Width="110px" SortKey="@(x => x.LatestTestOutcome)">
+                                <CellTemplate><span class="fc-badge @OutcomeBadge(context.LatestTestOutcome)">@context.LatestTestOutcome</span></CellTemplate>
+                            </DataColumn>
+                            <DataColumn TItem="ImpactToleranceRow" Title="Signal" Width="100px" SortKey="@(x => x.Signal)">
+                                <CellTemplate><span class="fc-badge @SignalBadge(context.Signal)">@context.Signal</span></CellTemplate>
+                            </DataColumn>
+                            <DataColumn TItem="ImpactToleranceRow" Title="Commentary" SortKey="@(x => x.Commentary)">
+                                <CellTemplate><span class="fc-text-muted-sm">@context.Commentary</span></CellTemplate>
+                            </DataColumn>
+                        </ChildContent>
+                    </DataTable>
+                </div>
+            </div>
+        }
+    </SectionErrorBoundary>
+</div>
+
+@code {
+    private bool _loading = true;
+    private Exception? _loadException;
+    private List<ImpactToleranceRow>? _tolerances;
+
+    protected override async Task OnInitializedAsync() => await ReloadAsync();
+    private async Task ReloadAsync()
+    {
+        _loading = true; _loadException = null;
+        try { _tolerances = await ResService.GetImpactTolerancesAsync(); }
+        catch (Exception ex) { _loadException = ex; }
+        finally { _loading = false; }
+    }
+
+    private static string SignalBadge(string s) => s switch { "green" or "Current" => "fc-badge--success", "amber" or "Watch" => "fc-badge--warning", "red" or "Critical" => "fc-badge--danger", _ => "fc-badge--neutral" };
+    private static string OutcomeBadge(string o) => o switch { "Pass" => "fc-badge--success", "Fail" => "fc-badge--danger", "Partial" => "fc-badge--warning", _ => "fc-badge--neutral" };
+}
