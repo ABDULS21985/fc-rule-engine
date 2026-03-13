@@ -250,6 +250,30 @@ public sealed class StressTestIntegrationTests
         Assert.Equal(0x46, pdfBytes[3]);
     }
 
+    [Fact]
+    public async Task GetRunSummaryAsync_WithPersistedRun_ReturnsMaterialisedSummary()
+    {
+        await _fx.SeedSectorAsync("2026-Q1", new[]
+        {
+            (31, "DMB", 18.0m, 4.0m, 130.0m, 25.0m),
+            (32, "MFB", 11.5m, 7.0m, 112.0m, 2.0m),
+        });
+
+        var run = await _fx.Orchestrator.RunAsync(
+            "CBN", scenarioId: 4, periodCode: "2026-Q1",
+            timeHorizon: "1Y", initiatedByUserId: 1);
+
+        var reloaded = await _fx.Orchestrator.GetRunSummaryAsync(run.RunGuid, "CBN");
+
+        Assert.NotNull(reloaded);
+        Assert.Equal(run.RunGuid, reloaded!.RunGuid);
+        Assert.Equal(run.RunId, reloaded.RunId);
+        Assert.Equal(run.ScenarioCode, reloaded.ScenarioCode);
+        Assert.Equal(run.PeriodCode, reloaded.PeriodCode);
+        Assert.NotEmpty(reloaded.BySector);
+        Assert.True(reloaded.Duration >= TimeSpan.Zero);
+    }
+
     // ── Test 8: Resilience rating scale is correct ────────────────────────────
     [Fact]
     public void MacroShockTransmitter_HealthyBank_NoBreaches()
@@ -341,12 +365,16 @@ CREATE TABLE Institutions (
     RegulatorCode   VARCHAR(10)     NOT NULL,
     InstitutionType VARCHAR(20)     NOT NULL,
     LicenseNumber   VARCHAR(50)     NOT NULL,
+    InstitutionName NVARCHAR(150)   NULL,
     ShortName       NVARCHAR(150)   NOT NULL,
     IsActive        BIT             NOT NULL DEFAULT 1
 );
 
-IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name='PrudentialMetrics')
-CREATE TABLE PrudentialMetrics (
+IF SCHEMA_ID('meta') IS NULL
+    EXEC('CREATE SCHEMA meta');
+
+IF OBJECT_ID('meta.prudential_metrics', 'U') IS NULL
+CREATE TABLE meta.prudential_metrics (
     InstitutionId       INT             NOT NULL,
     RegulatorCode       VARCHAR(10)     NOT NULL,
     InstitutionType     VARCHAR(20)     NOT NULL,
@@ -367,8 +395,8 @@ CREATE TABLE PrudentialMetrics (
     PRIMARY KEY (InstitutionId, PeriodCode)
 );
 
-IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name='InterbankExposures')
-CREATE TABLE InterbankExposures (
+IF OBJECT_ID('meta.interbank_exposures', 'U') IS NULL
+CREATE TABLE meta.interbank_exposures (
     Id                      INT IDENTITY(1,1) PRIMARY KEY,
     LendingInstitutionId    INT             NOT NULL,
     BorrowingInstitutionId  INT             NOT NULL,
@@ -412,6 +440,9 @@ BEGIN
         FXDepreciationPct       DECIMAL(8,4)    NULL,
         InflationShockPp        DECIMAL(8,4)    NULL,
         InterestRateShockBps    INT             NULL,
+        TradeVolumeShockPct     DECIMAL(8,4)    NULL,
+        RemittanceShockPct      DECIMAL(8,4)    NULL,
+        FDIShockPct             DECIMAL(8,4)    NULL,
         CarbonTaxUSDPerTon      DECIMAL(10,2)   NULL,
         PhysicalRiskHazardCode  VARCHAR(20)     NULL,
         StrandedAssetsPct       DECIMAL(8,4)    NULL,
@@ -585,8 +616,8 @@ USING (VALUES
 ) AS s(Id, RegulatorCode, InstitutionType, LicenseNumber, ShortName)
 ON t.Id = s.Id
 WHEN NOT MATCHED THEN
-    INSERT (Id, RegulatorCode, InstitutionType, LicenseNumber, ShortName, IsActive)
-    VALUES (s.Id, s.RegulatorCode, s.InstitutionType, s.LicenseNumber, s.ShortName, 1);
+    INSERT (Id, RegulatorCode, InstitutionType, LicenseNumber, InstitutionName, ShortName, IsActive)
+    VALUES (s.Id, s.RegulatorCode, s.InstitutionType, s.LicenseNumber, s.ShortName, s.ShortName, 1);
 """);
     }
 
@@ -598,7 +629,7 @@ WHEN NOT MATCHED THEN
         foreach (var e in entities)
         {
             await conn.ExecuteAsync("""
-MERGE PrudentialMetrics AS t
+ MERGE meta.prudential_metrics AS t
 USING (VALUES (@Id, @Period)) AS s(InstitutionId, PeriodCode)
 ON t.InstitutionId = s.InstitutionId AND t.PeriodCode = s.PeriodCode
 WHEN MATCHED THEN
@@ -612,7 +643,7 @@ WHEN NOT MATCHED THEN
             CAR, NPLRatio, LCR, NSFR, ROA, TotalAssets, TotalDeposits,
             OilSectorExposurePct)
     VALUES (@Id,'CBN',@Type, CAST(SYSUTCDATETIME() AS DATE), @Period,
-            @CAR, @NPL, @LCR, 110, 1.5, 200000, 140000, @Oil)
+            @CAR, @NPL, @LCR, 110, 1.5, 200000, 140000, @Oil);
 """,
                 new { Id = e.Id, Type = e.Type, Period = periodCode,
                       CAR = e.CAR, NPL = e.NPL, LCR = e.LCR, Oil = e.OilPct });
@@ -625,10 +656,10 @@ WHEN NOT MATCHED THEN
         using var conn = await Db.OpenAsync();
         await conn.ExecuteAsync("""
 IF NOT EXISTS (
-    SELECT 1 FROM InterbankExposures
+    SELECT 1 FROM meta.interbank_exposures
     WHERE LendingInstitutionId=@L AND BorrowingInstitutionId=@B
       AND ExposureType='PLACEMENT' AND PeriodCode=@P)
-INSERT INTO InterbankExposures
+INSERT INTO meta.interbank_exposures
     (LendingInstitutionId, BorrowingInstitutionId, RegulatorCode,
      PeriodCode, ExposureAmount, ExposureType, AsOfDate)
 VALUES (@L, @B, 'CBN', @P, @Amount, 'PLACEMENT',

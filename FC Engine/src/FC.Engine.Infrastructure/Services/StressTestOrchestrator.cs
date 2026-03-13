@@ -156,6 +156,8 @@ public sealed class StressTestOrchestrator : IStressTestOrchestrator
             new { Id = run.Id })).ToList();
 
         var score = (double)(run.SystemicResilienceScore ?? 50m);
+        var startedAt = AsUtc(run.StartedAt);
+        var completedAt = run.CompletedAt.HasValue ? AsUtc(run.CompletedAt.Value) : DateTimeOffset.UtcNow;
         return new StressTestRunSummary(
             RunId: run.Id, RunGuid: run.RunGuid,
             ScenarioCode: run.ScenarioCode, ScenarioName: run.ScenarioName,
@@ -165,7 +167,7 @@ public sealed class StressTestOrchestrator : IStressTestOrchestrator
             BySector: aggregates,
             TotalCapitalShortfallNgn: aggregates.Sum(a => a.TotalCapitalShortfall),
             TotalNDICExposureAtRisk:  aggregates.Sum(a => a.TotalInsurableDepositsAtRisk),
-            Duration: (run.CompletedAt ?? DateTimeOffset.UtcNow) - run.StartedAt,
+            Duration: completedAt - startedAt,
             ExecutiveSummary: run.ExecutiveSummary);
     }
 
@@ -196,7 +198,33 @@ public sealed class StressTestOrchestrator : IStressTestOrchestrator
         LoadScenarioParametersAsync(IDbConnection conn, int scenarioId)
     {
         var rows = await conn.QueryAsync<ScenarioParamRow>(
-            "SELECT * FROM StressScenarioParameters WHERE ScenarioId=@Id",
+            """
+            SELECT Id,
+                   ScenarioId,
+                   InstitutionType,
+                   ISNULL(GDPGrowthShock, 0) AS GDPGrowthShock,
+                   ISNULL(OilPriceShockPct, 0) AS OilPriceShockPct,
+                   ISNULL(FXDepreciationPct, 0) AS FXDepreciationPct,
+                   ISNULL(InflationShockPp, 0) AS InflationShockPp,
+                   ISNULL(InterestRateShockBps, 0) AS InterestRateShockBps,
+                   ISNULL(TradeVolumeShockPct, 0) AS TradeVolumeShockPct,
+                   ISNULL(RemittanceShockPct, 0) AS RemittanceShockPct,
+                   ISNULL(FDIShockPct, 0) AS FDIShockPct,
+                   ISNULL(CarbonTaxUSDPerTon, 0) AS CarbonTaxUSDPerTon,
+                   PhysicalRiskHazardCode,
+                   ISNULL(StrandedAssetsPct, 0) AS StrandedAssetsPct,
+                   ISNULL(CARDeltaPerGDPPp, 0) AS CARDeltaPerGDPPp,
+                   ISNULL(NPLDeltaPerGDPPp, 0) AS NPLDeltaPerGDPPp,
+                   ISNULL(LCRDeltaPerRateHike100, 0) AS LCRDeltaPerRateHike100,
+                   ISNULL(CARDeltaPerFXPct, 0) AS CARDeltaPerFXPct,
+                   ISNULL(NPLDeltaPerFXPct, 0) AS NPLDeltaPerFXPct,
+                   ISNULL(CARDeltaPerOilPct, 0) AS CARDeltaPerOilPct,
+                   ISNULL(NPLDeltaPerOilPct, 0) AS NPLDeltaPerOilPct,
+                   ISNULL(LCRDeltaPerCyber, 0) AS LCRDeltaPerCyber,
+                   ISNULL(DepositOutflowPctCyber, 0) AS DepositOutflowPctCyber
+            FROM StressScenarioParameters
+            WHERE ScenarioId = @Id
+            """,
             new { Id = scenarioId });
 
         return rows.ToDictionary(r => r.InstitutionType, r => new ResolvedShockParameters(
@@ -488,12 +516,15 @@ Policy recommendation: {GetPolicyRecommendation(rating, totalBreachCAR, entityCo
     private static decimal Avg(List<EntityShockResult> list, Func<EntityShockResult, decimal> sel)
         => list.Count == 0 ? 0m : list.Average(sel);
 
+    private static DateTimeOffset AsUtc(DateTime value) =>
+        new(DateTime.SpecifyKind(value, DateTimeKind.Utc));
+
     // ── Row types ─────────────────────────────────────────────────────────────
     private sealed record RunRow(
         long Id, Guid RunGuid, int ScenarioId, string PeriodCode,
         string TimeHorizon, int EntitiesShocked, int ContagionRounds,
         decimal? SystemicResilienceScore, string? ExecutiveSummary,
-        DateTimeOffset StartedAt, DateTimeOffset? CompletedAt,
+        DateTime StartedAt, DateTime? CompletedAt,
         string ScenarioCode, string ScenarioName);
 
     private sealed record ScenarioParamRow(
@@ -502,7 +533,7 @@ Policy recommendation: {GetPolicyRecommendation(rating, totalBreachCAR, entityCo
         decimal FXDepreciationPct, decimal InflationShockPp,
         int InterestRateShockBps,
         decimal TradeVolumeShockPct, decimal RemittanceShockPct, decimal FDIShockPct,
-        decimal CarbonTaxUSDPerTon, string PhysicalRiskHazardCode,
+        decimal CarbonTaxUSDPerTon, string? PhysicalRiskHazardCode,
         decimal StrandedAssetsPct,
         decimal CARDeltaPerGDPPp, decimal NPLDeltaPerGDPPp,
         decimal LCRDeltaPerRateHike100, decimal CARDeltaPerFXPct,

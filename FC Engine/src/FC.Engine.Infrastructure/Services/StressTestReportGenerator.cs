@@ -80,7 +80,27 @@ public sealed class StressTestReportGenerator : IStressTestReportGenerator
             new { RunId = runId })).ToList();
 
         var sectorAggregates = (await conn.QueryAsync<SectorAggRow>(
-            "SELECT * FROM StressTestSectorAggregates WHERE RunId=@Id ORDER BY InstitutionType",
+            """
+            SELECT InstitutionType,
+                   EntityCount,
+                   PreAvgCAR,
+                   PreAvgNPL,
+                   PreAvgLCR,
+                   PostAvgCAR,
+                   PostAvgNPL,
+                   PostAvgLCR,
+                   EntitiesBreachingCAR,
+                   EntitiesBreachingLCR,
+                   EntitiesInsolvent,
+                   EntitiesContagionVictims,
+                   TotalCapitalShortfall,
+                   TotalAdditionalProvisions,
+                   TotalInsurableDepositsAtRisk,
+                   TotalUninsurableDepositsAtRisk
+            FROM StressTestSectorAggregates
+            WHERE RunId = @Id
+            ORDER BY InstitutionType
+            """,
             new { Id = runId })).ToList();
 
         var contagionEvents = (await conn.QueryAsync<ContagionEventRow>(
@@ -112,7 +132,7 @@ public sealed class StressTestReportGenerator : IStressTestReportGenerator
 
         var score        = (double)(run.SystemicResilienceScore ?? 50m);
         var rating       = GetRating(score);
-        var reportDate   = run.CompletedAt ?? DateTimeOffset.UtcNow;
+        var reportDate   = run.CompletedAt.HasValue ? AsUtc(run.CompletedAt.Value) : DateTimeOffset.UtcNow;
         var totalShortfall = sectorAggregates.Sum(a => a.TotalCapitalShortfall);
         var totalNdic    = sectorAggregates.Sum(a => a.TotalInsurableDepositsAtRisk);
 
@@ -564,12 +584,15 @@ or management responses that may mitigate identified risks.
         _            => BandCritical
     };
 
+    private static DateTimeOffset AsUtc(DateTime value) =>
+        new(DateTime.SpecifyKind(value, DateTimeKind.Utc));
+
     // ── Row types ─────────────────────────────────────────────────────────────
     private sealed record RunDetailRow(
         long Id, Guid RunGuid, string PeriodCode, string TimeHorizon,
         int EntitiesShocked, int ContagionRounds,
         decimal? SystemicResilienceScore, string? ExecutiveSummary,
-        DateTimeOffset StartedAt, DateTimeOffset? CompletedAt,
+        DateTime StartedAt, DateTime? CompletedAt,
         string ScenarioCode, string ScenarioName, string Category,
         string Severity, string NarrativeSummary);
 
