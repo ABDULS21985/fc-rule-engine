@@ -2,7 +2,7 @@
 @attribute [Authorize]
 @using FC.Engine.Domain.Abstractions
 @using FC.Engine.Domain.Models
-@inject IForeSightService ForeSightService
+@inject Microsoft.Extensions.DependencyInjection.IServiceScopeFactory ScopeFactory
 @inject IJSRuntime JS
 
 <PageTitle>ForeSight</PageTitle>
@@ -960,9 +960,15 @@
     private bool _busy;
     private string? _error;
 
-    protected override async Task OnInitializedAsync()
+    protected override async Task OnAfterRenderAsync(bool firstRender)
     {
+        if (!firstRender)
+        {
+            return;
+        }
+
         await LoadAsync();
+        await InvokeAsync(StateHasChanged);
     }
 
     private async Task LoadAsync()
@@ -978,7 +984,7 @@
                 ?? throw new InvalidOperationException("Tenant context is missing from the current session.");
 
             _tenantId = Guid.Parse(tenantValue);
-            _dashboard = await ForeSightService.GetTenantDashboardAsync(_tenantId);
+            _dashboard = await LoadDashboardAsync(_tenantId);
         }
         catch (Exception ex)
         {
@@ -1002,8 +1008,8 @@
 
         try
         {
-            await ForeSightService.RunAllPredictionsAsync(_tenantId, "PORTAL_USER");
-            _dashboard = await ForeSightService.GetTenantDashboardAsync(_tenantId);
+            await RunPredictionsAsync(_tenantId, "PORTAL_USER");
+            _dashboard = await LoadDashboardAsync(_tenantId);
         }
         catch (Exception ex)
         {
@@ -1027,7 +1033,9 @@
 
         try
         {
-            var bytes = await ForeSightService.ExportFilingRiskReportAsync(_tenantId);
+            await using var scope = ScopeFactory.CreateAsyncScope();
+            var foreSightService = scope.ServiceProvider.GetRequiredService<IForeSightService>();
+            var bytes = await foreSightService.ExportFilingRiskReportAsync(_tenantId);
             var fileName = $"foresight-filing-risk-{DateTime.UtcNow:yyyyMMddHHmmss}.pdf";
             await JS.InvokeVoidAsync("portalDownloadBase64File", Convert.ToBase64String(bytes), fileName, "application/pdf");
         }
@@ -1045,7 +1053,9 @@
     {
         try
         {
-            await ForeSightService.DismissAlertAsync(alertId, "PORTAL_USER");
+            await using var scope = ScopeFactory.CreateAsyncScope();
+            var foreSightService = scope.ServiceProvider.GetRequiredService<IForeSightService>();
+            await foreSightService.DismissAlertAsync(alertId, "PORTAL_USER");
             if (_dashboard is not null)
             {
                 _dashboard.Alerts.RemoveAll(x => x.Id == alertId);
@@ -1056,6 +1066,37 @@
             _error = $"Unable to dismiss alert: {ex.Message}";
         }
     }
+
+    private async Task<ForeSightDashboardData> LoadDashboardAsync(Guid tenantId)
+    {
+        await using var readScope = ScopeFactory.CreateAsyncScope();
+        var readService = readScope.ServiceProvider.GetRequiredService<IForeSightService>();
+        var dashboard = await readService.GetTenantDashboardAsync(tenantId);
+
+        if (!NeedsBootstrap(dashboard))
+        {
+            return dashboard;
+        }
+
+        await RunPredictionsAsync(tenantId, "FORESIGHT_AUTO");
+
+        await using var refreshedScope = ScopeFactory.CreateAsyncScope();
+        var refreshedService = refreshedScope.ServiceProvider.GetRequiredService<IForeSightService>();
+        return await refreshedService.GetTenantDashboardAsync(tenantId);
+    }
+
+    private async Task RunPredictionsAsync(Guid tenantId, string performedBy)
+    {
+        await using var scope = ScopeFactory.CreateAsyncScope();
+        var foreSightService = scope.ServiceProvider.GetRequiredService<IForeSightService>();
+        await foreSightService.RunAllPredictionsAsync(tenantId, performedBy);
+    }
+
+    private static bool NeedsBootstrap(ForeSightDashboardData dashboard) =>
+        dashboard.FilingRisks.Count == 0
+        && dashboard.CapitalForecasts.Count == 0
+        && dashboard.ComplianceForecast is null
+        && dashboard.Alerts.Count == 0;
 
     private static decimal BuildAverageConfidence(ForeSightDashboardData dashboard)
     {

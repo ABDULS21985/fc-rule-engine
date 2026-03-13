@@ -35,8 +35,6 @@ public sealed class ForeSightService : IForeSightService
 
     public async Task<ForeSightDashboardData> GetTenantDashboardAsync(Guid tenantId, CancellationToken ct = default)
     {
-        await EnsureFreshPredictionsAsync(tenantId, ct);
-
         var predictions = await GetPredictionsAsync(tenantId, null, ct);
         var alerts = await GetAlertsAsync(tenantId, true, ct);
 
@@ -126,8 +124,6 @@ public sealed class ForeSightService : IForeSightService
 
     public async Task<IReadOnlyList<ForeSightPredictionSummary>> GetPredictionsAsync(Guid tenantId, string? modelCode = null, CancellationToken ct = default)
     {
-        await EnsureFreshPredictionsAsync(tenantId, ct);
-
         var query = _db.ForeSightPredictions
             .AsNoTracking()
             .Where(x => x.TenantId == tenantId && !x.IsSuppressed);
@@ -385,21 +381,6 @@ public sealed class ForeSightService : IForeSightService
             .FirstOrDefaultAsync(ct) ?? "Unknown tenant";
 
         return new ForeSightFilingRiskReportDocument(tenantName, dashboard.FilingRisks).GeneratePdf();
-    }
-
-    private async Task EnsureFreshPredictionsAsync(Guid tenantId, CancellationToken ct)
-    {
-        var staleAfterHours = ForeSightSupport.ParseInt((await GetConfigMapAsync(ct)).GetValueOrDefault("prediction.stale_after_hours"), 24);
-
-        var latest = await _db.ForeSightPredictions
-            .AsNoTracking()
-            .Where(x => x.TenantId == tenantId)
-            .MaxAsync(x => (DateTime?)x.CreatedAt, ct);
-
-        if (!latest.HasValue || latest.Value <= DateTime.UtcNow.AddHours(-staleAfterHours))
-        {
-            await RunAllPredictionsAsync(tenantId, "FORESIGHT_AUTO", ct);
-        }
     }
 
     private async Task<List<GeneratedPrediction>> BuildFilingRiskPredictionsAsync(InstitutionContext context, IReadOnlyDictionary<string, string> config, CancellationToken ct)

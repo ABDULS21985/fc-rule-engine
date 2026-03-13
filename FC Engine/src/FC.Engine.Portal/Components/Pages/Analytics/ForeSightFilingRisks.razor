@@ -2,7 +2,7 @@
 @attribute [Authorize]
 @using FC.Engine.Domain.Abstractions
 @using FC.Engine.Domain.Models
-@inject IForeSightService ForeSightService
+@inject Microsoft.Extensions.DependencyInjection.IServiceScopeFactory ScopeFactory
 
 <PageTitle>ForeSight Filing Risks</PageTitle>
 
@@ -272,6 +272,7 @@
     private List<FilingRiskForecast> _items = new();
     private bool _loading = true;
     private string? _error;
+    private bool _interactiveReady;
 
     private string ScopeLabel => string.IsNullOrWhiteSpace(Module) ? "All module forecasts" : $"{Module} filter";
 
@@ -290,9 +291,24 @@
         .Take(5)
         .ToList();
 
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+        {
+            return;
+        }
+
+        _interactiveReady = true;
+        await LoadAsync();
+        await InvokeAsync(StateHasChanged);
+    }
+
     protected override async Task OnParametersSetAsync()
     {
-        await LoadAsync();
+        if (_interactiveReady)
+        {
+            await LoadAsync();
+        }
     }
 
     private async Task LoadAsync()
@@ -308,7 +324,9 @@
                 ?? throw new InvalidOperationException("Tenant context is missing from the current session.");
 
             var tenantId = Guid.Parse(tenantValue);
-            var dashboard = await ForeSightService.GetTenantDashboardAsync(tenantId);
+            await using var scope = ScopeFactory.CreateAsyncScope();
+            var foreSightService = scope.ServiceProvider.GetRequiredService<IForeSightService>();
+            var dashboard = await foreSightService.GetTenantDashboardAsync(tenantId);
             _items = dashboard.FilingRisks
                 .Where(x => string.IsNullOrWhiteSpace(Module) || x.ModuleCode.Equals(Module, StringComparison.OrdinalIgnoreCase))
                 .ToList();

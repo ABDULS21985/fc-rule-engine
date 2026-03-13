@@ -2,7 +2,7 @@
 @attribute [Authorize]
 @using FC.Engine.Domain.Abstractions
 @using FC.Engine.Domain.Models
-@inject IForeSightService ForeSightService
+@inject Microsoft.Extensions.DependencyInjection.IServiceScopeFactory ScopeFactory
 
 <PageTitle>ForeSight Compliance Trend</PageTitle>
 
@@ -254,9 +254,15 @@
     private bool _loading = true;
     private string? _error;
 
-    protected override async Task OnInitializedAsync()
+    protected override async Task OnAfterRenderAsync(bool firstRender)
     {
+        if (!firstRender)
+        {
+            return;
+        }
+
         await LoadAsync();
+        await InvokeAsync(StateHasChanged);
     }
 
     private async Task LoadAsync()
@@ -272,7 +278,9 @@
                 ?? throw new InvalidOperationException("Tenant context is missing from the current session.");
 
             var tenantId = Guid.Parse(tenantValue);
-            var dashboard = await ForeSightService.GetTenantDashboardAsync(tenantId);
+            await using var scope = ScopeFactory.CreateAsyncScope();
+            var foreSightService = scope.ServiceProvider.GetRequiredService<IForeSightService>();
+            var dashboard = await foreSightService.GetTenantDashboardAsync(tenantId);
             _forecast = dashboard.ComplianceForecast;
         }
         catch (Exception ex)
