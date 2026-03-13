@@ -1,3 +1,4 @@
+@page "/validation/hub"
 @page "/validation/hub/{SubmissionId:int}"
 @attribute [Microsoft.AspNetCore.Authorization.Authorize(Policy = "InstitutionUser")]
 @using Microsoft.AspNetCore.Components.Authorization
@@ -30,6 +31,24 @@
             {
                 <div class="portal-skeleton" style="height: 54px; margin-bottom: 10px; border-radius: 8px;"></div>
             }
+        </div>
+    </div>
+}
+else if (_isLandingMode)
+{
+    <div class="portal-page">
+        <div class="portal-empty-state portal-card">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="48" height="48" aria-hidden="true">
+                <circle cx="12" cy="12" r="10"/>
+                <path d="M9 12l2 2 4-4"/>
+                <path d="M12 2v2M12 20v2M2 12h2M20 12h2"/>
+            </svg>
+            <h3>Select a submission to inspect</h3>
+            <p>Validation Hub needs a specific submission context. Open a recent submission or run a fresh validation check first.</p>
+            <div style="display:flex;gap:0.75rem;justify-content:center;flex-wrap:wrap;margin-top:1rem;">
+                <a href="/submissions" class="portal-btn portal-btn-primary">Browse Submissions</a>
+                <a href="/validate" class="portal-btn portal-btn-outline">Quick Validate</a>
+            </div>
         </div>
     </div>
 }
@@ -512,6 +531,7 @@ else
     [Inject] private NavigationManager Nav { get; set; } = default!;
 
     private bool _loading = true;
+    private bool _isLandingMode;
     private ValidationHubData? _data;
     private string _submissionsHref = "/submissions";
     private HashSet<string> _expandedGroups = new();
@@ -525,8 +545,14 @@ else
         new("Validation Report", IsCurrent: true),
     ];
 
-    protected override async Task OnInitializedAsync()
+    protected override async Task OnParametersSetAsync()
     {
+        _loading = true;
+        _isLandingMode = false;
+        _data = null;
+        _expandedGroups.Clear();
+        _expandedFixes.Clear();
+
         try
         {
             var state = await AuthState!;
@@ -536,6 +562,13 @@ else
                 _loading = false;
                 return;
             }
+
+            if (SubmissionId <= 0)
+            {
+                _isLandingMode = true;
+                return;
+            }
+
             _data = await HubSvc.GetHubDataAsync(SubmissionId, institutionId);
             _submissionsHref = _data?.SubmissionsHref ?? "/submissions";
 
