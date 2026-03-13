@@ -1,0 +1,102 @@
+@page "/platform/complianceiq/templates"
+@attribute [Authorize(Policy = "PlatformAdmin")]
+@using FC.Engine.Domain.Abstractions
+@using FC.Engine.Domain.Models
+@using Microsoft.AspNetCore.Authorization
+@inject IComplianceIqService ComplianceIqService
+
+<PageTitle>ComplianceIQ Templates</PageTitle>
+
+<PageHeader Title="ComplianceIQ Templates"
+            Subtitle="Auditable template catalog for grounded natural language query planning."
+            CountBadge="@(!_loading ? _templates.Count : null)">
+    <PrimaryAction>
+        <button class="fc-btn fc-btn--primary" type="button" @onclick="LoadAsync">Refresh</button>
+    </PrimaryAction>
+</PageHeader>
+
+<SectionErrorBoundary Title="Couldn't load ComplianceIQ templates" ExternalError="@_loadError" OnRetry="LoadAsync">
+    @if (_loading)
+    {
+        <SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Block" Height="320px" />
+    }
+    else if (_templates.Count == 0)
+    {
+        <EmptyState Context="templates"
+                    Heading="No query templates"
+                    Description="No ComplianceIQ templates are currently registered."
+                    PrimaryActionLabel="Reload"
+                    OnPrimaryAction="LoadAsync" />
+    }
+    else
+    {
+        <div class="fc-card">
+            <div class="fc-card__body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0" aria-label="ComplianceIQ template catalog">
+                        <thead class="table-light">
+                            <tr>
+                                <th scope="col">Intent</th>
+                                <th scope="col">Template</th>
+                                <th scope="col">Display Name</th>
+                                <th scope="col">Visualization</th>
+                                <th scope="col">Context</th>
+                                <th scope="col">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var template in _templates)
+                            {
+                                <tr>
+                                    <td>@template.IntentCode</td>
+                                    <td><code>@template.TemplateCode</code></td>
+                                    <td>
+                                        <div class="fw-semibold">@template.DisplayName</div>
+                                        <div class="small text-muted">@template.Description</div>
+                                    </td>
+                                    <td>@template.VisualizationType</td>
+                                    <td>@(template.RequiresRegulatorContext ? "Regulator" : "Institution")</td>
+                                    <td>
+                                        <span class="badge @(template.IsActive ? "bg-success" : "bg-secondary")">
+                                            @(template.IsActive ? "Active" : "Inactive")
+                                        </span>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    }
+</SectionErrorBoundary>
+
+@code {
+    private IReadOnlyList<ComplianceIqTemplateCatalogItem> _templates = Array.Empty<ComplianceIqTemplateCatalogItem>();
+    private bool _loading = true;
+    private Exception? _loadError;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _loadError = null;
+
+        try
+        {
+            _templates = await ComplianceIqService.GetTemplateCatalogAsync();
+        }
+        catch (Exception ex)
+        {
+            _loadError = ex;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+}

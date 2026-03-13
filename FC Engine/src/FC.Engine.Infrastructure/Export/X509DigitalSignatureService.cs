@@ -109,11 +109,29 @@ public class X509DigitalSignatureService : IDigitalSignatureService
         }
 
         var password = _settings.DigitalSignature.CertificatePassword;
-        _cachedCertificate = string.IsNullOrWhiteSpace(password)
-            ? new X509Certificate2(certPath)
-            : new X509Certificate2(certPath, password, X509KeyStorageFlags.MachineKeySet);
+        _cachedCertificate = LoadCertificateFromPath(certPath, password, X509KeyStorageFlags.MachineKeySet);
 
         _logger.LogInformation("Loaded digital signature certificate: {Thumbprint}", _cachedCertificate.Thumbprint);
         return _cachedCertificate;
+    }
+
+    private static X509Certificate2 LoadCertificateFromPath(
+        string path,
+        string? password,
+        X509KeyStorageFlags keyStorageFlags)
+    {
+        var isPkcs12 = path.EndsWith(".pfx", StringComparison.OrdinalIgnoreCase)
+            || path.EndsWith(".p12", StringComparison.OrdinalIgnoreCase);
+
+        if (!isPkcs12 && string.IsNullOrWhiteSpace(password))
+        {
+            return X509CertificateLoader.LoadCertificateFromFile(path);
+        }
+
+        return X509CertificateLoader.LoadPkcs12FromFile(
+            path,
+            password ?? string.Empty,
+            keyStorageFlags,
+            loaderLimits: null);
     }
 }

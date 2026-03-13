@@ -341,7 +341,7 @@ public sealed class EWIEngine : IEWIEngine
                 lcrBreachCount, 3, regulatorCode, periodCode, runId);
 
         // Sector-wide NPL rising across multiple institution types
-        var sectorNPLRow = await conn.QuerySingleOrDefaultAsync(
+        var sectorNPLRow = await conn.QuerySingleOrDefaultAsync<SectorNplRow>(
             """
             SELECT AVG(NPLRatio) AS CurrentAvgNPL,
                    COUNT(DISTINCT InstitutionType) AS TypesRising
@@ -448,5 +448,11 @@ public sealed class EWIEngine : IEWIEngine
         public int? LateFilingCount { get; set; }
         public string? AuditOpinionCode { get; set; }
         public decimal? TotalAssets { get; set; }
+    }
+
+    private sealed class SectorNplRow
+    {
+        public decimal CurrentAvgNPL { get; set; }
+        public int TypesRising { get; set; }
     }
 }

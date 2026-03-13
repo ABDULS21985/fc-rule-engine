@@ -62,10 +62,18 @@ public sealed class CaaSRedisRateLimiter : ICaaSRateLimiter
         try
         {
             var db = _redis.GetDatabase();
-            var result = (RedisValue[])await db.ScriptEvaluateAsync(
+            var result = (RedisValue[]?)await db.ScriptEvaluateAsync(
                 SlidingWindowScript,
                 new RedisKey[] { key },
                 new RedisValue[] { limit, windowMs, nowMs });
+
+            if (result is null || result.Length < 3)
+            {
+                _log.LogWarning(
+                    "Redis rate limiter script returned an unexpected response for partner {PartnerId}",
+                    partnerId);
+                return new RateLimitResult(true, limit, limit, 0);
+            }
 
             var current = (int)result[0];
             var allowed = (int)result[2] == 1;

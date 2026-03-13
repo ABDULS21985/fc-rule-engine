@@ -1,0 +1,289 @@
+@page "/regulator/complianceiq"
+@attribute [Authorize(Policy = "RegulatorOnly")]
+@using System.Globalization
+@using System.Security.Claims
+@using FC.Engine.Admin.Services
+@using FC.Engine.Domain.Abstractions
+@using FC.Engine.Domain.Models
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.AspNetCore.Components.Web
+@inject IComplianceIqService ComplianceIqService
+@inject RegulatorSessionService RegulatorSession
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject NavigationManager Navigation
+
+<PageTitle>ComplianceIQ Regulator</PageTitle>
+
+<PageHeader Title="ComplianceIQ"
+            Subtitle="Grounded regulator-side natural language analytics across supervised entities."
+            CountBadge="@(_messages.Count > 0 ? _messages.Count : (int?)null)">
+    <PrimaryAction>
+        <button class="fc-btn fc-btn--primary" type="button" @onclick="StartNewConversation">New Chat</button>
+    </PrimaryAction>
+    <SecondaryActions>
+        <button class="fc-btn fc-btn--outline" type="button" @onclick="ExportConversationAsync" disabled="@(!_conversationId.HasValue)">Export PDF</button>
+    </SecondaryActions>
+</PageHeader>
+
+<SectionErrorBoundary Title="Couldn't load ComplianceIQ" ExternalError="@_error" OnRetry="InitializeAsync">
+    <div class="fc-card">
+        <div class="fc-card__body" style="min-height: 540px; display: flex; flex-direction: column;">
+            <div class="flex-grow-1 overflow-auto">
+                @if (_messages.Count == 0)
+                {
+                    <div class="text-center py-5">
+                        <h3 class="h5 mb-2">Regulator analytics chat</h3>
+                        <p class="text-muted mb-4">Ask cross-tenant questions about sector aggregates, rankings, comparisons, anomalies, and deadlines.</p>
+                        <div class="d-flex flex-wrap justify-content-center gap-2">
+                            @foreach (var question in _quickQuestions)
+                            {
+                                <button class="fc-btn fc-btn--outline" type="button" @onclick="() => AskQuickQuestionAsync(question.QuestionText)">
+                                    @question.QuestionText
+                                </button>
+                            }
+                        </div>
+                    </div>
+                }
+                else
+                {
+                    @foreach (var message in _messages)
+                    {
+                        @if (message.IsUser)
+                        {
+                            <div class="d-flex justify-content-end mb-3">
+                                <div class="rounded-3 px-3 py-2 text-white" style="max-width: 75%; background: #0b4f6c;">
+                                    @message.Text
+                                </div>
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="mb-3">
+                                <div class="border rounded-3 px-3 py-2 bg-light">
+                                    <div style="white-space: pre-wrap;">@message.Text</div>
+
+                                    @if (message.Response?.Rows.Count > 0)
+                                    {
+                                        <div class="table-responsive mt-3">
+                                            <table class="table table-sm table-striped mb-2" aria-label="ComplianceIQ regulator response data">
+                                                <thead class="table-light">
+                                                    <tr>
+                                                        @foreach (var header in message.Response.Rows[0].Keys)
+                                                        {
+                                                            <th scope="col">@FormatHeader(header)</th>
+                                                        }
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    @foreach (var row in message.Response.Rows.Take(10))
+                                                    {
+                                                        <tr>
+                                                            @foreach (var header in message.Response.Rows[0].Keys)
+                                                            {
+                                                                <td>@FormatCell(row.GetValueOrDefault(header))</td>
+                                                            }
+                                                        </tr>
+                                                    }
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    }
+
+                                    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 border-top pt-2 mt-2">
+                                        <div class="small text-muted">
+                                            @if (message.Response?.Citations.Count > 0)
+                                            {
+                                                <span>Sources: @string.Join(", ", message.Response.Citations.Take(3).Select(FormatCitation))</span>
+                                            }
+                                        </div>
+                                        <div class="d-flex align-items-center gap-2">
+                                            @if (message.Response is not null)
+                                            {
+                                                <span class="@message.Response.ConfidenceCssClass">@message.Response.ConfidenceLevel</span>
+                                                <span class="small text-muted">@message.Response.TotalTimeMs ms</span>
+                                            }
+                                        </div>
+                                    </div>
+
+                                    @if (message.Response?.FollowUpSuggestions.Count > 0)
+                                    {
+                                        <div class="d-flex flex-wrap gap-2 mt-2">
+                                            @foreach (var suggestion in message.Response.FollowUpSuggestions)
+                                            {
+                                                <button class="fc-btn fc-btn--ghost" type="button" @onclick="() => AskQuickQuestionAsync(suggestion)">
+                                                    @suggestion
+                                                </button>
+                                            }
+                                        </div>
+                                    }
+                                </div>
+                            </div>
+                        }
+                    }
+
+                    @if (_isLoading)
+                    {
+                        <div class="d-flex align-items-center gap-2 text-muted">
+                            <span class="spinner-border spinner-border-sm" role="status"></span>
+                            <span>Processing regulator query...</span>
+                        </div>
+                    }
+                }
+            </div>
+
+            <div class="border-top pt-3 mt-3">
+                <div class="input-group">
+                    <input class="form-control"
+                           type="text"
+                           placeholder="Ask sector, comparison, ranking, anomaly, or deadline questions..."
+                           @bind="_query"
+                           @bind:event="oninput"
+                           @onkeydown="HandleKeyDown"
+                           disabled="@_isLoading"
+                           aria-label="ComplianceIQ regulator query input" />
+                    <button class="btn btn-primary" type="button" @onclick="SendAsync" disabled="@(_isLoading || string.IsNullOrWhiteSpace(_query))">
+                        Ask
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</SectionErrorBoundary>
+
+@code {
+    private readonly List<ChatMessage> _messages = new();
+    private IReadOnlyList<ComplianceIqQuickQuestionView> _quickQuestions = Array.Empty<ComplianceIqQuickQuestionView>();
+    private Guid? _conversationId;
+    private string _query = string.Empty;
+    private bool _isLoading;
+    private Exception? _error;
+    private RegulatorSessionContext? _session;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await InitializeAsync();
+    }
+
+    private async Task InitializeAsync()
+    {
+        _error = null;
+        _session = await RegulatorSession.GetRequiredAsync();
+        _quickQuestions = await ComplianceIqService.GetQuickQuestionsAsync(true);
+    }
+
+    private async Task SendAsync()
+    {
+        if (_isLoading || string.IsNullOrWhiteSpace(_query))
+        {
+            return;
+        }
+
+        var prompt = _query.Trim();
+        _query = string.Empty;
+        _messages.Add(new ChatMessage { IsUser = true, Text = prompt });
+        _isLoading = true;
+
+        try
+        {
+            _session ??= await RegulatorSession.GetRequiredAsync();
+            var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+            var principal = authState.User;
+            var userId = principal.FindFirst(ClaimTypes.NameIdentifier)?.Value
+                ?? principal.Identity?.Name
+                ?? _session.UserId.ToString(CultureInfo.InvariantCulture);
+            var userRole = principal.FindFirst(ClaimTypes.Role)?.Value ?? "Regulator";
+
+            var response = await ComplianceIqService.QueryAsync(new ComplianceIqQueryRequest
+            {
+                Query = prompt,
+                TenantId = _session.TenantId,
+                UserId = userId,
+                UserRole = userRole,
+                ConversationId = _conversationId,
+                IsRegulatorContext = true,
+                RegulatorCode = _session.RegulatorCode
+            });
+
+            _conversationId = response.ConversationId;
+            _messages.Add(new ChatMessage
+            {
+                IsUser = false,
+                Text = response.Answer,
+                Response = response
+            });
+        }
+        catch (Exception ex)
+        {
+            _error = ex;
+            _messages.Add(new ChatMessage
+            {
+                IsUser = false,
+                Text = "ComplianceIQ could not process that regulator question. Narrow the field, period, or institution scope and try again."
+            });
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private async Task AskQuickQuestionAsync(string question)
+    {
+        _query = question;
+        await SendAsync();
+    }
+
+    private void HandleKeyDown(KeyboardEventArgs args)
+    {
+        if (args.Key == "Enter" && !args.ShiftKey)
+        {
+            _ = SendAsync();
+        }
+    }
+
+    private void StartNewConversation()
+    {
+        _conversationId = null;
+        _messages.Clear();
+        _error = null;
+    }
+
+    private Task ExportConversationAsync()
+    {
+        if (_conversationId.HasValue)
+        {
+            Navigation.NavigateTo($"/regulator/complianceiq/conversations/{_conversationId.Value:D}/export", forceLoad: true);
+        }
+
+        return Task.CompletedTask;
+    }
+
+    private static string FormatHeader(string value) =>
+        value.Replace("_", " ", StringComparison.Ordinal).Trim();
+
+    private static string FormatCitation(ComplianceIqCitation citation)
+    {
+        var module = string.IsNullOrWhiteSpace(citation.SourceModule) ? "Unknown module" : citation.SourceModule;
+        var period = string.IsNullOrWhiteSpace(citation.SourcePeriod) ? "latest" : citation.SourcePeriod;
+        return $"{module} / {period}";
+    }
+
+    private static string FormatCell(object? value) => value switch
+    {
+        null => "—",
+        decimal number => number.ToString("N2", CultureInfo.InvariantCulture),
+        double number => number.ToString("N2", CultureInfo.InvariantCulture),
+        float number => number.ToString("N2", CultureInfo.InvariantCulture),
+        DateTime date => date.ToString("dd MMM yyyy", CultureInfo.InvariantCulture),
+        bool flag => flag ? "Yes" : "No",
+        _ => value.ToString() ?? "—"
+    };
+
+    private sealed class ChatMessage
+    {
+        public bool IsUser { get; set; }
+        public string Text { get; set; } = string.Empty;
+        public ComplianceIqQueryResponse? Response { get; set; }
+    }
+}

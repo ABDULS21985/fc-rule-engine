@@ -66,10 +66,15 @@ public class RegulatoryCalendarImportService(IServiceProvider serviceProvider)
             if (parsed is not null) rows.Add(parsed);
         }
 
-        int lineNum = hasHeader ? 2 : 2;
-        while (!reader.EndOfStream)
+        var lineNum = 2;
+        while (true)
         {
             var line = await reader.ReadLineAsync(ct);
+            if (line is null)
+            {
+                break;
+            }
+
             if (string.IsNullOrWhiteSpace(line)) { lineNum++; continue; }
 
             var row = ParseRow(line, lineNum);

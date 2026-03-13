@@ -86,7 +86,10 @@ public sealed class BatchSubmissionSigningService : ISubmissionSigningService
             if (string.IsNullOrWhiteSpace(certPath))
                 return Task.FromResult(false);
 
-            using var cert = new X509Certificate2(certPath, _settings.DigitalSignature.CertificatePassword);
+            using var cert = LoadCertificateFromPath(
+                certPath,
+                _settings.DigitalSignature.CertificatePassword,
+                X509KeyStorageFlags.DefaultKeySet);
             var rsa = cert.GetRSAPublicKey();
             if (rsa is null) return Task.FromResult(false);
 
@@ -123,9 +126,7 @@ public sealed class BatchSubmissionSigningService : ISubmissionSigningService
             if (string.IsNullOrWhiteSpace(path))
                 throw new InvalidOperationException("DigitalSignature:CertificatePath is not configured.");
 
-            _certCache = string.IsNullOrWhiteSpace(password)
-                ? new X509Certificate2(path)
-                : new X509Certificate2(path, password, X509KeyStorageFlags.Exportable);
+            _certCache = LoadCertificateFromPath(path, password, X509KeyStorageFlags.Exportable);
 
             return _certCache;
         }
@@ -133,6 +134,26 @@ public sealed class BatchSubmissionSigningService : ISubmissionSigningService
         {
             _certLock.Release();
         }
+    }
+
+    private static X509Certificate2 LoadCertificateFromPath(
+        string path,
+        string? password,
+        X509KeyStorageFlags keyStorageFlags)
+    {
+        var isPkcs12 = path.EndsWith(".pfx", StringComparison.OrdinalIgnoreCase)
+            || path.EndsWith(".p12", StringComparison.OrdinalIgnoreCase);
+
+        if (!isPkcs12 && string.IsNullOrWhiteSpace(password))
+        {
+            return X509CertificateLoader.LoadCertificateFromFile(path);
+        }
+
+        return X509CertificateLoader.LoadPkcs12FromFile(
+            path,
+            password ?? string.Empty,
+            keyStorageFlags,
+            loaderLimits: null);
     }
 
     /// <summary>

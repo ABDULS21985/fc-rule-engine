@@ -1,0 +1,117 @@
+@page "/analytics/chat/history"
+@attribute [Authorize]
+@using System.Globalization
+@using System.Security.Claims
+@using FC.Engine.Domain.Abstractions
+@using FC.Engine.Domain.Models
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Authorization
+@inject IComplianceIqService ComplianceIqService
+@inject NavigationManager Navigation
+
+<PageTitle>ComplianceIQ Query History</PageTitle>
+
+<div class="container-fluid px-4 py-3">
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
+        <div>
+            <h1 class="h3 mb-1">ComplianceIQ Query History</h1>
+            <p class="text-muted mb-0">Recent audited questions asked in your tenant workspace.</p>
+        </div>
+        <button class="btn btn-primary btn-sm" type="button" @onclick="OpenChat">
+            Open Chat
+        </button>
+    </div>
+
+    @if (_isLoading)
+    {
+        <div class="text-center py-5">
+            <div class="spinner-border text-primary" role="status"></div>
+            <p class="text-muted mt-3 mb-0">Loading query history...</p>
+        </div>
+    }
+    else if (!string.IsNullOrWhiteSpace(_error))
+    {
+        <div class="alert alert-danger">@_error</div>
+    }
+    else if (_history.Count == 0)
+    {
+        <div class="alert alert-info">No ComplianceIQ queries have been recorded yet for this tenant.</div>
+    }
+    else
+    {
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white">
+                <h2 class="h6 mb-0">Latest questions</h2>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-hover mb-0" aria-label="ComplianceIQ query history">
+                    <thead class="table-light">
+                        <tr>
+                            <th scope="col">When</th>
+                            <th scope="col">User</th>
+                            <th scope="col">Question</th>
+                            <th scope="col">Intent</th>
+                            <th scope="col">Template</th>
+                            <th scope="col">Confidence</th>
+                            <th scope="col">Time</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var entry in _history)
+                        {
+                            <tr>
+                                <td class="text-nowrap">@entry.CreatedAt.ToString("dd MMM yyyy HH:mm", CultureInfo.InvariantCulture)</td>
+                                <td>@entry.UserId</td>
+                                <td>@entry.QueryText</td>
+                                <td>@entry.IntentCode</td>
+                                <td>@entry.TemplateCode</td>
+                                <td>
+                                    <span class="badge @(entry.ConfidenceLevel == "HIGH" ? "bg-success" : entry.ConfidenceLevel == "MEDIUM" ? "bg-warning text-dark" : "bg-danger")">
+                                        @entry.ConfidenceLevel
+                                    </span>
+                                </td>
+                                <td>@entry.TotalTimeMs ms</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthenticationStateTask { get; set; } = default!;
+
+    private IReadOnlyList<ComplianceIqHistoryEntry> _history = Array.Empty<ComplianceIqHistoryEntry>();
+    private bool _isLoading = true;
+    private string? _error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var authState = await AuthenticationStateTask;
+            var principal = authState.User;
+            var tenantId = Guid.Parse(principal.FindFirst("TenantId")?.Value
+                ?? throw new InvalidOperationException("Tenant context is unavailable."));
+            var userId = principal.FindFirst(ClaimTypes.NameIdentifier)?.Value
+                ?? principal.Identity?.Name;
+
+            _history = await ComplianceIqService.GetQueryHistoryAsync(tenantId, userId);
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private void OpenChat()
+    {
+        Navigation.NavigateTo("/analytics/chat");
+    }
+}

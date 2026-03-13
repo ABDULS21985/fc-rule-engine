@@ -1864,6 +1864,35 @@ app.MapGet("/regulator/stress-test/report/pdf", async (
     return Results.File(pdf, "application/pdf", fileName);
 }).RequireAuthorization("RegulatorOnly");
 
+app.MapGet("/regulator/complianceiq/conversations/{conversationId:guid}/export", async (
+    Guid conversationId,
+    HttpContext context,
+    ITenantContext tenantContext,
+    ITenantAccessContextResolver tenantAccessContextResolver,
+    IComplianceIqService complianceIqService) =>
+{
+    if (!tenantContext.CurrentTenantId.HasValue)
+    {
+        return Results.Unauthorized();
+    }
+
+    var accessContext = await tenantAccessContextResolver.TryResolveAsync(
+        tenantContext.CurrentTenantId.Value,
+        context.User,
+        context.RequestAborted);
+    if (accessContext?.TenantType != TenantType.Regulator)
+    {
+        return Results.Forbid();
+    }
+
+    var pdf = await complianceIqService.ExportConversationPdfAsync(
+        conversationId,
+        accessContext.TenantId,
+        context.RequestAborted);
+    var fileName = $"complianceiq-regulator-conversation-{conversationId:D}.pdf";
+    return Results.File(pdf, "application/pdf", fileName);
+}).RequireAuthorization("RegulatorOnly");
+
 static async Task AuditIntelligenceExportAsync(
     HttpContext context,
     IAuditLogger auditLogger,

@@ -194,6 +194,16 @@ public class MetadataDbContext : DbContext
     public DbSet<AnomalyReport> AnomalyReports => Set<AnomalyReport>();
     public DbSet<AnomalyFinding> AnomalyFindings => Set<AnomalyFinding>();
 
+    // Natural language regulatory query interface (AI-02)
+    public DbSet<ComplianceIqConfig> ComplianceIqConfigs => Set<ComplianceIqConfig>();
+    public DbSet<ComplianceIqIntent> ComplianceIqIntents => Set<ComplianceIqIntent>();
+    public DbSet<ComplianceIqTemplate> ComplianceIqTemplates => Set<ComplianceIqTemplate>();
+    public DbSet<ComplianceIqFieldSynonym> ComplianceIqFieldSynonyms => Set<ComplianceIqFieldSynonym>();
+    public DbSet<ComplianceIqConversation> ComplianceIqConversations => Set<ComplianceIqConversation>();
+    public DbSet<ComplianceIqTurn> ComplianceIqTurns => Set<ComplianceIqTurn>();
+    public DbSet<ComplianceIqQuickQuestion> ComplianceIqQuickQuestions => Set<ComplianceIqQuickQuestion>();
+    public DbSet<ComplianceIqFeedback> ComplianceIqFeedback => Set<ComplianceIqFeedback>();
+
     // Cross-Border Harmonisation (RG-41)
     public DbSet<RegulatoryJurisdiction> RegulatoryJurisdictions => Set<RegulatoryJurisdiction>();
     public DbSet<FinancialGroup> FinancialGroups => Set<FinancialGroup>();

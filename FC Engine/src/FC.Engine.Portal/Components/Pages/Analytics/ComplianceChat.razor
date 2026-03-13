@@ -1,0 +1,338 @@
+@page "/analytics/chat"
+@attribute [Authorize]
+@using System.Globalization
+@using System.Security.Claims
+@using FC.Engine.Domain.Abstractions
+@using FC.Engine.Domain.Models
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.AspNetCore.Components.Web
+@inject IComplianceIqService ComplianceIqService
+@inject NavigationManager Navigation
+
+<PageTitle>ComplianceIQ</PageTitle>
+
+<div class="container-fluid px-4 py-3" style="height: calc(100vh - 120px); display: flex; flex-direction: column;">
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-3">
+        <div>
+            <h1 class="h3 mb-1">ComplianceIQ</h1>
+            <p class="text-muted mb-0">Ask grounded questions about returns, anomalies, compliance health, deadlines, and regulatory knowledge.</p>
+        </div>
+        <div class="d-flex gap-2">
+            <button class="btn btn-outline-secondary btn-sm" type="button" @onclick="GoToHistory">
+                Query History
+            </button>
+            <button class="btn btn-outline-secondary btn-sm" type="button" @onclick="ExportConversationAsync" disabled="@(!_conversationId.HasValue)">
+                Export PDF
+            </button>
+            <button class="btn btn-primary btn-sm" type="button" @onclick="StartNewConversation">
+                New Chat
+            </button>
+        </div>
+    </div>
+
+    <div class="card border-0 shadow-sm flex-grow-1 d-flex flex-column">
+        <div class="card-body overflow-auto" style="min-height: 420px;">
+            @if (_messages.Count == 0)
+            {
+                <div class="text-center py-5">
+                    <div class="display-6 mb-3">ComplianceIQ</div>
+                    <p class="text-muted mb-4">Try one of these grounded prompts.</p>
+                    <div class="d-flex flex-wrap justify-content-center gap-2">
+                        @foreach (var question in _quickQuestions)
+                        {
+                            <button class="btn btn-outline-primary btn-sm rounded-pill" type="button" @onclick="() => AskQuickQuestionAsync(question.QuestionText)">
+                                <i class="@question.IconClass me-1"></i>@question.QuestionText
+                            </button>
+                        }
+                    </div>
+                </div>
+            }
+            else
+            {
+                @foreach (var message in _messages)
+                {
+                    @if (message.IsUser)
+                    {
+                        <div class="d-flex justify-content-end mb-3">
+                            <div class="bg-primary text-white rounded-3 px-3 py-2" style="max-width: 75%;">
+                                <div>@message.Text</div>
+                            </div>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="d-flex mb-3">
+                            <div class="bg-light border rounded-3 px-3 py-2 w-100" style="max-width: 92%;">
+                                <div style="white-space: pre-wrap;">@message.Text</div>
+
+                                @if (message.Response?.Rows.Count > 0)
+                                {
+                                    <div class="table-responsive mt-3">
+                                        <table class="table table-sm table-striped align-middle mb-2" aria-label="ComplianceIQ response data">
+                                            <thead class="table-light">
+                                                <tr>
+                                                    @foreach (var header in message.Response.Rows[0].Keys)
+                                                    {
+                                                        <th scope="col">@FormatHeader(header)</th>
+                                                    }
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                @foreach (var row in message.Response.Rows.Take(10))
+                                                {
+                                                    <tr>
+                                                        @foreach (var header in message.Response.Rows[0].Keys)
+                                                        {
+                                                            <td>@FormatCell(row.GetValueOrDefault(header))</td>
+                                                        }
+                                                    </tr>
+                                                }
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                }
+
+                                <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 border-top pt-2 mt-2">
+                                    <div class="small text-muted">
+                                        @if (message.Response?.Citations.Count > 0)
+                                        {
+                                            <span>Sources: @string.Join(", ", message.Response.Citations.Take(3).Select(FormatCitation))</span>
+                                        }
+                                    </div>
+                                    <div class="d-flex align-items-center gap-2">
+                                        @if (message.Response is not null)
+                                        {
+                                            <span class="@message.Response.ConfidenceCssClass">@message.Response.ConfidenceLevel</span>
+                                            <span class="small text-muted">@message.Response.TotalTimeMs ms</span>
+                                        }
+                                    </div>
+                                </div>
+
+                                @if (message.Response?.FollowUpSuggestions.Count > 0)
+                                {
+                                    <div class="d-flex flex-wrap gap-2 mt-2">
+                                        @foreach (var suggestion in message.Response.FollowUpSuggestions)
+                                        {
+                                            <button class="btn btn-outline-secondary btn-sm rounded-pill" type="button" @onclick="() => AskQuickQuestionAsync(suggestion)">
+                                                @suggestion
+                                            </button>
+                                        }
+                                    </div>
+                                }
+
+                                @if (message.Response?.TurnId is int turnId)
+                                {
+                                    <div class="d-flex align-items-center gap-2 mt-2">
+                                        <button class="btn btn-link btn-sm p-0" type="button" @onclick="() => SubmitFeedbackAsync(turnId, (short)5)">
+                                            Helpful
+                                        </button>
+                                        <button class="btn btn-link btn-sm p-0 text-muted" type="button" @onclick="() => SubmitFeedbackAsync(turnId, (short)2)">
+                                            Needs work
+                                        </button>
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                    }
+                }
+
+                @if (_isLoading)
+                {
+                    <div class="d-flex mb-3">
+                        <div class="bg-light border rounded-3 px-3 py-2">
+                            <div class="d-flex align-items-center gap-2">
+                                <div class="spinner-border spinner-border-sm text-primary" role="status"></div>
+                                <span class="text-muted">Processing grounded query...</span>
+                            </div>
+                        </div>
+                    </div>
+                }
+            }
+        </div>
+
+        <div class="card-footer bg-white border-top">
+            @if (!string.IsNullOrWhiteSpace(_error))
+            {
+                <div class="alert alert-danger py-2 mb-3">@_error</div>
+            }
+
+            <div class="input-group">
+                <input class="form-control"
+                       type="text"
+                       placeholder="Ask about CAR, NPL trend, deadlines, anomalies, or compliance health..."
+                       @bind="_query"
+                       @bind:event="oninput"
+                       @onkeydown="HandleKeyDown"
+                       disabled="@_isLoading"
+                       aria-label="ComplianceIQ query input" />
+                <button class="btn btn-primary"
+                        type="button"
+                        @onclick="SendAsync"
+                        disabled="@(_isLoading || string.IsNullOrWhiteSpace(_query))">
+                    Ask
+                </button>
+            </div>
+            <div class="d-flex justify-content-between mt-2">
+                <small class="text-muted">Responses are grounded in your tenant's approved returns and linked platform records.</small>
+                <small class="text-muted">Read-only and audit-logged</small>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthenticationStateTask { get; set; } = default!;
+
+    private readonly List<ChatMessage> _messages = new();
+    private IReadOnlyList<ComplianceIqQuickQuestionView> _quickQuestions = Array.Empty<ComplianceIqQuickQuestionView>();
+    private Guid? _conversationId;
+    private string _query = string.Empty;
+    private bool _isLoading;
+    private string? _error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _quickQuestions = await ComplianceIqService.GetQuickQuestionsAsync(false);
+    }
+
+    private async Task SendAsync()
+    {
+        if (_isLoading || string.IsNullOrWhiteSpace(_query))
+        {
+            return;
+        }
+
+        var prompt = _query.Trim();
+        _query = string.Empty;
+        _error = null;
+        _messages.Add(new ChatMessage { IsUser = true, Text = prompt });
+        _isLoading = true;
+
+        try
+        {
+            var authState = await AuthenticationStateTask;
+            var principal = authState.User;
+            var tenantId = Guid.Parse(principal.FindFirst("TenantId")?.Value
+                ?? throw new InvalidOperationException("Tenant context is unavailable."));
+            var userId = principal.FindFirst(ClaimTypes.NameIdentifier)?.Value
+                ?? principal.Identity?.Name
+                ?? "unknown";
+            var userRole = principal.FindFirst(ClaimTypes.Role)?.Value ?? "InstitutionUser";
+
+            var response = await ComplianceIqService.QueryAsync(new ComplianceIqQueryRequest
+            {
+                Query = prompt,
+                TenantId = tenantId,
+                UserId = userId,
+                UserRole = userRole,
+                ConversationId = _conversationId,
+                IsRegulatorContext = false
+            });
+
+            _conversationId = response.ConversationId;
+            _messages.Add(new ChatMessage
+            {
+                IsUser = false,
+                Text = response.Answer,
+                Response = response
+            });
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+            _messages.Add(new ChatMessage
+            {
+                IsUser = false,
+                Text = "ComplianceIQ could not process that question. Try a more specific metric or period."
+            });
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private async Task AskQuickQuestionAsync(string question)
+    {
+        _query = question;
+        await SendAsync();
+    }
+
+    private void HandleKeyDown(KeyboardEventArgs args)
+    {
+        if (args.Key == "Enter" && !args.ShiftKey)
+        {
+            _ = SendAsync();
+        }
+    }
+
+    private void StartNewConversation()
+    {
+        _conversationId = null;
+        _messages.Clear();
+        _error = null;
+    }
+
+    private void GoToHistory()
+    {
+        Navigation.NavigateTo("/analytics/chat/history");
+    }
+
+    private Task ExportConversationAsync()
+    {
+        if (_conversationId.HasValue)
+        {
+            Navigation.NavigateTo($"/complianceiq/conversations/{_conversationId.Value:D}/export", forceLoad: true);
+        }
+
+        return Task.CompletedTask;
+    }
+
+    private async Task SubmitFeedbackAsync(int turnId, short rating)
+    {
+        try
+        {
+            var authState = await AuthenticationStateTask;
+            var tenantId = Guid.Parse(authState.User.FindFirst("TenantId")?.Value
+                ?? throw new InvalidOperationException("Tenant context is unavailable."));
+            var userId = authState.User.FindFirst(ClaimTypes.NameIdentifier)?.Value
+                ?? authState.User.Identity?.Name
+                ?? "unknown";
+
+            await ComplianceIqService.SubmitFeedbackAsync(turnId, tenantId, userId, rating, null);
+        }
+        catch
+        {
+            // Feedback is optional; swallow non-critical failures.
+        }
+    }
+
+    private static string FormatHeader(string value) =>
+        value.Replace("_", " ", StringComparison.Ordinal).Trim();
+
+    private static string FormatCitation(ComplianceIqCitation citation)
+    {
+        var module = string.IsNullOrWhiteSpace(citation.SourceModule) ? "Unknown module" : citation.SourceModule;
+        var period = string.IsNullOrWhiteSpace(citation.SourcePeriod) ? "latest" : citation.SourcePeriod;
+        return $"{module} / {period}";
+    }
+
+    private static string FormatCell(object? value) => value switch
+    {
+        null => "—",
+        decimal number => number.ToString("N2", CultureInfo.InvariantCulture),
+        double number => number.ToString("N2", CultureInfo.InvariantCulture),
+        float number => number.ToString("N2", CultureInfo.InvariantCulture),
+        DateTime date => date.ToString("dd MMM yyyy", CultureInfo.InvariantCulture),
+        bool flag => flag ? "Yes" : "No",
+        _ => value.ToString() ?? "—"
+    };
+
+    private sealed class ChatMessage
+    {
+        public bool IsUser { get; set; }
+        public string Text { get; set; } = string.Empty;
+        public ComplianceIqQueryResponse? Response { get; set; }
+    }
+}

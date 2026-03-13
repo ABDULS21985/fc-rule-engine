@@ -118,7 +118,7 @@ public sealed class CaaSServiceIntegrationTests
             expiresAt: DateTimeOffset.UtcNow.AddYears(1),
             createdByUserId: 101);
 
-        Assert.True(rawKey.StartsWith("regos_test_"));
+        Assert.StartsWith("regos_test_", rawKey);
         Assert.True(info.IsActive);
 
         // Validate

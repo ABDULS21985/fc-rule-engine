@@ -408,6 +408,35 @@ app.MapGet("/exports/{exportRequestId:int}/download", async (
     }
 });
 
+app.MapGet("/complianceiq/conversations/{conversationId:guid}/export", async (
+    Guid conversationId,
+    HttpContext context,
+    IComplianceIqService complianceIqService,
+    ITenantContext tenantContext,
+    CancellationToken ct) =>
+{
+    if (context.User?.Identity?.IsAuthenticated != true)
+    {
+        return Results.Unauthorized();
+    }
+
+    var tenantId = tenantContext.CurrentTenantId;
+    if (!tenantId.HasValue)
+    {
+        var tenantClaim = context.User.FindFirst("TenantId")?.Value;
+        if (!Guid.TryParse(tenantClaim, out var claimTenantId))
+        {
+            return Results.Forbid();
+        }
+
+        tenantId = claimTenantId;
+    }
+
+    var pdf = await complianceIqService.ExportConversationPdfAsync(conversationId, tenantId.Value, ct);
+    var fileName = $"complianceiq-conversation-{conversationId:D}.pdf";
+    return Results.File(pdf, "application/pdf", fileName);
+}).RequireAuthorization("InstitutionUser");
+
 app.MapControllers();
 app.MapHub<NotificationHub>("/hubs/notifications");
 app.MapHub<ReturnLockHub>("/hubs/returnlock");

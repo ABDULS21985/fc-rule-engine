@@ -112,10 +112,11 @@
                 <div class="portal-download-wrap" @onkeydown="HandleDownloadKeyDown">
                     <button class="portal-btn portal-btn-primary portal-btn-sm"
                             @onclick="ToggleDownloadMenu"
+                            disabled="@isRequestingExport"
                             aria-expanded="@_downloadMenuOpen"
                             aria-haspopup="true">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                        Download
+                        @(isRequestingExport ? "Queueing..." : "Download")
                         <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" style="margin-left:2px;"><polyline points="6 9 12 15 18 9"/></svg>
                     </button>
                     @if (_downloadMenuOpen)
@@ -713,7 +714,7 @@
                         </div>
                     }
 
-                    @if (!isChecker && submission.Status == SubmissionStatus.PendingApproval)
+                    @if (!isChecker && submission!.Status == SubmissionStatus.PendingApproval)
                     {
                         <div class="portal-actions-group">
                             <button class="portal-btn portal-btn-outline portal-btn-sm portal-btn-full" @onclick="WithdrawSubmission">
@@ -723,7 +724,7 @@
                         </div>
                     }
 
-                    @if (approval is null && !_isAdminRole && submission.Status != SubmissionStatus.PendingApproval && !(isChecker && !_isAdminRole))
+                    @if (approval is null && !_isAdminRole && submission!.Status != SubmissionStatus.PendingApproval && !(isChecker && !_isAdminRole))
                     {
                         <p class="portal-actions-empty">No actions available for this submission.</p>
                     }

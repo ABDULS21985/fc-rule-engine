@@ -412,10 +412,10 @@ public sealed class StressTestReportGenerator : IStressTestReportGenerator
                             Ec(et.Cell(), e.InstitutionName);
                             Ec(et.Cell(), e.InstitutionType);
                             Ec(et.Cell(), $"{e.PreCAR:F1}%");
-                            Ec(et.Cell(), $"{e.PostCAR:F1}%", e.PostCAR < 10 ? BandRed : e.PostCAR < 15 ? BandAmber : null, true);
-                            Ec(et.Cell(), $"{e.DeltaCAR:+0.0;-0.0}pp", e.DeltaCAR < -5 ? BandRed : null);
-                            Ec(et.Cell(), $"{e.PostNPL:F1}%", e.PostNPL > 20 ? BandRed : e.PostNPL > 10 ? BandAmber : null);
-                            Ec(et.Cell(), $"{e.PostLCR:F1}%", e.PostLCR < 100 ? BandRed : e.PostLCR < 110 ? BandAmber : null);
+                            Ec(et.Cell(), $"{e.PostCAR:F1}%", e.PostCAR < 10 ? BandRed : e.PostCAR < 15 ? BandAmber : (Color?)null, true);
+                            Ec(et.Cell(), $"{e.DeltaCAR:+0.0;-0.0}pp", e.DeltaCAR < -5 ? BandRed : (Color?)null);
+                            Ec(et.Cell(), $"{e.PostNPL:F1}%", e.PostNPL > 20 ? BandRed : e.PostNPL > 10 ? BandAmber : (Color?)null);
+                            Ec(et.Cell(), $"{e.PostLCR:F1}%", e.PostLCR < 100 ? BandRed : e.PostLCR < 110 ? BandAmber : (Color?)null);
                             Ec(et.Cell(), statusText, statusColour, true);
                         }
                     });
