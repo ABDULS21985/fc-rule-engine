@@ -6,128 +6,260 @@
 
 <PageTitle>ForeSight Compliance Trend</PageTitle>
 
-<div class="container-fluid px-4">
-    <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
-        <div>
-            <div class="small text-muted mb-1"><a href="/analytics/foresight" class="link-secondary">ForeSight</a> / Compliance Trend</div>
-            <h1 class="h3 mb-1">Compliance Trend Detail</h1>
-            <p class="text-muted mb-0">Projected compliance-health movement, explainability drivers, and advisory recommendations.</p>
-        </div>
-        <a class="btn btn-sm btn-outline-primary" href="/analytics/foresight">Back to overview</a>
-    </div>
+<div class="portal-page portal-fsd-shell">
+    <PortalPageHeader Title="ForeSight Compliance Trend"
+                      Subtitle="Projected compliance-health movement, explainability drivers, and advisory recommendations."
+                      Breadcrumb="@_breadcrumb">
+        <SecondaryActions>
+            <button class="portal-btn portal-btn-ghost portal-btn-sm" @onclick="LoadAsync" disabled="@_loading">Refresh</button>
+        </SecondaryActions>
+        <PrimaryAction>
+            <a class="portal-btn portal-btn-primary portal-btn-sm" href="/analytics/foresight">Back to overview</a>
+        </PrimaryAction>
+    </PortalPageHeader>
 
     @if (_loading)
     {
-        <div class="text-center py-5" role="status" aria-live="polite">
-            <div class="spinner-border text-primary"></div>
-            <p class="text-muted mt-3 mb-0">Loading compliance-trend detail...</p>
-        </div>
+        <section class="portal-fsd-loading" role="status" aria-label="Loading compliance trend detail">
+            <div class="portal-fsd-loading-hero"></div>
+            <div class="portal-fsd-loading-grid">
+                @for (var i = 0; i < 4; i++)
+                {
+                    <div class="portal-fsd-loading-card"></div>
+                }
+            </div>
+            <div class="portal-fsd-loading-panels">
+                <div class="portal-fsd-loading-panel"></div>
+                <div class="portal-fsd-loading-panel"></div>
+            </div>
+        </section>
     }
     else if (!string.IsNullOrWhiteSpace(_error))
     {
-        <div class="alert alert-danger">@_error</div>
+        <section class="portal-fsd-error" role="alert">
+            <div class="portal-fsd-error-icon" aria-hidden="true">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9">
+                    <circle cx="12" cy="12" r="9"></circle>
+                    <path d="M12 8v5"></path>
+                    <path d="M12 16h.01"></path>
+                </svg>
+            </div>
+            <div>
+                <strong>Unable to load compliance-trend detail.</strong>
+                <span>@_error</span>
+            </div>
+        </section>
     }
     else if (_forecast is null)
     {
-        <div class="alert alert-secondary mb-0">No unsuppressed compliance-trend forecast is currently available for this institution.</div>
+        <section class="portal-fsd-empty">No unsuppressed compliance-trend forecast is currently available for this institution.</section>
     }
     else
     {
-        <div class="row g-3 mb-4">
-            <div class="col-md-3">
-                <div class="card border-0 shadow-sm h-100">
-                    <div class="card-body">
-                        <div class="small text-muted">Current score</div>
-                        <div class="display-6">@_forecast.CurrentScore.ToString("F1")</div>
-                        <div class="small text-muted">@_forecast.CurrentRating</div>
-                    </div>
+        <section class="portal-fsd-banner portal-fsd-banner--@BuildBannerTone(_forecast)">
+            <div>
+                <div class="portal-fsd-eyebrow">Compliance trajectory pulse</div>
+                <h1 class="portal-fsd-banner-title">@BuildBannerHeadline(_forecast)</h1>
+                <p class="portal-fsd-banner-copy">@BuildBannerCopy(_forecast)</p>
+            </div>
+            <div class="portal-fsd-banner-meta">
+                <span class="portal-fsd-meta-label">Current posture</span>
+                <strong class="portal-fsd-meta-value">@_forecast.CurrentRating to @_forecast.ProjectedRating</strong>
+                <span class="portal-fsd-banner-copy">Risk band @_forecast.RiskBand with confidence @_forecast.ConfidenceScore.ToString("P0").</span>
+            </div>
+        </section>
+
+        <section class="portal-fsd-hero">
+            <div>
+                <div class="portal-fsd-eyebrow">Compliance health lane</div>
+                <h2 class="portal-fsd-hero-title">See whether your control posture is improving, holding, or starting to slip.</h2>
+                <p class="portal-fsd-hero-copy">
+                    This view translates the compliance-health forecast into a clear direction of travel, then shows the pillar under the most pressure
+                    and the factor contributions behind the score movement.
+                </p>
+                <div class="portal-fsd-chip-row">
+                    <span class="portal-fsd-chip @BuildTrendChipClass(_forecast)">@BuildScoreDeltaLabel(_forecast.ScoreChange)</span>
+                    <span class="portal-fsd-chip portal-fsd-chip--info">@_forecast.ConfidenceScore.ToString("P0") confidence</span>
+                    <span class="portal-fsd-chip @BuildRiskChipClass(_forecast.RiskBand)">@_forecast.RiskBand risk band</span>
                 </div>
             </div>
-            <div class="col-md-3">
-                <div class="card border-0 shadow-sm h-100">
-                    <div class="card-body">
-                        <div class="small text-muted">Projected score</div>
-                        <div class="display-6">@_forecast.ProjectedScore.ToString("F1")</div>
-                        <div class="small text-muted">@_forecast.ProjectedRating</div>
-                    </div>
+            <div class="portal-fsd-hero-aside">
+                <div class="portal-fsd-note">
+                    <span class="portal-fsd-note-label">Pillar under pressure</span>
+                    <strong class="portal-fsd-note-value">@(string.IsNullOrWhiteSpace(_forecast.DecliningPillar) ? "No specific pillar" : _forecast.DecliningPillar)</strong>
+                    <span class="portal-fsd-note-copy">This is the main decline signal currently highlighted by the forecast output.</span>
+                </div>
+                <div class="portal-fsd-note">
+                    <span class="portal-fsd-note-label">Confidence band</span>
+                    <strong class="portal-fsd-note-value">@_forecast.ConfidenceLower.ToString("F1") to @_forecast.ConfidenceUpper.ToString("F1")</strong>
+                    <span class="portal-fsd-note-copy">Keep this interval in view when deciding how aggressively to respond.</span>
                 </div>
             </div>
-            <div class="col-md-3">
-                <div class="card border-0 shadow-sm h-100">
-                    <div class="card-body">
-                        <div class="small text-muted">Score change</div>
-                        <div class="display-6 @(_forecast.ScoreChange < 0 ? "text-danger" : "text-success")">
-                            @(_forecast.ScoreChange >= 0 ? "+" : "")@_forecast.ScoreChange.ToString("F1")
+        </section>
+
+        <section class="portal-fsd-stat-grid" aria-label="Compliance trend metrics">
+            <article class="portal-fsd-stat">
+                <div class="portal-fsd-stat-label">Current score</div>
+                <div class="portal-fsd-stat-value">@_forecast.CurrentScore.ToString("F1")</div>
+                <div class="portal-fsd-stat-copy">Current compliance-health level and rating baseline.</div>
+            </article>
+            <article class="portal-fsd-stat">
+                <div class="portal-fsd-stat-label">Projected score</div>
+                <div class="portal-fsd-stat-value">@_forecast.ProjectedScore.ToString("F1")</div>
+                <div class="portal-fsd-stat-copy">Projected score at the current forecast horizon.</div>
+            </article>
+            <article class="portal-fsd-stat">
+                <div class="portal-fsd-stat-label">Score change</div>
+                <div class="portal-fsd-stat-value">@(_forecast.ScoreChange >= 0 ? "+" : string.Empty)@_forecast.ScoreChange.ToString("F1")</div>
+                <div class="portal-fsd-stat-copy">Net directional movement implied by the current predictive model.</div>
+            </article>
+            <article class="portal-fsd-stat">
+                <div class="portal-fsd-stat-label">Model confidence</div>
+                <div class="portal-fsd-stat-value">@_forecast.ConfidenceScore.ToString("P0")</div>
+                <div class="portal-fsd-stat-copy">Confidence score attached to the current compliance forecast.</div>
+            </article>
+        </section>
+
+        <section class="portal-fsd-grid">
+            <article class="portal-card portal-fsd-panel">
+                <div class="portal-fsd-panel-head">
+                    <div>
+                        <span class="portal-fsd-panel-eyebrow">Explainability stack</span>
+                        <h3 class="portal-fsd-panel-title">Why the compliance score is moving</h3>
+                        <p class="portal-fsd-panel-copy">Narrative, factor contributions, and the recommended human response path.</p>
+                    </div>
+                    <div class="portal-fsd-panel-metric">
+                        <small>Projected rating</small>
+                        @_forecast.ProjectedRating
+                    </div>
+                </div>
+                <div class="portal-fsd-panel-body">
+                    <article class="portal-fsd-row">
+                        <div class="portal-fsd-row-head">
+                            <div>
+                                <div class="portal-fsd-row-title">Compliance health outlook</div>
+                                <div class="portal-fsd-row-subtitle">Current @_forecast.CurrentRating, projected @_forecast.ProjectedRating</div>
+                            </div>
+                            <span class="portal-fsd-risk @BuildRiskClass(_forecast.RiskBand)">@_forecast.RiskBand</span>
                         </div>
-                        <div class="small text-muted">@_forecast.DecliningPillar</div>
-                    </div>
+                        <p class="portal-fsd-row-copy">@_forecast.Explanation</p>
+                        <div class="portal-fsd-row-meta">@_forecast.RootCauseNarrative</div>
+                        <div class="portal-fsd-metrics">
+                            <div class="portal-fsd-metric"><small>Current score</small><strong>@_forecast.CurrentScore.ToString("F1")</strong></div>
+                            <div class="portal-fsd-metric"><small>Projected score</small><strong>@_forecast.ProjectedScore.ToString("F1")</strong></div>
+                            <div class="portal-fsd-metric"><small>Score delta</small><strong>@BuildScoreDeltaLabel(_forecast.ScoreChange)</strong></div>
+                            <div class="portal-fsd-metric"><small>Confidence</small><strong>@_forecast.ConfidenceScore.ToString("P0")</strong></div>
+                        </div>
+                        @if (_forecast.TopFactors.Count > 0)
+                        {
+                            <div class="portal-fsd-factor-list mt-3">
+                                @foreach (var factor in _forecast.TopFactors.OrderByDescending(x => x.ContributionScore))
+                                {
+                                    <span class="portal-fsd-factor @BuildFactorClass(factor.ImpactDirection)">@factor.FeatureLabel (@factor.ContributionScore.ToString("F2"))</span>
+                                }
+                            </div>
+                        }
+                        @if (!string.IsNullOrWhiteSpace(_forecast.Recommendation))
+                        {
+                            <div class="portal-fsd-recommendation"><strong>Recommended action:</strong> @_forecast.Recommendation</div>
+                        }
+                    </article>
                 </div>
-            </div>
-            <div class="col-md-3">
-                <div class="card border-0 shadow-sm h-100">
-                    <div class="card-body">
-                        <div class="small text-muted">Model confidence</div>
-                        <div class="display-6">@_forecast.ConfidenceScore.ToString("P0")</div>
-                        <div class="small text-muted">@_forecast.ConfidenceLower.ToString("F1") to @_forecast.ConfidenceUpper.ToString("F1")</div>
+            </article>
+
+            <div class="portal-fsd-side">
+                <article class="portal-card portal-fsd-panel">
+                    <div class="portal-fsd-panel-head">
+                        <div>
+                            <span class="portal-fsd-panel-eyebrow">Rating path</span>
+                            <h3 class="portal-fsd-panel-title">Transition summary</h3>
+                            <p class="portal-fsd-panel-copy">Condenses the rating movement and primary control concern into a quick executive readout.</p>
+                        </div>
                     </div>
-                </div>
-            </div>
-        </div>
-
-        <div class="card border-0 shadow-sm">
-            <div class="card-header bg-white d-flex justify-content-between align-items-center gap-3">
-                <h2 class="h6 mb-0">Explainability</h2>
-                <span class="badge @(_forecast.RiskBand is "HIGH" or "CRITICAL" ? "bg-danger" : _forecast.RiskBand == "MEDIUM" ? "bg-warning text-dark" : "bg-success")">@_forecast.RiskBand</span>
-            </div>
-            <div class="card-body">
-                <p class="mb-2">@_forecast.Explanation</p>
-                <p class="text-muted mb-3">@_forecast.RootCauseNarrative</p>
-
-                @if (!string.IsNullOrWhiteSpace(_forecast.Recommendation))
-                {
-                    <div class="alert alert-light border">
-                        <strong>Recommendation:</strong> @_forecast.Recommendation
+                    <div class="portal-fsd-panel-body">
+                        <div class="portal-fsd-side-list">
+                            <div class="portal-fsd-side-item">
+                                <div class="portal-fsd-side-item-head">
+                                    <div>
+                                        <strong>Rating transition</strong>
+                                        <span>Current to projected</span>
+                                    </div>
+                                    <div class="portal-fsd-side-item-value">@($"{_forecast.CurrentRating} -> {_forecast.ProjectedRating}")</div>
+                                </div>
+                                <small>Use this as the fast executive summary of the forecasted posture shift.</small>
+                            </div>
+                            <div class="portal-fsd-side-item">
+                                <div class="portal-fsd-side-item-head">
+                                    <div>
+                                        <strong>Primary pillar</strong>
+                                        <span>Most visible area of pressure</span>
+                                    </div>
+                                    <div class="portal-fsd-side-item-value">@(string.IsNullOrWhiteSpace(_forecast.DecliningPillar) ? "Stable" : _forecast.DecliningPillar)</div>
+                                </div>
+                                <small>The forecast is attributing the strongest decline to this pillar right now.</small>
+                            </div>
+                        </div>
                     </div>
-                }
+                </article>
 
-                <div class="table-responsive">
-                    <table class="table table-sm align-middle mb-0" aria-label="Compliance trend drivers">
-                        <thead class="table-light">
-                            <tr>
-                                <th>Driver</th>
-                                <th>Raw value</th>
-                                <th>Weight</th>
-                                <th>Contribution</th>
-                                <th>Impact</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            @foreach (var factor in _forecast.TopFactors.OrderByDescending(x => x.ContributionScore))
-                            {
-                                <tr>
-                                    <td>@factor.FeatureLabel</td>
-                                    <td>@factor.RawValue.ToString("F2")</td>
-                                    <td>@factor.Weight.ToString("F2")</td>
-                                    <td>@factor.ContributionScore.ToString("F3")</td>
-                                    <td>@FormatImpact(factor.ImpactDirection)</td>
-                                </tr>
-                            }
-                        </tbody>
-                    </table>
-                </div>
+                <article class="portal-card portal-fsd-panel">
+                    <div class="portal-fsd-panel-head">
+                        <div>
+                            <span class="portal-fsd-panel-eyebrow">Top drivers</span>
+                            <h3 class="portal-fsd-panel-title">Most influential explainability factors</h3>
+                            <p class="portal-fsd-panel-copy">The factor cards below show which signals are moving the forecast most aggressively.</p>
+                        </div>
+                    </div>
+                    <div class="portal-fsd-panel-body">
+                        @if (_forecast.TopFactors.Count == 0)
+                        {
+                            <div class="portal-fsd-empty">No factor explainability is currently available for this forecast.</div>
+                        }
+                        else
+                        {
+                            <div class="portal-fsd-side-list">
+                                @foreach (var factor in _forecast.TopFactors.OrderByDescending(x => x.ContributionScore).Take(5))
+                                {
+                                    <div class="portal-fsd-side-item">
+                                        <div class="portal-fsd-side-item-head">
+                                            <div>
+                                                <strong>@factor.FeatureLabel</strong>
+                                                <span>Raw value @factor.RawValue.ToString("F2")</span>
+                                            </div>
+                                            <div class="portal-fsd-side-item-value">@factor.ContributionScore.ToString("F2")</div>
+                                        </div>
+                                        <small>Weight @factor.Weight.ToString("F2") · @FormatImpact(factor.ImpactDirection)</small>
+                                    </div>
+                                }
+                            </div>
+                        }
+                    </div>
+                </article>
             </div>
-        </div>
+        </section>
     }
 </div>
 
 @code {
     [CascadingParameter] private Task<AuthenticationState> AuthenticationStateTask { get; set; } = default!;
 
+    private readonly IReadOnlyList<BreadcrumbItem> _breadcrumb = new List<BreadcrumbItem>
+    {
+        new("Home", "/"),
+        new("ForeSight", "/analytics/foresight"),
+        new("Compliance Trend", IsCurrent: true)
+    };
+
     private ComplianceScoreForecast? _forecast;
     private bool _loading = true;
     private string? _error;
 
     protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
     {
         _loading = true;
         _error = null;
@@ -153,10 +285,130 @@
         }
     }
 
-    private static string FormatImpact(string impactDirection) => impactDirection switch
+    private static string BuildBannerTone(ComplianceScoreForecast forecast)
     {
-        "DECREASES_RISK" => "Reduces risk",
-        "DECREASES_RESILIENCE" => "Reduces resilience",
-        _ => "Increases risk"
-    };
+        if (forecast.RiskBand is "CRITICAL" or "HIGH")
+        {
+            return "danger";
+        }
+
+        if (forecast.RiskBand == "MEDIUM")
+        {
+            return "warning";
+        }
+
+        return forecast.ScoreChange >= 0 ? "success" : "warning";
+    }
+
+    private static string BuildBannerHeadline(ComplianceScoreForecast forecast)
+    {
+        if (forecast.ScoreChange < -5m)
+        {
+            return "Compliance health is projected to deteriorate meaningfully.";
+        }
+
+        if (forecast.ScoreChange < 0m)
+        {
+            return "Compliance health is softening and needs attention.";
+        }
+
+        if (forecast.ScoreChange == 0m)
+        {
+            return "Compliance health is projected to hold steady.";
+        }
+
+        return "Compliance health is projected to improve.";
+    }
+
+    private static string BuildBannerCopy(ComplianceScoreForecast forecast)
+    {
+        if (forecast.ScoreChange < 0m)
+        {
+            return $"The model projects a move from {forecast.CurrentScore:F1} to {forecast.ProjectedScore:F1}, with {forecast.ConfidenceScore:P0} confidence. Use the pillar and factor narrative to protect control quality before the deterioration compounds.";
+        }
+
+        if (forecast.ScoreChange == 0m)
+        {
+            return $"The model is holding the institution flat at {forecast.ProjectedScore:F1}. Use the factor stack to identify what needs reinforcement to break out of the plateau.";
+        }
+
+        return $"The forecast points to an improvement from {forecast.CurrentScore:F1} to {forecast.ProjectedScore:F1}. Keep reinforcing the factors that are currently reducing risk while watching the confidence band for reversal signs.";
+    }
+
+    private static string BuildScoreDeltaLabel(decimal scoreChange) => $"{(scoreChange >= 0 ? "+" : string.Empty)}{scoreChange:F1}";
+
+    private static string BuildTrendChipClass(ComplianceScoreForecast forecast)
+    {
+        if (forecast.ScoreChange < 0m)
+        {
+            return "portal-fsd-chip--danger";
+        }
+
+        if (forecast.ScoreChange == 0m)
+        {
+            return "portal-fsd-chip--warning";
+        }
+
+        return "portal-fsd-chip--success";
+    }
+
+    private static string BuildRiskChipClass(string riskBand)
+    {
+        if (riskBand is "CRITICAL" or "HIGH")
+        {
+            return "portal-fsd-chip--danger";
+        }
+
+        if (riskBand == "MEDIUM")
+        {
+            return "portal-fsd-chip--warning";
+        }
+
+        return "portal-fsd-chip--success";
+    }
+
+    private static string BuildRiskClass(string riskBand)
+    {
+        if (riskBand is "CRITICAL" or "HIGH")
+        {
+            return "portal-fsd-risk--danger";
+        }
+
+        if (riskBand == "MEDIUM")
+        {
+            return "portal-fsd-risk--warning";
+        }
+
+        return "portal-fsd-risk--success";
+    }
+
+    private static string BuildFactorClass(string impactDirection)
+    {
+        if (impactDirection == "DECREASES_RISK")
+        {
+            return "portal-fsd-factor--success";
+        }
+
+        if (impactDirection == "DECREASES_RESILIENCE")
+        {
+            return "portal-fsd-factor--warning";
+        }
+
+        return "portal-fsd-factor--danger";
+    }
+
+    private static string FormatImpact(string impactDirection)
+    {
+        if (impactDirection == "DECREASES_RISK")
+        {
+            return "Reduces risk";
+        }
+
+        if (impactDirection == "DECREASES_RESILIENCE")
+        {
+            return "Reduces resilience";
+        }
+
+        return "Increases risk";
+    }
 }

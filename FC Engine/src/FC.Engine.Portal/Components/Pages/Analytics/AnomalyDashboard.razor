@@ -5,135 +5,462 @@
 
 <PageTitle>Anomaly Dashboard</PageTitle>
 
-<div class="container-fluid px-4">
-    <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
-        <div>
-            <h1 class="h3 mb-1">Anomaly Dashboard</h1>
-            <p class="text-muted mb-0">Review AI-assisted statistical anomalies before final submission sign-off.</p>
-        </div>
-        <div class="d-flex gap-2">
-            <select class="form-select form-select-sm" style="min-width: 180px;" @bind="_selectedModule">
+<div class="portal-page portal-anom-page">
+    <PortalPageHeader Title="Anomaly Dashboard"
+                      Subtitle="Review AI-assisted anomaly findings, data quality signals, and outstanding alerts before submission sign-off."
+                      Breadcrumb="@_breadcrumb">
+        <SecondaryActions>
+            <select class="portal-btn portal-btn--outline portal-btn--sm portal-anom-filter" @bind="_selectedModule">
                 <option value="">All modules</option>
                 @foreach (var module in _reports.Select(x => x.ModuleCode).Distinct().Order())
                 {
                     <option value="@module">@module</option>
                 }
             </select>
-            <select class="form-select form-select-sm" style="min-width: 140px;" @bind="_selectedPeriod">
+            <select class="portal-btn portal-btn--outline portal-btn--sm portal-anom-filter" @bind="_selectedPeriod">
                 <option value="">All periods</option>
                 @foreach (var period in _reports.Select(x => x.PeriodCode).Distinct().OrderDescending())
                 {
                     <option value="@period">@period</option>
                 }
             </select>
-        </div>
-    </div>
+        </SecondaryActions>
+        <PrimaryAction>
+            <button class="portal-btn portal-btn--gold portal-btn--sm" @onclick="LoadAsync" disabled="@_isLoading">Refresh</button>
+        </PrimaryAction>
+    </PortalPageHeader>
 
     @if (_isLoading)
     {
-        <div class="text-center py-5" role="status" aria-live="polite">
-            <div class="spinner-border text-primary"></div>
-            <p class="text-muted mt-3 mb-0">Loading anomaly reports...</p>
+        <div class="portal-anom-flow" aria-busy="true" aria-label="Loading anomaly reports">
+            <div class="portal-anom-banner portal-skeleton" style="height: 150px;"></div>
+            <div class="portal-anom-stat-grid">
+                @for (var i = 0; i < 4; i++)
+                {
+                    <div class="portal-anom-stat-card portal-skeleton" style="height: 150px;"></div>
+                }
+            </div>
+            <div class="portal-anom-content-grid">
+                <div class="portal-card portal-skeleton" style="height: 520px;"></div>
+                <div class="portal-anom-side-grid">
+                    <div class="portal-card portal-skeleton" style="height: 240px;"></div>
+                    <div class="portal-card portal-skeleton" style="height: 280px;"></div>
+                </div>
+            </div>
         </div>
     }
     else if (!string.IsNullOrWhiteSpace(_error))
     {
-        <div class="alert alert-danger">@_error</div>
+        <div class="portal-anom-error">
+            <strong>Unable to load anomaly reports.</strong>
+            <span>@_error</span>
+            <button class="portal-btn portal-btn--primary portal-btn--sm" @onclick="LoadAsync">Retry</button>
+        </div>
     }
     else if (FilteredReports.Count == 0)
     {
-        <div class="alert alert-info">
-            No anomaly reports are available for the selected filters yet. Reports are created automatically for accepted submissions.
+        <div class="portal-anom-empty portal-card">
+            <h3>No anomaly reports in the current scope</h3>
+            <p>Reports are created automatically for accepted submissions. Change the current filters or wait for the next analysed return.</p>
         </div>
     }
     else
     {
-        <div class="row g-3 mb-4">
-            <div class="col-md-3">
-                <div class="card border-0 shadow-sm h-100">
-                    <div class="card-body">
-                        <div class="text-muted small">Returns Analysed</div>
-                        <div class="display-6 mb-0">@FilteredReports.Count</div>
-                    </div>
+        <div class="portal-anom-flow">
+            <section class="portal-anom-banner @BannerTone" aria-label="Anomaly posture">
+                <div>
+                    <div class="portal-anom-eyebrow">Anomaly posture</div>
+                    <h2 class="portal-anom-banner-title">@BannerHeadline</h2>
+                    <p class="portal-anom-banner-copy">@BannerCopy</p>
                 </div>
-            </div>
-            <div class="col-md-3">
-                <div class="card border-0 shadow-sm h-100">
-                    <div class="card-body">
-                        <div class="text-muted small">Average Quality</div>
-                        <div class="display-6 mb-0">@AverageQuality.ToString("F1")%</div>
-                    </div>
+                <div class="portal-anom-banner-meta">
+                    <span class="portal-anom-banner-meta-label">Current scope</span>
+                    <strong>@ScopeLabel</strong>
+                    <span>@FilteredReports.Count reports, @FilteredReports.Sum(x => x.AlertCount) outstanding alerts</span>
                 </div>
-            </div>
-            <div class="col-md-3">
-                <div class="card border-0 shadow-sm h-100">
-                    <div class="card-body">
-                        <div class="text-muted small">Red Reports</div>
-                        <div class="display-6 text-danger mb-0">@FilteredReports.Count(x => x.TrafficLight == "RED")</div>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-3">
-                <div class="card border-0 shadow-sm h-100">
-                    <div class="card-body">
-                        <div class="text-muted small">Outstanding Alerts</div>
-                        <div class="display-6 text-warning mb-0">@FilteredReports.Sum(x => x.AlertCount)</div>
-                    </div>
-                </div>
-            </div>
-        </div>
+            </section>
 
-        <div class="card border-0 shadow-sm">
-            <div class="card-header bg-white">
-                <h2 class="h6 mb-0">Latest anomaly reports</h2>
-            </div>
-            <div class="table-responsive">
-                <table class="table table-hover mb-0" aria-label="Anomaly report list">
-                    <thead class="table-light">
-                        <tr>
-                            <th>Module</th>
-                            <th>Period</th>
-                            <th>Quality</th>
-                            <th>Status</th>
-                            <th>Alerts</th>
-                            <th>Total Findings</th>
-                            <th>Analysed</th>
-                            <th></th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @foreach (var report in FilteredReports.OrderByDescending(x => x.AnalysedAt))
-                        {
-                            <tr>
-                                <td><strong>@report.ModuleCode</strong></td>
-                                <td>@report.PeriodCode</td>
-                                <td>@report.OverallQualityScore.ToString("F1")%</td>
-                                <td>
-                                    <span class="badge @(report.TrafficLight == "RED" ? "bg-danger" : report.TrafficLight == "AMBER" ? "bg-warning text-dark" : "bg-success")">
-                                        @report.TrafficLight
-                                    </span>
-                                </td>
-                                <td>@report.AlertCount</td>
-                                <td>@report.TotalFindings</td>
-                                <td class="text-muted small">@report.AnalysedAt.ToString("dd MMM yyyy HH:mm")</td>
-                                <td class="text-end">
-                                    <button class="btn btn-sm btn-outline-primary" @onclick='() => Navigation.NavigateTo($"/analytics/anomalies/{report.Id}")'>
-                                        Review
-                                    </button>
-                                </td>
-                            </tr>
-                        }
-                    </tbody>
-                </table>
-            </div>
+            <section class="portal-anom-hero" aria-labelledby="anomaly-hero-title">
+                <div>
+                    <div class="portal-anom-eyebrow">Analytics lane</div>
+                    <h1 id="anomaly-hero-title" class="portal-anom-hero-title">Review the pattern, not just the red badge.</h1>
+                    <p class="portal-anom-hero-copy">
+                        The anomaly workspace now exposes quality posture, report severity mix, and module concentration so compliance teams
+                        can focus review effort where the statistical signal is strongest.
+                    </p>
+                    <div class="portal-anom-chip-row">
+                        <span class="portal-anom-chip portal-anom-chip--neutral">@FilteredReports.Count reports analysed</span>
+                        <span class="portal-anom-chip @QualityChipClass">@AverageQuality.ToString("F1")% average quality</span>
+                        <span class="portal-anom-chip @AlertChipClass">@FilteredReports.Sum(x => x.AlertCount) outstanding alerts</span>
+                    </div>
+                </div>
+                <div class="portal-anom-hero-side">
+                    <div class="portal-anom-note">
+                        <span class="portal-anom-note-label">Red reports</span>
+                        <strong>@FilteredReports.Count(x => x.TrafficLight == "RED")</strong>
+                        <span>Reports whose anomaly posture currently requires the most urgent human review.</span>
+                    </div>
+                    <div class="portal-anom-note">
+                        <span class="portal-anom-note-label">Latest analysis</span>
+                        <strong>@FilteredReports.Max(x => x.AnalysedAt).ToString("dd MMM HH:mm")</strong>
+                        <span>Most recent anomaly analysis materialised in the current tenant scope.</span>
+                    </div>
+                </div>
+            </section>
+
+            <section class="portal-anom-stat-grid" aria-label="Anomaly metrics">
+                <article class="portal-anom-stat-card">
+                    <span class="portal-anom-stat-label">Returns analysed</span>
+                    <strong class="portal-anom-stat-value">@FilteredReports.Count</strong>
+                    <span class="portal-anom-stat-note">Accepted returns with anomaly reports in the current filter scope.</span>
+                </article>
+                <article class="portal-anom-stat-card">
+                    <span class="portal-anom-stat-label">Average quality</span>
+                    <strong class="portal-anom-stat-value @QualityValueClass">@AverageQuality.ToString("F1")%</strong>
+                    <span class="portal-anom-stat-note">Mean quality score across the visible anomaly reports.</span>
+                </article>
+                <article class="portal-anom-stat-card">
+                    <span class="portal-anom-stat-label">Red reports</span>
+                    <strong class="portal-anom-stat-value portal-anom-stat-value--danger">@FilteredReports.Count(x => x.TrafficLight == "RED")</strong>
+                    <span class="portal-anom-stat-note">Highest severity reports that should move to the top of review queues.</span>
+                </article>
+                <article class="portal-anom-stat-card">
+                    <span class="portal-anom-stat-label">Outstanding alerts</span>
+                    <strong class="portal-anom-stat-value @AlertValueClass">@FilteredReports.Sum(x => x.AlertCount)</strong>
+                    <span class="portal-anom-stat-note">Total active anomaly alerts across the visible report set.</span>
+                </article>
+            </section>
+
+            <section class="portal-anom-content-grid">
+                <div class="portal-card portal-anom-panel">
+                    <div class="portal-anom-panel-head">
+                        <div>
+                            <span class="portal-anom-panel-eyebrow">Report queue</span>
+                            <h2 class="portal-anom-panel-title">Latest anomaly reports</h2>
+                            <p class="portal-anom-panel-copy">Sorted by analysis timestamp so the newest statistical signals stay visible first.</p>
+                        </div>
+                    </div>
+                    <div class="portal-anom-table-wrap">
+                        <table class="portal-anom-table" aria-label="Anomaly report list">
+                            <thead>
+                                <tr>
+                                    <th>Module</th>
+                                    <th>Period</th>
+                                    <th>Quality</th>
+                                    <th>Status</th>
+                                    <th>Alerts</th>
+                                    <th>Total Findings</th>
+                                    <th>Analysed</th>
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var report in FilteredReports.OrderByDescending(x => x.AnalysedAt))
+                                {
+                                    <tr>
+                                        <td><strong>@report.ModuleCode</strong></td>
+                                        <td>@report.PeriodCode</td>
+                                        <td>@report.OverallQualityScore.ToString("F1")%</td>
+                                        <td><span class="portal-anom-badge @TrafficLightClass(report.TrafficLight)">@report.TrafficLight</span></td>
+                                        <td>@report.AlertCount</td>
+                                        <td>@report.TotalFindings</td>
+                                        <td>@report.AnalysedAt.ToString("dd MMM yyyy HH:mm")</td>
+                                        <td class="text-end">
+                                            <button class="portal-btn portal-btn--outline portal-btn--sm" @onclick='() => Navigation.NavigateTo($"/analytics/anomalies/{report.Id}")'>Review</button>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="portal-anom-side-grid">
+                    <div class="portal-card portal-anom-panel">
+                        <div class="portal-anom-panel-head"><div><span class="portal-anom-panel-eyebrow">Severity spread</span><h2 class="portal-anom-panel-title">Traffic light mix</h2><p class="portal-anom-panel-copy">Quick view of how many reports are currently green, amber, or red.</p></div></div>
+                        <div class="portal-anom-list">
+                            <div class="portal-anom-list-item"><span>Red</span><strong>@FilteredReports.Count(x => x.TrafficLight == "RED")</strong></div>
+                            <div class="portal-anom-list-item"><span>Amber</span><strong>@FilteredReports.Count(x => x.TrafficLight == "AMBER")</strong></div>
+                            <div class="portal-anom-list-item"><span>Green</span><strong>@FilteredReports.Count(x => x.TrafficLight == "GREEN")</strong></div>
+                        </div>
+                    </div>
+
+                    <div class="portal-card portal-anom-panel">
+                        <div class="portal-anom-panel-head"><div><span class="portal-anom-panel-eyebrow">Module pressure</span><h2 class="portal-anom-panel-title">Modules with the most alerts</h2><p class="portal-anom-panel-copy">Helps direct review effort to the returns carrying the heaviest alert concentration.</p></div></div>
+                        <div class="portal-anom-list">
+                            @foreach (var module in TopModules)
+                            {
+                                <div class="portal-anom-list-item">
+                                    <div>
+                                        <strong>@module.ModuleCode</strong>
+                                        <div class="portal-anom-list-meta">@module.ReportCount reports</div>
+                                    </div>
+                                    <strong>@module.AlertCount</strong>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                </div>
+            </section>
         </div>
     }
 </div>
+
+<style>
+    .portal-anom-page {
+        display: flex;
+        flex-direction: column;
+        gap: 1.25rem;
+    }
+
+    .portal-anom-flow {
+        display: flex;
+        flex-direction: column;
+        gap: 1.25rem;
+    }
+
+    .portal-anom-banner,
+    .portal-anom-hero,
+    .portal-anom-stat-card,
+    .portal-anom-panel,
+    .portal-anom-error,
+    .portal-anom-empty {
+        border: 1px solid rgba(15, 23, 42, 0.08);
+        box-shadow: 0 18px 40px rgba(15, 23, 42, 0.07);
+    }
+
+    .portal-anom-banner {
+        display: grid;
+        grid-template-columns: minmax(0, 1.2fr) minmax(220px, 0.8fr);
+        gap: 1rem;
+        padding: 1.5rem;
+        border-radius: 28px;
+        background: linear-gradient(135deg, rgba(11, 107, 63, 0.16), rgba(201, 169, 81, 0.14));
+    }
+
+    .portal-anom-banner--danger { background: linear-gradient(135deg, rgba(185, 28, 28, 0.18), rgba(124, 58, 237, 0.14)); }
+    .portal-anom-banner--warning { background: linear-gradient(135deg, rgba(224, 124, 36, 0.18), rgba(201, 169, 81, 0.16)); }
+    .portal-anom-banner--success { background: linear-gradient(135deg, rgba(11, 107, 63, 0.18), rgba(15, 118, 110, 0.14)); }
+
+    .portal-anom-eyebrow,
+    .portal-anom-panel-eyebrow,
+    .portal-anom-note-label,
+    .portal-anom-stat-label,
+    .portal-anom-banner-meta-label {
+        color: var(--portal-muted-strong, #64748b);
+        font-size: 0.75rem;
+        font-weight: 700;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+    }
+
+    .portal-anom-banner-title,
+    .portal-anom-hero-title,
+    .portal-anom-panel-title {
+        margin: 0.5rem 0 0;
+        color: var(--portal-text, #18212f);
+        font-weight: 800;
+        letter-spacing: -0.03em;
+    }
+
+    .portal-anom-banner-copy,
+    .portal-anom-hero-copy,
+    .portal-anom-panel-copy,
+    .portal-anom-note span:last-child,
+    .portal-anom-stat-note,
+    .portal-anom-list-meta {
+        color: var(--portal-muted, #66758b);
+        line-height: 1.6;
+    }
+
+    .portal-anom-banner-meta,
+    .portal-anom-note {
+        display: grid;
+        gap: 0.5rem;
+        padding: 1rem 1.1rem;
+        border-radius: 20px;
+        background: rgba(255, 255, 255, 0.72);
+        backdrop-filter: blur(10px);
+    }
+
+    .portal-anom-banner-meta strong,
+    .portal-anom-note strong,
+    .portal-anom-stat-value {
+        font-size: 1.8rem;
+        line-height: 1;
+        color: var(--portal-text, #18212f);
+    }
+
+    .portal-anom-hero {
+        display: grid;
+        grid-template-columns: minmax(0, 1.35fr) minmax(240px, 0.85fr);
+        gap: 1rem;
+        padding: 1.5rem;
+        border-radius: 30px;
+        background: linear-gradient(180deg, rgba(255,255,255,.97), rgba(247,250,247,.94));
+    }
+
+    .portal-anom-chip-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.65rem;
+        margin-top: 1rem;
+    }
+
+    .portal-anom-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.45rem;
+        min-height: 34px;
+        padding: 0 0.9rem;
+        border-radius: 999px;
+        border: 1px solid rgba(15, 23, 42, 0.08);
+        background: rgba(255,255,255,.82);
+        font-size: 0.83rem;
+        font-weight: 700;
+    }
+
+    .portal-anom-chip--success { color: #0b6b3f; }
+    .portal-anom-chip--warning { color: #b97908; }
+    .portal-anom-chip--danger { color: #b91c1c; }
+    .portal-anom-chip--neutral { color: #334155; }
+
+    .portal-anom-hero-side,
+    .portal-anom-side-grid {
+        display: grid;
+        gap: 1rem;
+    }
+
+    .portal-anom-stat-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 1rem;
+    }
+
+    .portal-anom-stat-card {
+        display: grid;
+        gap: 0.75rem;
+        padding: 1.1rem 1.15rem;
+        border-radius: 22px;
+        background: linear-gradient(180deg, rgba(255,255,255,.98), rgba(248,251,248,.95));
+    }
+
+    .portal-anom-stat-value--success { color: #0b6b3f; }
+    .portal-anom-stat-value--warning { color: #b97908; }
+    .portal-anom-stat-value--danger { color: #b91c1c; }
+
+    .portal-anom-content-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1.45fr) minmax(260px, 0.75fr);
+        gap: 1rem;
+        align-items: start;
+    }
+
+    .portal-anom-panel {
+        border-radius: 26px;
+        overflow: hidden;
+    }
+
+    .portal-anom-panel-head {
+        padding: 1.25rem 1.35rem 0;
+    }
+
+    .portal-anom-table-wrap {
+        overflow: auto;
+        padding: 1rem 1.35rem 1.35rem;
+    }
+
+    .portal-anom-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.92rem;
+    }
+
+    .portal-anom-table th,
+    .portal-anom-table td {
+        padding: 0.8rem 0.5rem;
+        border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+        text-align: left;
+        white-space: nowrap;
+    }
+
+    .portal-anom-table th {
+        color: var(--portal-muted-strong, #64748b);
+        font-size: 0.75rem;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+    }
+
+    .portal-anom-badge {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 72px;
+        min-height: 28px;
+        padding: 0 0.7rem;
+        border-radius: 999px;
+        font-size: 0.76rem;
+        font-weight: 700;
+    }
+
+    .portal-anom-badge--danger { background: rgba(185, 28, 28, 0.12); color: #b91c1c; }
+    .portal-anom-badge--warning { background: rgba(224, 124, 36, 0.14); color: #b97908; }
+    .portal-anom-badge--success { background: rgba(11, 107, 63, 0.12); color: #0b6b3f; }
+
+    .portal-anom-list {
+        display: grid;
+        gap: 0.85rem;
+        padding: 1rem 1.35rem 1.35rem;
+    }
+
+    .portal-anom-list-item {
+        display: flex;
+        justify-content: space-between;
+        gap: 0.75rem;
+        align-items: flex-start;
+        padding: 0.95rem 1rem;
+        border-radius: 18px;
+        background: rgba(248, 250, 252, 0.85);
+        border: 1px solid rgba(148, 163, 184, 0.16);
+    }
+
+    .portal-anom-error,
+    .portal-anom-empty {
+        display: grid;
+        gap: 0.75rem;
+        padding: 1.25rem;
+        border-radius: 24px;
+        background: rgba(255,255,255,.97);
+    }
+
+    .portal-anom-error { color: #991b1b; }
+
+    .portal-anom-filter {
+        min-width: 160px;
+        appearance: auto;
+        background: rgba(255,255,255,.9);
+    }
+
+    @@media (max-width: 980px) {
+        .portal-anom-banner,
+        .portal-anom-hero,
+        .portal-anom-content-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+</style>
 
 @code {
     [CascadingParameter] private Task<AuthenticationState> AuthenticationStateTask { get; set; } = default!;
 
     private readonly List<AnomalyReport> _reports = new();
+    private readonly List<BreadcrumbItem> _breadcrumb =
+    [
+        new("Home", "/"),
+        new("Analytics", "/analytics/foresight"),
+        new("Anomalies", null)
+    ];
+
     private bool _isLoading = true;
     private string? _error;
     private string _selectedModule = string.Empty;
@@ -149,10 +476,38 @@
         ? 100m
         : decimal.Round(FilteredReports.Average(x => x.OverallQualityScore), 1);
 
-    protected override async Task OnInitializedAsync()
-    {
-        await LoadAsync();
-    }
+    private string ScopeLabel => string.IsNullOrWhiteSpace(_selectedModule) && string.IsNullOrWhiteSpace(_selectedPeriod)
+        ? "All modules and periods"
+        : $"{(string.IsNullOrWhiteSpace(_selectedModule) ? "All modules" : _selectedModule)} / {(string.IsNullOrWhiteSpace(_selectedPeriod) ? "All periods" : _selectedPeriod)}";
+
+    private string BannerTone => FilteredReports.Any(x => x.TrafficLight == "RED")
+        ? "portal-anom-banner--danger"
+        : FilteredReports.Sum(x => x.AlertCount) > 0
+            ? "portal-anom-banner--warning"
+            : "portal-anom-banner--success";
+
+    private string BannerHeadline => FilteredReports.Any(x => x.TrafficLight == "RED")
+        ? "High-severity anomaly reports are visible in the current tenant scope."
+        : FilteredReports.Sum(x => x.AlertCount) > 0
+            ? "The anomaly posture is manageable, but there are still open statistical signals to review."
+            : "Current anomaly reports show a clean statistical posture across the selected scope.";
+
+    private string BannerCopy => $"Average quality is {AverageQuality:F1}% across {FilteredReports.Count} analysed returns, with {FilteredReports.Sum(x => x.TotalFindings)} total findings and {FilteredReports.Sum(x => x.AlertCount)} active alerts.";
+
+    private string QualityChipClass => AverageQuality >= 90m ? "portal-anom-chip--success" : AverageQuality >= 75m ? "portal-anom-chip--warning" : "portal-anom-chip--danger";
+    private string AlertChipClass => FilteredReports.Sum(x => x.AlertCount) > 0 ? "portal-anom-chip--warning" : "portal-anom-chip--success";
+    private string QualityValueClass => AverageQuality >= 90m ? "portal-anom-stat-value--success" : AverageQuality >= 75m ? "portal-anom-stat-value--warning" : "portal-anom-stat-value--danger";
+    private string AlertValueClass => FilteredReports.Sum(x => x.AlertCount) > 0 ? "portal-anom-stat-value--warning" : "portal-anom-stat-value--success";
+
+    private List<ModuleAlertSummary> TopModules => FilteredReports
+        .GroupBy(x => x.ModuleCode)
+        .Select(g => new ModuleAlertSummary(g.Key, g.Count(), g.Sum(x => x.AlertCount)))
+        .OrderByDescending(x => x.AlertCount)
+        .ThenByDescending(x => x.ReportCount)
+        .Take(5)
+        .ToList();
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
 
     private async Task LoadAsync()
     {
@@ -170,11 +525,20 @@
         }
         catch (Exception ex)
         {
-            _error = $"Unable to load anomaly reports: {ex.Message}";
+            _error = ex.Message;
         }
         finally
         {
             _isLoading = false;
         }
     }
+
+    private static string TrafficLightClass(string trafficLight) => trafficLight switch
+    {
+        "RED" => "portal-anom-badge--danger",
+        "AMBER" => "portal-anom-badge--warning",
+        _ => "portal-anom-badge--success"
+    };
+
+    private sealed record ModuleAlertSummary(string ModuleCode, int ReportCount, int AlertCount);
 }

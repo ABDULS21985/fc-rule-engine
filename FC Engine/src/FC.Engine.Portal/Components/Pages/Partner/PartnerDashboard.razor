@@ -11,6 +11,23 @@
 
 <PageTitle>Partner Dashboard</PageTitle>
 
+<div class="portal-page portal-fsd-shell">
+    <PortalPageHeader Title="Partner Dashboard"
+                      Subtitle="Portfolio-wide client health, churn pressure, and white-label operating posture.">
+        <SecondaryActions>
+            <button class="portal-btn portal-btn-ghost portal-btn-sm" @onclick="ReloadAsync" disabled="@_loading">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                    <polyline points="23 4 23 10 17 10"></polyline>
+                    <path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"></path>
+                </svg>
+                Refresh
+            </button>
+        </SecondaryActions>
+        <PrimaryAction>
+            <a class="portal-btn portal-btn-primary portal-btn-sm" href="/partner/sub-tenants">Manage sub-tenants</a>
+        </PrimaryAction>
+    </PortalPageHeader>
+
 @if (!string.IsNullOrWhiteSpace(_error))
 {
     <div class="portal-alert portal-alert-danger">@_error</div>
@@ -78,6 +95,75 @@ else if (!_isPartner)
 }
 else
 {
+    var attentionClients = _rows.Count(r => r.OverdueReturns > 0 || r.ComplianceRate < 80m);
+    var churnCases = _data?.ChurnRisk.Count ?? 0;
+    var bannerTone = ResolvePartnerBannerTone(attentionClients, churnCases, _alerts.Count);
+    var leadRisk = _rows.OrderBy(r => r.ComplianceRate).FirstOrDefault();
+
+    <section class="portal-fsd-banner portal-fsd-banner--@bannerTone">
+        <div>
+            <span class="portal-fsd-eyebrow">Partner pulse</span>
+            <h2 class="portal-fsd-banner-title">@BuildPartnerBannerHeadline(attentionClients, churnCases, _alerts.Count)</h2>
+            <p class="portal-fsd-banner-copy">@BuildPartnerBannerCopy(attentionClients, churnCases, leadRisk)</p>
+        </div>
+        <div class="portal-fsd-banner-meta">
+            <span class="portal-fsd-meta-label">Portfolio scope</span>
+            <strong class="portal-fsd-meta-value">@(_data?.Portfolio.ActiveSubTenants ?? 0) active of @(_data?.Portfolio.TotalSubTenants ?? 0)</strong>
+            <span class="portal-fsd-meta-copy">Generated @(_data?.GeneratedAt.ToString("dd MMM HH:mm") ?? "now") · Billing model @(_data?.Revenue.BillingModel ?? "N/A")</span>
+        </div>
+    </section>
+
+    <section class="portal-fsd-hero">
+        <div>
+            <span class="portal-fsd-eyebrow">Operating narrative</span>
+            <h2 class="portal-fsd-hero-title">Run the partner book like a live portfolio, not a stack of disconnected tenants.</h2>
+            <p class="portal-fsd-hero-copy">
+                This workspace surfaces filing pressure, revenue concentration, churn risk, and user activity so the partner team can
+                intervene early before a client drifts into inactivity or compliance failure.
+            </p>
+            <div class="portal-fsd-chip-row">
+                <span class="portal-fsd-chip portal-fsd-chip--@(attentionClients > 0 ? "warning" : "success")">@attentionClients client@(attentionClients == 1 ? "" : "s") need intervention</span>
+                <span class="portal-fsd-chip portal-fsd-chip--@(churnCases > 0 ? "danger" : "success")">@churnCases churn-risk signal@(churnCases == 1 ? "" : "s")</span>
+                <span class="portal-fsd-chip portal-fsd-chip--info">@FormatCurrencyShort(_data?.Revenue.CommissionsEarned ?? 0m) commissions earned</span>
+            </div>
+        </div>
+        <div class="portal-fsd-hero-aside">
+            <div class="portal-fsd-note">
+                <span class="portal-fsd-note-label">Primary watch client</span>
+                <strong class="portal-fsd-note-value">@(leadRisk?.Summary.TenantName ?? "Stable book")</strong>
+                <span class="portal-fsd-note-copy">@(leadRisk is null ? "No weak client surfaced in the current portfolio." : $"{leadRisk.ComplianceRate:0}% compliance with {leadRisk.OverdueReturns} overdue return(s).")</span>
+            </div>
+            <div class="portal-fsd-note">
+                <span class="portal-fsd-note-label">Usage footprint</span>
+                <strong class="portal-fsd-note-value">@(_data?.Usage.ActiveUsers ?? 0) active users</strong>
+                <span class="portal-fsd-note-copy">@(_data?.Usage.ActiveInstitutions ?? 0) institution@( (_data?.Usage.ActiveInstitutions ?? 0) == 1 ? "" : "s") currently active this month.</span>
+            </div>
+        </div>
+    </section>
+
+    <section class="portal-fsd-stat-grid" aria-label="Partner operating metrics">
+        <article class="portal-fsd-stat">
+            <span class="portal-fsd-stat-label">Gross billed</span>
+            <strong class="portal-fsd-stat-value">@FormatCurrencyShort(_data?.Revenue.GrossBilled ?? 0m)</strong>
+            <p class="portal-fsd-stat-copy">Current portfolio billings before discounts and commissions.</p>
+        </article>
+        <article class="portal-fsd-stat">
+            <span class="portal-fsd-stat-label">Net platform revenue</span>
+            <strong class="portal-fsd-stat-value">@FormatCurrencyShort(_data?.Revenue.NetPlatformRevenue ?? 0m)</strong>
+            <p class="portal-fsd-stat-copy">Net revenue remaining after the current partner commercial structure.</p>
+        </article>
+        <article class="portal-fsd-stat">
+            <span class="portal-fsd-stat-label">Wholesale discount</span>
+            <strong class="portal-fsd-stat-value">@FormatCurrencyShort(_data?.Revenue.WholesaleDiscountAmount ?? 0m)</strong>
+            <p class="portal-fsd-stat-copy">Discount pressure absorbed across the active white-label portfolio.</p>
+        </article>
+        <article class="portal-fsd-stat">
+            <span class="portal-fsd-stat-label">Alert load</span>
+            <strong class="portal-fsd-stat-value">@_alerts.Count</strong>
+            <p class="portal-fsd-stat-copy">Portfolio alerts built from client inactivity, overdue filings, and weak adoption.</p>
+        </article>
+    </section>
+
     <!-- ── HERO STATS ───────────────────────────────────────────── -->
     <div class="pd-hero">
         <div class="pd-hero-stat pd-hero-stat--primary">
@@ -501,6 +587,7 @@ else
         <div class="pd-bulk-feedback" role="status" aria-live="polite">@_bulkFeedback</div>
     }
 }
+</div>
 
 @code {
     // ── State ────────────────────────────────────────────────────────────────
@@ -831,5 +918,40 @@ else
         if (v >= 1_000_000) return $"₦{v / 1_000_000:0.0}M";
         if (v >= 1_000) return $"₦{v / 1_000:0.0}K";
         return $"₦{v:N0}";
+    }
+
+    private static string ResolvePartnerBannerTone(int attentionClients, int churnCases, int alerts)
+    {
+        if (churnCases > 0 || attentionClients >= 3) return "danger";
+        if (alerts > 0 || attentionClients > 0) return "warning";
+        return "success";
+    }
+
+    private static string BuildPartnerBannerHeadline(int attentionClients, int churnCases, int alerts)
+    {
+        if (churnCases > 0)
+            return $"{churnCases} client{(churnCases == 1 ? "" : "s")} have explicit churn-risk pressure in the current book.";
+
+        if (attentionClients > 0)
+            return $"{attentionClients} client{(attentionClients == 1 ? "" : "s")} are slipping below the preferred operating posture.";
+
+        if (alerts > 0)
+            return $"{alerts} portfolio alert{(alerts == 1 ? "" : "s")} need triage, even though churn pressure is not yet elevated.";
+
+        return "The partner portfolio is broadly stable across compliance, usage, and commercial posture.";
+    }
+
+    private static string BuildPartnerBannerCopy(int attentionClients, int churnCases, SubTenantHealthRow? leadRisk)
+    {
+        if (leadRisk is null)
+            return "No individual client is materially distorting the current portfolio posture.";
+
+        if (churnCases > 0)
+            return $"Lead risk currently sits with {leadRisk.Summary.TenantName}, where compliance is at {leadRisk.ComplianceRate:0}% and overdue pressure is already visible.";
+
+        if (attentionClients > 0)
+            return $"Use the heatmap and health matrix together to focus intervention on {leadRisk.Summary.TenantName} and peers showing the weakest month-to-month momentum.";
+
+        return $"{leadRisk.Summary.TenantName} is still the lowest client in the current cohort, but the portfolio remains inside an acceptable control band overall.";
     }
 }

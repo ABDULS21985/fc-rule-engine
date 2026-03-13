@@ -8,7 +8,7 @@
 
 <PageTitle>Cross-Module Data Consolidation</PageTitle>
 
-<div class="portal-page">
+<div class="portal-page portal-fsd-shell">
 
     <PortalPageHeader Title="Cross-Module Data Consolidation"
                       Subtitle="Entity hierarchy, submission status, and consolidated financials across jurisdictions."
@@ -40,6 +40,79 @@
             }
         </PrimaryAction>
     </PortalPageHeader>
+
+    @if (_data is not null)
+    {
+        var reconErrorCount = _reconAlerts.Count(a => a.Severity == ReconciliationAlertSeverity.Error);
+        var fxStaleCount = _filteredJurisdictions.Count(j => j.IsFxRateStale);
+        var unmatchedEliminations = _eliminations.Count(e => !e.IsMatched);
+        var leadJurisdiction = _filteredJurisdictions.OrderByDescending(j => j.GrossAmountReportingCurrency).FirstOrDefault();
+        var bannerTone = ResolveConsolidationBannerTone(reconErrorCount, fxStaleCount, unmatchedEliminations);
+
+        <section class="portal-fsd-banner portal-fsd-banner--@bannerTone">
+            <div>
+                <span class="portal-fsd-eyebrow">Consolidation pulse</span>
+                <h2 class="portal-fsd-banner-title">@BuildConsolidationBannerHeadline(reconErrorCount, fxStaleCount, unmatchedEliminations)</h2>
+                <p class="portal-fsd-banner-copy">@BuildConsolidationBannerCopy(leadJurisdiction, _data.ReportingCurrency, _selectedEntityId.HasValue)</p>
+            </div>
+            <div class="portal-fsd-banner-meta">
+                <span class="portal-fsd-meta-label">Current scope</span>
+                <strong class="portal-fsd-meta-value">@(_selectedEntityId.HasValue ? "Entity-focused view" : "Full group view")</strong>
+                <span class="portal-fsd-meta-copy">@_data.SubsidiaryCount entities · @_filteredJurisdictions.Count jurisdiction@(_filteredJurisdictions.Count == 1 ? "" : "s") · Generated @_data.GeneratedAt.ToString("dd MMM HH:mm")</span>
+            </div>
+        </section>
+
+        <section class="portal-fsd-hero">
+            <div>
+                <span class="portal-fsd-eyebrow">Consolidation narrative</span>
+                <h2 class="portal-fsd-hero-title">Keep structure, currency, and elimination logic in one visible control loop.</h2>
+                <p class="portal-fsd-hero-copy">
+                    This workspace combines entity hierarchy, submission readiness, FX conversion posture, reconciliation alerts, and
+                    intercompany eliminations so finance and compliance teams can see whether the net consolidated number is truly defensible.
+                </p>
+                <div class="portal-fsd-chip-row">
+                    <span class="portal-fsd-chip portal-fsd-chip--@(reconErrorCount > 0 ? "danger" : "success")">@reconErrorCount error alert@(reconErrorCount == 1 ? "" : "s")</span>
+                    <span class="portal-fsd-chip portal-fsd-chip--@(fxStaleCount > 0 ? "warning" : "success")">@fxStaleCount stale FX rate@(fxStaleCount == 1 ? "" : "s")</span>
+                    <span class="portal-fsd-chip portal-fsd-chip--info">@unmatchedEliminations unmatched elimination@(unmatchedEliminations == 1 ? "" : "s")</span>
+                </div>
+            </div>
+            <div class="portal-fsd-hero-aside">
+                <div class="portal-fsd-note">
+                    <span class="portal-fsd-note-label">Lead jurisdiction</span>
+                    <strong class="portal-fsd-note-value">@(leadJurisdiction?.CountryName ?? "N/A")</strong>
+                    <span class="portal-fsd-note-copy">@(leadJurisdiction is null ? "No jurisdiction data is currently available." : $"{leadJurisdiction.GrossAmountReportingCurrency:N2} {_data.ReportingCurrency} gross contribution in the current scope.")</span>
+                </div>
+                <div class="portal-fsd-note">
+                    <span class="portal-fsd-note-label">Net after eliminations</span>
+                    <strong class="portal-fsd-note-value">@FormatAmount(_data.NetAmount)</strong>
+                    <span class="portal-fsd-note-copy">Current net consolidated amount after elimination adjustments in the reporting currency.</span>
+                </div>
+            </div>
+        </section>
+
+        <section class="portal-fsd-stat-grid" aria-label="Consolidation summary metrics">
+            <article class="portal-fsd-stat">
+                <span class="portal-fsd-stat-label">Submission matrix rows</span>
+                <strong class="portal-fsd-stat-value">@_statusMatrix.Count</strong>
+                <p class="portal-fsd-stat-copy">Entities currently represented in the active submission status matrix.</p>
+            </article>
+            <article class="portal-fsd-stat">
+                <span class="portal-fsd-stat-label">Aggregation fields</span>
+                <strong class="portal-fsd-stat-value">@_aggregationFields.Count</strong>
+                <p class="portal-fsd-stat-copy">Numeric fields being traced through gross, expected, and variance views.</p>
+            </article>
+            <article class="portal-fsd-stat">
+                <span class="portal-fsd-stat-label">Reconciliation alerts</span>
+                <strong class="portal-fsd-stat-value">@_reconAlerts.Count</strong>
+                <p class="portal-fsd-stat-copy">Mismatch and variance alerts visible in the current consolidation run.</p>
+            </article>
+            <article class="portal-fsd-stat">
+                <span class="portal-fsd-stat-label">Jurisdictions</span>
+                <strong class="portal-fsd-stat-value">@_filteredJurisdictions.Count</strong>
+                <p class="portal-fsd-stat-copy">Country views currently contributing to the active consolidation scope.</p>
+            </article>
+        </section>
+    }
 
     @* ── 7. Reconciliation Alerts Banner ── *@
     @if (_showReconPanel && _reconAlerts.Count > 0)
@@ -795,5 +868,35 @@
         if (v.Contains(',') || v.Contains('"') || v.Contains('\n'))
             return "\"" + v.Replace("\"", "\"\"") + "\"";
         return v;
+    }
+
+    private static string ResolveConsolidationBannerTone(int reconErrorCount, int fxStaleCount, int unmatchedEliminations)
+    {
+        if (reconErrorCount > 0) return "danger";
+        if (fxStaleCount > 0 || unmatchedEliminations > 0) return "warning";
+        return "success";
+    }
+
+    private static string BuildConsolidationBannerHeadline(int reconErrorCount, int fxStaleCount, int unmatchedEliminations)
+    {
+        if (reconErrorCount > 0)
+            return $"{reconErrorCount} reconciliation error alert{(reconErrorCount == 1 ? "" : "s")} are affecting the current consolidation picture.";
+
+        if (fxStaleCount > 0)
+            return $"{fxStaleCount} jurisdiction FX rate{(fxStaleCount == 1 ? "" : "s")} are stale in the current scope.";
+
+        if (unmatchedEliminations > 0)
+            return $"{unmatchedEliminations} elimination entr{(unmatchedEliminations == 1 ? "y is" : "ies are")} still unmatched.";
+
+        return "The current consolidation run is balanced and free of major reconciliation pressure.";
+    }
+
+    private static string BuildConsolidationBannerCopy(JurisdictionConsolidationItem? leadJurisdiction, string reportingCurrency, bool entityFocused)
+    {
+        var scopeLabel = entityFocused ? "entity-focused" : "group-wide";
+        if (leadJurisdiction is null)
+            return $"The current {scopeLabel} view has no jurisdiction breakout available yet.";
+
+        return $"{leadJurisdiction.CountryName} is the largest contributor at {leadJurisdiction.GrossAmountReportingCurrency:N2} {reportingCurrency}, which makes it the clearest lens for reading current gross-to-net movement.";
     }
 }

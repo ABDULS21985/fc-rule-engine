@@ -4,144 +4,263 @@
 <PageTitle>Help Center — RegOS™ Portal</PageTitle>
 
 <HelpLayout>
-    <!-- Search -->
-    <div class="help-search-wrapper">
-        <div class="help-search-box">
-            <svg class="help-search-icon" width="18" height="18" viewBox="0 0 24 24" fill="none"
-                 stroke="currentColor" stroke-width="2" aria-hidden="true">
-                <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
-            </svg>
-            <input type="text" class="help-search-input" placeholder="Search for help..."
-                   @bind="searchQuery" @bind:event="oninput" aria-label="Search help articles" />
-            @if (!string.IsNullOrEmpty(searchQuery))
-            {
-                <button class="help-search-clear" @onclick="ClearSearch" aria-label="Clear search">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                        <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-                    </svg>
-                </button>
-            }
-        </div>
-    </div>
+    <div class="portal-fsd-shell">
+        <section class="portal-fsd-banner @ResolveBannerTone()" aria-label="Help posture">
+            <div>
+                <div class="portal-fsd-eyebrow">Help posture</div>
+                <h2 class="portal-fsd-banner-title">@BuildBannerHeadline()</h2>
+                <p class="portal-fsd-banner-copy">@BuildBannerCopy()</p>
+            </div>
+            <div class="portal-fsd-banner-meta">
+                <div class="portal-fsd-meta-label">Current coverage</div>
+                <div class="portal-fsd-meta-value">@BuildCoverageLabel()</div>
+                <div class="portal-fsd-note-copy">@BuildCoverageCopy()</div>
+            </div>
+        </section>
 
-    @if (!string.IsNullOrEmpty(searchQuery))
-    {
-        <!-- Search Results -->
-        <div class="help-search-results" role="region" aria-label="Search results">
-            <h2 class="help-section-title">Search Results for "@searchQuery"</h2>
-            @if (filteredTopics.Count == 0)
-            {
-                <div class="portal-empty-state" style="padding: 2rem;">
-                    <div class="portal-empty-state-icon" aria-hidden="true">
-                        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                            <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
-                        </svg>
+        <section class="portal-fsd-hero" aria-labelledby="help-home-title">
+            <div>
+                <div class="portal-fsd-eyebrow">Support command lane</div>
+                <h1 id="help-home-title" class="portal-fsd-hero-title">Guide users to the right answer before support becomes the queue.</h1>
+                <p class="portal-fsd-hero-copy">
+                    The help center now surfaces the fastest submission guides, validation references, and support routes in one
+                    premium workspace so teams can resolve issues without bouncing across the portal.
+                </p>
+                <div class="portal-fsd-chip-row">
+                    <span class="portal-fsd-chip portal-fsd-chip--info">@allTopics.Count curated topics</span>
+                    <span class="portal-fsd-chip portal-fsd-chip--success">@GuideCount guides</span>
+                    <span class="portal-fsd-chip portal-fsd-chip--warning">@ReferenceCount references</span>
+                    <span class="portal-fsd-chip @(HasSearchQuery ? "portal-fsd-chip--danger" : "portal-fsd-chip--success")">@BuildSearchChipLabel()</span>
+                </div>
+            </div>
+            <div class="portal-fsd-hero-aside">
+                <div class="portal-fsd-note">
+                    <div class="portal-fsd-note-label">Fastest route</div>
+                    <div class="portal-fsd-note-value">Submission Guide</div>
+                    <div class="portal-fsd-note-copy">Best first stop for XML structure, online form use, and maker-checker workflow issues.</div>
+                </div>
+                <div class="portal-fsd-note">
+                    <div class="portal-fsd-note-label">Escalation path</div>
+                    <div class="portal-fsd-note-value">Support desk</div>
+                    <div class="portal-fsd-note-copy">Move to support when the issue is tenant-specific, access-related, or cannot be resolved with published guidance.</div>
+                </div>
+            </div>
+        </section>
+
+        <section class="portal-fsd-stat-grid" aria-label="Help center metrics">
+            <article class="portal-fsd-stat">
+                <div class="portal-fsd-stat-label">Guides</div>
+                <div class="portal-fsd-stat-value portal-fsd-chip--success">@GuideCount</div>
+                <div class="portal-fsd-stat-copy">Step-by-step walkthroughs for setup, submissions, and first-use workflows.</div>
+            </article>
+            <article class="portal-fsd-stat">
+                <div class="portal-fsd-stat-label">References</div>
+                <div class="portal-fsd-stat-value portal-fsd-chip--warning">@ReferenceCount</div>
+                <div class="portal-fsd-stat-copy">Structured validation, schema, and rule references for troubleshooting deeper issues.</div>
+            </article>
+            <article class="portal-fsd-stat">
+                <div class="portal-fsd-stat-label">FAQs</div>
+                <div class="portal-fsd-stat-value portal-fsd-chip--info">@FaqCount</div>
+                <div class="portal-fsd-stat-copy">Quick answers for access, deadlines, approvals, and common platform behavior.</div>
+            </article>
+            <article class="portal-fsd-stat">
+                <div class="portal-fsd-stat-label">Support routes</div>
+                <div class="portal-fsd-stat-value @(HasSearchQuery && filteredTopics.Count == 0 ? "portal-fsd-chip--danger" : "portal-fsd-chip--success")">@SupportCount</div>
+                <div class="portal-fsd-stat-copy">Direct help paths for escalation when published guidance is not enough.</div>
+            </article>
+        </section>
+
+        <section class="portal-fsd-grid">
+            <div style="display:grid; gap:1rem;">
+                <section class="portal-fsd-panel">
+                    <div class="portal-fsd-panel-head">
+                        <div>
+                            <div class="portal-fsd-panel-eyebrow">Topic navigator</div>
+                            <h2 class="portal-fsd-panel-title">Search within curated help topics</h2>
+                            <p class="portal-fsd-panel-copy">Use the page filter for quick scanning, or the universal search bar above for full help-center lookup.</p>
+                        </div>
+                        <div class="portal-fsd-panel-metric">@(HasSearchQuery ? $"{filteredTopics.Count} hits" : $"{allTopics.Count} topics")</div>
                     </div>
-                    <h3 class="portal-empty-state-title">No Results Found</h3>
-                    <p class="portal-empty-state-desc">Try a different search term or browse the topics below.</p>
-                </div>
-            }
-            else
-            {
-                <div class="help-topics-grid" role="list" aria-label="Matching help topics">
-                    @foreach (var topic in filteredTopics)
-                    {
-                        <a href="@topic.Link" class="help-topic-card" role="listitem">
-                            <div class="help-topic-icon" aria-hidden="true">@((MarkupString)topic.Icon)</div>
-                            <h3 class="help-topic-title">@HighlightMatch(topic.Title)</h3>
-                            <p class="help-topic-desc">@HighlightMatch(topic.Description)</p>
-                        </a>
-                    }
-                </div>
-            }
-        </div>
-    }
-    else
-    {
-        <!-- Quick Links -->
-        <div class="help-quick-links" role="navigation" aria-label="Quick links">
-            <a href="/help/submission-guide" class="help-quick-link">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                    <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/>
-                </svg>
-                How to Submit a Return
-            </a>
-            <a href="/help/validation-errors" class="help-quick-link">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                    <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
-                    <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
-                </svg>
-                Understanding Validation Errors
-            </a>
-            <a href="/schemas" class="help-quick-link">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                    <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
-                </svg>
-                XML Schema Guide
-            </a>
-            <a href="/help/support" class="help-quick-link">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                    <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
-                </svg>
-                Contact Support
-            </a>
-            <a href="/help/knowledge-base" class="help-quick-link">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                    <path d="M4 19.5A2.5 2.5 0 016.5 17H20"/>
-                    <path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/>
-                </svg>
-                Knowledge Base
-            </a>
-        </div>
+                    <div class="portal-fsd-panel-body">
+                        <div class="help-search-wrapper" style="margin:0 0 1rem; padding:0;">
+                            <div class="help-search-box">
+                                <svg class="help-search-icon" width="18" height="18" viewBox="0 0 24 24" fill="none"
+                                     stroke="currentColor" stroke-width="2" aria-hidden="true">
+                                    <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                                </svg>
+                                <input type="text" class="help-search-input" placeholder="Filter these topics..."
+                                       value="@searchQuery" @oninput="OnSearchChanged" aria-label="Filter help topics on this page" />
+                                @if (HasSearchQuery)
+                                {
+                                    <button class="help-search-clear" @onclick="ClearSearch" aria-label="Clear topic filter">
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                                            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                                        </svg>
+                                    </button>
+                                }
+                            </div>
+                        </div>
 
-        <!-- Popular Topics -->
-        <h2 class="help-section-title" id="popular-topics-heading">Popular Topics</h2>
-        <div class="help-topics-grid" role="list" aria-labelledby="popular-topics-heading">
-            @foreach (var topic in allTopics)
-            {
-                <a href="@topic.Link" class="help-topic-card" role="listitem">
-                    <div class="help-topic-icon" aria-hidden="true">@((MarkupString)topic.Icon)</div>
-                    <h3 class="help-topic-title">@topic.Title</h3>
-                    <p class="help-topic-desc">@topic.Description</p>
-                </a>
-            }
-        </div>
-    }
+                        @if (HasSearchQuery)
+                        {
+                            @if (filteredTopics.Count == 0)
+                            {
+                                <div class="portal-fsd-empty">No curated topics matched “@searchQuery”. Try a broader term or move to the support route in the side rail.</div>
+                            }
+                            else
+                            {
+                                <div class="help-topics-grid" role="list" aria-label="Matching help topics">
+                                    @foreach (var topic in filteredTopics)
+                                    {
+                                        <a href="@topic.Link" class="help-topic-card" role="listitem">
+                                            <div class="help-topic-icon" aria-hidden="true">@((MarkupString)topic.Icon)</div>
+                                            <h3 class="help-topic-title">@HighlightMatch(topic.Title)</h3>
+                                            <p class="help-topic-desc">@HighlightMatch(topic.Description)</p>
+                                        </a>
+                                    }
+                                </div>
+                            }
+                        }
+                        else
+                        {
+                            <div>
+                                <h2 class="help-section-title" id="popular-topics-heading">Popular Topics</h2>
+                                <div class="help-topics-grid" role="list" aria-labelledby="popular-topics-heading">
+                                    @foreach (var topic in allTopics)
+                                    {
+                                        <a href="@topic.Link" class="help-topic-card" role="listitem">
+                                            <div class="help-topic-icon" aria-hidden="true">@((MarkupString)topic.Icon)</div>
+                                            <h3 class="help-topic-title">@topic.Title</h3>
+                                            <p class="help-topic-desc">@topic.Description</p>
+                                        </a>
+                                    }
+                                </div>
+                            </div>
+                        }
+                    </div>
+                </section>
+            </div>
+
+            <aside class="portal-fsd-side">
+                <section class="portal-fsd-panel">
+                    <div class="portal-fsd-panel-head">
+                        <div>
+                            <div class="portal-fsd-panel-eyebrow">Quick routes</div>
+                            <h2 class="portal-fsd-panel-title">Most-used shortcuts</h2>
+                            <p class="portal-fsd-panel-copy">Jump directly to the guidance pages users hit most often during return preparation.</p>
+                        </div>
+                    </div>
+                    <div class="portal-fsd-panel-body">
+                        <div class="portal-fsd-side-list">
+                            @foreach (var link in QuickLinks)
+                            {
+                                <a href="@link.Link" class="portal-fsd-side-item" style="text-decoration:none;">
+                                    <div class="portal-fsd-side-item-head">
+                                        <strong>@link.Title</strong>
+                                        <span class="portal-fsd-risk portal-fsd-risk--info">@link.Badge</span>
+                                    </div>
+                                    <span>@link.Description</span>
+                                </a>
+                            }
+                        </div>
+                    </div>
+                </section>
+
+                <section class="portal-fsd-panel">
+                    <div class="portal-fsd-panel-head">
+                        <div>
+                            <div class="portal-fsd-panel-eyebrow">Coverage map</div>
+                            <h2 class="portal-fsd-panel-title">Collections and escalation</h2>
+                            <p class="portal-fsd-panel-copy">Understand what the help estate covers and when to leave self-service.</p>
+                        </div>
+                    </div>
+                    <div class="portal-fsd-panel-body">
+                        <div class="portal-fsd-side-list">
+                            <div class="portal-fsd-side-item">
+                                <div class="portal-fsd-side-item-head">
+                                    <strong>Submission and XML</strong>
+                                    <span class="portal-fsd-side-item-value">@GuideCount</span>
+                                </div>
+                                <span>Setup guides and XML references for direct return preparation.</span>
+                            </div>
+                            <div class="portal-fsd-side-item">
+                                <div class="portal-fsd-side-item-head">
+                                    <strong>Validation diagnostics</strong>
+                                    <span class="portal-fsd-side-item-value">@ReferenceCount</span>
+                                </div>
+                                <span>Error catalogs and rule references for resolving structural and business-rule failures.</span>
+                            </div>
+                            <div class="portal-fsd-side-item">
+                                <div class="portal-fsd-side-item-head">
+                                    <strong>Ask support</strong>
+                                    <span class="portal-fsd-risk @(HasSearchQuery && filteredTopics.Count == 0 ? "portal-fsd-risk--danger" : "portal-fsd-risk--success")">Support</span>
+                                </div>
+                                <span>Use the support desk when access, tenant configuration, or environment-specific issues are blocking progress.</span>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            </aside>
+        </section>
+    </div>
 </HelpLayout>
 
 @code {
     private string searchQuery = "";
     private List<HelpTopic> filteredTopics = new();
+    private bool HasSearchQuery => !string.IsNullOrWhiteSpace(searchQuery);
+    private int GuideCount => allTopics.Count(t => t.Category == "Guide");
+    private int ReferenceCount => allTopics.Count(t => t.Category == "Reference");
+    private int FaqCount => allTopics.Count(t => t.Category == "FAQ");
+    private int SupportCount => allTopics.Count(t => t.Category is "Support" or "Articles");
+
+    private readonly List<QuickLinkItem> QuickLinks = new()
+    {
+        new("How to Submit a Return", "Best first stop for upload and filing workflow questions.", "/help/submission-guide", "Guide"),
+        new("Validation Errors", "Use this when a return fails structure, type, or business rules.", "/help/validation-errors", "Reference"),
+        new("XML Schema Guide", "Schema structure and namespace requirements for XML filings.", "/schemas", "Schema"),
+        new("Contact Support", "Escalate tenant-specific or access-related issues.", "/help/support", "Support"),
+        new("Knowledge Base", "Browse the full library of help content and operational articles.", "/help/knowledge-base", "Articles")
+    };
 
     private readonly List<HelpTopic> allTopics = new()
     {
         new("Getting Started", "Step-by-step guide for first-time users of the FI Portal.",
             "/help/getting-started",
-            "<svg width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2'><circle cx='12' cy='12' r='10'/><polygon points='10 8 16 12 10 16 10 8'/></svg>"),
+            "<svg width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2'><circle cx='12' cy='12' r='10'/><polygon points='10 8 16 12 10 16 10 8'/></svg>",
+            "Guide"),
         new("Submission Process", "Learn how to prepare and submit your regulatory returns.",
             "/help/submission-guide",
-            "<svg width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2'><path d='M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4'/><polyline points='17 8 12 3 7 8'/><line x1='12' y1='3' x2='12' y2='15'/></svg>"),
+            "<svg width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2'><path d='M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4'/><polyline points='17 8 12 3 7 8'/><line x1='12' y1='3' x2='12' y2='15'/></svg>",
+            "Guide"),
         new("XML Format Guide", "Understand the XML structure and format requirements for each return type.",
             "/help/submission-guide#xml-format",
-            "<svg width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2'><polyline points='16 18 22 12 16 6'/><polyline points='8 6 2 12 8 18'/></svg>"),
+            "<svg width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2'><polyline points='16 18 22 12 16 6'/><polyline points='8 6 2 12 8 18'/></svg>",
+            "Reference"),
         new("Validation Errors", "Catalog of validation error types with explanations and fixes.",
             "/help/validation-errors",
-            "<svg width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2'><path d='M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z'/><line x1='12' y1='9' x2='12' y2='13'/><line x1='12' y1='17' x2='12.01' y2='17'/></svg>"),
+            "<svg width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2'><path d='M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z'/><line x1='12' y1='9' x2='12' y2='13'/><line x1='12' y1='17' x2='12.01' y2='17'/></svg>",
+            "Reference"),
         new("Maker-Checker Workflow", "How the dual-approval process works for your institution.",
             "/help/faq#approvals",
-            "<svg width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2'><path d='M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z'/></svg>"),
+            "<svg width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2'><path d='M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z'/></svg>",
+            "FAQ"),
         new("Account & Security", "Managing your account, password, and team members.",
             "/help/faq#account",
-            "<svg width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2'><rect x='3' y='11' width='18' height='11' rx='2' ry='2'/><path d='M7 11V7a5 5 0 0110 0v4'/></svg>"),
+            "<svg width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2'><rect x='3' y='11' width='18' height='11' rx='2' ry='2'/><path d='M7 11V7a5 5 0 0110 0v4'/></svg>",
+            "FAQ"),
         new("Reporting Calendar", "Deadlines, reporting periods, and submission windows.",
             "/help/faq#compliance",
-            "<svg width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2'><rect x='3' y='4' width='18' height='18' rx='2' ry='2'/><line x1='16' y1='2' x2='16' y2='6'/><line x1='8' y1='2' x2='8' y2='6'/><line x1='3' y1='10' x2='21' y2='10'/></svg>"),
+            "<svg width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2'><rect x='3' y='4' width='18' height='18' rx='2' ry='2'/><line x1='16' y1='2' x2='16' y2='6'/><line x1='8' y1='2' x2='8' y2='6'/><line x1='3' y1='10' x2='21' y2='10'/></svg>",
+            "FAQ"),
         new("Knowledge Base", "Searchable onboarding, module, FAQ, and troubleshooting articles.",
             "/help/knowledge-base",
-            "<svg width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2'><path d='M4 19.5A2.5 2.5 0 016.5 17H20'/><path d='M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z'/></svg>"),
+            "<svg width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2'><path d='M4 19.5A2.5 2.5 0 016.5 17H20'/><path d='M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z'/></svg>",
+            "Articles"),
         new("Contact Support", "Get help from the CBN support team.",
             "/help/support",
-            "<svg width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2'><path d='M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z'/></svg>")
+            "<svg width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2'><path d='M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z'/></svg>",
+            "Support")
     };
 
     private MarkupString HighlightMatch(string text)
@@ -158,9 +277,11 @@
         return new MarkupString($"{before}<mark>{match}</mark>{after}");
     }
 
-    private void ClearSearch() => searchQuery = "";
-
-    protected override void OnParametersSet() => ApplySearch();
+    private void OnSearchChanged(ChangeEventArgs args)
+    {
+        searchQuery = args.Value?.ToString() ?? string.Empty;
+        ApplySearch();
+    }
 
     private void ApplySearch()
     {
@@ -171,9 +292,67 @@
         }
         filteredTopics = allTopics
             .Where(t => t.Title.Contains(searchQuery, StringComparison.OrdinalIgnoreCase)
-                || t.Description.Contains(searchQuery, StringComparison.OrdinalIgnoreCase))
+                || t.Description.Contains(searchQuery, StringComparison.OrdinalIgnoreCase)
+                || t.Category.Contains(searchQuery, StringComparison.OrdinalIgnoreCase))
             .ToList();
     }
 
-    private record HelpTopic(string Title, string Description, string Link, string Icon);
+    private string ResolveBannerTone()
+    {
+        if (!HasSearchQuery)
+        {
+            return "portal-fsd-banner--success";
+        }
+
+        return filteredTopics.Count == 0
+            ? "portal-fsd-banner--danger"
+            : filteredTopics.Count <= 2
+                ? "portal-fsd-banner--warning"
+                : "portal-fsd-banner--success";
+    }
+
+    private string BuildBannerHeadline()
+    {
+        if (!HasSearchQuery)
+        {
+            return "Help coverage is ready across submissions, validation, and support routes.";
+        }
+
+        return filteredTopics.Count == 0
+            ? $"No curated topics matched “{searchQuery}”."
+            : $"{filteredTopics.Count} curated help topic{(filteredTopics.Count == 1 ? string.Empty : "s")} matched “{searchQuery}”.";
+    }
+
+    private string BuildBannerCopy()
+    {
+        if (!HasSearchQuery)
+        {
+            return "Use the search surface to find guides quickly, then drop into the structured quick routes and collections to keep teams moving during filing windows.";
+        }
+
+        return filteredTopics.Count == 0
+            ? "The current help index did not surface a direct match. Try a broader term, browse the quick routes, or escalate through the support desk."
+            : "The current filter is surfacing the best curated topics in the local help index. Use the global search above if you need full-knowledge-base coverage.";
+    }
+
+    private string BuildCoverageLabel() => HasSearchQuery
+        ? $"{filteredTopics.Count} local matches"
+        : $"{allTopics.Count} curated topics";
+
+    private string BuildCoverageCopy() => HasSearchQuery
+        ? $"Searching inside guides, FAQs, references, and support routes for “{searchQuery}”."
+        : "Curated coverage across guides, validation references, FAQs, and escalation paths.";
+
+    private string BuildSearchChipLabel() => HasSearchQuery
+        ? $"{filteredTopics.Count} search hits"
+        : "search ready";
+
+    private void ClearSearch()
+    {
+        searchQuery = string.Empty;
+        ApplySearch();
+    }
+
+    private record HelpTopic(string Title, string Description, string Link, string Icon, string Category);
+    private record QuickLinkItem(string Title, string Description, string Link, string Badge);
 }

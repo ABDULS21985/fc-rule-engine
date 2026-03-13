@@ -31,7 +31,17 @@
 }
 else if (_data is not null)
 {
-    <div class="portal-page" id="printable-compliance-dashboard">
+    <div class="portal-page portal-fsd-shell" id="printable-compliance-dashboard">
+
+        @{
+            var attentionModules = _data.ModuleBreakdowns.Count(x => x.ComplianceRate < 80m);
+            var bestModule = _data.ModuleBreakdowns.OrderByDescending(x => x.ComplianceRate).FirstOrDefault();
+            var worstModule = _data.ModuleBreakdowns.OrderBy(x => x.ComplianceRate).FirstOrDefault();
+            var onTimeTotal = _data.MonthlyBars.Sum(x => x.OnTime);
+            var missedTotal = _data.MonthlyBars.Sum(x => x.Missed);
+            var activeFilterCount = (string.IsNullOrWhiteSpace(_filterReturnCode) ? 0 : 1) + (string.IsNullOrWhiteSpace(_filterFrequency) ? 0 : 1);
+            var bannerTone = ResolveComplianceBannerTone(_data.Overdue, _data.QuarterChange, attentionModules);
+        }
 
         <!-- ════════════════════════════════════════════════════
              PAGE HEADER
@@ -73,6 +83,70 @@ else if (_data is not null)
                 </button>
             </SecondaryActions>
         </PortalPageHeader>
+
+        <section class="portal-fsd-banner portal-fsd-banner--@bannerTone">
+            <div>
+                <span class="portal-fsd-eyebrow">Compliance pulse</span>
+                <h2 class="portal-fsd-banner-title">@BuildComplianceBannerHeadline(_data.Overdue, _data.QuarterChange, attentionModules)</h2>
+                <p class="portal-fsd-banner-copy">@BuildComplianceBannerCopy(_data.Overdue, _data.QuarterChange, attentionModules, bestModule)</p>
+            </div>
+            <div class="portal-fsd-banner-meta">
+                <span class="portal-fsd-meta-label">Current scope</span>
+                <strong class="portal-fsd-meta-value">@BuildFilterScopeLabel()</strong>
+                <span class="portal-fsd-meta-copy">@_data.ModuleBreakdowns.Count module@(_data.ModuleBreakdowns.Count == 1 ? "" : "s") included · Generated @_data.GeneratedAt.ToString("dd MMM HH:mm")</span>
+            </div>
+        </section>
+
+        <section class="portal-fsd-hero">
+            <div>
+                <span class="portal-fsd-eyebrow">Control narrative</span>
+                <h2 class="portal-fsd-hero-title">The institution’s compliance posture is visible, explainable, and ready for action.</h2>
+                <p class="portal-fsd-hero-copy">
+                    This dashboard blends live filing posture with a 12-month view of timeliness so operators can see whether the current
+                    period is a short-term wobble or part of a broader pattern.
+                </p>
+                <div class="portal-fsd-chip-row">
+                    <span class="portal-fsd-chip portal-fsd-chip--@(attentionModules > 0 ? "warning" : "success")">@attentionModules module@(attentionModules == 1 ? "" : "s") need attention</span>
+                    <span class="portal-fsd-chip portal-fsd-chip--@(_data.Overdue > 0 ? "danger" : "success")">@_data.Overdue overdue return@(_data.Overdue == 1 ? "" : "s")</span>
+                    <span class="portal-fsd-chip portal-fsd-chip--@(_data.IsTrendImproving ? "success" : _data.QuarterChange < 0 ? "warning" : "info")">@_data.QuarterChange.ToString("+0.#;-0.#;0") pt quarter change</span>
+                </div>
+            </div>
+            <div class="portal-fsd-hero-aside">
+                <div class="portal-fsd-note">
+                    <span class="portal-fsd-note-label">Best performer</span>
+                    <strong class="portal-fsd-note-value">@(bestModule?.ReturnCode ?? "N/A")</strong>
+                    <span class="portal-fsd-note-copy">@(bestModule is null ? "No module data available in the current scope." : $"{bestModule.ReturnName} at {bestModule.ComplianceRate:0.#}% compliance.")</span>
+                </div>
+                <div class="portal-fsd-note">
+                    <span class="portal-fsd-note-label">Watch item</span>
+                    <strong class="portal-fsd-note-value">@(worstModule?.ReturnCode ?? "Stable")</strong>
+                    <span class="portal-fsd-note-copy">@(worstModule is null ? "No weak module surfaced." : $"{worstModule.ReturnName} is the lowest performer at {worstModule.ComplianceRate:0.#}% compliance.")</span>
+                </div>
+            </div>
+        </section>
+
+        <section class="portal-fsd-stat-grid" aria-label="Compliance control metrics">
+            <article class="portal-fsd-stat">
+                <span class="portal-fsd-stat-label">Modules in scope</span>
+                <strong class="portal-fsd-stat-value">@_data.ModuleBreakdowns.Count</strong>
+                <p class="portal-fsd-stat-copy">Distinct return modules currently included by your filter scope.</p>
+            </article>
+            <article class="portal-fsd-stat">
+                <span class="portal-fsd-stat-label">On-time filings (12m)</span>
+                <strong class="portal-fsd-stat-value">@onTimeTotal</strong>
+                <p class="portal-fsd-stat-copy">Accepted on or before deadline across the trailing twelve-month view.</p>
+            </article>
+            <article class="portal-fsd-stat">
+                <span class="portal-fsd-stat-label">Missed periods (12m)</span>
+                <strong class="portal-fsd-stat-value">@missedTotal</strong>
+                <p class="portal-fsd-stat-copy">Missed filing windows still visible in the historical timeliness panel.</p>
+            </article>
+            <article class="portal-fsd-stat">
+                <span class="portal-fsd-stat-label">Active filters</span>
+                <strong class="portal-fsd-stat-value">@activeFilterCount</strong>
+                <p class="portal-fsd-stat-copy">Use module and frequency filters together to tighten the monitoring lens.</p>
+            </article>
+        </section>
 
         <!-- ════════════════════════════════════════════════════
              FILTER BAR
@@ -543,4 +617,43 @@ else if (_data is not null)
         >= 80 => "#C8A415",
         _     => "#DC2626"
     };
+
+    private static string ResolveComplianceBannerTone(int overdue, decimal quarterChange, int attentionModules)
+    {
+        if (overdue > 0 || quarterChange <= -5m) return "danger";
+        if (attentionModules > 0 || quarterChange < 0) return "warning";
+        return "success";
+    }
+
+    private static string BuildComplianceBannerHeadline(int overdue, decimal quarterChange, int attentionModules)
+    {
+        if (overdue > 0)
+            return $"{overdue} overdue filing{(overdue == 1 ? "" : "s")} require immediate operator attention.";
+
+        if (quarterChange <= -5m)
+            return "Compliance performance is falling sharply against the last quarter.";
+
+        if (attentionModules > 0)
+            return $"{attentionModules} module{(attentionModules == 1 ? "" : "s")} are slipping below the preferred compliance band.";
+
+        return "The current compliance posture is stable and within the preferred operating band.";
+    }
+
+    private static string BuildComplianceBannerCopy(int overdue, decimal quarterChange, int attentionModules, ComplianceModuleBreakdown? bestModule)
+    {
+        if (overdue > 0)
+            return "Use the module breakdown and monthly history together to identify whether the overdue count is concentrated in one return family or spread across operational teams.";
+
+        if (quarterChange < 0)
+            return $"Quarter-on-quarter performance moved {quarterChange:+0.#;-0.#;0} points. The strongest current module is {(bestModule?.ReturnCode ?? "not available")}, which provides the clearest benchmark for recovery.";
+
+        return $"No overdue exposure is visible right now, and {(bestModule?.ReturnCode ?? "the current lead module")} is setting the pace for the rest of the institution.";
+    }
+
+    private string BuildFilterScopeLabel()
+    {
+        var moduleLabel = string.IsNullOrWhiteSpace(_filterReturnCode) ? "All modules" : _filterReturnCode;
+        var frequencyLabel = string.IsNullOrWhiteSpace(_filterFrequency) ? "All frequencies" : _filterFrequency;
+        return $"{moduleLabel} · {frequencyLabel}";
+    }
 }

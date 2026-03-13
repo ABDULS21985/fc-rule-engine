@@ -2,116 +2,232 @@
 @attribute [Authorize(Policy = "RegulatorOnly")]
 @inject IAnomalyDetectionService AnomalyService
 
+<PageTitle>Anomaly Intelligence</PageTitle>
+
 <PageHeader Title="Anomaly Intelligence"
             Subtitle="Rank institutions by anomaly density, quality score, and unresolved outliers." />
 
-<div class="fc-card" style="margin-bottom: 1rem;">
-    <div class="fc-card__body">
-        <div style="display:flex; flex-wrap:wrap; gap:0.75rem; align-items:end;">
-            <div>
-                <label class="form-label">Regulator</label>
-                <select class="form-select" style="min-width: 160px;" @bind="_regulatorCode">
-                    <option value="CBN">CBN</option>
-                    <option value="NDIC">NDIC</option>
-                    <option value="NAICOM">NAICOM</option>
-                    <option value="SEC">SEC</option>
-                </select>
+<div class="fc-page">
+    @if (_isLoading)
+    {
+        <div class="rg-premium-flow" aria-busy="true" aria-label="Loading anomaly intelligence">
+            <div class="rg-premium-banner"><SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Block" Height="138px" /></div>
+            <div class="rg-premium-hero"><SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Block" Height="210px" /></div>
+            <div class="rg-premium-stat-grid">
+                @for (var i = 0; i < 4; i++)
+                {
+                    <div class="rg-premium-stat"><SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Block" Height="140px" /></div>
+                }
             </div>
-            <div>
-                <label class="form-label">Module code</label>
-                <input class="form-control" style="min-width: 180px;" @bind="_moduleCode" placeholder="Optional" />
+            <div class="rg-premium-content-grid">
+                <div class="rg-premium-main"><div class="rg-premium-panel"><SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.TableRows" RowCount="8" /></div></div>
+                <div class="rg-premium-side"><div class="rg-premium-panel"><SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Block" Height="240px" /></div><div class="rg-premium-panel"><SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Block" Height="260px" /></div></div>
             </div>
-            <div>
-                <label class="form-label">Period code</label>
-                <input class="form-control" style="min-width: 140px;" @bind="_periodCode" placeholder="2026-Q1" />
-            </div>
-            <button class="fc-btn fc-btn--primary" @onclick="LoadAsync">Refresh</button>
         </div>
-    </div>
+    }
+    else if (!string.IsNullOrWhiteSpace(_error))
+    {
+        <div class="rg-premium-empty">@_error</div>
+    }
+    else if (_rows.Count == 0)
+    {
+        <div class="rg-premium-empty">No anomaly reports matched the current filter.</div>
+    }
+    else
+    {
+        var averageQuality = _rows.Average(x => x.QualityScore);
+        var redCount = _rows.Count(x => x.TrafficLight == "RED");
+        var outstandingFindings = _rows.Sum(x => x.UnacknowledgedCount);
+        var leadAlertInstitution = _rows.OrderByDescending(x => x.AlertCount).ThenBy(x => x.QualityScore).First();
+        var weakestQualityInstitution = _rows.OrderBy(x => x.QualityScore).ThenByDescending(x => x.UnacknowledgedCount).First();
+
+        <div class="rg-premium-flow">
+            <section class="rg-premium-banner @ResolveAnomalyBannerTone(redCount, averageQuality, outstandingFindings)" aria-label="Anomaly intelligence posture">
+                <div class="rg-premium-banner__grid">
+                    <div>
+                        <div class="rg-premium-banner__eyebrow">Anomaly posture</div>
+                        <h2 class="rg-premium-banner__headline">@BuildAnomalyBannerHeadline(redCount, averageQuality, outstandingFindings)</h2>
+                        <p class="rg-premium-banner__detail">@BuildAnomalyBannerDetail(leadAlertInstitution, weakestQualityInstitution, averageQuality)</p>
+                    </div>
+                    <div class="rg-premium-banner__meta">
+                        <div class="rg-premium-banner__meta-label">Current filter scope</div>
+                        <div class="rg-premium-banner__meta-value">@BuildAnomalyScopeLabel()</div>
+                        <div class="rg-premium-banner__meta-copy">@_rows.Count institutions in view · @outstandingFindings unresolved findings</div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="rg-premium-hero" aria-labelledby="anomaly-intel-hero-title">
+                <div class="rg-premium-hero__grid">
+                    <div>
+                        <div class="rg-premium-hero__eyebrow">Supervisory analytics lane</div>
+                        <h1 id="anomaly-intel-hero-title" class="rg-premium-hero__title">Direct examiner attention to the institutions carrying the heaviest anomaly burden.</h1>
+                        <p class="rg-premium-hero__subtitle">
+                            This workspace ranks supervised entities by quality score, unresolved findings, and anomaly alert concentration so reviewers can
+                            focus on statistical outliers before they distort filing quality across the sector.
+                        </p>
+                        <div class="rg-premium-badge-row">
+                            <span class="rg-premium-chip rg-premium-chip--info">@_regulatorCode scope</span>
+                            <span class="rg-premium-chip @(redCount > 0 ? "rg-premium-chip--danger" : "rg-premium-chip--success")">@redCount red institution(s)</span>
+                            <span class="rg-premium-chip @(averageQuality >= 90m ? "rg-premium-chip--success" : averageQuality >= 75m ? "rg-premium-chip--warning" : "rg-premium-chip--danger")">@averageQuality.ToString("F1")% average quality</span>
+                        </div>
+                    </div>
+                    <div class="rg-premium-hero__aside">
+                        <div class="rg-premium-note">
+                            <div class="rg-premium-note__label">Most alerts</div>
+                            <div class="rg-premium-note__value">@leadAlertInstitution.InstitutionName</div>
+                            <div class="rg-premium-note__copy">@leadAlertInstitution.AlertCount alerts across @leadAlertInstitution.ModuleCode @leadAlertInstitution.PeriodCode.</div>
+                        </div>
+                        <div class="rg-premium-note">
+                            <div class="rg-premium-note__label">Weakest quality</div>
+                            <div class="rg-premium-note__value">@weakestQualityInstitution.InstitutionName</div>
+                            <div class="rg-premium-note__copy">@weakestQualityInstitution.QualityScore.ToString("F1")% quality with @weakestQualityInstitution.UnacknowledgedCount open findings.</div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="rg-premium-stat-grid" aria-label="Anomaly intelligence metrics">
+                <article class="rg-premium-stat">
+                    <div class="rg-premium-stat__label">Institutions</div>
+                    <div class="rg-premium-stat__value rg-premium-stat__value--info">@_rows.Count</div>
+                    <div class="rg-premium-stat__note">Institutions with anomaly summaries in the current regulator and period lens.</div>
+                </article>
+                <article class="rg-premium-stat">
+                    <div class="rg-premium-stat__label">Average quality</div>
+                    <div class="rg-premium-stat__value @(averageQuality >= 90m ? "rg-premium-stat__value--success" : averageQuality >= 75m ? "rg-premium-stat__value--warning" : "rg-premium-stat__value--danger")">@averageQuality.ToString("F1")%</div>
+                    <div class="rg-premium-stat__note">Average anomaly quality posture across the visible entities.</div>
+                </article>
+                <article class="rg-premium-stat">
+                    <div class="rg-premium-stat__label">Red entities</div>
+                    <div class="rg-premium-stat__value @(redCount > 0 ? "rg-premium-stat__value--danger" : "rg-premium-stat__value--success")">@redCount</div>
+                    <div class="rg-premium-stat__note">Entities with the highest-severity traffic light state in the current filter scope.</div>
+                </article>
+                <article class="rg-premium-stat">
+                    <div class="rg-premium-stat__label">Outstanding findings</div>
+                    <div class="rg-premium-stat__value @(outstandingFindings > 0 ? "rg-premium-stat__value--warning" : "rg-premium-stat__value--success")">@outstandingFindings</div>
+                    <div class="rg-premium-stat__note">Unacknowledged anomaly findings still waiting for institution or examiner action.</div>
+                </article>
+            </section>
+
+            <section class="rg-premium-content-grid">
+                <div class="rg-premium-main">
+                    <article class="rg-premium-panel">
+                        <div class="rg-premium-panel__header">
+                            <div>
+                                <div class="rg-premium-panel__eyebrow">Ranking workspace</div>
+                                <h2 class="rg-premium-panel__title">Sector anomaly heatmap</h2>
+                                <p class="rg-premium-panel__subtitle">Filter by regulator, module, and period to isolate the institutions creating the heaviest anomaly drag.</p>
+                            </div>
+                            <div class="rg-premium-panel__metric">
+                                <span class="rg-premium-panel__metric-label">Visible institutions</span>
+                                @_rows.Count
+                            </div>
+                        </div>
+                        <div class="rg-premium-panel__body rg-premium-panel__body--table">
+                            <div style="display:flex; flex-wrap:wrap; gap:0.75rem; align-items:end; margin-bottom:1rem;">
+                                <div>
+                                    <label class="form-label">Regulator</label>
+                                    <select class="form-select" style="min-width: 160px;" @bind="_regulatorCode">
+                                        <option value="CBN">CBN</option>
+                                        <option value="NDIC">NDIC</option>
+                                        <option value="NAICOM">NAICOM</option>
+                                        <option value="SEC">SEC</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="form-label">Module code</label>
+                                    <input class="form-control" style="min-width: 180px;" @bind="_moduleCode" placeholder="Optional" />
+                                </div>
+                                <div>
+                                    <label class="form-label">Period code</label>
+                                    <input class="form-control" style="min-width: 140px;" @bind="_periodCode" placeholder="2026-Q1" />
+                                </div>
+                                <button class="fc-btn fc-btn--primary" @onclick="LoadAsync">Refresh</button>
+                            </div>
+                            <table class="fc-table">
+                                <thead>
+                                    <tr>
+                                        <th>Institution</th>
+                                        <th>Licence</th>
+                                        <th>Module</th>
+                                        <th>Period</th>
+                                        <th>Quality</th>
+                                        <th>Status</th>
+                                        <th>Alerts</th>
+                                        <th>Total findings</th>
+                                        <th>Unacknowledged</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var row in _rows.OrderBy(x => x.QualityScore).ThenByDescending(x => x.AlertCount))
+                                    {
+                                        <tr>
+                                            <td>@row.InstitutionName</td>
+                                            <td>@row.LicenceType</td>
+                                            <td>@row.ModuleCode</td>
+                                            <td>@row.PeriodCode</td>
+                                            <td>@row.QualityScore.ToString("F1")%</td>
+                                            <td>
+                                                <span class="badge @(row.TrafficLight == "RED" ? "bg-danger" : row.TrafficLight == "AMBER" ? "bg-warning text-dark" : "bg-success")">
+                                                    @row.TrafficLight
+                                                </span>
+                                            </td>
+                                            <td>@row.AlertCount</td>
+                                            <td>@row.TotalFindings</td>
+                                            <td>@row.UnacknowledgedCount</td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    </article>
+                </div>
+                <aside class="rg-premium-side">
+                    <article class="rg-premium-panel">
+                        <div class="rg-premium-panel__header">
+                            <div>
+                                <div class="rg-premium-panel__eyebrow">Pressure rail</div>
+                                <h2 class="rg-premium-panel__title">Highest alert concentration</h2>
+                                <p class="rg-premium-panel__subtitle">Entities currently carrying the most anomaly alert volume.</p>
+                            </div>
+                        </div>
+                        <div class="rg-premium-panel__body">
+                            <div class="rg-premium-list">
+                                @foreach (var row in _rows.OrderByDescending(x => x.AlertCount).ThenBy(x => x.QualityScore).Take(5))
+                                {
+                                    <article class="rg-premium-list__item">
+                                        <div class="rg-premium-list__top">
+                                            <div class="rg-premium-list__heading">@row.InstitutionName</div>
+                                            <div class="rg-premium-list__value">@row.AlertCount</div>
+                                        </div>
+                                        <div class="rg-premium-list__meta">@row.ModuleCode @row.PeriodCode · @row.UnacknowledgedCount unresolved</div>
+                                    </article>
+                                }
+                            </div>
+                        </div>
+                    </article>
+                    <article class="rg-premium-panel">
+                        <div class="rg-premium-panel__header">
+                            <div>
+                                <div class="rg-premium-panel__eyebrow">Severity spread</div>
+                                <h2 class="rg-premium-panel__title">Traffic-light distribution</h2>
+                                <p class="rg-premium-panel__subtitle">Shows whether the anomaly burden is concentrated in red or still mostly amber/green.</p>
+                            </div>
+                        </div>
+                        <div class="rg-premium-panel__body">
+                            <div class="rg-premium-list">
+                                <article class="rg-premium-list__item"><div class="rg-premium-list__top"><div class="rg-premium-list__heading">Red</div><div class="rg-premium-list__value">@_rows.Count(x => x.TrafficLight == "RED")</div></div><div class="rg-premium-list__meta">Highest severity anomaly entities.</div></article>
+                                <article class="rg-premium-list__item"><div class="rg-premium-list__top"><div class="rg-premium-list__heading">Amber</div><div class="rg-premium-list__value">@_rows.Count(x => x.TrafficLight == "AMBER")</div></div><div class="rg-premium-list__meta">Watch-level anomaly patterns requiring review.</div></article>
+                                <article class="rg-premium-list__item"><div class="rg-premium-list__top"><div class="rg-premium-list__heading">Green</div><div class="rg-premium-list__value">@_rows.Count(x => x.TrafficLight == "GREEN")</div></div><div class="rg-premium-list__meta">Entities currently showing stable anomaly posture.</div></article>
+                            </div>
+                        </div>
+                    </article>
+                </aside>
+            </section>
+        </div>
+    }
 </div>
-
-@if (_isLoading)
-{
-    <div class="fc-card">
-        <div class="fc-card__body">Loading anomaly intelligence...</div>
-    </div>
-}
-else if (!string.IsNullOrWhiteSpace(_error))
-{
-    <div class="fc-card">
-        <div class="fc-card__body" style="color: var(--cbn-danger);">@_error</div>
-    </div>
-}
-else if (_rows.Count == 0)
-{
-    <div class="fc-card">
-        <div class="fc-card__body">No anomaly reports matched the current filter.</div>
-    </div>
-}
-else
-{
-    <div class="fc-grid fc-grid--4" style="margin-bottom: 1rem;">
-        <div class="fc-kpi-card">
-            <span class="fc-kpi-card__label">Institutions</span>
-            <strong class="fc-kpi-card__value">@_rows.Count</strong>
-        </div>
-        <div class="fc-kpi-card">
-            <span class="fc-kpi-card__label">Average quality</span>
-            <strong class="fc-kpi-card__value">@_rows.Average(x => x.QualityScore).ToString("F1")%</strong>
-        </div>
-        <div class="fc-kpi-card">
-            <span class="fc-kpi-card__label">Red entities</span>
-            <strong class="fc-kpi-card__value" style="color: var(--cbn-danger);">@_rows.Count(x => x.TrafficLight == "RED")</strong>
-        </div>
-        <div class="fc-kpi-card">
-            <span class="fc-kpi-card__label">Outstanding findings</span>
-            <strong class="fc-kpi-card__value">@_rows.Sum(x => x.UnacknowledgedCount)</strong>
-        </div>
-    </div>
-
-    <div class="fc-card">
-        <div class="fc-card__header">
-            <h2 class="fc-card__title">Sector anomaly heatmap</h2>
-        </div>
-        <div class="fc-card__body" style="padding:0;">
-            <table class="fc-table">
-                <thead>
-                    <tr>
-                        <th>Institution</th>
-                        <th>Licence</th>
-                        <th>Module</th>
-                        <th>Period</th>
-                        <th>Quality</th>
-                        <th>Status</th>
-                        <th>Alerts</th>
-                        <th>Total findings</th>
-                        <th>Unacknowledged</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @foreach (var row in _rows.OrderBy(x => x.QualityScore).ThenByDescending(x => x.AlertCount))
-                    {
-                        <tr>
-                            <td>@row.InstitutionName</td>
-                            <td>@row.LicenceType</td>
-                            <td>@row.ModuleCode</td>
-                            <td>@row.PeriodCode</td>
-                            <td>@row.QualityScore.ToString("F1")%</td>
-                            <td>
-                                <span class="badge @(row.TrafficLight == "RED" ? "bg-danger" : row.TrafficLight == "AMBER" ? "bg-warning text-dark" : "bg-success")">
-                                    @row.TrafficLight
-                                </span>
-                            </td>
-                            <td>@row.AlertCount</td>
-                            <td>@row.TotalFindings</td>
-                            <td>@row.UnacknowledgedCount</td>
-                        </tr>
-                    }
-                </tbody>
-            </table>
-        </div>
-    </div>
-}
 
 @code {
     private readonly List<AnomalySectorSummary> _rows = new();
@@ -147,5 +263,48 @@ else
         {
             _isLoading = false;
         }
+    }
+
+    private string ResolveAnomalyBannerTone(decimal redCount, decimal averageQuality, int outstandingFindings)
+    {
+        if (redCount > 0 || averageQuality < 75m)
+        {
+            return "rg-premium-banner--danger";
+        }
+
+        if (outstandingFindings > 0 || averageQuality < 90m)
+        {
+            return "rg-premium-banner--warning";
+        }
+
+        return "rg-premium-banner--success";
+    }
+
+    private static string BuildAnomalyBannerHeadline(decimal redCount, decimal averageQuality, int outstandingFindings)
+    {
+        if (redCount > 0)
+        {
+            return "Anomaly intelligence is surfacing red-flag entities that need examiner attention now.";
+        }
+
+        if (outstandingFindings > 0 || averageQuality < 90m)
+        {
+            return "Anomaly posture is manageable, but unresolved findings are still building in the queue.";
+        }
+
+        return "Anomaly posture is stable across the visible supervised institutions.";
+    }
+
+    private static string BuildAnomalyBannerDetail(AnomalySectorSummary leadAlertInstitution, AnomalySectorSummary weakestQualityInstitution, decimal averageQuality)
+    {
+        return $"{leadAlertInstitution.InstitutionName} currently leads the alert queue, while {weakestQualityInstitution.InstitutionName} has the weakest quality score at {weakestQualityInstitution.QualityScore:F1}%. " +
+               $"Average quality across the current scope is {averageQuality:F1}%.";
+    }
+
+    private string BuildAnomalyScopeLabel()
+    {
+        var module = string.IsNullOrWhiteSpace(_moduleCode) ? "All modules" : _moduleCode;
+        var period = string.IsNullOrWhiteSpace(_periodCode) ? "All periods" : _periodCode;
+        return $"{_regulatorCode} · {module} · {period}";
     }
 }

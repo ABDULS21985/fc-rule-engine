@@ -6,143 +6,283 @@
 <PageTitle>Governor Dashboard</PageTitle>
 
 <PageHeader Title="Governor Dashboard"
-            Subtitle="Systemic stability overview, sector capital adequacy, compliance rates, and priority warnings."
-            BackUrl="/regulator">
-    <PrimaryAction><button class="fc-btn fc-btn--primary" @onclick="ReloadAsync" disabled="@_loading">Refresh</button></PrimaryAction>
+            Subtitle="Systemic stability, capital posture, compliance concentration, and supervisory pressure in one premium view."
+            BackUrl="/regulator"
+            StatusBadge="@ResolveStatusBadge()"
+            StatusVariant="@ResolveStatusVariant()">
+    <PrimaryAction>
+        <button class="fc-btn fc-btn--primary" @onclick="ReloadAsync" disabled="@_loading">Refresh</button>
+    </PrimaryAction>
 </PageHeader>
 
 <div class="fc-page">
     <SectionErrorBoundary Title="Failed to load governor dashboard" ExternalError="@_loadException" OnRetry="ReloadAsync">
         @if (_loading)
         {
-            <div class="rg-dash-kpi-strip">
-                @for (var i = 0; i < 4; i++)
-                {
-                    <div class="rg-dash-kpi"><SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Block" Height="88px" /></div>
-                }
+            <div class="rg-premium-flow">
+                <div class="rg-premium-banner"><SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Block" Height="138px" /></div>
+                <div class="rg-premium-stat-grid">
+                    @for (var i = 0; i < 4; i++)
+                    {
+                        <div class="rg-premium-stat"><SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Block" Height="140px" /></div>
+                    }
+                </div>
+                <div class="rg-premium-content-grid">
+                    <div class="rg-premium-main">
+                        <div class="rg-premium-dual-grid">
+                            <div class="rg-premium-panel"><SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Block" Height="320px" /></div>
+                            <div class="rg-premium-panel"><SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Block" Height="320px" /></div>
+                        </div>
+                        <div class="rg-premium-panel"><SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Block" Height="420px" /></div>
+                    </div>
+                    <div class="rg-premium-side">
+                        <div class="rg-premium-panel"><SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Block" Height="260px" /></div>
+                        <div class="rg-premium-panel"><SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Block" Height="320px" /></div>
+                    </div>
+                </div>
             </div>
         }
         else if (_data is null)
         {
-            <EmptyState Context="data" Heading="No dashboard data" Description="Refresh the Intelligence Hub to generate stakeholder data." />
+            <EmptyState Context="data" Heading="No governor dashboard data" Description="Refresh the Intelligence Hub to generate stakeholder data." />
         }
         else
         {
-            <div class="rg-dash-kpi-strip">
-                <div class="rg-dash-kpi">
-                    <div class="rg-dash-kpi-value">@_data.TotalInstitutions</div>
-                    <div class="rg-dash-kpi-label">Institutions</div>
-                </div>
-                <div class="rg-dash-kpi">
-                    <div class="rg-dash-kpi-value">@_data.AverageCapitalScore</div>
-                    <div class="rg-dash-kpi-label">Avg Capital Score</div>
-                </div>
-                <div class="rg-dash-kpi">
-                    <div class="rg-dash-kpi-value @(_data.ComplianceRatePercent < 80 ? "rg-dash-kpi-value--red" : _data.ComplianceRatePercent < 95 ? "rg-dash-kpi-value--amber" : "rg-dash-kpi-value--green")">@_data.ComplianceRatePercent%</div>
-                    <div class="rg-dash-kpi-label">Compliance Rate</div>
-                </div>
-                <div class="rg-dash-kpi">
-                    <div class="rg-dash-kpi-value @(_data.OpenWarnings > 0 ? "rg-dash-kpi-value--red" : "")">@_data.OpenWarnings</div>
-                    <div class="rg-dash-kpi-label">Open Warnings</div>
-                </div>
-            </div>
+            <div class="rg-premium-flow">
+                <section class="rg-premium-banner @ResolveBannerTone()" aria-label="Governor posture">
+                    <div class="rg-premium-banner__grid">
+                        <div>
+                            <div class="rg-premium-banner__eyebrow">Governor pulse</div>
+                            <h2 class="rg-premium-banner__headline">@BuildBannerHeadline()</h2>
+                            <p class="rg-premium-banner__detail">@BuildBannerDetail()</p>
+                        </div>
+                        <div class="rg-premium-banner__meta">
+                            <div class="rg-premium-banner__meta-label">Primary watchpoint</div>
+                            <div class="rg-premium-banner__meta-value">@((_data.OpenWarnings > 0 ? $"{_data.OpenWarnings} open warnings" : "No immediate warning surge"))</div>
+                            <div class="rg-premium-banner__meta-copy">@BuildSectorMixCopy()</div>
+                        </div>
+                    </div>
+                </section>
 
-            <div class="rg-dash-kpi-strip" style="margin-top:var(--space-2);">
-                <div class="rg-dash-kpi">
-                    <div class="rg-dash-kpi-value">@_data.CapitalWatchlistCount</div>
-                    <div class="rg-dash-kpi-label">Capital Watchlist</div>
-                </div>
-                <div class="rg-dash-kpi">
-                    <div class="rg-dash-kpi-value">@_data.ActiveInterventions</div>
-                    <div class="rg-dash-kpi-label">Active Interventions</div>
-                </div>
-                <div class="rg-dash-kpi">
-                    <div class="rg-dash-kpi-value">@_data.OpenResilienceIncidents</div>
-                    <div class="rg-dash-kpi-label">Resilience Incidents</div>
-                </div>
-                <div class="rg-dash-kpi">
-                    <div class="rg-dash-kpi-value">@_data.ModelsUnderReview</div>
-                    <div class="rg-dash-kpi-label">Model Reviews</div>
-                </div>
-            </div>
+                <section class="rg-premium-hero" aria-labelledby="governor-hero-title">
+                    <div class="rg-premium-hero__grid">
+                        <div>
+                            <div class="rg-premium-hero__eyebrow">Sector command view</div>
+                            <h1 id="governor-hero-title" class="rg-premium-hero__title">Macro posture with institution-level clarity.</h1>
+                            <p class="rg-premium-hero__subtitle">
+                                This cockpit frames sector health for senior regulator review, combining capital depth, compliance discipline,
+                                licence concentration, intervention pressure, and the institutions most likely to reshape the supervisory narrative.
+                            </p>
+                            <div class="rg-premium-badge-row">
+                                <span class="rg-premium-chip rg-premium-chip--success">@($"{_data.TotalInstitutions} supervised institutions")</span>
+                                <span class="rg-premium-chip @(GetChipClassForCompliance())">@($"{_data.ComplianceRatePercent:F1}% filing compliance")</span>
+                                <span class="rg-premium-chip @(GetChipClassForWarnings())">@($"{_data.ActiveInterventions} interventions active")</span>
+                            </div>
+                        </div>
+                        <div class="rg-premium-hero__aside">
+                            <div class="rg-premium-note">
+                                <div class="rg-premium-note__label">Capital lens</div>
+                                <div class="rg-premium-note__value">@($"{_data.AverageCapitalScore:F1}/100")</div>
+                                <div class="rg-premium-note__copy">
+                                    Average capital score across the supervised estate. Use this with the watchlist count to separate broad deterioration from isolated pockets.
+                                </div>
+                            </div>
+                            <div class="rg-premium-note">
+                                <div class="rg-premium-note__label">Concentration risk</div>
+                                <div class="rg-premium-note__value">@BuildTopPriorityLabel()</div>
+                                <div class="rg-premium-note__copy">@BuildTopPriorityCopy()</div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
 
-            @* Charts Row *@
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--space-4);margin-top:var(--space-4);">
-                <div class="fc-card">
-                    <div class="fc-card__header"><h2 class="fc-card__title">Priority Distribution</h2></div>
-                    <div class="fc-card__body"><canvas id="govPriorityChart" style="max-height:260px;"></canvas></div>
-                </div>
-                <div class="fc-card">
-                    <div class="fc-card__header"><h2 class="fc-card__title">Licence Distribution</h2></div>
-                    <div class="fc-card__body"><canvas id="govLicenceChart" style="max-height:260px;"></canvas></div>
-                </div>
-            </div>
+                <section class="rg-premium-stat-grid" aria-label="Governor metrics">
+                    <article class="rg-premium-stat">
+                        <div class="rg-premium-stat__label">Institutions</div>
+                        <div class="rg-premium-stat__value">@_data.TotalInstitutions</div>
+                        <div class="rg-premium-stat__note">Licensed institutions currently represented in the sector intelligence workspace.</div>
+                    </article>
+                    <article class="rg-premium-stat">
+                        <div class="rg-premium-stat__label">Average capital score</div>
+                        <div class="rg-premium-stat__value @BuildCapitalValueClass()">@($"{_data.AverageCapitalScore:F1}")</div>
+                        <div class="rg-premium-stat__note">@($"{_data.CapitalWatchlistCount} institutions on the capital watchlist.")</div>
+                    </article>
+                    <article class="rg-premium-stat">
+                        <div class="rg-premium-stat__label">Compliance rate</div>
+                        <div class="rg-premium-stat__value @BuildComplianceValueClass()">@($"{_data.ComplianceRatePercent:F1}%")</div>
+                        <div class="rg-premium-stat__note">Institutions currently filing without overdue obligations across the latest reporting posture.</div>
+                    </article>
+                    <article class="rg-premium-stat">
+                        <div class="rg-premium-stat__label">Open warnings</div>
+                        <div class="rg-premium-stat__value @BuildWarningValueClass()">@_data.OpenWarnings</div>
+                        <div class="rg-premium-stat__note">@($"{_data.OpenResilienceIncidents} resilience incidents and {_data.ModelsUnderReview} model reviews remain open.")</div>
+                    </article>
+                </section>
 
-            @* Top Risk Institutions *@
-            <div class="fc-card fc-card--mb" style="margin-top:var(--space-4);">
-                <div class="fc-card__header"><h2 class="fc-card__title">Top Risk Institutions</h2></div>
-                <div class="fc-card__body">
-                    <DataTable TItem="InstitutionScorecardRow" Items="@_data.TopRiskInstitutions" PageSize="10" Sortable="true" ShowExport="true" ExportFileName="governor-top-risk">
-                        <ChildContent>
-                            <DataColumn TItem="InstitutionScorecardRow" Title="Institution" SortKey="@(x => x.InstitutionName)">
-                                <CellTemplate><strong>@context.InstitutionName</strong></CellTemplate>
-                            </DataColumn>
-                            <DataColumn TItem="InstitutionScorecardRow" Title="Licence" Width="120px" SortKey="@(x => x.LicenceType)">
-                                <CellTemplate><span class="fc-badge fc-badge--neutral">@context.LicenceType</span></CellTemplate>
-                            </DataColumn>
-                            <DataColumn TItem="InstitutionScorecardRow" Title="Priority" Width="100px" SortKey="@(x => x.Priority)">
-                                <CellTemplate><span class="fc-badge @PriorityBadge(context.Priority)">@context.Priority</span></CellTemplate>
-                            </DataColumn>
-                            <DataColumn TItem="InstitutionScorecardRow" Title="Capital" Width="90px" SortKey="@(x => x.CapitalScore)">
-                                <CellTemplate>@(context.CapitalScore?.ToString("F1") ?? "—")</CellTemplate>
-                            </DataColumn>
-                            <DataColumn TItem="InstitutionScorecardRow" Title="Overdue" Width="90px" SortKey="@(x => x.OverdueObligations)">
-                                <CellTemplate>
-                                    <span class="@(context.OverdueObligations > 0 ? "fc-text-danger" : "")">@context.OverdueObligations</span>
-                                </CellTemplate>
-                            </DataColumn>
-                            <DataColumn TItem="InstitutionScorecardRow" Title="Incidents" Width="90px" SortKey="@(x => x.OpenResilienceIncidents)">
-                                <CellTemplate>@context.OpenResilienceIncidents</CellTemplate>
-                            </DataColumn>
-                            <DataColumn TItem="InstitutionScorecardRow" Title="Alerts" Width="80px" SortKey="@(x => x.OpenSecurityAlerts)">
-                                <CellTemplate>@context.OpenSecurityAlerts</CellTemplate>
-                            </DataColumn>
-                        </ChildContent>
-                    </DataTable>
-                </div>
-            </div>
+                <section class="rg-premium-content-grid">
+                    <div class="rg-premium-main">
+                        <div class="rg-premium-dual-grid">
+                            <section class="rg-premium-panel">
+                                <div class="rg-premium-panel__header">
+                                    <div>
+                                        <div class="rg-premium-panel__eyebrow">Risk concentration</div>
+                                        <h2 class="rg-premium-panel__title">Priority distribution</h2>
+                                        <p class="rg-premium-panel__subtitle">See whether the current supervisory load is clustering into critical lanes or distributed across lower-severity cases.</p>
+                                    </div>
+                                    <div class="rg-premium-panel__metric">
+                                        <span class="rg-premium-panel__metric-label">Largest bucket</span>
+                                        @BuildTopPriorityLabel()
+                                    </div>
+                                </div>
+                                <div class="rg-premium-panel__body rg-premium-panel__body--chart">
+                                    <canvas id="govPriorityChart" style="max-height:260px;"></canvas>
+                                </div>
+                            </section>
 
-            @* Recent Activity *@
-            <div class="fc-card">
-                <div class="fc-card__header"><h2 class="fc-card__title">Recent Activity</h2></div>
-                <div class="fc-card__body">
-                    <DataTable TItem="ActivityTimelineRow" Items="@_data.RecentActivity" PageSize="10" Sortable="true">
-                        <ChildContent>
-                            <DataColumn TItem="ActivityTimelineRow" Title="Domain" Width="120px" SortKey="@(x => x.Domain)">
-                                <CellTemplate><span class="fc-badge fc-badge--neutral">@context.Domain</span></CellTemplate>
-                            </DataColumn>
-                            <DataColumn TItem="ActivityTimelineRow" Title="Event" SortKey="@(x => x.Title)">
-                                <CellTemplate>
-                                    <strong>@context.Title</strong>
-                                    <div class="fc-text-muted-sm">@context.Detail</div>
-                                </CellTemplate>
-                            </DataColumn>
-                            <DataColumn TItem="ActivityTimelineRow" Title="Severity" Width="100px" SortKey="@(x => x.Severity)">
-                                <CellTemplate><span class="fc-badge @SeverityBadge(context.Severity)">@context.Severity</span></CellTemplate>
-                            </DataColumn>
-                            <DataColumn TItem="ActivityTimelineRow" Title="When" Width="150px" SortKey="@(x => x.HappenedAt)">
-                                <CellTemplate>@context.HappenedAt.ToString("dd MMM yyyy HH:mm")</CellTemplate>
-                            </DataColumn>
-                        </ChildContent>
-                    </DataTable>
-                </div>
+                            <section class="rg-premium-panel">
+                                <div class="rg-premium-panel__header">
+                                    <div>
+                                        <div class="rg-premium-panel__eyebrow">Estate mix</div>
+                                        <h2 class="rg-premium-panel__title">Licence distribution</h2>
+                                        <p class="rg-premium-panel__subtitle">Track the licence cohorts driving most current oversight demand and capital surveillance workload.</p>
+                                    </div>
+                                    <div class="rg-premium-panel__metric">
+                                        <span class="rg-premium-panel__metric-label">Largest cohort</span>
+                                        @BuildLargestLicenceLabel()
+                                    </div>
+                                </div>
+                                <div class="rg-premium-panel__body rg-premium-panel__body--chart">
+                                    <canvas id="govLicenceChart" style="max-height:260px;"></canvas>
+                                </div>
+                            </section>
+                        </div>
+
+                        <section class="rg-premium-panel">
+                            <div class="rg-premium-panel__header">
+                                <div>
+                                    <div class="rg-premium-panel__eyebrow">Institution ranking</div>
+                                    <h2 class="rg-premium-panel__title">Top risk institutions</h2>
+                                    <p class="rg-premium-panel__subtitle">Institutions ordered by combined overdue obligations, resilience incidents, and open security pressure.</p>
+                                </div>
+                                <div class="rg-premium-panel__metric">
+                                    <span class="rg-premium-panel__metric-label">Leading risk</span>
+                                    @(_data.TopRiskInstitutions.FirstOrDefault()?.InstitutionName ?? "No concentration")
+                                </div>
+                            </div>
+                            <div class="rg-premium-panel__body rg-premium-panel__body--table">
+                                <DataTable TItem="InstitutionScorecardRow" Items="@_data.TopRiskInstitutions" PageSize="10" Sortable="true" ShowExport="true" ExportFileName="governor-top-risk">
+                                    <ChildContent>
+                                        <DataColumn TItem="InstitutionScorecardRow" Title="Institution" SortKey="@(x => x.InstitutionName)">
+                                            <CellTemplate><strong>@context.InstitutionName</strong></CellTemplate>
+                                        </DataColumn>
+                                        <DataColumn TItem="InstitutionScorecardRow" Title="Licence" Width="120px" SortKey="@(x => x.LicenceType)">
+                                            <CellTemplate><span class="fc-badge fc-badge--neutral">@context.LicenceType</span></CellTemplate>
+                                        </DataColumn>
+                                        <DataColumn TItem="InstitutionScorecardRow" Title="Priority" Width="100px" SortKey="@(x => x.Priority)">
+                                            <CellTemplate><span class="fc-badge @PriorityBadge(context.Priority)">@context.Priority</span></CellTemplate>
+                                        </DataColumn>
+                                        <DataColumn TItem="InstitutionScorecardRow" Title="Capital" Width="90px" SortKey="@(x => x.CapitalScore)">
+                                            <CellTemplate>@(context.CapitalScore?.ToString("F1") ?? "—")</CellTemplate>
+                                        </DataColumn>
+                                        <DataColumn TItem="InstitutionScorecardRow" Title="Overdue" Width="90px" SortKey="@(x => x.OverdueObligations)">
+                                            <CellTemplate><span class="@(context.OverdueObligations > 0 ? "fc-text-danger" : string.Empty)">@context.OverdueObligations</span></CellTemplate>
+                                        </DataColumn>
+                                        <DataColumn TItem="InstitutionScorecardRow" Title="Incidents" Width="90px" SortKey="@(x => x.OpenResilienceIncidents)">
+                                            <CellTemplate>@context.OpenResilienceIncidents</CellTemplate>
+                                        </DataColumn>
+                                        <DataColumn TItem="InstitutionScorecardRow" Title="Alerts" Width="80px" SortKey="@(x => x.OpenSecurityAlerts)">
+                                            <CellTemplate>@context.OpenSecurityAlerts</CellTemplate>
+                                        </DataColumn>
+                                    </ChildContent>
+                                </DataTable>
+                            </div>
+                        </section>
+                    </div>
+
+                    <aside class="rg-premium-side">
+                        <section class="rg-premium-panel">
+                            <div class="rg-premium-panel__header">
+                                <div>
+                                    <div class="rg-premium-panel__eyebrow">Watchlist preview</div>
+                                    <h2 class="rg-premium-panel__title">Institutions shaping today’s briefing</h2>
+                                    <p class="rg-premium-panel__subtitle">Quick-read cards for the institutions most likely to influence senior supervisory decisions.</p>
+                                </div>
+                            </div>
+                            <div class="rg-premium-panel__body">
+                                @if (_data.TopRiskInstitutions.Count == 0)
+                                {
+                                    <div class="rg-premium-empty">No high-concentration institutions are currently surfaced by the intelligence model.</div>
+                                }
+                                else
+                                {
+                                    <div class="rg-premium-list">
+                                        @foreach (var institution in _data.TopRiskInstitutions.Take(5))
+                                        {
+                                            <article class="rg-premium-list__item">
+                                                <div class="rg-premium-list__top">
+                                                    <div class="rg-premium-list__heading">@institution.InstitutionName</div>
+                                                    <div class="rg-premium-list__value">@(institution.CapitalScore?.ToString("F1") ?? "—")</div>
+                                                </div>
+                                                <div class="rg-premium-list__meta">@institution.Summary</div>
+                                                <div class="rg-premium-list__tags">
+                                                    <span class="fc-badge fc-badge--neutral">@institution.LicenceType</span>
+                                                    <span class="fc-badge @PriorityBadge(institution.Priority)">@institution.Priority</span>
+                                                    @if (institution.OverdueObligations > 0)
+                                                    {
+                                                        <span class="fc-badge fc-badge--danger">@($"{institution.OverdueObligations} overdue")</span>
+                                                    }
+                                                </div>
+                                            </article>
+                                        }
+                                    </div>
+                                }
+                            </div>
+                        </section>
+
+                        <section class="rg-premium-panel">
+                            <div class="rg-premium-panel__header">
+                                <div>
+                                    <div class="rg-premium-panel__eyebrow">Activity rail</div>
+                                    <h2 class="rg-premium-panel__title">Recent supervisory movement</h2>
+                                    <p class="rg-premium-panel__subtitle">The latest significant activity captured across compliance, capital, resilience, and model oversight.</p>
+                                </div>
+                            </div>
+                            <div class="rg-premium-panel__body">
+                                @if (_data.RecentActivity.Count == 0)
+                                {
+                                    <div class="rg-premium-empty">No recent supervisory events are available yet.</div>
+                                }
+                                else
+                                {
+                                    <div class="rg-premium-list">
+                                        @foreach (var activity in _data.RecentActivity.Take(8))
+                                        {
+                                            <article class="rg-premium-list__item">
+                                                <div class="rg-premium-list__top">
+                                                    <div class="rg-premium-list__heading">@activity.Title</div>
+                                                    <span class="fc-badge @SeverityBadge(activity.Severity)">@activity.Severity</span>
+                                                </div>
+                                                <div class="rg-premium-list__meta">@activity.Detail</div>
+                                                <div class="rg-premium-list__tags">
+                                                    <span class="fc-badge fc-badge--neutral">@activity.Domain</span>
+                                                    <span class="fc-badge fc-badge--neutral">@activity.HappenedAt.ToString("dd MMM HH:mm")</span>
+                                                </div>
+                                            </article>
+                                        }
+                                    </div>
+                                }
+                            </div>
+                        </section>
+                    </aside>
+                </section>
             </div>
         }
     </SectionErrorBoundary>
 </div>
 
 @code {
-    private bool _loading = true, _chartsRendered;
+    private bool _loading = true;
+    private bool _chartsRendered;
     private Exception? _loadException;
     private FC.Engine.Admin.Services.Dashboards.GovernorDashboardData? _data;
 
@@ -159,15 +299,31 @@
 
     private async Task ReloadAsync()
     {
-        _loading = true; _loadException = null; _chartsRendered = false;
-        try { _data = await DashboardService.GetGovernorDashboardAsync(); }
-        catch (Exception ex) { _loadException = ex; }
-        finally { _loading = false; }
+        _loading = true;
+        _loadException = null;
+        _chartsRendered = false;
+
+        try
+        {
+            _data = await DashboardService.GetGovernorDashboardAsync();
+        }
+        catch (Exception ex)
+        {
+            _loadException = ex;
+        }
+        finally
+        {
+            _loading = false;
+        }
     }
 
     private async Task RenderChartsAsync()
     {
-        if (_data is null) return;
+        if (_data is null)
+        {
+            return;
+        }
+
         try
         {
             if (_data.PriorityDistribution.Count > 0)
@@ -179,6 +335,7 @@
                     colors = _data.PriorityDistribution.Select(p => PriorityColor(p.Label)).ToArray()
                 });
             }
+
             if (_data.LicenceDistribution.Count > 0)
             {
                 await JS.InvokeVoidAsync("fcCharts.renderDoughnut", "govLicenceChart", new
@@ -189,10 +346,187 @@
                 });
             }
         }
-        catch { }
+        catch
+        {
+        }
     }
 
-    private static string PriorityBadge(string p) => p switch { "Critical" => "fc-badge--danger", "High" => "fc-badge--warning", "Medium" => "fc-badge--info", _ => "fc-badge--neutral" };
-    private static string PriorityColor(string p) => p switch { "Critical" => "#D32F2F", "High" => "#E07C24", "Medium" => "#C8A415", _ => "#9CA3AF" };
-    private static string SeverityBadge(string s) => s switch { "Critical" => "fc-badge--danger", "High" or "Warning" => "fc-badge--warning", "Info" => "fc-badge--info", _ => "fc-badge--neutral" };
+    private string ResolveStatusBadge()
+    {
+        if (_loading)
+        {
+            return "Refreshing";
+        }
+
+        if (_data is null)
+        {
+            return "Awaiting data";
+        }
+
+        if (_data.OpenWarnings > 0)
+        {
+            return $"{_data.OpenWarnings} open warnings";
+        }
+
+        return _data.ComplianceRatePercent >= 95m ? "Sector steady" : "Monitoring";
+    }
+
+    private string ResolveStatusVariant()
+    {
+        if (_data is null)
+        {
+            return "neutral";
+        }
+
+        if (_data.OpenWarnings >= 5 || _data.ComplianceRatePercent < 80m)
+        {
+            return "danger";
+        }
+
+        if (_data.OpenWarnings > 0 || _data.ComplianceRatePercent < 95m)
+        {
+            return "warning";
+        }
+
+        return "success";
+    }
+
+    private string ResolveBannerTone()
+    {
+        if (_data is null)
+        {
+            return "rg-premium-banner--info";
+        }
+
+        if (_data.OpenWarnings >= 5 || _data.CapitalWatchlistCount >= 5)
+        {
+            return "rg-premium-banner--danger";
+        }
+
+        if (_data.OpenWarnings > 0 || _data.ComplianceRatePercent < 95m)
+        {
+            return "rg-premium-banner--warning";
+        }
+
+        return "rg-premium-banner--success";
+    }
+
+    private string BuildBannerHeadline()
+    {
+        if (_data is null)
+        {
+            return "Refreshing sector posture.";
+        }
+
+        if (_data.OpenWarnings >= 5)
+        {
+            return "Supervisory pressure is concentrated in the warning lane.";
+        }
+
+        if (_data.CapitalWatchlistCount >= 5)
+        {
+            return "Capital watchlist concentration is shaping the current governor brief.";
+        }
+
+        return _data.ComplianceRatePercent >= 95m
+            ? "Sector posture is stable with only limited immediate intervention pressure."
+            : "Compliance softness is visible and needs close senior attention.";
+    }
+
+    private string BuildBannerDetail()
+    {
+        if (_data is null)
+        {
+            return string.Empty;
+        }
+
+        return $"The dashboard is tracking {_data.ActiveInterventions} active interventions, {_data.OpenResilienceIncidents} resilience incidents, and {_data.ModelsUnderReview} model review items across {_data.TotalInstitutions} institutions.";
+    }
+
+    private string BuildSectorMixCopy()
+    {
+        var topLicence = _data?.LicenceDistribution.OrderByDescending(x => x.Count).FirstOrDefault();
+        var topPriority = _data?.PriorityDistribution.OrderByDescending(x => x.Count).FirstOrDefault();
+
+        if (topLicence is null && topPriority is null)
+        {
+            return "No licence or priority mix is available yet.";
+        }
+
+        return $"{topLicence?.Label ?? "No licence cohort"} is the largest cohort, while {topPriority?.Label ?? "no priority band"} currently leads the supervisory distribution.";
+    }
+
+    private string BuildTopPriorityLabel()
+    {
+        var topPriority = _data?.PriorityDistribution.OrderByDescending(x => x.Count).FirstOrDefault();
+        return topPriority is null ? "Balanced" : $"{topPriority.Label} priority";
+    }
+
+    private string BuildTopPriorityCopy()
+    {
+        var topPriority = _data?.PriorityDistribution.OrderByDescending(x => x.Count).FirstOrDefault();
+        return topPriority is null
+            ? "Priority exposure is currently balanced across the estate."
+            : $"{topPriority.Count} institutions are clustered in the {topPriority.Label.ToLowerInvariant()} band, giving the clearest signal on sector concentration.";
+    }
+
+    private string BuildLargestLicenceLabel()
+    {
+        var topLicence = _data?.LicenceDistribution.OrderByDescending(x => x.Count).FirstOrDefault();
+        return topLicence is null ? "No cohort" : topLicence.Label;
+    }
+
+    private string BuildCapitalValueClass() =>
+        _data is null ? string.Empty :
+        _data.AverageCapitalScore >= 80m ? "rg-premium-stat__value--success" :
+        _data.AverageCapitalScore >= 65m ? "rg-premium-stat__value--warning" :
+        "rg-premium-stat__value--danger";
+
+    private string BuildComplianceValueClass() =>
+        _data is null ? string.Empty :
+        _data.ComplianceRatePercent >= 95m ? "rg-premium-stat__value--success" :
+        _data.ComplianceRatePercent >= 80m ? "rg-premium-stat__value--warning" :
+        "rg-premium-stat__value--danger";
+
+    private string BuildWarningValueClass() =>
+        _data is null ? string.Empty :
+        _data.OpenWarnings == 0 ? "rg-premium-stat__value--success" :
+        _data.OpenWarnings < 5 ? "rg-premium-stat__value--warning" :
+        "rg-premium-stat__value--danger";
+
+    private string GetChipClassForCompliance() =>
+        _data is null ? "rg-premium-chip--info" :
+        _data.ComplianceRatePercent >= 95m ? "rg-premium-chip--success" :
+        _data.ComplianceRatePercent >= 80m ? "rg-premium-chip--warning" :
+        "rg-premium-chip--danger";
+
+    private string GetChipClassForWarnings() =>
+        _data is null ? "rg-premium-chip--info" :
+        _data.OpenWarnings == 0 ? "rg-premium-chip--success" :
+        _data.OpenWarnings < 5 ? "rg-premium-chip--warning" :
+        "rg-premium-chip--danger";
+
+    private static string PriorityBadge(string priority) => priority switch
+    {
+        "Critical" => "fc-badge--danger",
+        "High" => "fc-badge--warning",
+        "Medium" => "fc-badge--info",
+        _ => "fc-badge--neutral"
+    };
+
+    private static string PriorityColor(string priority) => priority switch
+    {
+        "Critical" => "#D32F2F",
+        "High" => "#E07C24",
+        "Medium" => "#C8A415",
+        _ => "#9CA3AF"
+    };
+
+    private static string SeverityBadge(string severity) => severity switch
+    {
+        "Critical" => "fc-badge--danger",
+        "High" or "Warning" => "fc-badge--warning",
+        "Info" => "fc-badge--info",
+        _ => "fc-badge--neutral"
+    };
 }

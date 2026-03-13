@@ -80,6 +80,84 @@
     }
     else if (_data is not null)
     {
+        var dsarBacklog = _pipelineStages
+            .Where(x => x.Status is not DataSubjectRequestStatus.Completed and not DataSubjectRequestStatus.Rejected)
+            .Sum(x => x.Count);
+        var imminentNotifications = _data.BreachCountdowns.Count(x => x.HoursRemaining <= 24);
+        var pendingPias = _data.PrivacyImpactStatusByModule.Count(x => !string.Equals(x.Status, "Complete", StringComparison.OrdinalIgnoreCase));
+        var leadActivity = _data.ActivityCountsByModule.OrderByDescending(x => x.ActivityCount).FirstOrDefault();
+        var bannerTone = ResolvePrivacyBannerTone(_privacyScore, _data.OpenBreachCount, imminentNotifications);
+
+        <div class="rg-premium-flow">
+            <section class="rg-premium-banner rg-premium-banner--@bannerTone">
+                <div class="rg-premium-banner__grid">
+                    <div>
+                        <span class="rg-premium-banner__eyebrow">Privacy pulse</span>
+                        <h2 class="rg-premium-banner__headline">@BuildPrivacyBannerHeadline(_privacyScore, _data.OpenBreachCount, imminentNotifications)</h2>
+                        <p class="rg-premium-banner__detail">@BuildPrivacyBannerDetail(dsarBacklog, pendingPias, leadActivity?.ModuleCode)</p>
+                    </div>
+                    <div class="rg-premium-banner__meta">
+                        <span class="rg-premium-banner__meta-label">Current posture</span>
+                        <strong class="rg-premium-banner__meta-value">@_privacyScore.ToString("0") / 100</strong>
+                        <span class="rg-premium-banner__meta-copy">@_privacyRating rating · Updated @_data.GeneratedAt.ToString("dd MMM HH:mm") UTC</span>
+                    </div>
+                </div>
+            </section>
+
+            <section class="rg-premium-hero">
+                <div class="rg-premium-hero__grid">
+                    <div>
+                        <span class="rg-premium-hero__eyebrow">DPO command narrative</span>
+                        <h2 class="rg-premium-hero__title">Treat privacy operations as a live control system, not a yearly compliance checklist.</h2>
+                        <p class="rg-premium-hero__subtitle">
+                            This dashboard merges DSAR execution, consent posture, breach timeliness, retention pressure, and impact-assessment
+                            coverage so the DPO can intervene before NDPA exposure becomes a supervisory problem.
+                        </p>
+                        <div class="rg-premium-badge-row">
+                            <span class="rg-premium-chip rg-premium-chip--@(dsarBacklog > 0 ? "warning" : "success")">@dsarBacklog active DSAR item@(dsarBacklog == 1 ? "" : "s")</span>
+                            <span class="rg-premium-chip rg-premium-chip--@(_data.OpenBreachCount > 0 ? "danger" : "success")">@_data.OpenBreachCount open breach@(_data.OpenBreachCount == 1 ? "" : "es")</span>
+                            <span class="rg-premium-chip rg-premium-chip--@(pendingPias > 0 ? "warning" : "success")">@pendingPias PIA item@(pendingPias == 1 ? "" : "s") pending</span>
+                        </div>
+                    </div>
+                    <aside class="rg-premium-hero__aside">
+                        <div class="rg-premium-note">
+                            <span class="rg-premium-note__label">Lead activity domain</span>
+                            <strong class="rg-premium-note__value">@(leadActivity?.ModuleCode ?? "N/A")</strong>
+                            <span class="rg-premium-note__copy">@(leadActivity is null ? "No processing activity count is currently available." : $"{leadActivity.ActivityCount} processing activit{(leadActivity.ActivityCount == 1 ? "y" : "ies")} mapped to the busiest module.")</span>
+                        </div>
+                        <div class="rg-premium-note">
+                            <span class="rg-premium-note__label">Notification urgency</span>
+                            <strong class="rg-premium-note__value">@imminentNotifications due in 24h</strong>
+                            <span class="rg-premium-note__copy">Incidents nearing the NITDA notification window should be treated as active response work.</span>
+                        </div>
+                    </aside>
+                </div>
+            </section>
+
+            <section class="rg-premium-stat-grid" aria-label="Privacy control metrics">
+                <article class="rg-premium-stat">
+                    <span class="rg-premium-stat__label">DSAR backlog</span>
+                    <strong class="rg-premium-stat__value @(dsarBacklog > 0 ? "rg-premium-stat__value--warning" : "rg-premium-stat__value--success")">@dsarBacklog</strong>
+                    <p class="rg-premium-stat__note">Requests still flowing through received, in-progress, or approval stages.</p>
+                </article>
+                <article class="rg-premium-stat">
+                    <span class="rg-premium-stat__label">Imminent notifications</span>
+                    <strong class="rg-premium-stat__value @(imminentNotifications > 0 ? "rg-premium-stat__value--danger" : "rg-premium-stat__value--success")">@imminentNotifications</strong>
+                    <p class="rg-premium-stat__note">Incidents within twenty-four hours of the notification deadline.</p>
+                </article>
+                <article class="rg-premium-stat">
+                    <span class="rg-premium-stat__label">Retention due</span>
+                    <strong class="rg-premium-stat__value rg-premium-stat__value--info">@_data.RetentionDueThisMonth</strong>
+                    <p class="rg-premium-stat__note">Records entering retention-review or disposal windows this month.</p>
+                </article>
+                <article class="rg-premium-stat">
+                    <span class="rg-premium-stat__label">Pending PIAs</span>
+                    <strong class="rg-premium-stat__value @(pendingPias > 0 ? "rg-premium-stat__value--warning" : "rg-premium-stat__value--success")">@pendingPias</strong>
+                    <p class="rg-premium-stat__note">Module assessments not yet marked complete in the current register.</p>
+                </article>
+            </section>
+        </div>
+
         @* ══════════════════════════════════════════════════════════
            §1  Privacy Compliance Score Banner
            ══════════════════════════════════════════════════════════ *@
@@ -678,5 +756,32 @@
         public string Key { get; set; } = "";
         public string Label { get; set; } = "";
         public int Count { get; set; }
+    }
+
+    private static string ResolvePrivacyBannerTone(decimal privacyScore, int openBreaches, int imminentNotifications)
+    {
+        if (openBreaches > 0 || imminentNotifications > 0 || privacyScore < 60m) return "danger";
+        if (privacyScore < 75m) return "warning";
+        return "success";
+    }
+
+    private static string BuildPrivacyBannerHeadline(decimal privacyScore, int openBreaches, int imminentNotifications)
+    {
+        if (openBreaches > 0)
+            return $"{openBreaches} open breach{(openBreaches == 1 ? "" : "es")} are shaping the current privacy control posture.";
+
+        if (imminentNotifications > 0)
+            return $"{imminentNotifications} incident{(imminentNotifications == 1 ? "" : "s")} are nearing the notification deadline.";
+
+        if (privacyScore < 75m)
+            return "Privacy posture is serviceable, but the operating margin is too thin for comfort.";
+
+        return "Privacy controls are currently inside the preferred operating band.";
+    }
+
+    private static string BuildPrivacyBannerDetail(int dsarBacklog, int pendingPias, string? leadModuleCode)
+    {
+        var moduleLabel = string.IsNullOrWhiteSpace(leadModuleCode) ? "the current processing estate" : leadModuleCode;
+        return $"{dsarBacklog} active DSAR item{(dsarBacklog == 1 ? "" : "s")} and {pendingPias} pending privacy assessment{(pendingPias == 1 ? "" : "s")} remain in flight, with {moduleLabel} currently carrying the heaviest processing footprint.";
     }
 }

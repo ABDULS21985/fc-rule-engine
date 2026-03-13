@@ -65,188 +65,217 @@
     }
     else if (_summary is not null)
     {
-        <!-- Sector CHS Banner -->
-        <div class="fc-chs-banner fc-chs-banner--@GetScoreLevel(_summary.SectorAverage)">
-            <div class="fc-chs-banner__orb"></div>
-            <div class="fc-chs-banner__body">
-                <span class="fc-chs-banner__headline">
-                    Sector Average CHS: @_summary.SectorAverage.ToString("0.#") / 100
-                </span>
-                <span class="fc-chs-banner__sub">
-                    @_summary.TotalInstitutions institutions monitored &middot;
-                    @(_watchlist?.Count ?? 0) on watch list &middot;
-                    Last computed @DateTime.UtcNow.ToString("HH:mm") UTC
-                </span>
-            </div>
-        </div>
+        var latestTrend = _summary.SectorTrend.LastOrDefault();
+        var highestInstitution = _heatmap?.OrderByDescending(x => x.OverallScore).FirstOrDefault();
+        var weakestInstitution = _heatmap?.OrderBy(x => x.OverallScore).FirstOrDefault();
 
-        <!-- KPI Cards -->
-        <div class="fc-grid fc-grid-4 fc-mb-4">
-            <div class="fc-card fc-kpi-card">
-                <div class="fc-card__body">
-                    <div class="fc-stat-label">Sector Average</div>
-                    <div class="fc-stat-value" style="color:@GetScoreColor(_summary.SectorAverage)">@_summary.SectorAverage.ToString("0.#")</div>
-                    <div class="fc-kpi-delta">out of 100</div>
+        <div class="rg-premium-flow">
+            <section class="rg-premium-banner @ResolveOverviewBannerTone()" aria-label="Compliance health posture">
+                <div class="rg-premium-banner__grid">
+                    <div>
+                        <div class="rg-premium-banner__eyebrow">Sector health pulse</div>
+                        <h2 class="rg-premium-banner__headline">@BuildOverviewBannerHeadline()</h2>
+                        <p class="rg-premium-banner__detail">@BuildOverviewBannerDetail()</p>
+                    </div>
+                    <div class="rg-premium-banner__meta">
+                        <div class="rg-premium-banner__meta-label">Supervised entities</div>
+                        <div class="rg-premium-banner__meta-value">@_summary.TotalInstitutions</div>
+                        <div class="rg-premium-banner__meta-copy">
+                            @(_watchlist?.Count ?? 0) on watch list · @(latestTrend?.PeriodLabel ?? "Current window") latest period
+                        </div>
+                    </div>
                 </div>
-            </div>
-            <div class="fc-card fc-kpi-card">
-                <div class="fc-card__body">
-                    <div class="fc-stat-label">Sector Median</div>
-                    <div class="fc-stat-value" style="color:@GetScoreColor(_summary.SectorMedian)">@_summary.SectorMedian.ToString("0.#")</div>
-                    <div class="fc-kpi-delta">50th percentile</div>
-                </div>
-            </div>
-            <div class="fc-card fc-kpi-card fc-kpi-card--success">
-                <div class="fc-card__body">
-                    <div class="fc-stat-label">A / A+ Rated</div>
-                    <div class="fc-stat-value fc-chs-stat--green">@GetHighRatedCount()</div>
-                    <div class="fc-kpi-delta">of @_summary.TotalInstitutions institutions</div>
-                </div>
-            </div>
-            <div class="fc-card fc-kpi-card fc-kpi-card--critical">
-                <div class="fc-card__body">
-                    <div class="fc-stat-label">Watch List</div>
-                    <div class="fc-stat-value fc-chs-stat--red">@(_watchlist?.Count ?? 0)</div>
-                    <div class="fc-kpi-delta">require attention</div>
-                </div>
-            </div>
-        </div>
+            </section>
 
-        <!-- Charts Row: Rating Distribution & Sector Trend -->
-        <div class="fc-grid fc-grid-2 fc-mb-4">
-            <div class="fc-card">
-                <div class="fc-card__header">
-                    <h2 class="fc-card__title">Rating Distribution</h2>
-                    <span class="fc-chart-chip">@_summary.TotalInstitutions institutions</span>
+            <section class="rg-premium-hero" aria-labelledby="platform-chs-hero-title">
+                <div class="rg-premium-hero__grid">
+                    <div>
+                        <div class="rg-premium-hero__eyebrow">Platform oversight lane</div>
+                        <h1 id="platform-chs-hero-title" class="rg-premium-hero__title">Track sector-wide compliance pressure before it turns into escalations.</h1>
+                        <p class="rg-premium-hero__subtitle">
+                            This view gives platform operators a clean picture of rating distribution, CHS trend direction, and the institutions
+                            carrying the heaviest compliance drag so support and regulator engagement can be prioritised early.
+                        </p>
+                        <div class="rg-premium-badge-row">
+                            <span class="rg-premium-chip rg-premium-chip--info">@_regulatorCode monitoring scope</span>
+                            <span class="rg-premium-chip @(GetHighRatedCount() >= Math.Max(1, _summary.TotalInstitutions / 2) ? "rg-premium-chip--success" : "rg-premium-chip--warning")">@GetHighRatedCount() high-rated entities</span>
+                            <span class="rg-premium-chip @((_watchlist?.Count ?? 0) == 0 ? "rg-premium-chip--success" : (_watchlist?.Count ?? 0) >= 3 ? "rg-premium-chip--danger" : "rg-premium-chip--warning")">@(_watchlist?.Count ?? 0) entities flagged</span>
+                        </div>
+                    </div>
+                    <div class="rg-premium-hero__aside">
+                        <div class="rg-premium-note">
+                            <div class="rg-premium-note__label">Strongest institution</div>
+                            <div class="rg-premium-note__value">@(highestInstitution?.InstitutionName ?? "No data")</div>
+                            <div class="rg-premium-note__copy">@(highestInstitution is null ? "Heatmap data has not been generated yet." : $"{highestInstitution.OverallScore:F0} CHS · {ComplianceHealthService.RatingLabel(highestInstitution.Rating)} rating.")</div>
+                        </div>
+                        <div class="rg-premium-note">
+                            <div class="rg-premium-note__label">Lowest institution</div>
+                            <div class="rg-premium-note__value">@(weakestInstitution?.InstitutionName ?? "No data")</div>
+                            <div class="rg-premium-note__copy">@(weakestInstitution is null ? "No ranked institution is available yet." : $"{weakestInstitution.OverallScore:F0} CHS currently anchors the downside tail.")</div>
+                        </div>
+                    </div>
                 </div>
-                <div class="fc-card__body fc-chart-height">
-                    <canvas id="chs-rating-dist"></canvas>
-                </div>
-            </div>
-            <div class="fc-card">
-                <div class="fc-card__header">
-                    <h2 class="fc-card__title">Sector CHS Trend</h2>
-                    <span class="fc-chart-chip">12-week average</span>
-                </div>
-                <div class="fc-card__body fc-chart-height">
-                    <canvas id="chs-sector-trend"></canvas>
-                </div>
-            </div>
-        </div>
+            </section>
 
-        <!-- Institution CHS Heatmap -->
-        @if (_heatmap is not null && _heatmap.Count > 0)
-        {
-            <div class="fc-card fc-mb-4">
-                <div class="fc-card__header">
-                    <h2 class="fc-card__title">Institution CHS Heatmap</h2>
-                    <span class="fc-chart-chip">@_heatmap.Count entities ranked by CHS</span>
+            <section class="rg-premium-stat-grid" aria-label="Compliance health summary metrics">
+                <article class="rg-premium-stat">
+                    <div class="rg-premium-stat__label">Sector average</div>
+                    <div class="rg-premium-stat__value @(GetScoreLevel(_summary.SectorAverage) == "green" ? "rg-premium-stat__value--success" : GetScoreLevel(_summary.SectorAverage) == "amber" ? "rg-premium-stat__value--warning" : "rg-premium-stat__value--danger")">@_summary.SectorAverage.ToString("0.#")</div>
+                    <div class="rg-premium-stat__note">Average CHS across all monitored institutions.</div>
+                </article>
+                <article class="rg-premium-stat">
+                    <div class="rg-premium-stat__label">Sector median</div>
+                    <div class="rg-premium-stat__value rg-premium-stat__value--info">@_summary.SectorMedian.ToString("0.#")</div>
+                    <div class="rg-premium-stat__note">Median score isolates whether weakness is systemic or concentrated.</div>
+                </article>
+                <article class="rg-premium-stat">
+                    <div class="rg-premium-stat__label">A / A+ rated</div>
+                    <div class="rg-premium-stat__value rg-premium-stat__value--success">@GetHighRatedCount()</div>
+                    <div class="rg-premium-stat__note">Entities holding the strongest current rating tier.</div>
+                </article>
+                <article class="rg-premium-stat">
+                    <div class="rg-premium-stat__label">Watch list</div>
+                    <div class="rg-premium-stat__value @((_watchlist?.Count ?? 0) == 0 ? "rg-premium-stat__value--success" : (_watchlist?.Count ?? 0) >= 3 ? "rg-premium-stat__value--danger" : "rg-premium-stat__value--warning")">@(_watchlist?.Count ?? 0)</div>
+                    <div class="rg-premium-stat__note">Institutions requiring follow-up due to low CHS or repeated deterioration.</div>
+                </article>
+            </section>
+
+            <!-- Charts Row: Rating Distribution & Sector Trend -->
+            <div class="fc-grid fc-grid-2 fc-mb-4">
+                <div class="fc-card">
+                    <div class="fc-card__header">
+                        <h2 class="fc-card__title">Rating Distribution</h2>
+                        <span class="fc-chart-chip">@_summary.TotalInstitutions institutions</span>
+                    </div>
+                    <div class="fc-card__body fc-chart-height">
+                        <canvas id="chs-rating-dist"></canvas>
+                    </div>
                 </div>
-                <div class="fc-card__body fc-chs-table-wrap">
-                    <table class="fc-chs-table">
-                        <thead>
-                            <tr>
-                                <th>#</th>
-                                <th>Institution</th>
-                                <th>Type</th>
-                                <th class="fc-chs-th-num">CHS</th>
-                                <th>Rating</th>
-                                <th class="fc-chs-th-num">Filing</th>
-                                <th class="fc-chs-th-num">Quality</th>
-                                <th class="fc-chs-th-num">Capital</th>
-                                <th class="fc-chs-th-num">Governance</th>
-                                <th class="fc-chs-th-num">Engagement</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            @{ var rank = 1; }
-                            @foreach (var item in _heatmap)
-                            {
-                                <tr class="fc-chs-row">
-                                    <td class="fc-text-muted">@(rank++)</td>
-                                    <td class="fc-chs-entity-name">@item.InstitutionName</td>
-                                    <td><span class="fc-badge fc-badge--sm fc-badge--outline">@item.LicenceType</span></td>
-                                    <td class="fc-chs-td-score"><strong style="color:@GetScoreColor(item.OverallScore)">@item.OverallScore.ToString("0.#")</strong></td>
-                                    <td>
-                                        <span class="fc-chs-rating fc-chs-rating--@RatingClass(item.Rating)">
-                                            @ComplianceHealthService.RatingLabel(item.Rating)
-                                        </span>
-                                    </td>
-                                    <td class="fc-chs-td-score @PillarClass(item.FilingTimeliness)">@item.FilingTimeliness.ToString("0.#")</td>
-                                    <td class="fc-chs-td-score @PillarClass(item.DataQuality)">@item.DataQuality.ToString("0.#")</td>
-                                    <td class="fc-chs-td-score @PillarClass(item.RegulatoryCapital)">@item.RegulatoryCapital.ToString("0.#")</td>
-                                    <td class="fc-chs-td-score @PillarClass(item.AuditGovernance)">@item.AuditGovernance.ToString("0.#")</td>
-                                    <td class="fc-chs-td-score @PillarClass(item.Engagement)">@item.Engagement.ToString("0.#")</td>
+                <div class="fc-card">
+                    <div class="fc-card__header">
+                        <h2 class="fc-card__title">Sector CHS Trend</h2>
+                        <span class="fc-chart-chip">12-week average</span>
+                    </div>
+                    <div class="fc-card__body fc-chart-height">
+                        <canvas id="chs-sector-trend"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Institution CHS Heatmap -->
+            @if (_heatmap is not null && _heatmap.Count > 0)
+            {
+                <div class="fc-card fc-mb-4">
+                    <div class="fc-card__header">
+                        <h2 class="fc-card__title">Institution CHS Heatmap</h2>
+                        <span class="fc-chart-chip">@_heatmap.Count entities ranked by CHS</span>
+                    </div>
+                    <div class="fc-card__body fc-chs-table-wrap">
+                        <table class="fc-chs-table">
+                            <thead>
+                                <tr>
+                                    <th>#</th>
+                                    <th>Institution</th>
+                                    <th>Type</th>
+                                    <th class="fc-chs-th-num">CHS</th>
+                                    <th>Rating</th>
+                                    <th class="fc-chs-th-num">Filing</th>
+                                    <th class="fc-chs-th-num">Quality</th>
+                                    <th class="fc-chs-th-num">Capital</th>
+                                    <th class="fc-chs-th-num">Governance</th>
+                                    <th class="fc-chs-th-num">Engagement</th>
                                 </tr>
-                            }
-                        </tbody>
-                    </table>
+                            </thead>
+                            <tbody>
+                                @{ var rank = 1; }
+                                @foreach (var item in _heatmap)
+                                {
+                                    <tr class="fc-chs-row">
+                                        <td class="fc-text-muted">@(rank++)</td>
+                                        <td class="fc-chs-entity-name">@item.InstitutionName</td>
+                                        <td><span class="fc-badge fc-badge--sm fc-badge--outline">@item.LicenceType</span></td>
+                                        <td class="fc-chs-td-score"><strong style="color:@GetScoreColor(item.OverallScore)">@item.OverallScore.ToString("0.#")</strong></td>
+                                        <td>
+                                            <span class="fc-chs-rating fc-chs-rating--@RatingClass(item.Rating)">
+                                                @ComplianceHealthService.RatingLabel(item.Rating)
+                                            </span>
+                                        </td>
+                                        <td class="fc-chs-td-score @PillarClass(item.FilingTimeliness)">@item.FilingTimeliness.ToString("0.#")</td>
+                                        <td class="fc-chs-td-score @PillarClass(item.DataQuality)">@item.DataQuality.ToString("0.#")</td>
+                                        <td class="fc-chs-td-score @PillarClass(item.RegulatoryCapital)">@item.RegulatoryCapital.ToString("0.#")</td>
+                                        <td class="fc-chs-td-score @PillarClass(item.AuditGovernance)">@item.AuditGovernance.ToString("0.#")</td>
+                                        <td class="fc-chs-td-score @PillarClass(item.Engagement)">@item.Engagement.ToString("0.#")</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
-            </div>
-        }
+            }
 
-        <!-- Watch List -->
-        @if (_watchlist is not null && _watchlist.Count > 0)
-        {
-            <div class="fc-card fc-mb-4">
-                <div class="fc-card__header">
-                    <h2 class="fc-card__title">Watch List</h2>
-                    <span class="fc-badge fc-badge--danger">@_watchlist.Count institutions</span>
-                </div>
-                <div class="fc-card__body fc-chs-table-wrap">
-                    <table class="fc-chs-table">
-                        <thead>
-                            <tr>
-                                <th>Institution</th>
-                                <th>Type</th>
-                                <th class="fc-chs-th-num">CHS</th>
-                                <th>Rating</th>
-                                <th>Trend</th>
-                                <th class="fc-chs-th-num">Declines</th>
-                                <th class="fc-chs-th-num">4-Wk Change</th>
-                                <th>Reason</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            @foreach (var item in _watchlist)
-                            {
-                                <tr class="fc-chs-row">
-                                    <td class="fc-chs-entity-name">@item.InstitutionName</td>
-                                    <td><span class="fc-badge fc-badge--sm fc-badge--outline">@item.LicenceType</span></td>
-                                    <td class="fc-chs-td-score"><strong style="color:@GetScoreColor(item.CurrentScore)">@item.CurrentScore.ToString("0.#")</strong></td>
-                                    <td>
-                                        <span class="fc-chs-rating fc-chs-rating--@RatingClass(item.Rating)">
-                                            @ComplianceHealthService.RatingLabel(item.Rating)
-                                        </span>
-                                    </td>
-                                    <td>
-                                        <span class="fc-chs-trend fc-chs-trend--@item.Trend.ToString().ToLower()">
-                                            @ComplianceHealthService.TrendArrow(item.Trend)
-                                        </span>
-                                    </td>
-                                    <td class="fc-chs-td-score">
-                                        @if (item.ConsecutiveDeclines >= 3)
-                                        {
-                                            <span class="fc-badge fc-badge--sm fc-badge--danger">@item.ConsecutiveDeclines</span>
-                                        }
-                                        else
-                                        {
-                                            <span class="fc-text-muted">@item.ConsecutiveDeclines</span>
-                                        }
-                                    </td>
-                                    <td class="fc-chs-td-score">
-                                        <span style="color:@(item.ScoreChange >= 0 ? "var(--cbn-success)" : "var(--cbn-danger)")">
-                                            @(item.ScoreChange >= 0 ? "+" : "")@item.ScoreChange.ToString("0.#")
-                                        </span>
-                                    </td>
-                                    <td><span class="fc-text-muted">@item.WatchReason</span></td>
+            <!-- Watch List -->
+            @if (_watchlist is not null && _watchlist.Count > 0)
+            {
+                <div class="fc-card fc-mb-4">
+                    <div class="fc-card__header">
+                        <h2 class="fc-card__title">Watch List</h2>
+                        <span class="fc-badge fc-badge--danger">@_watchlist.Count institutions</span>
+                    </div>
+                    <div class="fc-card__body fc-chs-table-wrap">
+                        <table class="fc-chs-table">
+                            <thead>
+                                <tr>
+                                    <th>Institution</th>
+                                    <th>Type</th>
+                                    <th class="fc-chs-th-num">CHS</th>
+                                    <th>Rating</th>
+                                    <th>Trend</th>
+                                    <th class="fc-chs-th-num">Declines</th>
+                                    <th class="fc-chs-th-num">4-Wk Change</th>
+                                    <th>Reason</th>
                                 </tr>
-                            }
-                        </tbody>
-                    </table>
+                            </thead>
+                            <tbody>
+                                @foreach (var item in _watchlist)
+                                {
+                                    <tr class="fc-chs-row">
+                                        <td class="fc-chs-entity-name">@item.InstitutionName</td>
+                                        <td><span class="fc-badge fc-badge--sm fc-badge--outline">@item.LicenceType</span></td>
+                                        <td class="fc-chs-td-score"><strong style="color:@GetScoreColor(item.CurrentScore)">@item.CurrentScore.ToString("0.#")</strong></td>
+                                        <td>
+                                            <span class="fc-chs-rating fc-chs-rating--@RatingClass(item.Rating)">
+                                                @ComplianceHealthService.RatingLabel(item.Rating)
+                                            </span>
+                                        </td>
+                                        <td>
+                                            <span class="fc-chs-trend fc-chs-trend--@item.Trend.ToString().ToLower()">
+                                                @ComplianceHealthService.TrendArrow(item.Trend)
+                                            </span>
+                                        </td>
+                                        <td class="fc-chs-td-score">
+                                            @if (item.ConsecutiveDeclines >= 3)
+                                            {
+                                                <span class="fc-badge fc-badge--sm fc-badge--danger">@item.ConsecutiveDeclines</span>
+                                            }
+                                            else
+                                            {
+                                                <span class="fc-text-muted">@item.ConsecutiveDeclines</span>
+                                            }
+                                        </td>
+                                        <td class="fc-chs-td-score">
+                                            <span style="color:@(item.ScoreChange >= 0 ? "var(--cbn-success)" : "var(--cbn-danger)")">
+                                                @(item.ScoreChange >= 0 ? "+" : "")@item.ScoreChange.ToString("0.#")
+                                            </span>
+                                        </td>
+                                        <td><span class="fc-text-muted">@item.WatchReason</span></td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
-            </div>
-        }
+            }
+        </div>
     }
 </div>
 
@@ -256,6 +285,7 @@
     private List<ChsWatchListItem>? _watchlist;
     private Exception? _error;
     private bool _loading = true;
+    private bool _chartsRendered;
 
     private string _regulatorCode = "CBN";
 
@@ -268,6 +298,7 @@
     {
         _loading = true;
         _error = null;
+        _chartsRendered = false;
         StateHasChanged();
 
         try
@@ -289,7 +320,8 @@
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (!firstRender || _summary is null) return;
+        if (_summary is null || _chartsRendered) return;
+        _chartsRendered = true;
         await RenderCharts();
     }
 
@@ -365,6 +397,60 @@
     private void ExportDashboard()
     {
         Toast.Info("Export feature will generate a compliance health report. Coming soon.");
+    }
+
+    private string ResolveOverviewBannerTone()
+    {
+        if (_summary is null)
+        {
+            return "rg-premium-banner--info";
+        }
+
+        var watchCount = _watchlist?.Count ?? 0;
+        if (_summary.SectorAverage < 60 || watchCount >= Math.Max(3, _summary.TotalInstitutions / 4))
+        {
+            return "rg-premium-banner--danger";
+        }
+
+        if (_summary.SectorAverage < 75 || watchCount > 0)
+        {
+            return "rg-premium-banner--warning";
+        }
+
+        return "rg-premium-banner--success";
+    }
+
+    private string BuildOverviewBannerHeadline()
+    {
+        if (_summary is null)
+        {
+            return "Sector compliance health is awaiting the next refresh cycle.";
+        }
+
+        if (_summary.SectorAverage < 60)
+        {
+            return "Sector compliance health is trending into intervention territory.";
+        }
+
+        if ((_watchlist?.Count ?? 0) > 0)
+        {
+            return "Sector compliance health is stable overall, but a watch list is building.";
+        }
+
+        return "Sector compliance health remains resilient across the monitored population.";
+    }
+
+    private string BuildOverviewBannerDetail()
+    {
+        if (_summary is null)
+        {
+            return "No sector CHS data is available yet.";
+        }
+
+        var watchCount = _watchlist?.Count ?? 0;
+        var latestPeriod = _summary.SectorTrend.LastOrDefault()?.PeriodLabel ?? "the current period";
+        return $"Average CHS is {_summary.SectorAverage:F1} with a sector median of {_summary.SectorMedian:F1}. " +
+               $"{watchCount} institutions are on the watch list based on data from {latestPeriod}.";
     }
 
     // ── UI Helpers ──

@@ -33,8 +33,13 @@ else if (_data is not null)
 {
     var current = _data.Current;
     var peer = _data.PeerComparison;
+    var weakestPillar = _data.Pillars.OrderBy(x => x.Score).FirstOrDefault();
+    var strongestPillar = _data.Pillars.OrderByDescending(x => x.Score).FirstOrDefault();
+    var latestSnapshot = _data.Trend.Snapshots.LastOrDefault();
+    var alertCount = _data.ActiveAlerts.Count;
+    var bannerTone = ResolveChsBannerTone(current.Rating, current.Trend, alertCount, weakestPillar?.Score ?? current.OverallScore);
 
-    <div class="portal-page">
+    <div class="portal-page portal-fsd-shell">
 
         <!-- ════════════════════════════════════════════════════
              PAGE HEADER
@@ -51,6 +56,70 @@ else if (_data is not null)
                 </button>
             </PrimaryAction>
         </PortalPageHeader>
+
+        <section class="portal-fsd-banner portal-fsd-banner--@bannerTone">
+            <div>
+                <span class="portal-fsd-eyebrow">Compliance health pulse</span>
+                <h2 class="portal-fsd-banner-title">@BuildChsBannerHeadline(current, alertCount, weakestPillar)</h2>
+                <p class="portal-fsd-banner-copy">@BuildChsBannerCopy(current, peer, weakestPillar, strongestPillar)</p>
+            </div>
+            <div class="portal-fsd-banner-meta">
+                <span class="portal-fsd-meta-label">Peer standing</span>
+                <strong class="portal-fsd-meta-value">@peer.Percentile<sup>th</sup> percentile</strong>
+                <span class="portal-fsd-meta-copy">@peer.PeerCount @peer.LicenceType peer@(peer.PeerCount == 1 ? "" : "s") in the current comparison set</span>
+            </div>
+        </section>
+
+        <section class="portal-fsd-hero">
+            <div>
+                <span class="portal-fsd-eyebrow">Health narrative</span>
+                <h2 class="portal-fsd-hero-title">Translate five-pillar scoring into an operating story the institution can act on.</h2>
+                <p class="portal-fsd-hero-copy">
+                    The CHS workspace links current score, trend direction, peer position, and pillar-level contribution so the team can see
+                    whether deterioration is structural, temporary, or isolated to one control domain.
+                </p>
+                <div class="portal-fsd-chip-row">
+                    <span class="portal-fsd-chip portal-fsd-chip--@BuildChsRiskChip(current.Trend, alertCount)">@ComplianceHealthService.TrendArrow(current.Trend) @current.Trend</span>
+                    <span class="portal-fsd-chip portal-fsd-chip--@(alertCount > 0 ? "danger" : "success")">@alertCount active alert@(alertCount == 1 ? "" : "s")</span>
+                    <span class="portal-fsd-chip portal-fsd-chip--info">@peer.PeerMedian.ToString("F0") peer median</span>
+                </div>
+            </div>
+            <div class="portal-fsd-hero-aside">
+                <div class="portal-fsd-note">
+                    <span class="portal-fsd-note-label">Weakest pillar</span>
+                    <strong class="portal-fsd-note-value">@(weakestPillar?.PillarName ?? "N/A")</strong>
+                    <span class="portal-fsd-note-copy">@(weakestPillar is null ? "No pillar breakdown is available." : $"{weakestPillar.Score:F0} score with {weakestPillar.WeightedContribution:F1} contribution.")</span>
+                </div>
+                <div class="portal-fsd-note">
+                    <span class="portal-fsd-note-label">Latest period</span>
+                    <strong class="portal-fsd-note-value">@(latestSnapshot?.PeriodLabel ?? current.PeriodLabel)</strong>
+                    <span class="portal-fsd-note-copy">@(latestSnapshot is null ? "Trend history is limited." : $"Latest measured score is {latestSnapshot.OverallScore:F0} in the most recent time bucket.")</span>
+                </div>
+            </div>
+        </section>
+
+        <section class="portal-fsd-stat-grid" aria-label="Compliance health summary metrics">
+            <article class="portal-fsd-stat">
+                <span class="portal-fsd-stat-label">Overall CHS</span>
+                <strong class="portal-fsd-stat-value">@current.OverallScore.ToString("F0")</strong>
+                <p class="portal-fsd-stat-copy">Current institution-wide score across timeliness, data quality, capital, governance, and engagement.</p>
+            </article>
+            <article class="portal-fsd-stat">
+                <span class="portal-fsd-stat-label">Peer delta</span>
+                <strong class="portal-fsd-stat-value">@((current.OverallScore - peer.PeerMedian).ToString("+0.#;-0.#;0"))</strong>
+                <p class="portal-fsd-stat-copy">Difference between the institution’s CHS and the peer median in the current licence cohort.</p>
+            </article>
+            <article class="portal-fsd-stat">
+                <span class="portal-fsd-stat-label">Consecutive declines</span>
+                <strong class="portal-fsd-stat-value">@_data.Trend.ConsecutiveDeclines</strong>
+                <p class="portal-fsd-stat-copy">Number of sequential down moves visible in the current trend history.</p>
+            </article>
+            <article class="portal-fsd-stat">
+                <span class="portal-fsd-stat-label">Strongest pillar</span>
+                <strong class="portal-fsd-stat-value">@(strongestPillar?.Score.ToString("F0") ?? "N/A")</strong>
+                <p class="portal-fsd-stat-copy">@(strongestPillar is null ? "No pillar data available." : $"{strongestPillar.PillarName} currently anchors the strongest contribution.")</p>
+            </article>
+        </section>
 
         <!-- ════════════════════════════════════════════════════
              ALERT BANNER (conditional)
@@ -408,4 +477,39 @@ else
         >= 60 => "#C8A415",
         _ => "#DC2626"
     };
+
+    private static string ResolveChsBannerTone(ChsRating rating, ChsTrend trend, int alertCount, decimal weakestPillarScore)
+    {
+        if (alertCount > 0 || rating is ChsRating.D or ChsRating.F || weakestPillarScore < 50m) return "danger";
+        if (trend == ChsTrend.Declining || rating == ChsRating.C || weakestPillarScore < 70m) return "warning";
+        return "success";
+    }
+
+    private static string BuildChsBannerHeadline(ComplianceHealthScore current, int alertCount, ChsPillarDetail? weakestPillar)
+    {
+        if (alertCount > 0)
+            return $"{alertCount} active health alert{(alertCount == 1 ? "" : "s")} are pushing the score out of its preferred band.";
+
+        if (current.Trend == ChsTrend.Declining)
+            return "The health score is weakening, and the trend now needs active operator attention.";
+
+        if (weakestPillar is not null && weakestPillar.Score < 70m)
+            return $"{weakestPillar.PillarName} is now the weakest control pillar in the current CHS profile.";
+
+        return "The compliance health posture is currently stable and comparatively strong.";
+    }
+
+    private static string BuildChsBannerCopy(ComplianceHealthScore current, ChsPeerComparison peer, ChsPillarDetail? weakestPillar, ChsPillarDetail? strongestPillar)
+    {
+        var weakestLabel = weakestPillar?.PillarName ?? "the weakest pillar";
+        var strongestLabel = strongestPillar?.PillarName ?? "the strongest pillar";
+        return $"{weakestLabel} is the clearest drag on the score, while {strongestLabel} provides the strongest offset. The institution sits {(current.OverallScore - peer.PeerMedian):+0.#;-0.#;0} points versus peer median.";
+    }
+
+    private static string BuildChsRiskChip(ChsTrend trend, int alertCount)
+    {
+        if (alertCount > 0) return "danger";
+        if (trend == ChsTrend.Declining) return "warning";
+        return "success";
+    }
 }

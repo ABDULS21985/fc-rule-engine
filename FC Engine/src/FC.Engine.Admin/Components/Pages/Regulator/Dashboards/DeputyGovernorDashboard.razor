@@ -6,129 +6,314 @@
 <PageTitle>Deputy Governor Dashboard</PageTitle>
 
 <PageHeader Title="Deputy Governor Dashboard"
-            Subtitle="Portfolio oversight, unresolved issues, escalation tracking, and remediation progress."
-            BackUrl="/regulator/dashboards/governor">
-    <PrimaryAction><button class="fc-btn fc-btn--primary" @onclick="ReloadAsync" disabled="@_loading">Refresh</button></PrimaryAction>
+            Subtitle="Portfolio oversight, escalation control, remediation performance, and intervention sequencing."
+            BackUrl="/regulator/dashboards/governor"
+            StatusBadge="@ResolveStatusBadge()"
+            StatusVariant="@ResolveStatusVariant()">
+    <PrimaryAction>
+        <button class="fc-btn fc-btn--primary" @onclick="ReloadAsync" disabled="@_loading">Refresh</button>
+    </PrimaryAction>
 </PageHeader>
 
 <div class="fc-page">
     <SectionErrorBoundary Title="Failed to load deputy dashboard" ExternalError="@_loadException" OnRetry="ReloadAsync">
         @if (_loading)
         {
-            <div class="rg-dash-kpi-strip">
-                @for (var i = 0; i < 4; i++)
-                {
-                    <div class="rg-dash-kpi"><SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Block" Height="88px" /></div>
-                }
+            <div class="rg-premium-flow">
+                <div class="rg-premium-banner"><SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Block" Height="138px" /></div>
+                <div class="rg-premium-stat-grid">
+                    @for (var i = 0; i < 4; i++)
+                    {
+                        <div class="rg-premium-stat"><SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Block" Height="140px" /></div>
+                    }
+                </div>
+                <div class="rg-premium-content-grid">
+                    <div class="rg-premium-main">
+                        <div class="rg-premium-panel"><SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Block" Height="320px" /></div>
+                        <div class="rg-premium-panel"><SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Block" Height="420px" /></div>
+                        <div class="rg-premium-panel"><SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Block" Height="420px" /></div>
+                    </div>
+                    <div class="rg-premium-side">
+                        <div class="rg-premium-panel"><SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Block" Height="260px" /></div>
+                        <div class="rg-premium-panel"><SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Block" Height="320px" /></div>
+                    </div>
+                </div>
             </div>
         }
         else if (_data is null)
         {
-            <EmptyState Context="data" Heading="No dashboard data" Description="Refresh the Intelligence Hub to generate stakeholder data." />
+            <EmptyState Context="data" Heading="No deputy dashboard data" Description="Refresh the Intelligence Hub to generate stakeholder data." />
         }
         else
         {
-            <div class="rg-dash-kpi-strip">
-                <div class="rg-dash-kpi">
-                    <div class="rg-dash-kpi-value">@_data.PortfolioSize</div>
-                    <div class="rg-dash-kpi-label">Portfolio Size</div>
-                </div>
-                <div class="rg-dash-kpi">
-                    <div class="rg-dash-kpi-value @(_data.UnresolvedIssues > 0 ? "rg-dash-kpi-value--amber" : "")">@_data.UnresolvedIssues</div>
-                    <div class="rg-dash-kpi-label">Unresolved Issues</div>
-                </div>
-                <div class="rg-dash-kpi">
-                    <div class="rg-dash-kpi-value @(_data.Escalations > 0 ? "rg-dash-kpi-value--red" : "")">@_data.Escalations</div>
-                    <div class="rg-dash-kpi-label">Escalations</div>
-                </div>
-                <div class="rg-dash-kpi">
-                    <div class="rg-dash-kpi-value @(_data.RemediationRatePercent >= 80 ? "rg-dash-kpi-value--green" : "rg-dash-kpi-value--amber")">@_data.RemediationRatePercent%</div>
-                    <div class="rg-dash-kpi-label">Remediation Rate</div>
-                </div>
-            </div>
+            <div class="rg-premium-flow">
+                <section class="rg-premium-banner @ResolveBannerTone()" aria-label="Deputy governor posture">
+                    <div class="rg-premium-banner__grid">
+                        <div>
+                            <div class="rg-premium-banner__eyebrow">Intervention pulse</div>
+                            <h2 class="rg-premium-banner__headline">@BuildBannerHeadline()</h2>
+                            <p class="rg-premium-banner__detail">@BuildBannerDetail()</p>
+                        </div>
+                        <div class="rg-premium-banner__meta">
+                            <div class="rg-premium-banner__meta-label">Escalation posture</div>
+                            <div class="rg-premium-banner__meta-value">@($"{_data.Escalations} escalations")</div>
+                            <div class="rg-premium-banner__meta-copy">@BuildEscalationCopy()</div>
+                        </div>
+                    </div>
+                </section>
 
-            @* Domain Distribution Chart *@
-            <div class="fc-card fc-card--mb" style="margin-top:var(--space-4);">
-                <div class="fc-card__header"><h2 class="fc-card__title">Issue Distribution by Domain</h2></div>
-                <div class="fc-card__body"><canvas id="deputyDomainChart" style="max-height:260px;"></canvas></div>
-            </div>
+                <section class="rg-premium-hero" aria-labelledby="deputy-hero-title">
+                    <div class="rg-premium-hero__grid">
+                        <div>
+                            <div class="rg-premium-hero__eyebrow">Deputy governor control room</div>
+                            <h1 id="deputy-hero-title" class="rg-premium-hero__title">Sequence interventions before they become governance bottlenecks.</h1>
+                            <p class="rg-premium-hero__subtitle">
+                                This view is about queue control: what is unresolved, where escalations are forming, how much remediation is closing,
+                                and which institutions deserve direct portfolio management attention.
+                            </p>
+                            <div class="rg-premium-badge-row">
+                                <span class="rg-premium-chip rg-premium-chip--info">@($"{_data.PortfolioSize} institutions in portfolio")</span>
+                                <span class="rg-premium-chip @BuildEscalationChipClass()">@($"{_data.Escalations} escalations live")</span>
+                                <span class="rg-premium-chip @BuildRemediationChipClass()">@($"{_data.RemediationRatePercent:F1}% remediated")</span>
+                            </div>
+                        </div>
+                        <div class="rg-premium-hero__aside">
+                            <div class="rg-premium-note">
+                                <div class="rg-premium-note__label">Unresolved pressure</div>
+                                <div class="rg-premium-note__value">@_data.UnresolvedIssues</div>
+                                <div class="rg-premium-note__copy">
+                                    Combined open obligations, resilience incidents, and alert load still outstanding across the portfolio.
+                                </div>
+                            </div>
+                            <div class="rg-premium-note">
+                                <div class="rg-premium-note__label">Dominant domain</div>
+                                <div class="rg-premium-note__value">@BuildDominantDomainLabel()</div>
+                                <div class="rg-premium-note__copy">@BuildDominantDomainCopy()</div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
 
-            @* Intervention Queue *@
-            <div class="fc-card fc-card--mb">
-                <div class="fc-card__header"><h2 class="fc-card__title">Intervention Queue</h2></div>
-                <div class="fc-card__body">
-                    @if (_data.InterventionQueue.Count == 0)
-                    {
-                        <p class="fc-text-muted">No active interventions.</p>
-                    }
-                    else
-                    {
-                        <DataTable TItem="InterventionQueueRow" Items="@_data.InterventionQueue" PageSize="20" Sortable="true" ShowExport="true" ExportFileName="deputy-interventions">
-                            <ChildContent>
-                                <DataColumn TItem="InterventionQueueRow" Title="Domain" Width="120px" SortKey="@(x => x.Domain)">
-                                    <CellTemplate><span class="fc-badge fc-badge--neutral">@context.Domain</span></CellTemplate>
-                                </DataColumn>
-                                <DataColumn TItem="InterventionQueueRow" Title="Subject" SortKey="@(x => x.Subject)">
-                                    <CellTemplate><strong>@context.Subject</strong></CellTemplate>
-                                </DataColumn>
-                                <DataColumn TItem="InterventionQueueRow" Title="Signal" Width="90px" SortKey="@(x => x.Signal)">
-                                    <CellTemplate><span class="fc-badge @SignalBadge(context.Signal)">@context.Signal</span></CellTemplate>
-                                </DataColumn>
-                                <DataColumn TItem="InterventionQueueRow" Title="Priority" Width="100px" SortKey="@(x => x.Priority)">
-                                    <CellTemplate><span class="fc-badge @PriorityBadge(context.Priority)">@context.Priority</span></CellTemplate>
-                                </DataColumn>
-                                <DataColumn TItem="InterventionQueueRow" Title="Next Action" SortKey="@(x => x.NextAction)">
-                                    <CellTemplate>@context.NextAction</CellTemplate>
-                                </DataColumn>
-                                <DataColumn TItem="InterventionQueueRow" Title="Owner" Width="110px" SortKey="@(x => x.OwnerLane)">
-                                    <CellTemplate>@context.OwnerLane</CellTemplate>
-                                </DataColumn>
-                                <DataColumn TItem="InterventionQueueRow" Title="Due" Width="120px" SortKey="@(x => x.DueDate)">
-                                    <CellTemplate>@context.DueDate.ToString("dd MMM yyyy")</CellTemplate>
-                                </DataColumn>
-                            </ChildContent>
-                        </DataTable>
-                    }
-                </div>
-            </div>
+                <section class="rg-premium-stat-grid" aria-label="Deputy governor metrics">
+                    <article class="rg-premium-stat">
+                        <div class="rg-premium-stat__label">Portfolio size</div>
+                        <div class="rg-premium-stat__value">@_data.PortfolioSize</div>
+                        <div class="rg-premium-stat__note">Institutions currently routed into this portfolio oversight lane.</div>
+                    </article>
+                    <article class="rg-premium-stat">
+                        <div class="rg-premium-stat__label">Unresolved issues</div>
+                        <div class="rg-premium-stat__value @BuildIssueValueClass()">@_data.UnresolvedIssues</div>
+                        <div class="rg-premium-stat__note">Current unresolved pressure needing remediation follow-through or re-sequencing.</div>
+                    </article>
+                    <article class="rg-premium-stat">
+                        <div class="rg-premium-stat__label">Escalations</div>
+                        <div class="rg-premium-stat__value @BuildEscalationValueClass()">@_data.Escalations</div>
+                        <div class="rg-premium-stat__note">Critical and high-priority interventions requiring deputy governor attention.</div>
+                    </article>
+                    <article class="rg-premium-stat">
+                        <div class="rg-premium-stat__label">Remediation rate</div>
+                        <div class="rg-premium-stat__value @BuildRemediationValueClass()">@($"{_data.RemediationRatePercent:F1}%")</div>
+                        <div class="rg-premium-stat__note">Share of intervention queue items that have already moved into resolved state.</div>
+                    </article>
+                </section>
 
-            @* Institution Scorecards *@
-            <div class="fc-card">
-                <div class="fc-card__header"><h2 class="fc-card__title">Institution Scorecards</h2></div>
-                <div class="fc-card__body">
-                    <DataTable TItem="InstitutionScorecardRow" Items="@_data.InstitutionScorecards" PageSize="15" Sortable="true" ShowExport="true" ExportFileName="deputy-scorecards">
-                        <ChildContent>
-                            <DataColumn TItem="InstitutionScorecardRow" Title="Institution" SortKey="@(x => x.InstitutionName)">
-                                <CellTemplate><strong>@context.InstitutionName</strong></CellTemplate>
-                            </DataColumn>
-                            <DataColumn TItem="InstitutionScorecardRow" Title="Licence" Width="120px" SortKey="@(x => x.LicenceType)">
-                                <CellTemplate><span class="fc-badge fc-badge--neutral">@context.LicenceType</span></CellTemplate>
-                            </DataColumn>
-                            <DataColumn TItem="InstitutionScorecardRow" Title="Overdue" Width="90px" SortKey="@(x => x.OverdueObligations)">
-                                <CellTemplate><span class="@(context.OverdueObligations > 0 ? "fc-text-danger" : "")">@context.OverdueObligations</span></CellTemplate>
-                            </DataColumn>
-                            <DataColumn TItem="InstitutionScorecardRow" Title="Due Soon" Width="90px" SortKey="@(x => x.DueSoonObligations)">
-                                <CellTemplate><span class="@(context.DueSoonObligations > 0 ? "fc-text-warning" : "")">@context.DueSoonObligations</span></CellTemplate>
-                            </DataColumn>
-                            <DataColumn TItem="InstitutionScorecardRow" Title="Capital" Width="90px" SortKey="@(x => x.CapitalScore)">
-                                <CellTemplate>@(context.CapitalScore?.ToString("F1") ?? "—")</CellTemplate>
-                            </DataColumn>
-                            <DataColumn TItem="InstitutionScorecardRow" Title="Incidents" Width="90px" SortKey="@(x => x.OpenResilienceIncidents)">
-                                <CellTemplate>@context.OpenResilienceIncidents</CellTemplate>
-                            </DataColumn>
-                            <DataColumn TItem="InstitutionScorecardRow" Title="Priority" Width="100px" SortKey="@(x => x.Priority)">
-                                <CellTemplate><span class="fc-badge @PriorityBadge(context.Priority)">@context.Priority</span></CellTemplate>
-                            </DataColumn>
-                        </ChildContent>
-                    </DataTable>
-                </div>
+                <section class="rg-premium-content-grid">
+                    <div class="rg-premium-main">
+                        <section class="rg-premium-panel">
+                            <div class="rg-premium-panel__header">
+                                <div>
+                                    <div class="rg-premium-panel__eyebrow">Issue concentration</div>
+                                    <h2 class="rg-premium-panel__title">Issue distribution by domain</h2>
+                                    <p class="rg-premium-panel__subtitle">Use this to spot which operating lane is absorbing the largest share of queue pressure.</p>
+                                </div>
+                                <div class="rg-premium-panel__metric">
+                                    <span class="rg-premium-panel__metric-label">Largest lane</span>
+                                    @BuildDominantDomainLabel()
+                                </div>
+                            </div>
+                            <div class="rg-premium-panel__body rg-premium-panel__body--chart">
+                                <canvas id="deputyDomainChart" style="max-height:260px;"></canvas>
+                            </div>
+                        </section>
+
+                        <section class="rg-premium-panel">
+                            <div class="rg-premium-panel__header">
+                                <div>
+                                    <div class="rg-premium-panel__eyebrow">Intervention sequencing</div>
+                                    <h2 class="rg-premium-panel__title">Intervention queue</h2>
+                                    <p class="rg-premium-panel__subtitle">The queue is sorted toward due-date urgency so escalation decisions stay operationally grounded.</p>
+                                </div>
+                                <div class="rg-premium-panel__metric">
+                                    <span class="rg-premium-panel__metric-label">Next due</span>
+                                    @(BuildNextDueDate())
+                                </div>
+                            </div>
+                            <div class="rg-premium-panel__body rg-premium-panel__body--table">
+                                @if (_data.InterventionQueue.Count == 0)
+                                {
+                                    <div class="rg-premium-empty">No active interventions are currently queued.</div>
+                                }
+                                else
+                                {
+                                    <DataTable TItem="InterventionQueueRow" Items="@_data.InterventionQueue" PageSize="20" Sortable="true" ShowExport="true" ExportFileName="deputy-interventions">
+                                        <ChildContent>
+                                            <DataColumn TItem="InterventionQueueRow" Title="Domain" Width="120px" SortKey="@(x => x.Domain)">
+                                                <CellTemplate><span class="fc-badge fc-badge--neutral">@context.Domain</span></CellTemplate>
+                                            </DataColumn>
+                                            <DataColumn TItem="InterventionQueueRow" Title="Subject" SortKey="@(x => x.Subject)">
+                                                <CellTemplate><strong>@context.Subject</strong></CellTemplate>
+                                            </DataColumn>
+                                            <DataColumn TItem="InterventionQueueRow" Title="Signal" Width="90px" SortKey="@(x => x.Signal)">
+                                                <CellTemplate><span class="fc-badge @SignalBadge(context.Signal)">@context.Signal</span></CellTemplate>
+                                            </DataColumn>
+                                            <DataColumn TItem="InterventionQueueRow" Title="Priority" Width="100px" SortKey="@(x => x.Priority)">
+                                                <CellTemplate><span class="fc-badge @PriorityBadge(context.Priority)">@context.Priority</span></CellTemplate>
+                                            </DataColumn>
+                                            <DataColumn TItem="InterventionQueueRow" Title="Next Action" SortKey="@(x => x.NextAction)">
+                                                <CellTemplate>@context.NextAction</CellTemplate>
+                                            </DataColumn>
+                                            <DataColumn TItem="InterventionQueueRow" Title="Owner" Width="110px" SortKey="@(x => x.OwnerLane)">
+                                                <CellTemplate>@context.OwnerLane</CellTemplate>
+                                            </DataColumn>
+                                            <DataColumn TItem="InterventionQueueRow" Title="Due" Width="120px" SortKey="@(x => x.DueDate)">
+                                                <CellTemplate>@context.DueDate.ToString("dd MMM yyyy")</CellTemplate>
+                                            </DataColumn>
+                                        </ChildContent>
+                                    </DataTable>
+                                }
+                            </div>
+                        </section>
+
+                        <section class="rg-premium-panel">
+                            <div class="rg-premium-panel__header">
+                                <div>
+                                    <div class="rg-premium-panel__eyebrow">Portfolio ranking</div>
+                                    <h2 class="rg-premium-panel__title">Institution scorecards</h2>
+                                    <p class="rg-premium-panel__subtitle">Compare institutions by overdue pressure, due-soon obligations, capital strength, and supervisory priority.</p>
+                                </div>
+                                <div class="rg-premium-panel__metric">
+                                    <span class="rg-premium-panel__metric-label">Top pressure</span>
+                                    @(_data.InstitutionScorecards.FirstOrDefault()?.InstitutionName ?? "No queue")
+                                </div>
+                            </div>
+                            <div class="rg-premium-panel__body rg-premium-panel__body--table">
+                                <DataTable TItem="InstitutionScorecardRow" Items="@_data.InstitutionScorecards" PageSize="15" Sortable="true" ShowExport="true" ExportFileName="deputy-scorecards">
+                                    <ChildContent>
+                                        <DataColumn TItem="InstitutionScorecardRow" Title="Institution" SortKey="@(x => x.InstitutionName)">
+                                            <CellTemplate><strong>@context.InstitutionName</strong></CellTemplate>
+                                        </DataColumn>
+                                        <DataColumn TItem="InstitutionScorecardRow" Title="Licence" Width="120px" SortKey="@(x => x.LicenceType)">
+                                            <CellTemplate><span class="fc-badge fc-badge--neutral">@context.LicenceType</span></CellTemplate>
+                                        </DataColumn>
+                                        <DataColumn TItem="InstitutionScorecardRow" Title="Overdue" Width="90px" SortKey="@(x => x.OverdueObligations)">
+                                            <CellTemplate><span class="@(context.OverdueObligations > 0 ? "fc-text-danger" : string.Empty)">@context.OverdueObligations</span></CellTemplate>
+                                        </DataColumn>
+                                        <DataColumn TItem="InstitutionScorecardRow" Title="Due Soon" Width="90px" SortKey="@(x => x.DueSoonObligations)">
+                                            <CellTemplate><span class="@(context.DueSoonObligations > 0 ? "fc-text-warning" : string.Empty)">@context.DueSoonObligations</span></CellTemplate>
+                                        </DataColumn>
+                                        <DataColumn TItem="InstitutionScorecardRow" Title="Capital" Width="90px" SortKey="@(x => x.CapitalScore)">
+                                            <CellTemplate>@(context.CapitalScore?.ToString("F1") ?? "—")</CellTemplate>
+                                        </DataColumn>
+                                        <DataColumn TItem="InstitutionScorecardRow" Title="Incidents" Width="90px" SortKey="@(x => x.OpenResilienceIncidents)">
+                                            <CellTemplate>@context.OpenResilienceIncidents</CellTemplate>
+                                        </DataColumn>
+                                        <DataColumn TItem="InstitutionScorecardRow" Title="Priority" Width="100px" SortKey="@(x => x.Priority)">
+                                            <CellTemplate><span class="fc-badge @PriorityBadge(context.Priority)">@context.Priority</span></CellTemplate>
+                                        </DataColumn>
+                                    </ChildContent>
+                                </DataTable>
+                            </div>
+                        </section>
+                    </div>
+
+                    <aside class="rg-premium-side">
+                        <section class="rg-premium-panel">
+                            <div class="rg-premium-panel__header">
+                                <div>
+                                    <div class="rg-premium-panel__eyebrow">Due-soon rail</div>
+                                    <h2 class="rg-premium-panel__title">Immediate intervention preview</h2>
+                                    <p class="rg-premium-panel__subtitle">Fast-read cards for the next interventions likely to need explicit sequencing or escalation decisions.</p>
+                                </div>
+                            </div>
+                            <div class="rg-premium-panel__body">
+                                @if (_data.InterventionQueue.Count == 0)
+                                {
+                                    <div class="rg-premium-empty">The intervention queue is currently clear.</div>
+                                }
+                                else
+                                {
+                                    <div class="rg-premium-list">
+                                        @foreach (var item in _data.InterventionQueue.Take(5))
+                                        {
+                                            <article class="rg-premium-list__item">
+                                                <div class="rg-premium-list__top">
+                                                    <div class="rg-premium-list__heading">@item.Subject</div>
+                                                    <span class="fc-badge @PriorityBadge(item.Priority)">@item.Priority</span>
+                                                </div>
+                                                <div class="rg-premium-list__meta">@item.NextAction</div>
+                                                <div class="rg-premium-list__tags">
+                                                    <span class="fc-badge fc-badge--neutral">@item.Domain</span>
+                                                    <span class="fc-badge @SignalBadge(item.Signal)">@item.Signal</span>
+                                                    <span class="fc-badge fc-badge--neutral">@item.DueDate.ToString("dd MMM")</span>
+                                                </div>
+                                            </article>
+                                        }
+                                    </div>
+                                }
+                            </div>
+                        </section>
+
+                        <section class="rg-premium-panel">
+                            <div class="rg-premium-panel__header">
+                                <div>
+                                    <div class="rg-premium-panel__eyebrow">Priority spread</div>
+                                    <h2 class="rg-premium-panel__title">Portfolio pressure cards</h2>
+                                    <p class="rg-premium-panel__subtitle">A compact view of the institutions carrying the heaviest open obligation load.</p>
+                                </div>
+                            </div>
+                            <div class="rg-premium-panel__body">
+                                @if (_data.InstitutionScorecards.Count == 0)
+                                {
+                                    <div class="rg-premium-empty">Institution scorecards will appear here after the next intelligence refresh.</div>
+                                }
+                                else
+                                {
+                                    <div class="rg-premium-list">
+                                        @foreach (var institution in _data.InstitutionScorecards.Take(5))
+                                        {
+                                            <article class="rg-premium-list__item">
+                                                <div class="rg-premium-list__top">
+                                                    <div class="rg-premium-list__heading">@institution.InstitutionName</div>
+                                                    <span class="fc-badge @PriorityBadge(institution.Priority)">@institution.Priority</span>
+                                                </div>
+                                                <div class="rg-premium-list__meta">@institution.Summary</div>
+                                                <div class="rg-premium-list__tags">
+                                                    <span class="fc-badge fc-badge--neutral">@institution.LicenceType</span>
+                                                    @if (institution.OverdueObligations > 0)
+                                                    {
+                                                        <span class="fc-badge fc-badge--danger">@($"{institution.OverdueObligations} overdue")</span>
+                                                    }
+                                                    @if (institution.DueSoonObligations > 0)
+                                                    {
+                                                        <span class="fc-badge fc-badge--warning">@($"{institution.DueSoonObligations} due soon")</span>
+                                                    }
+                                                </div>
+                                            </article>
+                                        }
+                                    </div>
+                                }
+                            </div>
+                        </section>
+                    </aside>
+                </section>
             </div>
         }
     </SectionErrorBoundary>
 </div>
 
 @code {
-    private bool _loading = true, _chartsRendered;
+    private bool _loading = true;
+    private bool _chartsRendered;
     private Exception? _loadException;
     private FC.Engine.Admin.Services.Dashboards.DeputyGovernorDashboardData? _data;
 
@@ -139,6 +324,7 @@
         if (!_chartsRendered && _data is not null && _data.DomainDistribution.Count > 0)
         {
             _chartsRendered = true;
+
             try
             {
                 await JS.InvokeVoidAsync("fcCharts.renderBar", "deputyDomainChart", new
@@ -150,18 +336,199 @@
                     }
                 });
             }
-            catch { }
+            catch
+            {
+            }
         }
     }
 
     private async Task ReloadAsync()
     {
-        _loading = true; _loadException = null; _chartsRendered = false;
-        try { _data = await DashboardService.GetDeputyGovernorDashboardAsync(); }
-        catch (Exception ex) { _loadException = ex; }
-        finally { _loading = false; }
+        _loading = true;
+        _loadException = null;
+        _chartsRendered = false;
+
+        try
+        {
+            _data = await DashboardService.GetDeputyGovernorDashboardAsync();
+        }
+        catch (Exception ex)
+        {
+            _loadException = ex;
+        }
+        finally
+        {
+            _loading = false;
+        }
     }
 
-    private static string PriorityBadge(string p) => p switch { "Critical" => "fc-badge--danger", "High" => "fc-badge--warning", "Medium" => "fc-badge--info", _ => "fc-badge--neutral" };
-    private static string SignalBadge(string s) => s switch { "Critical" or "Alert" => "fc-badge--danger", "Warning" or "Watch" => "fc-badge--warning", "Resolved" => "fc-badge--success", _ => "fc-badge--neutral" };
+    private string ResolveStatusBadge()
+    {
+        if (_loading)
+        {
+            return "Refreshing";
+        }
+
+        if (_data is null)
+        {
+            return "Awaiting data";
+        }
+
+        if (_data.Escalations > 0)
+        {
+            return $"{_data.Escalations} escalations";
+        }
+
+        return _data.RemediationRatePercent >= 80m ? "Queue controlled" : "Monitoring";
+    }
+
+    private string ResolveStatusVariant()
+    {
+        if (_data is null)
+        {
+            return "neutral";
+        }
+
+        if (_data.Escalations >= 5 || _data.RemediationRatePercent < 50m)
+        {
+            return "danger";
+        }
+
+        if (_data.Escalations > 0 || _data.UnresolvedIssues > 0 || _data.RemediationRatePercent < 80m)
+        {
+            return "warning";
+        }
+
+        return "success";
+    }
+
+    private string ResolveBannerTone()
+    {
+        if (_data is null)
+        {
+            return "rg-premium-banner--info";
+        }
+
+        if (_data.Escalations >= 5 || _data.RemediationRatePercent < 50m)
+        {
+            return "rg-premium-banner--danger";
+        }
+
+        if (_data.Escalations > 0 || _data.UnresolvedIssues > 0 || _data.RemediationRatePercent < 80m)
+        {
+            return "rg-premium-banner--warning";
+        }
+
+        return "rg-premium-banner--success";
+    }
+
+    private string BuildBannerHeadline()
+    {
+        if (_data is null)
+        {
+            return "Refreshing intervention posture.";
+        }
+
+        if (_data.Escalations >= 5)
+        {
+            return "Escalation pressure is high enough to dominate portfolio management today.";
+        }
+
+        if (_data.RemediationRatePercent < 50m)
+        {
+            return "Remediation throughput is lagging the pace of new supervisory pressure.";
+        }
+
+        return _data.UnresolvedIssues > 0
+            ? "The queue is manageable, but unresolved issues still require deliberate sequencing."
+            : "Intervention pressure is currently under control.";
+    }
+
+    private string BuildBannerDetail()
+    {
+        if (_data is null)
+        {
+            return string.Empty;
+        }
+
+        return $"The portfolio spans {_data.PortfolioSize} institutions, {_data.UnresolvedIssues} unresolved issues, and {_data.InterventionQueue.Count} queued interventions.";
+    }
+
+    private string BuildEscalationCopy()
+    {
+        if (_data is null)
+        {
+            return string.Empty;
+        }
+
+        return _data.Escalations == 0
+            ? "No critical or high-priority interventions are currently waiting for escalation."
+            : $"{_data.Escalations} intervention items are sitting in critical or high-priority lanes and may need direct deputy governor steering.";
+    }
+
+    private string BuildDominantDomainLabel()
+    {
+        var dominant = _data?.DomainDistribution.OrderByDescending(x => x.Count).FirstOrDefault();
+        return dominant is null ? "Balanced" : dominant.Label;
+    }
+
+    private string BuildDominantDomainCopy()
+    {
+        var dominant = _data?.DomainDistribution.OrderByDescending(x => x.Count).FirstOrDefault();
+        return dominant is null
+            ? "Issue pressure is currently spread evenly across domains."
+            : $"{dominant.Count} queued items are concentrated in the {dominant.Label.ToLowerInvariant()} lane.";
+    }
+
+    private string BuildNextDueDate()
+    {
+        var nextDue = _data?.InterventionQueue.OrderBy(x => x.DueDate).FirstOrDefault();
+        return nextDue is null ? "No due date" : nextDue.DueDate.ToString("dd MMM");
+    }
+
+    private string BuildIssueValueClass() =>
+        _data is null ? string.Empty :
+        _data.UnresolvedIssues == 0 ? "rg-premium-stat__value--success" :
+        _data.UnresolvedIssues < 10 ? "rg-premium-stat__value--warning" :
+        "rg-premium-stat__value--danger";
+
+    private string BuildEscalationValueClass() =>
+        _data is null ? string.Empty :
+        _data.Escalations == 0 ? "rg-premium-stat__value--success" :
+        _data.Escalations < 5 ? "rg-premium-stat__value--warning" :
+        "rg-premium-stat__value--danger";
+
+    private string BuildRemediationValueClass() =>
+        _data is null ? string.Empty :
+        _data.RemediationRatePercent >= 80m ? "rg-premium-stat__value--success" :
+        _data.RemediationRatePercent >= 50m ? "rg-premium-stat__value--warning" :
+        "rg-premium-stat__value--danger";
+
+    private string BuildEscalationChipClass() =>
+        _data is null ? "rg-premium-chip--info" :
+        _data.Escalations == 0 ? "rg-premium-chip--success" :
+        _data.Escalations < 5 ? "rg-premium-chip--warning" :
+        "rg-premium-chip--danger";
+
+    private string BuildRemediationChipClass() =>
+        _data is null ? "rg-premium-chip--info" :
+        _data.RemediationRatePercent >= 80m ? "rg-premium-chip--success" :
+        _data.RemediationRatePercent >= 50m ? "rg-premium-chip--warning" :
+        "rg-premium-chip--danger";
+
+    private static string PriorityBadge(string priority) => priority switch
+    {
+        "Critical" => "fc-badge--danger",
+        "High" => "fc-badge--warning",
+        "Medium" => "fc-badge--info",
+        _ => "fc-badge--neutral"
+    };
+
+    private static string SignalBadge(string signal) => signal switch
+    {
+        "Critical" or "Alert" => "fc-badge--danger",
+        "Warning" or "Watch" => "fc-badge--warning",
+        "Resolved" => "fc-badge--success",
+        _ => "fc-badge--neutral"
+    };
 }

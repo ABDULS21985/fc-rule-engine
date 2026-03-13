@@ -15,7 +15,18 @@
     <SectionErrorBoundary Title="Failed to load performance data" ExternalError="@_loadException" OnRetry="ReloadAsync">
         @if (_loading)
         {
-            <SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.TableRows" />
+            <div class="rg-premium-flow">
+                <div class="rg-premium-banner"><SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Block" Height="138px" /></div>
+                <div class="rg-premium-hero"><SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Block" Height="210px" /></div>
+                <div class="rg-premium-stat-grid">
+                    @for (var i = 0; i < 4; i++)
+                    {
+                        <div class="rg-premium-stat"><SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Block" Height="140px" /></div>
+                    }
+                </div>
+                <div class="rg-premium-panel"><SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Block" Height="260px" /></div>
+                <div class="rg-premium-panel"><SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.TableRows" RowCount="8" /></div>
+            </div>
         }
         else if (_data is null)
         {
@@ -23,132 +34,197 @@
         }
         else
         {
-            <div class="rg-mrm-kpi-strip">
-                <div class="rg-mrm-kpi">
-                    <div class="rg-mrm-kpi-value">@_data.PerformanceEvidence.Count</div>
-                    <div class="rg-mrm-kpi-label">Evidence Records</div>
-                </div>
-                <div class="rg-mrm-kpi">
-                    <div class="rg-mrm-kpi-value">@_data.Backtesting.Count</div>
-                    <div class="rg-mrm-kpi-label">Backtest Results</div>
-                </div>
-                <div class="rg-mrm-kpi">
-                    <div class="rg-mrm-kpi-value">@_data.MonitoringSummary.Count</div>
-                    <div class="rg-mrm-kpi-label">Monitoring Metrics</div>
-                </div>
-                <div class="rg-mrm-kpi">
-                    <div class="rg-mrm-kpi-value @(_alertCount > 0 ? "rg-mrm-kpi-value--red" : "rg-mrm-kpi-value--green")">@_alertCount</div>
-                    <div class="rg-mrm-kpi-label">Alert Signals</div>
-                </div>
-            </div>
+            var watchSignals = _data.PerformanceEvidence.Count(e => e.Signal == "Watch")
+                + _data.Backtesting.Count(b => b.Signal == "Watch")
+                + _data.MonitoringSummary.Count(m => m.Signal == "Watch");
+            var topEvidenceModel = _data.PerformanceEvidence
+                .GroupBy(x => x.ModelName)
+                .Select(g => new PerformancePressureSummary(g.Key, g.Count(x => x.Signal is "Alert" or "Breach"), g.Count()))
+                .OrderByDescending(x => x.Alerts)
+                .ThenByDescending(x => x.Evidence)
+                .FirstOrDefault();
+            var weakestCalibrationModel = _data.MonitoringSummary
+                .OrderByDescending(x => x.Signal is "Alert" or "Breach")
+                .ThenBy(x => x.CalibrationStatus)
+                .FirstOrDefault();
 
-            @* Signal Distribution Chart *@
-            <div class="fc-card fc-card--mb">
-                <div class="fc-card__header"><h2 class="fc-card__title">Signal Distribution</h2></div>
-                <div class="fc-card__body">
-                    <canvas id="mrmSignalChart" style="max-height:260px;"></canvas>
-                </div>
-            </div>
+            <div class="rg-premium-flow">
+                <section class="rg-premium-banner @ResolvePerformanceBannerTone()" aria-label="Model performance posture">
+                    <div class="rg-premium-banner__grid">
+                        <div>
+                            <div class="rg-premium-banner__eyebrow">Model assurance posture</div>
+                            <h2 class="rg-premium-banner__headline">@BuildPerformanceBannerHeadline()</h2>
+                            <p class="rg-premium-banner__detail">@BuildPerformanceBannerDetail(topEvidenceModel, weakestCalibrationModel)</p>
+                        </div>
+                        <div class="rg-premium-banner__meta">
+                            <div class="rg-premium-banner__meta-label">Monitoring footprint</div>
+                            <div class="rg-premium-banner__meta-value">@_data.MonitoringSummary.Select(x => x.ModelCode).Distinct().Count()</div>
+                            <div class="rg-premium-banner__meta-copy">@_alertCount alert/breach signals · @watchSignals watch signals</div>
+                        </div>
+                    </div>
+                </section>
 
-            @* Performance Evidence *@
-            <div class="fc-card fc-card--mb">
-                <div class="fc-card__header"><h2 class="fc-card__title">Performance Evidence</h2></div>
-                <div class="fc-card__body">
-                    <DataTable TItem="ModelPerformanceEvidenceRow" Items="@_data.PerformanceEvidence" PageSize="20" Sortable="true" ShowExport="true" ExportFileName="model-performance-evidence">
-                        <ChildContent>
-                            <DataColumn TItem="ModelPerformanceEvidenceRow" Title="Code" Width="110px" SortKey="@(x => x.ModelCode)">
-                                <CellTemplate><span class="fc-badge fc-badge--neutral">@context.ModelCode</span></CellTemplate>
-                            </DataColumn>
-                            <DataColumn TItem="ModelPerformanceEvidenceRow" Title="Model" SortKey="@(x => x.ModelName)">
-                                <CellTemplate><strong>@context.ModelName</strong></CellTemplate>
-                            </DataColumn>
-                            <DataColumn TItem="ModelPerformanceEvidenceRow" Title="Evidence Type" Width="130px" SortKey="@(x => x.EvidenceType)">
-                                <CellTemplate>@context.EvidenceType</CellTemplate>
-                            </DataColumn>
-                            <DataColumn TItem="ModelPerformanceEvidenceRow" Title="Metric" Width="120px" SortKey="@(x => x.MetricLabel)">
-                                <CellTemplate>@context.MetricLabel</CellTemplate>
-                            </DataColumn>
-                            <DataColumn TItem="ModelPerformanceEvidenceRow" Title="Value" Width="90px" SortKey="@(x => x.MetricValue)">
-                                <CellTemplate>@(context.MetricValue?.ToString("F2") ?? "—")</CellTemplate>
-                            </DataColumn>
-                            <DataColumn TItem="ModelPerformanceEvidenceRow" Title="Sample" Width="80px" SortKey="@(x => x.SampleSize)">
-                                <CellTemplate>@context.SampleSize.ToString("N0")</CellTemplate>
-                            </DataColumn>
-                            <DataColumn TItem="ModelPerformanceEvidenceRow" Title="Signal" Width="100px" SortKey="@(x => x.Signal)">
-                                <CellTemplate><span class="fc-badge @SignalBadge(context.Signal)">@context.Signal</span></CellTemplate>
-                            </DataColumn>
-                            <DataColumn TItem="ModelPerformanceEvidenceRow" Title="Measured" Width="130px" SortKey="@(x => x.MeasuredAt)">
-                                <CellTemplate>@(context.MeasuredAt?.ToString("dd MMM yyyy") ?? "—")</CellTemplate>
-                            </DataColumn>
-                        </ChildContent>
-                    </DataTable>
-                </div>
-            </div>
+                <section class="rg-premium-hero" aria-labelledby="model-performance-hero-title">
+                    <div class="rg-premium-hero__grid">
+                        <div>
+                            <div class="rg-premium-hero__eyebrow">Model governance lane</div>
+                            <h1 id="model-performance-hero-title" class="rg-premium-hero__title">Keep model evidence, backtesting, and calibration signals in one supervisory narrative.</h1>
+                            <p class="rg-premium-hero__subtitle">
+                                This workspace brings together evidence records, backtesting variances, and live monitoring outcomes so the regulator can
+                                see where model performance is drifting before those weaknesses become governance incidents.
+                            </p>
+                            <div class="rg-premium-badge-row">
+                                <span class="rg-premium-chip rg-premium-chip--info">@_data.PerformanceEvidence.Count evidence records</span>
+                                <span class="rg-premium-chip @(_alertCount > 0 ? "rg-premium-chip--danger" : watchSignals > 0 ? "rg-premium-chip--warning" : "rg-premium-chip--success")">@_alertCount alert/breach signals</span>
+                                <span class="rg-premium-chip @(watchSignals > 0 ? "rg-premium-chip--warning" : "rg-premium-chip--success")">@watchSignals watch signals</span>
+                            </div>
+                        </div>
+                        <div class="rg-premium-hero__aside">
+                            <div class="rg-premium-note">
+                                <div class="rg-premium-note__label">Most pressured model</div>
+                                <div class="rg-premium-note__value">@(topEvidenceModel?.ModelName ?? "No data")</div>
+                                <div class="rg-premium-note__copy">@(topEvidenceModel is null ? "Performance evidence has not been materialised yet." : $"{topEvidenceModel.Alerts} alert or breach signals across {topEvidenceModel.Evidence} evidence record(s).")</div>
+                            </div>
+                            <div class="rg-premium-note">
+                                <div class="rg-premium-note__label">Calibration watch</div>
+                                <div class="rg-premium-note__value">@(weakestCalibrationModel?.ModelName ?? "No data")</div>
+                                <div class="rg-premium-note__copy">@(weakestCalibrationModel is null ? "Monitoring summary is not available yet." : $"{weakestCalibrationModel.CalibrationStatus} calibration status with signal {weakestCalibrationModel.Signal}.")</div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
 
-            @* Backtesting *@
-            <div class="fc-card fc-card--mb">
-                <div class="fc-card__header"><h2 class="fc-card__title">Backtesting Results</h2></div>
-                <div class="fc-card__body">
-                    <DataTable TItem="ModelBacktestingRow" Items="@_data.Backtesting" PageSize="20" Sortable="true" ShowExport="true" ExportFileName="model-backtesting">
-                        <ChildContent>
-                            <DataColumn TItem="ModelBacktestingRow" Title="Code" Width="110px" SortKey="@(x => x.ModelCode)">
-                                <CellTemplate><span class="fc-badge fc-badge--neutral">@context.ModelCode</span></CellTemplate>
-                            </DataColumn>
-                            <DataColumn TItem="ModelBacktestingRow" Title="Model" SortKey="@(x => x.ModelName)">
-                                <CellTemplate><strong>@context.ModelName</strong></CellTemplate>
-                            </DataColumn>
-                            <DataColumn TItem="ModelBacktestingRow" Title="Type" Width="120px" SortKey="@(x => x.BacktestType)">
-                                <CellTemplate>@context.BacktestType</CellTemplate>
-                            </DataColumn>
-                            <DataColumn TItem="ModelBacktestingRow" Title="Predicted" Width="110px">
-                                <CellTemplate><span title="@context.PredictedLabel">@context.PredictedValue</span></CellTemplate>
-                            </DataColumn>
-                            <DataColumn TItem="ModelBacktestingRow" Title="Actual" Width="110px">
-                                <CellTemplate><span title="@context.ActualLabel">@context.ActualValue</span></CellTemplate>
-                            </DataColumn>
-                            <DataColumn TItem="ModelBacktestingRow" Title="Variance" Width="120px">
-                                <CellTemplate>@context.VarianceText</CellTemplate>
-                            </DataColumn>
-                            <DataColumn TItem="ModelBacktestingRow" Title="Signal" Width="100px" SortKey="@(x => x.Signal)">
-                                <CellTemplate><span class="fc-badge @SignalBadge(context.Signal)">@context.Signal</span></CellTemplate>
-                            </DataColumn>
-                            <DataColumn TItem="ModelBacktestingRow" Title="Sample" Width="80px" SortKey="@(x => x.SampleSize)">
-                                <CellTemplate>@context.SampleSize.ToString("N0")</CellTemplate>
-                            </DataColumn>
-                        </ChildContent>
-                    </DataTable>
-                </div>
-            </div>
+                <section class="rg-premium-stat-grid" aria-label="Model performance metrics">
+                    <article class="rg-premium-stat">
+                        <div class="rg-premium-stat__label">Evidence records</div>
+                        <div class="rg-premium-stat__value rg-premium-stat__value--info">@_data.PerformanceEvidence.Count</div>
+                        <div class="rg-premium-stat__note">Recorded quantitative evidence supporting model performance assessments.</div>
+                    </article>
+                    <article class="rg-premium-stat">
+                        <div class="rg-premium-stat__label">Backtest results</div>
+                        <div class="rg-premium-stat__value rg-premium-stat__value--info">@_data.Backtesting.Count</div>
+                        <div class="rg-premium-stat__note">Predicted-versus-actual results currently in the supervisory evidence base.</div>
+                    </article>
+                    <article class="rg-premium-stat">
+                        <div class="rg-premium-stat__label">Monitoring metrics</div>
+                        <div class="rg-premium-stat__value rg-premium-stat__value--info">@_data.MonitoringSummary.Count</div>
+                        <div class="rg-premium-stat__note">Current stability, accuracy, and calibration measurements in active monitoring scope.</div>
+                    </article>
+                    <article class="rg-premium-stat">
+                        <div class="rg-premium-stat__label">Alert signals</div>
+                        <div class="rg-premium-stat__value @(_alertCount > 0 ? "rg-premium-stat__value--danger" : watchSignals > 0 ? "rg-premium-stat__value--warning" : "rg-premium-stat__value--success")">@_alertCount</div>
+                        <div class="rg-premium-stat__note">Signals currently indicating degraded model performance or control failure risk.</div>
+                    </article>
+                </section>
 
-            @* Monitoring Summary *@
-            <div class="fc-card">
-                <div class="fc-card__header"><h2 class="fc-card__title">Monitoring Summary</h2></div>
-                <div class="fc-card__body">
-                    <DataTable TItem="ModelMonitoringSummaryRow" Items="@_data.MonitoringSummary" PageSize="20" Sortable="true" ShowExport="true" ExportFileName="model-monitoring-summary">
-                        <ChildContent>
-                            <DataColumn TItem="ModelMonitoringSummaryRow" Title="Code" Width="110px" SortKey="@(x => x.ModelCode)">
-                                <CellTemplate><span class="fc-badge fc-badge--neutral">@context.ModelCode</span></CellTemplate>
-                            </DataColumn>
-                            <DataColumn TItem="ModelMonitoringSummaryRow" Title="Model" SortKey="@(x => x.ModelName)">
-                                <CellTemplate><strong>@context.ModelName</strong></CellTemplate>
-                            </DataColumn>
-                            <DataColumn TItem="ModelMonitoringSummaryRow" Title="Focus" Width="130px" SortKey="@(x => x.MonitoringFocus)">
-                                <CellTemplate>@context.MonitoringFocus</CellTemplate>
-                            </DataColumn>
-                            <DataColumn TItem="ModelMonitoringSummaryRow" Title="Stability" Width="110px">
-                                <CellTemplate><span title="@context.StabilityLabel">@context.StabilityValue</span></CellTemplate>
-                            </DataColumn>
-                            <DataColumn TItem="ModelMonitoringSummaryRow" Title="Accuracy" Width="110px">
-                                <CellTemplate><span title="@context.AccuracyLabel">@context.AccuracyValue</span></CellTemplate>
-                            </DataColumn>
-                            <DataColumn TItem="ModelMonitoringSummaryRow" Title="Calibration" Width="110px" SortKey="@(x => x.CalibrationStatus)">
-                                <CellTemplate><span class="fc-badge @CalibBadge(context.CalibrationStatus)">@context.CalibrationStatus</span></CellTemplate>
-                            </DataColumn>
-                            <DataColumn TItem="ModelMonitoringSummaryRow" Title="Signal" Width="100px" SortKey="@(x => x.Signal)">
-                                <CellTemplate><span class="fc-badge @SignalBadge(context.Signal)">@context.Signal</span></CellTemplate>
-                            </DataColumn>
-                        </ChildContent>
-                    </DataTable>
+                @* Signal Distribution Chart *@
+                <div class="fc-card fc-card--mb">
+                    <div class="fc-card__header"><h2 class="fc-card__title">Signal Distribution</h2></div>
+                    <div class="fc-card__body">
+                        <canvas id="mrmSignalChart" style="max-height:260px;"></canvas>
+                    </div>
+                </div>
+
+                @* Performance Evidence *@
+                <div class="fc-card fc-card--mb">
+                    <div class="fc-card__header"><h2 class="fc-card__title">Performance Evidence</h2></div>
+                    <div class="fc-card__body">
+                        <DataTable TItem="ModelPerformanceEvidenceRow" Items="@_data.PerformanceEvidence" PageSize="20" Sortable="true" ShowExport="true" ExportFileName="model-performance-evidence">
+                            <ChildContent>
+                                <DataColumn TItem="ModelPerformanceEvidenceRow" Title="Code" Width="110px" SortKey="@(x => x.ModelCode)">
+                                    <CellTemplate><span class="fc-badge fc-badge--neutral">@context.ModelCode</span></CellTemplate>
+                                </DataColumn>
+                                <DataColumn TItem="ModelPerformanceEvidenceRow" Title="Model" SortKey="@(x => x.ModelName)">
+                                    <CellTemplate><strong>@context.ModelName</strong></CellTemplate>
+                                </DataColumn>
+                                <DataColumn TItem="ModelPerformanceEvidenceRow" Title="Evidence Type" Width="130px" SortKey="@(x => x.EvidenceType)">
+                                    <CellTemplate>@context.EvidenceType</CellTemplate>
+                                </DataColumn>
+                                <DataColumn TItem="ModelPerformanceEvidenceRow" Title="Metric" Width="120px" SortKey="@(x => x.MetricLabel)">
+                                    <CellTemplate>@context.MetricLabel</CellTemplate>
+                                </DataColumn>
+                                <DataColumn TItem="ModelPerformanceEvidenceRow" Title="Value" Width="90px" SortKey="@(x => x.MetricValue)">
+                                    <CellTemplate>@(context.MetricValue?.ToString("F2") ?? "—")</CellTemplate>
+                                </DataColumn>
+                                <DataColumn TItem="ModelPerformanceEvidenceRow" Title="Sample" Width="80px" SortKey="@(x => x.SampleSize)">
+                                    <CellTemplate>@context.SampleSize.ToString("N0")</CellTemplate>
+                                </DataColumn>
+                                <DataColumn TItem="ModelPerformanceEvidenceRow" Title="Signal" Width="100px" SortKey="@(x => x.Signal)">
+                                    <CellTemplate><span class="fc-badge @SignalBadge(context.Signal)">@context.Signal</span></CellTemplate>
+                                </DataColumn>
+                                <DataColumn TItem="ModelPerformanceEvidenceRow" Title="Measured" Width="130px" SortKey="@(x => x.MeasuredAt)">
+                                    <CellTemplate>@(context.MeasuredAt?.ToString("dd MMM yyyy") ?? "—")</CellTemplate>
+                                </DataColumn>
+                            </ChildContent>
+                        </DataTable>
+                    </div>
+                </div>
+
+                @* Backtesting *@
+                <div class="fc-card fc-card--mb">
+                    <div class="fc-card__header"><h2 class="fc-card__title">Backtesting Results</h2></div>
+                    <div class="fc-card__body">
+                        <DataTable TItem="ModelBacktestingRow" Items="@_data.Backtesting" PageSize="20" Sortable="true" ShowExport="true" ExportFileName="model-backtesting">
+                            <ChildContent>
+                                <DataColumn TItem="ModelBacktestingRow" Title="Code" Width="110px" SortKey="@(x => x.ModelCode)">
+                                    <CellTemplate><span class="fc-badge fc-badge--neutral">@context.ModelCode</span></CellTemplate>
+                                </DataColumn>
+                                <DataColumn TItem="ModelBacktestingRow" Title="Model" SortKey="@(x => x.ModelName)">
+                                    <CellTemplate><strong>@context.ModelName</strong></CellTemplate>
+                                </DataColumn>
+                                <DataColumn TItem="ModelBacktestingRow" Title="Type" Width="120px" SortKey="@(x => x.BacktestType)">
+                                    <CellTemplate>@context.BacktestType</CellTemplate>
+                                </DataColumn>
+                                <DataColumn TItem="ModelBacktestingRow" Title="Predicted" Width="110px">
+                                    <CellTemplate><span title="@context.PredictedLabel">@context.PredictedValue</span></CellTemplate>
+                                </DataColumn>
+                                <DataColumn TItem="ModelBacktestingRow" Title="Actual" Width="110px">
+                                    <CellTemplate><span title="@context.ActualLabel">@context.ActualValue</span></CellTemplate>
+                                </DataColumn>
+                                <DataColumn TItem="ModelBacktestingRow" Title="Variance" Width="120px">
+                                    <CellTemplate>@context.VarianceText</CellTemplate>
+                                </DataColumn>
+                                <DataColumn TItem="ModelBacktestingRow" Title="Signal" Width="100px" SortKey="@(x => x.Signal)">
+                                    <CellTemplate><span class="fc-badge @SignalBadge(context.Signal)">@context.Signal</span></CellTemplate>
+                                </DataColumn>
+                                <DataColumn TItem="ModelBacktestingRow" Title="Sample" Width="80px" SortKey="@(x => x.SampleSize)">
+                                    <CellTemplate>@context.SampleSize.ToString("N0")</CellTemplate>
+                                </DataColumn>
+                            </ChildContent>
+                        </DataTable>
+                    </div>
+                </div>
+
+                @* Monitoring Summary *@
+                <div class="fc-card">
+                    <div class="fc-card__header"><h2 class="fc-card__title">Monitoring Summary</h2></div>
+                    <div class="fc-card__body">
+                        <DataTable TItem="ModelMonitoringSummaryRow" Items="@_data.MonitoringSummary" PageSize="20" Sortable="true" ShowExport="true" ExportFileName="model-monitoring-summary">
+                            <ChildContent>
+                                <DataColumn TItem="ModelMonitoringSummaryRow" Title="Code" Width="110px" SortKey="@(x => x.ModelCode)">
+                                    <CellTemplate><span class="fc-badge fc-badge--neutral">@context.ModelCode</span></CellTemplate>
+                                </DataColumn>
+                                <DataColumn TItem="ModelMonitoringSummaryRow" Title="Model" SortKey="@(x => x.ModelName)">
+                                    <CellTemplate><strong>@context.ModelName</strong></CellTemplate>
+                                </DataColumn>
+                                <DataColumn TItem="ModelMonitoringSummaryRow" Title="Focus" Width="130px" SortKey="@(x => x.MonitoringFocus)">
+                                    <CellTemplate>@context.MonitoringFocus</CellTemplate>
+                                </DataColumn>
+                                <DataColumn TItem="ModelMonitoringSummaryRow" Title="Stability" Width="110px">
+                                    <CellTemplate><span title="@context.StabilityLabel">@context.StabilityValue</span></CellTemplate>
+                                </DataColumn>
+                                <DataColumn TItem="ModelMonitoringSummaryRow" Title="Accuracy" Width="110px">
+                                    <CellTemplate><span title="@context.AccuracyLabel">@context.AccuracyValue</span></CellTemplate>
+                                </DataColumn>
+                                <DataColumn TItem="ModelMonitoringSummaryRow" Title="Calibration" Width="110px" SortKey="@(x => x.CalibrationStatus)">
+                                    <CellTemplate><span class="fc-badge @CalibBadge(context.CalibrationStatus)">@context.CalibrationStatus</span></CellTemplate>
+                                </DataColumn>
+                                <DataColumn TItem="ModelMonitoringSummaryRow" Title="Signal" Width="100px" SortKey="@(x => x.Signal)">
+                                    <CellTemplate><span class="fc-badge @SignalBadge(context.Signal)">@context.Signal</span></CellTemplate>
+                                </DataColumn>
+                            </ChildContent>
+                        </DataTable>
+                    </div>
                 </div>
             </div>
         }
@@ -212,4 +288,47 @@
 
     private static string SignalBadge(string s) => s switch { "Pass" or "Stable" => "fc-badge--success", "Watch" or "Degraded" => "fc-badge--warning", "Alert" or "Breach" => "fc-badge--danger", _ => "fc-badge--neutral" };
     private static string CalibBadge(string c) => c switch { "Calibrated" or "In Range" => "fc-badge--success", "Review" or "Marginal" => "fc-badge--warning", "Miscalibrated" or "Out of Range" => "fc-badge--danger", _ => "fc-badge--neutral" };
+
+    private string ResolvePerformanceBannerTone()
+    {
+        if (_alertCount > 0)
+        {
+            return "rg-premium-banner--danger";
+        }
+
+        var watchSignals = _data!.PerformanceEvidence.Count(e => e.Signal == "Watch")
+            + _data.Backtesting.Count(b => b.Signal == "Watch")
+            + _data.MonitoringSummary.Count(m => m.Signal == "Watch");
+
+        return watchSignals > 0 ? "rg-premium-banner--warning" : "rg-premium-banner--success";
+    }
+
+    private string BuildPerformanceBannerHeadline()
+    {
+        if (_alertCount > 0)
+        {
+            return "Model performance monitoring is surfacing alert-level drift or governance weaknesses.";
+        }
+
+        var watchSignals = _data!.PerformanceEvidence.Count(e => e.Signal == "Watch")
+            + _data.Backtesting.Count(b => b.Signal == "Watch")
+            + _data.MonitoringSummary.Count(m => m.Signal == "Watch");
+
+        return watchSignals > 0
+            ? "Model performance remains mostly stable, but watch-level signals are accumulating."
+            : "Model performance evidence is currently stable across the monitored estate.";
+    }
+
+    private string BuildPerformanceBannerDetail(PerformancePressureSummary? topEvidenceModel, ModelMonitoringSummaryRow? weakestCalibrationModel)
+    {
+        var topModelText = topEvidenceModel is null
+            ? "No model currently dominates the alert queue."
+            : $"{topEvidenceModel.ModelName} currently carries the most pressure in the evidence set.";
+        var calibrationText = weakestCalibrationModel is null
+            ? "Calibration summary is not yet available."
+            : $"{weakestCalibrationModel.ModelName} is the current calibration watch model.";
+        return $"{topModelText} {calibrationText}";
+    }
+
+    private sealed record PerformancePressureSummary(string ModelName, int Alerts, int Evidence);
 }

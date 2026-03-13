@@ -6,137 +6,255 @@
 
 <PageTitle>ForeSight Filing Risks</PageTitle>
 
-<div class="container-fluid px-4">
-    <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
-        <div>
-            <div class="small text-muted mb-1"><a href="/analytics/foresight" class="link-secondary">ForeSight</a> / Filing Risks</div>
-            <h1 class="h3 mb-1">Filing Risk Detail</h1>
-            <p class="text-muted mb-0">Module-by-module filing forecasts with explainability, confidence bands, and recommended actions.</p>
-        </div>
-        <div class="d-flex gap-2">
+<div class="portal-page portal-fsd-shell">
+    <PortalPageHeader Title="ForeSight Filing Risks"
+                      Subtitle="Module-by-module filing forecasts with confidence bands, explainability, and recommended human action."
+                      Breadcrumb="@_breadcrumb">
+        <SecondaryActions>
             @if (!string.IsNullOrWhiteSpace(Module))
             {
-                <a class="btn btn-sm btn-outline-secondary" href="/analytics/foresight/filing-risks">Clear filter</a>
+                <a class="portal-btn portal-btn-ghost portal-btn-sm" href="/analytics/foresight/filing-risks">Clear filter</a>
             }
-            <a class="btn btn-sm btn-outline-primary" href="/analytics/foresight">Back to overview</a>
-        </div>
-    </div>
+            <button class="portal-btn portal-btn-ghost portal-btn-sm" @onclick="LoadAsync" disabled="@_loading">Refresh</button>
+        </SecondaryActions>
+        <PrimaryAction>
+            <a class="portal-btn portal-btn-primary portal-btn-sm" href="/analytics/foresight">Back to overview</a>
+        </PrimaryAction>
+    </PortalPageHeader>
 
     @if (_loading)
     {
-        <div class="text-center py-5" role="status" aria-live="polite">
-            <div class="spinner-border text-primary"></div>
-            <p class="text-muted mt-3 mb-0">Loading filing-risk detail...</p>
-        </div>
+        <section class="portal-fsd-loading" role="status" aria-label="Loading filing risk detail">
+            <div class="portal-fsd-loading-hero"></div>
+            <div class="portal-fsd-loading-grid">
+                @for (var i = 0; i < 4; i++)
+                {
+                    <div class="portal-fsd-loading-card"></div>
+                }
+            </div>
+            <div class="portal-fsd-loading-panels">
+                <div class="portal-fsd-loading-panel"></div>
+                <div class="portal-fsd-loading-panel"></div>
+            </div>
+        </section>
     }
     else if (!string.IsNullOrWhiteSpace(_error))
     {
-        <div class="alert alert-danger">@_error</div>
+        <section class="portal-fsd-error" role="alert">
+            <div class="portal-fsd-error-icon" aria-hidden="true">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9">
+                    <circle cx="12" cy="12" r="9"></circle>
+                    <path d="M12 8v5"></path>
+                    <path d="M12 16h.01"></path>
+                </svg>
+            </div>
+            <div>
+                <strong>Unable to load filing-risk detail.</strong>
+                <span>@_error</span>
+            </div>
+        </section>
     }
     else
     {
-        <div class="row g-3 mb-4">
-            <div class="col-md-4">
-                <div class="card border-0 shadow-sm h-100">
-                    <div class="card-body">
-                        <div class="small text-muted">Forecasts in scope</div>
-                        <div class="display-6">@_items.Count</div>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-4">
-                <div class="card border-0 shadow-sm h-100">
-                    <div class="card-body">
-                        <div class="small text-muted">High or critical</div>
-                        <div class="display-6">@_items.Count(x => x.RiskBand is "HIGH" or "CRITICAL")</div>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-4">
-                <div class="card border-0 shadow-sm h-100">
-                    <div class="card-body">
-                        <div class="small text-muted">Average confidence</div>
-                        <div class="display-6">@(_items.Count == 0 ? "0%" : _items.Average(x => x.ConfidenceScore).ToString("P0"))</div>
-                    </div>
-                </div>
-            </div>
-        </div>
+        var elevatedCount = _items.Count(x => x.RiskBand is "HIGH" or "CRITICAL");
+        var averageConfidence = _items.Count == 0 ? 0m : _items.Average(x => x.ConfidenceScore);
+        var averageProbability = _items.Count == 0 ? 0m : _items.Average(x => x.ProbabilityLate);
+        var soonestDue = _items.OrderBy(x => x.DueDate).FirstOrDefault();
+        var highestRisk = _items.OrderByDescending(x => x.ProbabilityLate).FirstOrDefault();
 
-        @if (_items.Count == 0)
-        {
-            <div class="alert alert-secondary mb-0">No unsuppressed filing-risk forecasts are currently available for this institution.</div>
-        }
-        else
-        {
-            @foreach (var item in _items.OrderByDescending(x => x.ProbabilityLate))
-            {
-                <div class="card border-0 shadow-sm mb-4">
-                    <div class="card-header bg-white d-flex justify-content-between align-items-center gap-3">
+        <section class="portal-fsd-banner portal-fsd-banner--@BuildBannerTone(elevatedCount, averageProbability)">
+            <div>
+                <div class="portal-fsd-eyebrow">Filing risk pulse</div>
+                <h1 class="portal-fsd-banner-title">@BuildBannerHeadline(elevatedCount, averageProbability)</h1>
+                <p class="portal-fsd-banner-copy">@BuildBannerCopy(elevatedCount, averageConfidence, highestRisk)</p>
+            </div>
+            <div class="portal-fsd-banner-meta">
+                <span class="portal-fsd-meta-label">Current scope</span>
+                <strong class="portal-fsd-meta-value">@ScopeLabel</strong>
+                <span class="portal-fsd-banner-copy">@_items.Count forecast(s) in view, @elevatedCount in high-attention bands.</span>
+            </div>
+        </section>
+
+        <section class="portal-fsd-hero">
+            <div>
+                <div class="portal-fsd-eyebrow">Operational filing lane</div>
+                <h2 class="portal-fsd-hero-title">See which return is drifting first, and why.</h2>
+                <p class="portal-fsd-hero-copy">
+                    ForeSight combines deadline proximity, preparation state, historical lateness, user activity, and anomaly carry-over
+                    to surface the filing returns most likely to slip. Use the factor narrative to intervene early, not to automate a submission decision.
+                </p>
+                <div class="portal-fsd-chip-row">
+                    <span class="portal-fsd-chip portal-fsd-chip--danger">@elevatedCount elevated return(s)</span>
+                    <span class="portal-fsd-chip portal-fsd-chip--info">@averageConfidence.ToString("P0") average confidence</span>
+                    <span class="portal-fsd-chip portal-fsd-chip--warning">@averageProbability.ToString("P0") average P(late)</span>
+                </div>
+            </div>
+            <div class="portal-fsd-hero-aside">
+                <div class="portal-fsd-note">
+                    <span class="portal-fsd-note-label">Nearest deadline</span>
+                    <strong class="portal-fsd-note-value">@(soonestDue?.DueDate.ToString("dd MMM yyyy") ?? "No active deadline")</strong>
+                    <span class="portal-fsd-note-copy">@(soonestDue is null ? "No current filing forecasts are in scope." : $"{soonestDue.ModuleName} for {soonestDue.PeriodCode} is due in {soonestDue.DaysToDeadline} day(s).")</span>
+                </div>
+                <div class="portal-fsd-note">
+                    <span class="portal-fsd-note-label">Highest current risk</span>
+                    <strong class="portal-fsd-note-value">@(highestRisk?.ModuleName ?? "No high-risk filing")</strong>
+                    <span class="portal-fsd-note-copy">@(highestRisk is null ? "Once forecasts are available, the most exposed filing will appear here." : $"{highestRisk.ProbabilityLate:P0} probability late with confidence {highestRisk.ConfidenceScore:P0}.")</span>
+                </div>
+            </div>
+        </section>
+
+        <section class="portal-fsd-stat-grid" aria-label="Filing risk metrics">
+            <article class="portal-fsd-stat">
+                <div class="portal-fsd-stat-label">Forecasts in scope</div>
+                <div class="portal-fsd-stat-value">@_items.Count</div>
+                <div class="portal-fsd-stat-copy">Unsuppressed filing forecasts currently visible for this institution.</div>
+            </article>
+            <article class="portal-fsd-stat">
+                <div class="portal-fsd-stat-label">High or critical</div>
+                <div class="portal-fsd-stat-value">@elevatedCount</div>
+                <div class="portal-fsd-stat-copy">Returns that need the earliest human review and preparation pressure relief.</div>
+            </article>
+            <article class="portal-fsd-stat">
+                <div class="portal-fsd-stat-label">Average confidence</div>
+                <div class="portal-fsd-stat-value">@averageConfidence.ToString("P0")</div>
+                <div class="portal-fsd-stat-copy">Model confidence across the current filing risk portfolio.</div>
+            </article>
+            <article class="portal-fsd-stat">
+                <div class="portal-fsd-stat-label">Nearest deadline</div>
+                <div class="portal-fsd-stat-value">@(soonestDue?.DaysToDeadline ?? 0)</div>
+                <div class="portal-fsd-stat-copy">Day(s) until the earliest due filing in the visible forecast set.</div>
+            </article>
+        </section>
+
+        <section class="portal-fsd-grid">
+            <article class="portal-card portal-fsd-panel">
+                <div class="portal-fsd-panel-head">
+                    <div>
+                        <span class="portal-fsd-panel-eyebrow">Ranked filing queue</span>
+                        <h3 class="portal-fsd-panel-title">Returns most likely to drift late</h3>
+                        <p class="portal-fsd-panel-copy">Probability, confidence band, and factor-level explainability for each visible return.</p>
+                    </div>
+                    <div class="portal-fsd-panel-metric">
+                        <small>Average P(late)</small>
+                        @averageProbability.ToString("P0")
+                    </div>
+                </div>
+                <div class="portal-fsd-panel-body">
+                    @if (_items.Count == 0)
+                    {
+                        <div class="portal-fsd-empty">No unsuppressed filing-risk forecasts are currently available for this institution.</div>
+                    }
+                    else
+                    {
+                        <div class="portal-fsd-list">
+                            @foreach (var item in _items.OrderByDescending(x => x.ProbabilityLate))
+                            {
+                                <article class="portal-fsd-row">
+                                    <div class="portal-fsd-row-head">
+                                        <div>
+                                            <div class="portal-fsd-row-title">@item.ModuleName</div>
+                                            <div class="portal-fsd-row-subtitle">@item.PeriodCode · due @item.DueDate.ToString("dd MMM yyyy")</div>
+                                        </div>
+                                        <span class="portal-fsd-risk @BuildRiskClass(item.RiskBand)">@item.RiskBand</span>
+                                    </div>
+                                    <p class="portal-fsd-row-copy">@item.Explanation</p>
+                                    <div class="portal-fsd-row-meta">@item.RootCauseNarrative</div>
+                                    <div class="portal-fsd-metrics">
+                                        <div class="portal-fsd-metric"><small>P(late)</small><strong>@item.ProbabilityLate.ToString("P0")</strong></div>
+                                        <div class="portal-fsd-metric"><small>Confidence</small><strong>@item.ConfidenceScore.ToString("P0")</strong></div>
+                                        <div class="portal-fsd-metric"><small>Confidence band</small><strong>@item.ConfidenceLower.ToString("P0") to @item.ConfidenceUpper.ToString("P0")</strong></div>
+                                        <div class="portal-fsd-metric"><small>Days to deadline</small><strong>@item.DaysToDeadline</strong></div>
+                                    </div>
+                                    @if (item.TopFactors.Count > 0)
+                                    {
+                                        <div class="portal-fsd-factor-list mt-3">
+                                            @foreach (var factor in item.TopFactors.OrderByDescending(x => x.ContributionScore).Take(4))
+                                            {
+                                                <span class="portal-fsd-factor @BuildFactorClass(factor.ImpactDirection)">@factor.FeatureLabel (@factor.ContributionScore.ToString("F2"))</span>
+                                            }
+                                        </div>
+                                    }
+                                    @if (!string.IsNullOrWhiteSpace(item.Recommendation))
+                                    {
+                                        <div class="portal-fsd-recommendation"><strong>Recommended action:</strong> @item.Recommendation</div>
+                                    }
+                                </article>
+                            }
+                        </div>
+                    }
+                </div>
+            </article>
+
+            <div class="portal-fsd-side">
+                <article class="portal-card portal-fsd-panel">
+                    <div class="portal-fsd-panel-head">
                         <div>
-                            <h2 class="h6 mb-0">@item.ModuleName</h2>
-                            <div class="small text-muted">@item.PeriodCode • Due @item.DueDate.ToString("dd MMM yyyy")</div>
+                            <span class="portal-fsd-panel-eyebrow">Module pressure</span>
+                            <h3 class="portal-fsd-panel-title">Modules with the heaviest forecast load</h3>
+                            <p class="portal-fsd-panel-copy">Shows where the alert concentration is accumulating across filing forecasts.</p>
                         </div>
-                        <span class="badge @(item.RiskBand is "HIGH" or "CRITICAL" ? "bg-danger" : item.RiskBand == "MEDIUM" ? "bg-warning text-dark" : "bg-success")">@item.RiskBand</span>
                     </div>
-                    <div class="card-body">
-                        <div class="row g-3 mb-3">
-                            <div class="col-md-3">
-                                <div class="small text-muted">Probability of late filing</div>
-                                <div class="h4 mb-0">@item.ProbabilityLate.ToString("P0")</div>
-                            </div>
-                            <div class="col-md-3">
-                                <div class="small text-muted">Confidence score</div>
-                                <div class="h4 mb-0">@item.ConfidenceScore.ToString("P0")</div>
-                            </div>
-                            <div class="col-md-3">
-                                <div class="small text-muted">Confidence interval</div>
-                                <div class="h6 mb-0">@item.ConfidenceLower.ToString("P0") to @item.ConfidenceUpper.ToString("P0")</div>
-                            </div>
-                            <div class="col-md-3">
-                                <div class="small text-muted">Days to deadline</div>
-                                <div class="h4 mb-0">@item.DaysToDeadline</div>
-                            </div>
-                        </div>
-
-                        <p class="mb-2">@item.Explanation</p>
-                        <p class="text-muted mb-3">@item.RootCauseNarrative</p>
-
-                        @if (!string.IsNullOrWhiteSpace(item.Recommendation))
+                    <div class="portal-fsd-panel-body">
+                        @if (TopModules.Count == 0)
                         {
-                            <div class="alert alert-light border">
-                                <strong>Recommendation:</strong> @item.Recommendation
+                            <div class="portal-fsd-empty">No module pressure summary is available yet.</div>
+                        }
+                        else
+                        {
+                            <div class="portal-fsd-side-list">
+                                @foreach (var module in TopModules)
+                                {
+                                    <div class="portal-fsd-side-item">
+                                        <div class="portal-fsd-side-item-head">
+                                            <div>
+                                                <strong>@module.Label</strong>
+                                                <span>@module.Count forecast(s)</span>
+                                            </div>
+                                            <div class="portal-fsd-side-item-value">@module.Probability.ToString("P0")</div>
+                                        </div>
+                                        <small>Highest probability currently visible for this module cluster.</small>
+                                    </div>
+                                }
                             </div>
                         }
+                    </div>
+                </article>
 
-                        <div class="table-responsive">
-                            <table class="table table-sm align-middle mb-0" aria-label="@($"{item.ModuleName} filing risk factors")">
-                                <thead class="table-light">
-                                    <tr>
-                                        <th>Driver</th>
-                                        <th>Raw value</th>
-                                        <th>Weight</th>
-                                        <th>Contribution</th>
-                                        <th>Impact</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    @foreach (var factor in item.TopFactors.OrderByDescending(x => x.ContributionScore))
-                                    {
-                                        <tr>
-                                            <td>@factor.FeatureLabel</td>
-                                            <td>@factor.RawValue.ToString("F2")</td>
-                                            <td>@factor.Weight.ToString("F2")</td>
-                                            <td>@factor.ContributionScore.ToString("F3")</td>
-                                            <td>@FormatImpact(factor.ImpactDirection)</td>
-                                        </tr>
-                                    }
-                                </tbody>
-                            </table>
+                <article class="portal-card portal-fsd-panel">
+                    <div class="portal-fsd-panel-head">
+                        <div>
+                            <span class="portal-fsd-panel-eyebrow">Leading drivers</span>
+                            <h3 class="portal-fsd-panel-title">Explainability signals repeating most often</h3>
+                            <p class="portal-fsd-panel-copy">Aggregated from the top factors across all visible filing forecasts.</p>
                         </div>
                     </div>
-                </div>
-            }
-        }
+                    <div class="portal-fsd-panel-body">
+                        @if (TopDrivers.Count == 0)
+                        {
+                            <div class="portal-fsd-empty">No factor explainability is currently available for the selected scope.</div>
+                        }
+                        else
+                        {
+                            <div class="portal-fsd-side-list">
+                                @foreach (var driver in TopDrivers)
+                                {
+                                    <div class="portal-fsd-side-item">
+                                        <div class="portal-fsd-side-item-head">
+                                            <div>
+                                                <strong>@driver.Label</strong>
+                                                <span>@driver.Appearances appearance(s)</span>
+                                            </div>
+                                            <div class="portal-fsd-side-item-value">@driver.Score.ToString("F2")</div>
+                                        </div>
+                                        <small>Total contribution across the current filing forecast set.</small>
+                                    </div>
+                                }
+                            </div>
+                        }
+                    </div>
+                </article>
+            </div>
+        </section>
     }
 </div>
 
@@ -144,9 +262,33 @@
     [CascadingParameter] private Task<AuthenticationState> AuthenticationStateTask { get; set; } = default!;
     [SupplyParameterFromQuery(Name = "module")] public string? Module { get; set; }
 
+    private readonly IReadOnlyList<BreadcrumbItem> _breadcrumb = new List<BreadcrumbItem>
+    {
+        new("Home", "/"),
+        new("ForeSight", "/analytics/foresight"),
+        new("Filing Risks", IsCurrent: true)
+    };
+
     private List<FilingRiskForecast> _items = new();
     private bool _loading = true;
     private string? _error;
+
+    private string ScopeLabel => string.IsNullOrWhiteSpace(Module) ? "All module forecasts" : $"{Module} filter";
+
+    private IReadOnlyList<ModulePressure> TopModules => _items
+        .GroupBy(item => string.IsNullOrWhiteSpace(item.ModuleName) ? item.ModuleCode : item.ModuleName)
+        .Select(group => new ModulePressure(group.Key, group.Count(), group.Max(item => item.ProbabilityLate)))
+        .OrderByDescending(item => item.Probability)
+        .Take(5)
+        .ToList();
+
+    private IReadOnlyList<DriverRollup> TopDrivers => _items
+        .SelectMany(item => item.TopFactors)
+        .GroupBy(factor => factor.FeatureLabel)
+        .Select(group => new DriverRollup(group.Key, group.Count(), group.Sum(item => item.ContributionScore)))
+        .OrderByDescending(item => item.Score)
+        .Take(5)
+        .ToList();
 
     protected override async Task OnParametersSetAsync()
     {
@@ -181,10 +323,47 @@
         }
     }
 
-    private static string FormatImpact(string impactDirection) => impactDirection switch
+    private static string BuildBannerTone(int elevatedCount, decimal averageProbability) => elevatedCount switch
     {
-        "DECREASES_RISK" => "Reduces risk",
-        "DECREASES_RESILIENCE" => "Reduces resilience",
-        _ => "Increases risk"
+        > 0 => "danger",
+        _ when averageProbability >= 0.35m => "warning",
+        _ => "success"
     };
+
+    private static string BuildBannerHeadline(int elevatedCount, decimal averageProbability) => elevatedCount switch
+    {
+        > 2 => "Multiple returns are starting to bunch up near risk thresholds.",
+        > 0 => "A small set of returns needs immediate filing attention.",
+        _ when averageProbability >= 0.35m => "Watch the filing queue closely even though nothing is critical yet.",
+        _ => "The current filing forecast set looks stable."
+    };
+
+    private static string BuildBannerCopy(int elevatedCount, decimal averageConfidence, FilingRiskForecast? highestRisk)
+    {
+        if (highestRisk is null)
+        {
+            return "ForeSight will surface late-filing pressure here once enough draft, deadline, and activity signals exist for the current institution.";
+        }
+
+        return elevatedCount > 0
+            ? $"{highestRisk.ModuleName} currently leads at {highestRisk.ProbabilityLate:P0} probability late, with the visible filing portfolio averaging {averageConfidence:P0} confidence. Use the top-factor narrative to prioritize preparer time and management attention."
+            : $"{highestRisk.ModuleName} is the most exposed filing at {highestRisk.ProbabilityLate:P0}, but the current queue remains monitorable rather than critical.";
+    }
+
+    private static string BuildRiskClass(string riskBand) => riskBand switch
+    {
+        "CRITICAL" or "HIGH" => "portal-fsd-risk--danger",
+        "MEDIUM" => "portal-fsd-risk--warning",
+        _ => "portal-fsd-risk--success"
+    };
+
+    private static string BuildFactorClass(string impactDirection) => impactDirection switch
+    {
+        "DECREASES_RISK" => "portal-fsd-factor--success",
+        "DECREASES_RESILIENCE" => "portal-fsd-factor--warning",
+        _ => "portal-fsd-factor--danger"
+    };
+
+    private sealed record ModulePressure(string Label, int Count, decimal Probability);
+    private sealed record DriverRollup(string Label, int Appearances, decimal Score);
 }

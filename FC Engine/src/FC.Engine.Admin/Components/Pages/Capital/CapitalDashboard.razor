@@ -8,112 +8,199 @@
 <PageTitle>Capital Management</PageTitle>
 
 <PageHeader Title="Capital Management"
-            Subtitle="RWA optimisation, buffer management, capital planning, and stack optimization."
-            StatusBadge="@(_scenario is not null ? "Scenario Loaded" : "No Scenario")"
-            StatusVariant="@(_scenario is not null ? "success" : "warning")" />
+            Subtitle="RWA optimisation, buffer architecture, capital planning, and stack design in one premium control surface."
+            StatusBadge="@ResolveStatusBadge()"
+            StatusVariant="@ResolveStatusVariant()" />
 
 <div class="fc-page">
     <SectionErrorBoundary Title="Failed to load capital data" ExternalError="@_loadException" OnRetry="ReloadAsync">
         @if (_loading)
         {
-            <div class="fc-cap-kpi-strip">
-                @for (var i = 0; i < 4; i++)
-                {
-                    <div class="fc-cap-kpi"><SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Block" Height="88px" /></div>
-                }
-            </div>
-            <div class="rg-hub-grid">
-                @for (var i = 0; i < 5; i++)
-                {
-                    <SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Card" />
-                }
+            <div class="rg-premium-flow">
+                <div class="rg-premium-banner"><SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Block" Height="138px" /></div>
+                <div class="rg-premium-stat-grid">
+                    @for (var i = 0; i < 4; i++)
+                    {
+                        <div class="rg-premium-stat"><SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Block" Height="140px" /></div>
+                    }
+                </div>
+                <div class="rg-premium-content-grid">
+                    <div class="rg-premium-main">
+                        <div class="rg-premium-panel"><SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Block" Height="420px" /></div>
+                    </div>
+                    <div class="rg-premium-side">
+                        <div class="rg-premium-panel"><SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Block" Height="240px" /></div>
+                        <div class="rg-premium-panel"><SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Block" Height="280px" /></div>
+                    </div>
+                </div>
             </div>
         }
         else
         {
-            <div class="fc-cap-kpi-strip">
-                <div class="fc-cap-kpi">
-                    <div class="fc-cap-kpi-value @CarColorClass(_scenario?.CurrentCarPercent ?? 0)">
-                        @((_scenario?.CurrentCarPercent ?? 0).ToString("F1"))%
+            <div class="rg-premium-flow">
+                <section class="rg-premium-banner @ResolveBannerTone()" aria-label="Capital posture">
+                    <div class="rg-premium-banner__grid">
+                        <div>
+                            <div class="rg-premium-banner__eyebrow">Capital posture</div>
+                            <h2 class="rg-premium-banner__headline">@BuildBannerHeadline()</h2>
+                            <p class="rg-premium-banner__detail">@BuildBannerDetail()</p>
+                        </div>
+                        <div class="rg-premium-banner__meta">
+                            <div class="rg-premium-banner__meta-label">Primary watchpoint</div>
+                            <div class="rg-premium-banner__meta-value">@BuildWatchpointLabel()</div>
+                            <div class="rg-premium-banner__meta-copy">@BuildWatchpointCopy()</div>
+                        </div>
                     </div>
-                    <div class="fc-cap-kpi-label">Current CAR</div>
-                </div>
-                <div class="fc-cap-kpi">
-                    <div class="fc-cap-kpi-value">
-                        @((_scenario?.CurrentRwaBn ?? 0).ToString("F1"))bn
-                    </div>
-                    <div class="fc-cap-kpi-label">Total RWA</div>
-                </div>
-                <div class="fc-cap-kpi">
-                    <div class="fc-cap-kpi-value @BufferColorClass(_bufferHeadroom)">
-                        @(_bufferHeadroom.ToString("F1"))%
-                    </div>
-                    <div class="fc-cap-kpi-label">Buffer Headroom</div>
-                </div>
-                <div class="fc-cap-kpi">
-                    <div class="fc-cap-kpi-value">@_actionCount</div>
-                    <div class="fc-cap-kpi-label">Action Templates</div>
-                </div>
-            </div>
+                </section>
 
-            <div class="rg-hub-grid">
-                <a class="rg-hub-card" href="/platform/capital/rwa" style="--stagger-i:0;">
-                    <div class="rg-hub-card-icon rg-hub-icon--blue">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="24" height="24" aria-hidden="true">
-                            <path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 002 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0022 16z"/>
-                            <polyline points="3.27 6.96 12 12.01 20.73 6.96"/>
-                            <line x1="12" y1="22.08" x2="12" y2="12"/>
-                        </svg>
+                <section class="rg-premium-hero" aria-labelledby="capital-hero-title">
+                    <div class="rg-premium-hero__grid">
+                        <div>
+                            <div class="rg-premium-hero__eyebrow">Capital command lane</div>
+                            <h1 id="capital-hero-title" class="rg-premium-hero__title">Plan headroom before the buffer becomes the story.</h1>
+                            <p class="rg-premium-hero__subtitle">
+                                This surface connects current capital posture with scenario assumptions, optimisation levers,
+                                and the concrete actions available to improve buffers or reshape the stack.
+                            </p>
+                            <div class="rg-premium-badge-row">
+                                <span class="rg-premium-chip @BuildCarChipClass()">@BuildCarLabel()</span>
+                                <span class="rg-premium-chip @BuildHeadroomChipClass()">@BuildHeadroomLabel()</span>
+                                <span class="rg-premium-chip rg-premium-chip--info">@(_actionCount) action templates</span>
+                            </div>
+                        </div>
+                        <div class="rg-premium-hero__aside">
+                            <div class="rg-premium-note">
+                                <div class="rg-premium-note__label">Target CAR</div>
+                                <div class="rg-premium-note__value">@((_scenario?.TargetCarPercent ?? 0m).ToString("F1"))%</div>
+                                <div class="rg-premium-note__copy">
+                                    Planned destination for capital posture once optimisation, earnings retention, and any issuance actions are reflected.
+                                </div>
+                            </div>
+                            <div class="rg-premium-note">
+                                <div class="rg-premium-note__label">Scenario freshness</div>
+                                <div class="rg-premium-note__value">@BuildScenarioFreshnessLabel()</div>
+                                <div class="rg-premium-note__copy">@BuildScenarioFreshnessCopy()</div>
+                            </div>
+                        </div>
                     </div>
-                    <h3 class="rg-hub-card-title">RWA Optimisation</h3>
-                    <p class="rg-hub-card-desc">Analyse RWA composition and identify optimisation opportunities</p>
-                </a>
-                <a class="rg-hub-card" href="/platform/capital/buffers" style="--stagger-i:1;">
-                    <div class="rg-hub-card-icon rg-hub-icon--amber">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="24" height="24" aria-hidden="true">
-                            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
-                        </svg>
-                    </div>
-                    <h3 class="rg-hub-card-title">Buffer Management</h3>
-                    <p class="rg-hub-card-desc">Track conservation, countercyclical, and D-SIB buffers with trigger warnings</p>
-                </a>
-                <a class="rg-hub-card" href="/platform/capital/planning" style="--stagger-i:2;">
-                    <div class="rg-hub-card-icon rg-hub-icon--green">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="24" height="24" aria-hidden="true">
-                            <line x1="12" y1="20" x2="12" y2="10"/><line x1="18" y1="20" x2="18" y2="4"/><line x1="6" y1="20" x2="6" y2="16"/>
-                        </svg>
-                    </div>
-                    <h3 class="rg-hub-card-title">Capital Planning</h3>
-                    <p class="rg-hub-card-desc">Project CAR over 4–8 quarters using growth, profit, and issuance assumptions</p>
-                </a>
-                <a class="rg-hub-card" href="/platform/capital/actions" style="--stagger-i:3;">
-                    <div class="rg-hub-card-icon rg-hub-icon--purple">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="24" height="24" aria-hidden="true">
-                            <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
-                            <rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>
-                        </svg>
-                    </div>
-                    <h3 class="rg-hub-card-title">What-If Actions</h3>
-                    <p class="rg-hub-card-desc">Compare issuance, disposal, and portfolio action scenarios side by side</p>
-                </a>
-                <a class="rg-hub-card" href="/platform/capital/stack" style="--stagger-i:4;">
-                    <div class="rg-hub-card-icon rg-hub-icon--red">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="24" height="24" aria-hidden="true">
-                            <line x1="12" y1="1" x2="12" y2="23"/>
-                            <path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/>
-                        </svg>
-                    </div>
-                    <h3 class="rg-hub-card-title">Capital Stack Optimiser</h3>
-                    <p class="rg-hub-card-desc">Find the optimal CET1 / AT1 / Tier 2 mix to minimise cost of capital</p>
-                </a>
-            </div>
+                </section>
 
-            @if (_scenario is not null)
-            {
-                <div class="fc-cap-scenario-meta">
-                    <span class="fc-text-muted">Scenario last saved @_scenario.SavedAtUtc.ToString("dd MMM yyyy HH:mm") UTC</span>
-                </div>
-            }
+                <section class="rg-premium-stat-grid" aria-label="Capital metrics">
+                    <article class="rg-premium-stat">
+                        <div class="rg-premium-stat__label">Current CAR</div>
+                        <div class="rg-premium-stat__value @BuildCarValueClass()">@((_scenario?.CurrentCarPercent ?? 0m).ToString("F1"))%</div>
+                        <div class="rg-premium-stat__note">Current capital adequacy ratio captured in the active planning scenario.</div>
+                    </article>
+                    <article class="rg-premium-stat">
+                        <div class="rg-premium-stat__label">Total RWA</div>
+                        <div class="rg-premium-stat__value">@((_scenario?.CurrentRwaBn ?? 0m).ToString("F1"))bn</div>
+                        <div class="rg-premium-stat__note">Risk-weighted assets currently driving the capital denominator.</div>
+                    </article>
+                    <article class="rg-premium-stat">
+                        <div class="rg-premium-stat__label">Buffer headroom</div>
+                        <div class="rg-premium-stat__value @BuildHeadroomValueClass()">@_bufferHeadroom.ToString("F1")%</div>
+                        <div class="rg-premium-stat__note">Current CAR less minimum requirement, conservation buffer, countercyclical buffer, and D-SIB add-on.</div>
+                    </article>
+                    <article class="rg-premium-stat">
+                        <div class="rg-premium-stat__label">Action templates</div>
+                        <div class="rg-premium-stat__value rg-premium-stat__value--info">@_actionCount</div>
+                        <div class="rg-premium-stat__note">Structured response options available for capital uplift, earnings retention, or RWA relief.</div>
+                    </article>
+                </section>
+
+                <section class="rg-premium-content-grid">
+                    <div class="rg-premium-main">
+                        <section class="rg-premium-panel">
+                            <div class="rg-premium-panel__header">
+                                <div>
+                                    <div class="rg-premium-panel__eyebrow">Execution lanes</div>
+                                    <h2 class="rg-premium-panel__title">Capital workstreams</h2>
+                                    <p class="rg-premium-panel__subtitle">Jump directly into the capital workflow that matches the current planning problem.</p>
+                                </div>
+                            </div>
+                            <div class="rg-premium-panel__body">
+                                <div class="rg-premium-action-grid">
+                                    @foreach (var card in ActionCards)
+                                    {
+                                        <a class="rg-premium-link-card" href="@card.Href">
+                                            <div class="rg-premium-link-card__icon" style="@card.IconStyle">@((MarkupString)card.IconSvg)</div>
+                                            <h3 class="rg-premium-link-card__title">@card.Title</h3>
+                                            <p class="rg-premium-link-card__desc">@card.Description</p>
+                                            <div class="rg-premium-link-card__footer">
+                                                <span>@card.Footer</span>
+                                                <span class="rg-premium-link-card__arrow" aria-hidden="true">-&gt;</span>
+                                            </div>
+                                        </a>
+                                    }
+                                </div>
+                            </div>
+                        </section>
+                    </div>
+
+                    <aside class="rg-premium-side">
+                        <section class="rg-premium-panel">
+                            <div class="rg-premium-panel__header">
+                                <div>
+                                    <div class="rg-premium-panel__eyebrow">Scenario assumptions</div>
+                                    <h2 class="rg-premium-panel__title">Planning basis</h2>
+                                    <p class="rg-premium-panel__subtitle">Key assumptions currently shaping the capital forecast.</p>
+                                </div>
+                            </div>
+                            <div class="rg-premium-panel__body">
+                                <div class="rg-premium-list">
+                                    <article class="rg-premium-list__item">
+                                        <div class="rg-premium-list__top">
+                                            <div class="rg-premium-list__heading">Quarterly RWA growth</div>
+                                            <div class="rg-premium-list__value">@((_scenario?.QuarterlyRwaGrowthPercent ?? 0m).ToString("F1"))%</div>
+                                        </div>
+                                        <div class="rg-premium-list__meta">Expected quarterly growth rate on the RWA base before optimisation is applied.</div>
+                                    </article>
+                                    <article class="rg-premium-list__item">
+                                        <div class="rg-premium-list__top">
+                                            <div class="rg-premium-list__heading">Retained earnings</div>
+                                            <div class="rg-premium-list__value">@((_scenario?.QuarterlyRetainedEarningsBn ?? 0m).ToString("F1"))bn</div>
+                                        </div>
+                                        <div class="rg-premium-list__meta">Quarterly retained earnings available to support organic capital rebuild.</div>
+                                    </article>
+                                    <article class="rg-premium-list__item">
+                                        <div class="rg-premium-list__top">
+                                            <div class="rg-premium-list__heading">Capital action input</div>
+                                            <div class="rg-premium-list__value">@((_scenario?.CapitalActionBn ?? 0m).ToString("F1"))bn</div>
+                                        </div>
+                                        <div class="rg-premium-list__meta">Explicit capital action already baked into the active scenario.</div>
+                                    </article>
+                                </div>
+                            </div>
+                        </section>
+
+                        <section class="rg-premium-panel">
+                            <div class="rg-premium-panel__header">
+                                <div>
+                                    <div class="rg-premium-panel__eyebrow">Buffer architecture</div>
+                                    <h2 class="rg-premium-panel__title">Regulatory stack</h2>
+                                    <p class="rg-premium-panel__subtitle">Minimum and overlay buffers currently assumed in the scenario.</p>
+                                </div>
+                            </div>
+                            <div class="rg-premium-panel__body">
+                                <div class="rg-premium-list">
+                                    <article class="rg-premium-list__item">
+                                        <div class="rg-premium-list__top"><div class="rg-premium-list__heading">Minimum requirement</div><div class="rg-premium-list__value">@((_scenario?.MinimumRequirementPercent ?? 0m).ToString("F1"))%</div></div>
+                                    </article>
+                                    <article class="rg-premium-list__item">
+                                        <div class="rg-premium-list__top"><div class="rg-premium-list__heading">Conservation buffer</div><div class="rg-premium-list__value">@((_scenario?.ConservationBufferPercent ?? 0m).ToString("F1"))%</div></div>
+                                    </article>
+                                    <article class="rg-premium-list__item">
+                                        <div class="rg-premium-list__top"><div class="rg-premium-list__heading">Countercyclical buffer</div><div class="rg-premium-list__value">@((_scenario?.CountercyclicalBufferPercent ?? 0m).ToString("F1"))%</div></div>
+                                    </article>
+                                    <article class="rg-premium-list__item">
+                                        <div class="rg-premium-list__top"><div class="rg-premium-list__heading">D-SIB buffer</div><div class="rg-premium-list__value">@((_scenario?.DsibBufferPercent ?? 0m).ToString("F1"))%</div></div>
+                                    </article>
+                                </div>
+                            </div>
+                        </section>
+                    </aside>
+                </section>
+            </div>
         }
     </SectionErrorBoundary>
 </div>
@@ -125,17 +212,28 @@
     private decimal _bufferHeadroom;
     private int _actionCount;
 
+    private static readonly ActionCard[] ActionCards =
+    [
+        new("RWA Optimisation", "/platform/capital/rwa", "Diagnose RWA composition and identify denominator relief opportunities.", "Best for density reduction", "background:linear-gradient(135deg,#2563EB,#0EA5E9);", "<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" width=\"24\" height=\"24\" aria-hidden=\"true\"><path d=\"M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 2 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 22 16z\"/><polyline points=\"3.27 6.96 12 12.01 20.73 6.96\"/><line x1=\"12\" y1=\"22.08\" x2=\"12\" y2=\"12\"/></svg>"),
+        new("Buffer Management", "/platform/capital/buffers", "Track minimums and overlays so approaching trigger points are visible earlier.", "Best for threshold watch", "background:linear-gradient(135deg,#C8A415,#E07C24);", "<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" width=\"24\" height=\"24\" aria-hidden=\"true\"><path d=\"M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z\"/></svg>"),
+        new("Capital Planning", "/platform/capital/planning", "Project CAR over multiple quarters using growth, profit, and issuance assumptions.", "Best for forecast design", "background:linear-gradient(135deg,#006B3F,#0F766E);", "<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" width=\"24\" height=\"24\" aria-hidden=\"true\"><line x1=\"12\" y1=\"20\" x2=\"12\" y2=\"10\"/><line x1=\"18\" y1=\"20\" x2=\"18\" y2=\"4\"/><line x1=\"6\" y1=\"20\" x2=\"6\" y2=\"16\"/></svg>"),
+        new("What-If Actions", "/platform/capital/actions", "Compare issuance, disposal, and portfolio levers before committing to a plan.", "Best for response design", "background:linear-gradient(135deg,#7C3AED,#2563EB);", "<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" width=\"24\" height=\"24\" aria-hidden=\"true\"><rect x=\"3\" y=\"3\" width=\"7\" height=\"7\"/><rect x=\"14\" y=\"3\" width=\"7\" height=\"7\"/><rect x=\"14\" y=\"14\" width=\"7\" height=\"7\"/><rect x=\"3\" y=\"14\" width=\"7\" height=\"7\"/></svg>"),
+        new("Capital Stack Optimiser", "/platform/capital/stack", "Design the CET1, AT1, and Tier 2 mix that meets posture with lower funding drag.", "Best for stack economics", "background:linear-gradient(135deg,#D32F2F,#7C3AED);", "<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" width=\"24\" height=\"24\" aria-hidden=\"true\"><line x1=\"12\" y1=\"1\" x2=\"12\" y2=\"23\"/><path d=\"M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6\"/></svg>")
+    ];
+
     protected override async Task OnInitializedAsync() => await ReloadAsync();
 
     private async Task ReloadAsync()
     {
         _loading = true;
         _loadException = null;
+
         try
         {
             _scenario = await ScenarioStore.LoadAsync();
             var catalog = await ActionCatalog.LoadAsync();
             _actionCount = catalog.Templates.Count;
+            _bufferHeadroom = 0m;
 
             if (_scenario is not null)
             {
@@ -156,17 +254,170 @@
         }
     }
 
-    private static string CarColorClass(decimal car) => car switch
+    private string ResolveStatusBadge()
     {
-        >= 15 => "fc-cap-kpi-value--green",
-        >= 10 => "fc-cap-kpi-value--amber",
-        _ => "fc-cap-kpi-value--red"
-    };
+        if (_loading)
+        {
+            return "Refreshing";
+        }
 
-    private static string BufferColorClass(decimal headroom) => headroom switch
+        if (_scenario is null)
+        {
+            return "Awaiting scenario";
+        }
+
+        if (_bufferHeadroom <= 1m)
+        {
+            return "Buffer under pressure";
+        }
+
+        return "Scenario loaded";
+    }
+
+    private string ResolveStatusVariant()
     {
-        >= 3 => "fc-cap-kpi-value--green",
-        >= 1 => "fc-cap-kpi-value--amber",
-        _ => "fc-cap-kpi-value--red"
-    };
+        if (_scenario is null)
+        {
+            return "warning";
+        }
+
+        if (_bufferHeadroom <= 1m || _scenario.CurrentCarPercent < _scenario.MinimumRequirementPercent)
+        {
+            return "danger";
+        }
+
+        if (_bufferHeadroom <= 3m)
+        {
+            return "warning";
+        }
+
+        return "success";
+    }
+
+    private string ResolveBannerTone()
+    {
+        if (_scenario is null)
+        {
+            return "rg-premium-banner--warning";
+        }
+
+        if (_bufferHeadroom <= 1m || _scenario.CurrentCarPercent < _scenario.MinimumRequirementPercent)
+        {
+            return "rg-premium-banner--danger";
+        }
+
+        if (_bufferHeadroom <= 3m)
+        {
+            return "rg-premium-banner--warning";
+        }
+
+        return "rg-premium-banner--success";
+    }
+
+    private string BuildBannerHeadline()
+    {
+        if (_scenario is null)
+        {
+            return "No active capital planning scenario is loaded yet.";
+        }
+
+        if (_bufferHeadroom <= 1m)
+        {
+            return "Capital headroom is tight enough to require active management now.";
+        }
+
+        if (_bufferHeadroom <= 3m)
+        {
+            return "Buffers are still positive, but the cushion is thin enough to justify pre-emptive action.";
+        }
+
+        return "Current capital posture is workable, but scenario discipline still matters before growth accelerates.";
+    }
+
+    private string BuildBannerDetail()
+    {
+        if (_scenario is null)
+        {
+            return "Load or save a scenario to activate the full capital planning workspace and design actions against a real buffer stack.";
+        }
+
+        return $"Current CAR is {_scenario.CurrentCarPercent:F1}% against a total buffer requirement of {BuildTotalRequirement():F1}%. The active scenario assumes {_scenario.QuarterlyRwaGrowthPercent:F1}% quarterly RWA growth and {_scenario.QuarterlyRetainedEarningsBn:F1}bn retained earnings.";
+    }
+
+    private decimal BuildTotalRequirement() =>
+        (_scenario?.MinimumRequirementPercent ?? 0m)
+        + (_scenario?.ConservationBufferPercent ?? 0m)
+        + (_scenario?.CountercyclicalBufferPercent ?? 0m)
+        + (_scenario?.DsibBufferPercent ?? 0m);
+
+    private string BuildWatchpointLabel() => _scenario is null
+        ? "Scenario required"
+        : _bufferHeadroom <= 1m
+            ? "Headroom below 1.0%"
+            : _bufferHeadroom <= 3m
+                ? "Headroom below 3.0%"
+                : "Buffer stack intact";
+
+    private string BuildWatchpointCopy() => _scenario is null
+        ? "Without a current scenario, it is harder to separate structural capital pressure from temporary posture changes."
+        : $"The current stack combines a {_scenario.MinimumRequirementPercent:F1}% minimum with {(_scenario.ConservationBufferPercent + _scenario.CountercyclicalBufferPercent + _scenario.DsibBufferPercent):F1}% in overlays.";
+
+    private string BuildCarLabel() => _scenario is null ? "No current CAR" : $"{_scenario.CurrentCarPercent:F1}% current CAR";
+
+    private string BuildHeadroomLabel() => _scenario is null ? "No headroom view" : $"{_bufferHeadroom:F1}% headroom";
+
+    private string BuildCarChipClass() => _scenario is null
+        ? "rg-premium-chip--warning"
+        : _scenario.CurrentCarPercent >= 15m
+            ? "rg-premium-chip--success"
+            : _scenario.CurrentCarPercent >= 10m
+                ? "rg-premium-chip--warning"
+                : "rg-premium-chip--danger";
+
+    private string BuildHeadroomChipClass() => _scenario is null
+        ? "rg-premium-chip--warning"
+        : _bufferHeadroom > 3m
+            ? "rg-premium-chip--success"
+            : _bufferHeadroom > 1m
+                ? "rg-premium-chip--warning"
+                : "rg-premium-chip--danger";
+
+    private string BuildCarValueClass() => _scenario is null
+        ? string.Empty
+        : _scenario.CurrentCarPercent >= 15m
+            ? "rg-premium-stat__value--success"
+            : _scenario.CurrentCarPercent >= 10m
+                ? "rg-premium-stat__value--warning"
+                : "rg-premium-stat__value--danger";
+
+    private string BuildHeadroomValueClass() => _scenario is null
+        ? string.Empty
+        : _bufferHeadroom > 3m
+            ? "rg-premium-stat__value--success"
+            : _bufferHeadroom > 1m
+                ? "rg-premium-stat__value--warning"
+                : "rg-premium-stat__value--danger";
+
+    private string BuildScenarioFreshnessLabel()
+    {
+        if (_scenario is null)
+        {
+            return "No scenario";
+        }
+
+        var age = DateTime.UtcNow - _scenario.SavedAtUtc;
+        return age.TotalHours < 24 ? "Fresh" : age.TotalDays < 7 ? "This week" : "Aged";
+    }
+
+    private string BuildScenarioFreshnessCopy()
+    {
+        if (_scenario is null)
+        {
+            return "Save a scenario to activate planning assumptions and current stack metadata.";
+        }
+
+        return $"Scenario last saved {_scenario.SavedAtUtc:dd MMM yyyy HH:mm} UTC with target CAR set to {_scenario.TargetCarPercent:F1}% and optimisation factor {_scenario.RwaOptimisationPercent:F1}%.";
+    }
+
+    private sealed record ActionCard(string Title, string Href, string Description, string Footer, string IconStyle, string IconSvg);
 }

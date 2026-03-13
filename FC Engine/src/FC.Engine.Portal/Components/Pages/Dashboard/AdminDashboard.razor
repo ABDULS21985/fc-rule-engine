@@ -9,120 +9,810 @@
 
 <PageTitle>Tenant Admin Dashboard</PageTitle>
 
-@if (_loading)
-{
-    <SkeletonGuard OnRetry="ReloadAsync">
-        <div class="dash17-admin" aria-busy="true" aria-label="Loading dashboard…">
-            <div class="fc-skel-stats-row fc-skel-section">
-                <SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Stat" Index="0" />
-                <SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Stat" Index="3" />
-                <SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Stat" Index="6" />
-                <SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Stat" Index="9" />
-            </div>
-            <section class="dash17-usage-grid fc-skel-section">
-                <article class="fc-skel-card-body">
-                    <div class="fc-skel fc-skel-text-lg" style="width: 55%; --skeleton-index: 12; margin-bottom: var(--space-4);"></div>
-                    @for (int i = 0; i < 5; i++)
-                    {
-                        var si = 13 + i;
-                        <div style="display:flex; gap:var(--space-3); align-items:center; padding:6px 0; border-bottom:1px solid var(--cbn-border-subtle);">
-                            <div class="fc-skel fc-skel-text" style="width: 28%; --skeleton-index: @si;"></div>
-                            <div class="fc-skel fc-skel-block" style="height:8px; flex:1; --skeleton-index: @si;"></div>
-                        </div>
-                    }
-                </article>
-                <article class="fc-skel-card-body">
-                    <div class="fc-skel fc-skel-text-lg" style="width: 50%; --skeleton-index: 18; margin-bottom: var(--space-4);"></div>
-                    <SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.NotificationRow" RowCount="4" Index="19" />
-                </article>
-                <SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.ChartBar" Index="23" />
-            </section>
-            <div class="fc-skel-section">
-                <SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.ChartBar" Index="27" />
-            </div>
-        </div>
-    </SkeletonGuard>
-}
-else if (!string.IsNullOrWhiteSpace(_error))
-{
-    <div class="dash17-error">@_error</div>
-}
-else if (_data is not null)
-{
-    <div class="dash17-admin">
-        <header class="dash17-header">
-            <div>
-                <h1>Tenant Admin Dashboard</h1>
-                <p>Usage, billing, user activity, and data quality overview</p>
-            </div>
-            <div class="dash17-score-chip">Updated @_data.GeneratedAt.ToString("dd MMM yyyy HH:mm")</div>
-        </header>
+<div class="portal-page portal-ta39-shell">
+    <PortalPageHeader Title="Tenant Admin Dashboard"
+                      Subtitle="Usage, billing, user activity, and data quality across the current tenant workspace.">
+        <SecondaryActions>
+            <span class="portal-ta39-header-chip">
+                <span class="portal-ta39-header-chip-label">Snapshot</span>
+                <strong>@(_data?.GeneratedAt.ToString("dd MMM yyyy · HH:mm") ?? "Refreshing workspace")</strong>
+            </span>
+        </SecondaryActions>
+        <PrimaryAction>
+            <button class="portal-btn portal-btn-primary portal-btn-sm" @onclick="ReloadAsync" disabled="@_loading">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                    <polyline points="23 4 23 10 17 10"></polyline>
+                    <path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"></path>
+                </svg>
+                Refresh
+            </button>
+        </PrimaryAction>
+    </PortalPageHeader>
 
-        <section class="dash17-kpi-grid">
-            <article class="dash17-kpi-card">
-                <h3>Active Users (Month)</h3>
-                <div class="dash17-kpi-value">@_data.UserActivity.ActiveUsersThisMonth</div>
-                <p>Avg logins/user: @_data.UserActivity.AverageLoginsPerUser.ToString("0.##")</p>
-            </article>
-            <article class="dash17-kpi-card">
-                <h3>Plan</h3>
-                <div class="dash17-kpi-value">@_data.Billing.PlanName</div>
-                <p>@_data.Billing.BillingFrequency billing</p>
-            </article>
-            <article class="dash17-kpi-card">
-                <h3>Outstanding Balance</h3>
-                <div class="dash17-kpi-value">@_data.Billing.Currency @(_data.Billing.OutstandingBalance.ToString("N2"))</div>
-                <p>Next invoice: @_data.Billing.NextInvoiceDate.ToString("dd MMM yyyy")</p>
-            </article>
-            <article class="dash17-kpi-card">
-                <h3>Validation Pass Rate</h3>
-                <div class="dash17-kpi-value">@_data.ValidationPassRate.ToString("0.##")%</div>
-                <p>Completeness: @_data.CompletenessScore.ToString("0.##")%</p>
-            </article>
+    @if (_loading)
+    {
+        <section class="portal-ta39-loading" role="status" aria-label="Loading tenant admin dashboard">
+            <div class="portal-ta39-loading-hero"></div>
+            <div class="portal-ta39-loading-grid">
+                @for (var i = 0; i < 4; i++)
+                {
+                    <div class="portal-ta39-loading-card"></div>
+                }
+            </div>
+            <div class="portal-ta39-loading-panels">
+                <div class="portal-ta39-loading-panel"></div>
+                <div class="portal-ta39-loading-panel"></div>
+                <div class="portal-ta39-loading-panel"></div>
+            </div>
+        </section>
+    }
+    else if (!string.IsNullOrWhiteSpace(_error))
+    {
+        <section class="portal-ta39-error" role="alert">
+            <div class="portal-ta39-error-icon" aria-hidden="true">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9">
+                    <circle cx="12" cy="12" r="9"></circle>
+                    <path d="M12 8v5"></path>
+                    <path d="M12 16h.01"></path>
+                </svg>
+            </div>
+            <div>
+                <span class="portal-ta39-kicker">Workspace unavailable</span>
+                <h2>We could not materialise the tenant admin dashboard.</h2>
+                <p>@_error</p>
+            </div>
+        </section>
+    }
+    else if (_data is not null)
+    {
+        var usageTiles = BuildUsageTiles(_data);
+        var usagePressure = usageTiles.Max(x => x.Percent);
+        var tightestResource = usageTiles.OrderByDescending(x => x.Percent).First();
+        var controlScore = BuildControlScore(_data, usagePressure);
+        var deliveryRate = BuildDeliveryRate(_data.NotificationStats);
+        var leadContributor = _data.UserActivity.TopContributors.FirstOrDefault();
+        var bannerTone = ResolveBannerTone(controlScore, usagePressure, _data.Billing.OutstandingBalance);
+
+        <section class="portal-ta39-banner portal-ta39-banner--@bannerTone">
+            <div>
+                <span class="portal-ta39-kicker">Tenant pulse</span>
+                <h2>@BuildBannerHeadline(controlScore, usagePressure, _data.Billing.OutstandingBalance)</h2>
+                <p>@BuildBannerDetail(controlScore, tightestResource.Label, usagePressure, deliveryRate)</p>
+            </div>
+            <div class="portal-ta39-banner-pills">
+                <span class="portal-ta39-pill">@_data.Billing.PlanName</span>
+                <span class="portal-ta39-pill">@tightestResource.Label at @tightestResource.Percent.ToString("0.#")%</span>
+                <span class="portal-ta39-pill">Delivery @deliveryRate.ToString("0.#")%</span>
+            </div>
         </section>
 
-        <section class="dash17-usage-grid">
-            <article class="dash17-usage-card">
-                <h3>Subscription Usage</h3>
-                @UsageBar("Users", _data.Usage.UsersUsed, _data.Usage.UsersLimit, _data.Usage.UsersUsagePercent)
-                @UsageBar("Entities", _data.Usage.EntitiesUsed, _data.Usage.EntitiesLimit, _data.Usage.EntitiesUsagePercent)
-                @UsageBar("Modules", _data.Usage.ModulesUsed, _data.Usage.ModulesLimit, _data.Usage.ModulesUsagePercent)
-                @UsageBar("Storage (MB)", _data.Usage.StorageUsedMb, _data.Usage.StorageLimitMb, _data.Usage.StorageUsagePercent)
-                @UsageBar("API Calls", _data.Usage.ApiCallsUsed, _data.Usage.ApiCallsLimit, _data.Usage.ApiUsagePercent)
+        <section class="portal-ta39-overview">
+            <article class="portal-ta39-hero" style="--stagger: 0;">
+                <div class="portal-ta39-kicker">
+                    <span class="portal-ta39-kicker-dot" aria-hidden="true"></span>
+                    Tenant operations workspace
+                </div>
+                <div class="portal-ta39-hero-topline">
+                    <div>
+                        <h2>See who is active, where the subscription is tightening, and how clean the tenant data posture really is.</h2>
+                        <p>
+                            This dashboard blends user activity, subscription consumption, billing posture, and quality trends so institution
+                            administrators can act before the workspace drifts into avoidable friction.
+                        </p>
+                    </div>
+                    <div class="portal-ta39-hero-score">
+                        <span>Workspace readiness</span>
+                        <strong>@controlScore.ToString("0")</strong>
+                        <small>Composite of validation, completeness, and headroom</small>
+                    </div>
+                </div>
+
+                <div class="portal-ta39-hero-metrics">
+                    <div class="portal-ta39-hero-metric">
+                        <span>Active users</span>
+                        <strong>@_data.UserActivity.ActiveUsersThisMonth</strong>
+                        <small>@_data.UserActivity.AverageLoginsPerUser.ToString("0.##") average logins per user</small>
+                    </div>
+                    <div class="portal-ta39-hero-metric">
+                        <span>Plan posture</span>
+                        <strong>@_data.Billing.PlanName</strong>
+                        <small>@_data.Billing.BillingFrequency billing cadence</small>
+                    </div>
+                    <div class="portal-ta39-hero-metric">
+                        <span>Validation pass rate</span>
+                        <strong>@_data.ValidationPassRate.ToString("0.##")%</strong>
+                        <small>@_data.CompletenessScore.ToString("0.##")% completeness</small>
+                    </div>
+                </div>
+
+                <div class="portal-ta39-storyline">
+                    <span class="portal-ta39-story-pill">Next invoice: @_data.Billing.NextInvoiceDate.ToString("dd MMM yyyy")</span>
+                    <span class="portal-ta39-story-pill">Outstanding: @FormatCurrency(_data.Billing.OutstandingBalance, _data.Billing.Currency)</span>
+                    <span class="portal-ta39-story-pill">Top contributor: @(leadContributor?.DisplayName ?? "No submissions yet")</span>
+                </div>
             </article>
 
-            <article class="dash17-usage-card">
-                <h3>Top Contributors</h3>
+            <aside class="portal-ta39-kpi-grid">
+                <div class="portal-ta39-kpi portal-ta39-kpi--emerald" style="--stagger: 1;">
+                    <span class="portal-ta39-kpi-label">Users this month</span>
+                    <strong>@_data.UserActivity.ActiveUsersThisMonth</strong>
+                    <p>Unique active users in the current month</p>
+                </div>
+                <div class="portal-ta39-kpi portal-ta39-kpi--gold" style="--stagger: 2;">
+                    <span class="portal-ta39-kpi-label">Usage pressure</span>
+                    <strong>@usagePressure.ToString("0.#")%</strong>
+                    <p>@tightestResource.Label is the tightest subscription limit</p>
+                </div>
+                <div class="portal-ta39-kpi portal-ta39-kpi--teal" style="--stagger: 3;">
+                    <span class="portal-ta39-kpi-label">Notification delivery</span>
+                    <strong>@deliveryRate.ToString("0.#")%</strong>
+                    <p>@_data.NotificationStats.Delivered delivered out of @_data.NotificationStats.Sent sent</p>
+                </div>
+                <div class="portal-ta39-kpi portal-ta39-kpi--slate" style="--stagger: 4;">
+                    <span class="portal-ta39-kpi-label">Billing exposure</span>
+                    <strong>@FormatCurrency(_data.Billing.OutstandingBalance, _data.Billing.Currency)</strong>
+                    <p>@_data.Billing.NextInvoiceDate.ToString("dd MMM yyyy") next invoice date</p>
+                </div>
+            </aside>
+        </section>
+
+        <section class="portal-ta39-grid">
+            <article class="portal-ta39-panel portal-ta39-panel--span-6" style="--stagger: 5;">
+                <div class="portal-ta39-panel-head">
+                    <div>
+                        <span class="portal-ta39-kicker">Subscription headroom</span>
+                        <h3>Which limits are tightening first</h3>
+                    </div>
+                    <span class="portal-ta39-inline-note">@tightestResource.Label leads</span>
+                </div>
+                <p class="portal-ta39-panel-copy">Usage across users, entities, modules, storage, and API calls against the active subscription envelope.</p>
+
+                <div class="portal-ta39-usage-stack">
+                    @foreach (var item in usageTiles)
+                    {
+                        <div class="portal-ta39-usage-row">
+                            <div class="portal-ta39-usage-head">
+                                <strong>@item.Label</strong>
+                                <span>@item.UsedText / @item.LimitText</span>
+                            </div>
+                            <div class="portal-ta39-usage-track" aria-hidden="true">
+                                <span style="width: @Math.Min(100m, item.Percent).ToString("0.##")%;"></span>
+                            </div>
+                            <div class="portal-ta39-usage-percent">@item.Percent.ToString("0.##")%</div>
+                        </div>
+                    }
+                </div>
+            </article>
+
+            <article class="portal-ta39-panel portal-ta39-panel--span-6" style="--stagger: 6;">
+                <div class="portal-ta39-panel-head">
+                    <div>
+                        <span class="portal-ta39-kicker">Contributor activity</span>
+                        <h3>Who is carrying submission throughput</h3>
+                    </div>
+                    <span class="portal-ta39-inline-note">@_data.UserActivity.TopContributors.Count contributor(s)</span>
+                </div>
+                <p class="portal-ta39-panel-copy">Most active contributors by submission volume in the current month.</p>
+
                 @if (_data.UserActivity.TopContributors.Count == 0)
                 {
-                    <p>No submissions recorded this month.</p>
+                    <div class="portal-ta39-empty">No submission activity has been recorded this month.</div>
                 }
                 else
                 {
-                    <ul class="dash17-list">
-                        @foreach (var contributor in _data.UserActivity.TopContributors)
+                    <div class="portal-ta39-list">
+                        @foreach (var item in _data.UserActivity.TopContributors.Take(8).Select((contributor, index) => new { contributor, index }))
                         {
-                            <li>
-                                <span>@contributor.DisplayName</span>
-                                <strong>@contributor.SubmissionCount submissions</strong>
-                            </li>
+                            <div class="portal-ta39-row">
+                                <div class="portal-ta39-rank">@((item.index + 1).ToString("00"))</div>
+                                <div class="portal-ta39-row-main">
+                                    <strong>@item.contributor.DisplayName</strong>
+                                    <span>@item.contributor.SubmissionCount submission(s) this month</span>
+                                </div>
+                                <span class="portal-ta39-chip">@BuildContributorShare(item.contributor.SubmissionCount, _data.UserActivity.TopContributors)</span>
+                            </div>
                         }
-                    </ul>
+                    </div>
                 }
             </article>
 
-            <article class="dash17-usage-card">
-                <h3>Notification Delivery</h3>
-                <div class="dash17-chart-wrap"><canvas id="adminNotificationChart"></canvas></div>
+            <article class="portal-ta39-panel portal-ta39-panel--span-4" style="--stagger: 7;">
+                <div class="portal-ta39-panel-head">
+                    <div>
+                        <span class="portal-ta39-kicker">Notification delivery</span>
+                        <h3>Queue health</h3>
+                    </div>
+                    <span class="portal-ta39-inline-note">@deliveryRate.ToString("0.#")%</span>
+                </div>
+                <p class="portal-ta39-panel-copy">Delivered, sent, queued, and failed notifications in the current tenant scope.</p>
+                <div class="portal-ta39-chart-wrap">
+                    <canvas id="adminNotificationChart"></canvas>
+                </div>
+            </article>
+
+            <article class="portal-ta39-panel portal-ta39-panel--span-4" style="--stagger: 8;">
+                <div class="portal-ta39-panel-head">
+                    <div>
+                        <span class="portal-ta39-kicker">Billing posture</span>
+                        <h3>Commercial readiness</h3>
+                    </div>
+                    <span class="portal-ta39-inline-note">@_data.Billing.PlanCode</span>
+                </div>
+                <p class="portal-ta39-panel-copy">Plan, invoice timing, and outstanding balance at a glance.</p>
+                <div class="portal-ta39-billing-card">
+                    <div>
+                        <small>Plan</small>
+                        <strong>@_data.Billing.PlanName</strong>
+                    </div>
+                    <div>
+                        <small>Billing cycle</small>
+                        <strong>@_data.Billing.BillingFrequency</strong>
+                    </div>
+                    <div>
+                        <small>Outstanding</small>
+                        <strong>@FormatCurrency(_data.Billing.OutstandingBalance, _data.Billing.Currency)</strong>
+                    </div>
+                    <div>
+                        <small>Next invoice</small>
+                        <strong>@_data.Billing.NextInvoiceDate.ToString("dd MMM yyyy")</strong>
+                    </div>
+                </div>
+            </article>
+
+            <article class="portal-ta39-panel portal-ta39-panel--span-4" style="--stagger: 9;">
+                <div class="portal-ta39-panel-head">
+                    <div>
+                        <span class="portal-ta39-kicker">Readiness scorecard</span>
+                        <h3>Quality and delivery guardrails</h3>
+                    </div>
+                    <span class="portal-ta39-inline-note">@controlScore.ToString("0")/100</span>
+                </div>
+                <p class="portal-ta39-panel-copy">Core quality and execution indicators used to judge whether the workspace is drifting or holding firm.</p>
+                <div class="portal-ta39-score-grid">
+                    <div>
+                        <small>Validation pass</small>
+                        <strong>@_data.ValidationPassRate.ToString("0.##")%</strong>
+                    </div>
+                    <div>
+                        <small>Completeness</small>
+                        <strong>@_data.CompletenessScore.ToString("0.##")%</strong>
+                    </div>
+                    <div>
+                        <small>Delivery rate</small>
+                        <strong>@deliveryRate.ToString("0.#")%</strong>
+                    </div>
+                    <div>
+                        <small>Headroom</small>
+                        <strong>@(Math.Max(0m, 100m - usagePressure).ToString("0.#"))%</strong>
+                    </div>
+                </div>
+            </article>
+
+            <article class="portal-ta39-panel portal-ta39-panel--span-12" style="--stagger: 10;">
+                <div class="portal-ta39-panel-head">
+                    <div>
+                        <span class="portal-ta39-kicker">Data quality trend</span>
+                        <h3>Whether quality is improving or eroding over time</h3>
+                    </div>
+                    <span class="portal-ta39-inline-note">@_data.DataQualityTrend.Labels.Count point(s)</span>
+                </div>
+                <p class="portal-ta39-panel-copy">Historical quality trend for the current tenant across the reporting periods surfaced by the dashboard service.</p>
+                <div class="portal-ta39-chart-wrap portal-ta39-chart-wrap--wide">
+                    <canvas id="adminDataQualityChart"></canvas>
+                </div>
             </article>
         </section>
+    }
+</div>
 
-        <section class="dash17-chart-card dash17-chart-card-wide">
-            <h3>Data Quality Trend</h3>
-            <div class="dash17-chart-wrap"><canvas id="adminDataQualityChart"></canvas></div>
-        </section>
-    </div>
-}
+<style>
+    .portal-ta39-shell {
+        display: grid;
+        gap: 1.5rem;
+    }
+
+    .portal-ta39-header-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.55rem;
+        padding: 0.72rem 0.98rem;
+        border-radius: 999px;
+        border: 1px solid rgba(0, 107, 63, 0.12);
+        background: rgba(255, 255, 255, 0.86);
+        box-shadow: 0 18px 34px rgba(15, 23, 42, 0.05);
+        color: #17324d;
+    }
+
+    .portal-ta39-header-chip-label {
+        text-transform: uppercase;
+        letter-spacing: 0.11em;
+        font-size: 0.68rem;
+        font-weight: 800;
+        color: #6b7280;
+    }
+
+    .portal-ta39-loading {
+        display: grid;
+        gap: 1rem;
+    }
+
+    .portal-ta39-loading-hero,
+    .portal-ta39-loading-card,
+    .portal-ta39-loading-panel {
+        position: relative;
+        overflow: hidden;
+        border-radius: 30px;
+        background: linear-gradient(135deg, rgba(255, 255, 255, 0.94), rgba(244, 248, 242, 0.97));
+        border: 1px solid rgba(226, 232, 240, 0.9);
+    }
+
+    .portal-ta39-loading-hero::after,
+    .portal-ta39-loading-card::after,
+    .portal-ta39-loading-panel::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(110deg, transparent 8%, rgba(255, 255, 255, 0.8) 30%, transparent 52%);
+        transform: translateX(-100%);
+        animation: portal-ta39-shimmer 1.4s infinite;
+    }
+
+    .portal-ta39-loading-hero {
+        min-height: 250px;
+    }
+
+    .portal-ta39-loading-grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 1rem;
+    }
+
+    .portal-ta39-loading-card {
+        min-height: 150px;
+    }
+
+    .portal-ta39-loading-panels {
+        display: grid;
+        grid-template-columns: repeat(12, minmax(0, 1fr));
+        gap: 1rem;
+    }
+
+    .portal-ta39-loading-panel {
+        min-height: 320px;
+        grid-column: span 4;
+    }
+
+    .portal-ta39-banner,
+    .portal-ta39-hero,
+    .portal-ta39-kpi,
+    .portal-ta39-panel,
+    .portal-ta39-error {
+        position: relative;
+        overflow: hidden;
+        border-radius: 28px;
+        border: 1px solid rgba(226, 232, 240, 0.92);
+        background: rgba(255, 255, 255, 0.94);
+        box-shadow: 0 24px 56px rgba(15, 23, 42, 0.05);
+        animation: portal-ta39-rise 620ms cubic-bezier(.2, .75, .25, 1) both;
+        animation-delay: calc(var(--stagger, 0) * 70ms);
+    }
+
+    .portal-ta39-error {
+        display: grid;
+        grid-template-columns: auto 1fr;
+        gap: 1rem;
+        align-items: center;
+        padding: 1.35rem;
+    }
+
+    .portal-ta39-error-icon {
+        width: 54px;
+        height: 54px;
+        border-radius: 18px;
+        display: grid;
+        place-items: center;
+        background: linear-gradient(135deg, rgba(185, 28, 28, 0.12), rgba(251, 191, 36, 0.1));
+        color: #b91c1c;
+    }
+
+    .portal-ta39-error h2 {
+        margin: 0.3rem 0 0.45rem;
+        color: #1d2a3d;
+    }
+
+    .portal-ta39-error p {
+        margin: 0;
+        color: #607082;
+    }
+
+    .portal-ta39-banner {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 1rem;
+        align-items: center;
+        padding: 1.5rem;
+        color: #fff;
+    }
+
+    .portal-ta39-banner--critical {
+        background: linear-gradient(135deg, rgba(127, 29, 29, 0.98), rgba(185, 28, 28, 0.94));
+    }
+
+    .portal-ta39-banner--warning {
+        background: linear-gradient(135deg, rgba(120, 53, 15, 0.96), rgba(180, 83, 9, 0.92));
+    }
+
+    .portal-ta39-banner--success {
+        background: linear-gradient(135deg, rgba(0, 107, 63, 0.96), rgba(13, 148, 101, 0.9));
+    }
+
+    .portal-ta39-banner h2 {
+        margin: 0.3rem 0 0.45rem;
+        font-size: clamp(1.35rem, 1.8vw, 1.95rem);
+    }
+
+    .portal-ta39-banner p {
+        margin: 0;
+        color: rgba(255, 255, 255, 0.88);
+        max-width: 72ch;
+    }
+
+    .portal-ta39-banner-pills,
+    .portal-ta39-storyline {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.65rem;
+    }
+
+    .portal-ta39-pill,
+    .portal-ta39-story-pill,
+    .portal-ta39-chip,
+    .portal-ta39-inline-note {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0.55rem 0.8rem;
+        border-radius: 999px;
+        font-size: 0.83rem;
+        font-weight: 800;
+    }
+
+    .portal-ta39-pill {
+        background: rgba(255, 255, 255, 0.14);
+        border: 1px solid rgba(255, 255, 255, 0.16);
+        color: #fff;
+    }
+
+    .portal-ta39-kicker {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.55rem;
+        text-transform: uppercase;
+        letter-spacing: 0.16em;
+        font-size: 0.72rem;
+        font-weight: 900;
+        color: #006b3f;
+    }
+
+    .portal-ta39-kicker-dot {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #0a8f56, #c8a415);
+        box-shadow: 0 0 0 5px rgba(0, 107, 63, 0.08);
+    }
+
+    .portal-ta39-overview {
+        display: grid;
+        grid-template-columns: minmax(0, 1.45fr) minmax(280px, 0.95fr);
+        gap: 1rem;
+    }
+
+    .portal-ta39-hero {
+        padding: 1.55rem;
+        background:
+            radial-gradient(circle at top right, rgba(200, 164, 21, 0.18), transparent 34%),
+            linear-gradient(140deg, rgba(250, 252, 248, 0.98), rgba(255, 255, 255, 0.95));
+    }
+
+    .portal-ta39-hero-topline {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 1rem;
+        align-items: start;
+        margin-top: 1rem;
+    }
+
+    .portal-ta39-hero h2 {
+        margin: 0;
+        font-size: clamp(2rem, 3vw, 3rem);
+        line-height: 0.98;
+        letter-spacing: -0.05em;
+        color: #1d2a3d;
+        max-width: 15ch;
+    }
+
+    .portal-ta39-hero p,
+    .portal-ta39-panel-copy {
+        color: #607082;
+        line-height: 1.55;
+    }
+
+    .portal-ta39-hero-score,
+    .portal-ta39-hero-metric,
+    .portal-ta39-kpi,
+    .portal-ta39-billing-card {
+        padding: 1rem 1.05rem;
+        border-radius: 24px;
+        border: 1px solid rgba(226, 232, 240, 0.9);
+        background: rgba(255, 255, 255, 0.8);
+    }
+
+    .portal-ta39-hero-score span,
+    .portal-ta39-hero-metric span,
+    .portal-ta39-kpi-label,
+    .portal-ta39-billing-card small,
+    .portal-ta39-score-grid small {
+        display: block;
+        text-transform: uppercase;
+        letter-spacing: 0.14em;
+        font-size: 0.72rem;
+        font-weight: 800;
+        color: #6b7280;
+    }
+
+    .portal-ta39-hero-score strong,
+    .portal-ta39-hero-metric strong,
+    .portal-ta39-kpi strong,
+    .portal-ta39-billing-card strong,
+    .portal-ta39-score-grid strong {
+        display: block;
+        margin-top: 0.45rem;
+        font-size: clamp(1.5rem, 2vw, 2.2rem);
+        line-height: 1;
+        letter-spacing: -0.04em;
+        color: #172335;
+    }
+
+    .portal-ta39-hero-score {
+        min-width: 180px;
+        text-align: right;
+    }
+
+    .portal-ta39-hero-score small,
+    .portal-ta39-hero-metric small,
+    .portal-ta39-kpi p {
+        display: block;
+        margin-top: 0.45rem;
+        color: #647082;
+    }
+
+    .portal-ta39-hero-metrics,
+    .portal-ta39-kpi-grid,
+    .portal-ta39-grid {
+        display: grid;
+        gap: 1rem;
+    }
+
+    .portal-ta39-hero-metrics {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        margin-top: 1.2rem;
+    }
+
+    .portal-ta39-kpi-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .portal-ta39-story-pill,
+    .portal-ta39-inline-note,
+    .portal-ta39-chip {
+        background: rgba(23, 50, 77, 0.05);
+        border: 1px solid rgba(23, 50, 77, 0.08);
+        color: #334155;
+    }
+
+    .portal-ta39-kpi--emerald {
+        background: linear-gradient(180deg, rgba(0, 107, 63, 0.1), rgba(255, 255, 255, 0.95));
+    }
+
+    .portal-ta39-kpi--gold {
+        background: linear-gradient(180deg, rgba(200, 164, 21, 0.14), rgba(255, 255, 255, 0.95));
+    }
+
+    .portal-ta39-kpi--teal {
+        background: linear-gradient(180deg, rgba(15, 118, 110, 0.12), rgba(255, 255, 255, 0.96));
+    }
+
+    .portal-ta39-kpi--slate {
+        background: linear-gradient(180deg, rgba(51, 65, 85, 0.08), rgba(255, 255, 255, 0.95));
+    }
+
+    .portal-ta39-grid {
+        grid-template-columns: repeat(12, minmax(0, 1fr));
+    }
+
+    .portal-ta39-panel {
+        padding: 1.35rem;
+    }
+
+    .portal-ta39-panel--span-4 {
+        grid-column: span 4;
+    }
+
+    .portal-ta39-panel--span-6 {
+        grid-column: span 6;
+    }
+
+    .portal-ta39-panel--span-12 {
+        grid-column: span 12;
+    }
+
+    .portal-ta39-panel-head {
+        display: flex;
+        justify-content: space-between;
+        gap: 1rem;
+        align-items: flex-start;
+    }
+
+    .portal-ta39-panel-head h3 {
+        margin: 0.35rem 0 0;
+        color: #172335;
+        font-size: clamp(1.2rem, 1.5vw, 1.7rem);
+        letter-spacing: -0.03em;
+    }
+
+    .portal-ta39-usage-stack,
+    .portal-ta39-list {
+        display: grid;
+        gap: 0.8rem;
+    }
+
+    .portal-ta39-usage-row,
+    .portal-ta39-row {
+        display: grid;
+        gap: 0.65rem;
+        padding: 0.95rem 1rem;
+        border-radius: 22px;
+        border: 1px solid rgba(226, 232, 240, 0.9);
+        background: rgba(248, 250, 252, 0.72);
+    }
+
+    .portal-ta39-usage-head {
+        display: flex;
+        justify-content: space-between;
+        gap: 1rem;
+        align-items: center;
+        color: #172335;
+    }
+
+    .portal-ta39-usage-head span,
+    .portal-ta39-row-main span {
+        color: #647082;
+    }
+
+    .portal-ta39-usage-track {
+        width: 100%;
+        height: 10px;
+        border-radius: 999px;
+        overflow: hidden;
+        background: rgba(15, 23, 42, 0.06);
+    }
+
+    .portal-ta39-usage-track span {
+        display: block;
+        height: 100%;
+        border-radius: inherit;
+        background: linear-gradient(90deg, #006b3f, #0ea5e9);
+    }
+
+    .portal-ta39-usage-percent {
+        font-weight: 800;
+        color: #17324d;
+    }
+
+    .portal-ta39-row {
+        grid-template-columns: auto minmax(0, 1fr) auto;
+        align-items: center;
+    }
+
+    .portal-ta39-rank {
+        width: 42px;
+        height: 42px;
+        border-radius: 14px;
+        display: grid;
+        place-items: center;
+        background: linear-gradient(135deg, rgba(0, 107, 63, 0.12), rgba(200, 164, 21, 0.18));
+        color: #0b6b47;
+        font-weight: 900;
+        letter-spacing: 0.04em;
+    }
+
+    .portal-ta39-row-main strong {
+        display: block;
+        color: #172335;
+    }
+
+    .portal-ta39-chart-wrap {
+        min-height: 280px;
+        position: relative;
+    }
+
+    .portal-ta39-chart-wrap--wide {
+        min-height: 340px;
+    }
+
+    .portal-ta39-billing-card,
+    .portal-ta39-score-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 0.85rem;
+    }
+
+    .portal-ta39-empty {
+        min-height: 220px;
+        display: grid;
+        place-items: center;
+        text-align: center;
+        color: #647082;
+        border-radius: 24px;
+        border: 1px dashed rgba(148, 163, 184, 0.45);
+        background: linear-gradient(135deg, rgba(248, 250, 252, 0.82), rgba(255, 255, 255, 0.95));
+        padding: 1.25rem;
+    }
+
+    @@keyframes portal-ta39-rise {
+        from {
+            opacity: 0;
+            transform: translateY(14px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    @@keyframes portal-ta39-shimmer {
+        to {
+            transform: translateX(100%);
+        }
+    }
+
+    @@media (max-width: 1220px) {
+        .portal-ta39-overview,
+        .portal-ta39-grid,
+        .portal-ta39-loading-panels {
+            grid-template-columns: 1fr;
+        }
+
+        .portal-ta39-loading-grid,
+        .portal-ta39-kpi-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .portal-ta39-panel--span-4,
+        .portal-ta39-panel--span-6,
+        .portal-ta39-panel--span-12 {
+            grid-column: auto;
+        }
+    }
+
+    @@media (max-width: 860px) {
+        .portal-ta39-banner,
+        .portal-ta39-hero-topline,
+        .portal-ta39-hero-metrics,
+        .portal-ta39-kpi-grid,
+        .portal-ta39-loading-grid,
+        .portal-ta39-billing-card,
+        .portal-ta39-score-grid {
+            grid-template-columns: 1fr;
+        }
+
+        .portal-ta39-usage-head,
+        .portal-ta39-row {
+            grid-template-columns: 1fr;
+        }
+    }
+</style>
 
 @code {
     private AdminDashboardData? _data;
@@ -190,37 +880,79 @@ else if (_data is not null)
         };
     }
 
-    private static RenderFragment UsageBar(string label, decimal used, int limit, decimal percent) => builder =>
+    private static IReadOnlyList<UsageTile> BuildUsageTiles(AdminDashboardData data)
     {
-        var seq = 0;
-        builder.OpenElement(seq++, "div");
-        builder.AddAttribute(seq++, "class", "dash17-usage-row");
+        return
+        [
+            new UsageTile("Users", data.Usage.UsersUsed.ToString("N0"), data.Usage.UsersLimit.ToString("N0"), data.Usage.UsersUsagePercent),
+            new UsageTile("Entities", data.Usage.EntitiesUsed.ToString("N0"), data.Usage.EntitiesLimit.ToString("N0"), data.Usage.EntitiesUsagePercent),
+            new UsageTile("Modules", data.Usage.ModulesUsed.ToString("N0"), data.Usage.ModulesLimit.ToString("N0"), data.Usage.ModulesUsagePercent),
+            new UsageTile("Storage", data.Usage.StorageUsedMb.ToString("0.##") + " MB", data.Usage.StorageLimitMb.ToString("N0") + " MB", data.Usage.StorageUsagePercent),
+            new UsageTile("API calls", data.Usage.ApiCallsUsed.ToString("N0"), data.Usage.ApiCallsLimit.ToString("N0"), data.Usage.ApiUsagePercent)
+        ];
+    }
 
-        builder.OpenElement(seq++, "div");
-        builder.AddAttribute(seq++, "class", "dash17-usage-label");
-        builder.AddContent(seq++, label);
-        builder.CloseElement();
+    private static decimal BuildControlScore(AdminDashboardData data, decimal usagePressure)
+    {
+        var headroomScore = Math.Max(0m, 100m - usagePressure);
+        return Math.Round((data.ValidationPassRate + data.CompletenessScore + headroomScore) / 3m, 1);
+    }
 
-        builder.OpenElement(seq++, "div");
-        builder.AddAttribute(seq++, "class", "dash17-usage-values");
-        builder.AddContent(seq++, $"{used:0.##} / {limit}");
-        builder.CloseElement();
+    private static decimal BuildDeliveryRate(NotificationStats stats)
+    {
+        return stats.Sent <= 0 ? 100m : Math.Round((decimal)stats.Delivered * 100m / stats.Sent, 2);
+    }
 
-        builder.OpenElement(seq++, "div");
-        builder.AddAttribute(seq++, "class", "dash17-usage-track");
+    private static string ResolveBannerTone(decimal controlScore, decimal usagePressure, decimal outstandingBalance)
+    {
+        if (controlScore < 60m || usagePressure >= 90m || outstandingBalance > 0m)
+        {
+            return "critical";
+        }
 
-        builder.OpenElement(seq++, "div");
-        builder.AddAttribute(seq++, "class", "dash17-usage-fill");
-        builder.AddAttribute(seq++, "style", $"width: {Math.Min(100, percent):0.##}%");
-        builder.CloseElement();
+        if (controlScore < 75m || usagePressure >= 75m)
+        {
+            return "warning";
+        }
 
-        builder.CloseElement();
+        return "success";
+    }
 
-        builder.OpenElement(seq++, "div");
-        builder.AddAttribute(seq++, "class", "dash17-usage-percent");
-        builder.AddContent(seq++, $"{percent:0.##}%");
-        builder.CloseElement();
+    private static string BuildBannerHeadline(decimal controlScore, decimal usagePressure, decimal outstandingBalance)
+    {
+        if (controlScore < 60m || usagePressure >= 90m)
+        {
+            return "This tenant workspace needs active administrative attention.";
+        }
 
-        builder.CloseElement();
-    };
+        if (outstandingBalance > 0m)
+        {
+            return "The tenant is operational, but commercial or capacity pressure is building.";
+        }
+
+        return "The tenant workspace is operating inside healthy quality and capacity bands.";
+    }
+
+    private static string BuildBannerDetail(decimal controlScore, string tightestResource, decimal usagePressure, decimal deliveryRate)
+    {
+        return $"Workspace readiness is {controlScore:0}/100. The tightest capacity area is {tightestResource} at {usagePressure:0.#}%, while notification delivery is running at {deliveryRate:0.#}%.";
+    }
+
+    private static string FormatCurrency(decimal amount, string currency)
+    {
+        return $"{currency} {amount:N2}";
+    }
+
+    private static string BuildContributorShare(int count, IEnumerable<UserContributionItem> contributors)
+    {
+        var total = contributors.Sum(x => x.SubmissionCount);
+        if (total <= 0)
+        {
+            return "0%";
+        }
+
+        return $"{Math.Round((decimal)count * 100m / total, 1):0.#}% of volume";
+    }
+
+    private sealed record UsageTile(string Label, string UsedText, string LimitText, decimal Percent);
 }

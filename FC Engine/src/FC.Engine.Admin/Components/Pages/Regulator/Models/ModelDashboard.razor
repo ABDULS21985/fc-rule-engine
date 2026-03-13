@@ -5,20 +5,34 @@
 <PageTitle>Model Governance</PageTitle>
 
 <PageHeader Title="Model Governance"
-            Subtitle="Manage model inventory, validation schedules, performance monitoring, and approval workflows."
-            BackUrl="/regulator">
-    <PrimaryAction><button class="fc-btn fc-btn--primary" @onclick="ReloadAsync" disabled="@_loading">Refresh</button></PrimaryAction>
+            Subtitle="Inventory discipline, validation cadence, performance drift, and approval control for supervisory model risk."
+            BackUrl="/regulator"
+            StatusBadge="@ResolveStatusBadge()"
+            StatusVariant="@ResolveStatusVariant()">
+    <PrimaryAction>
+        <button class="fc-btn fc-btn--primary" @onclick="ReloadAsync" disabled="@_loading">Refresh</button>
+    </PrimaryAction>
 </PageHeader>
 
 <div class="fc-page">
     <SectionErrorBoundary Title="Failed to load model data" ExternalError="@_loadException" OnRetry="ReloadAsync">
         @if (_loading)
         {
-            <div class="rg-mrm-kpi-strip">
-                @for (var i = 0; i < 4; i++)
-                {
-                    <div class="rg-mrm-kpi"><SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Block" Height="88px" /></div>
-                }
+            <div class="rg-premium-flow">
+                <div class="rg-premium-banner"><SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Block" Height="138px" /></div>
+                <div class="rg-premium-stat-grid">
+                    @for (var i = 0; i < 5; i++)
+                    {
+                        <div class="rg-premium-stat"><SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Block" Height="140px" /></div>
+                    }
+                </div>
+                <div class="rg-premium-content-grid">
+                    <div class="rg-premium-main"><div class="rg-premium-panel"><SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Block" Height="420px" /></div></div>
+                    <div class="rg-premium-side">
+                        <div class="rg-premium-panel"><SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Block" Height="240px" /></div>
+                        <div class="rg-premium-panel"><SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Block" Height="260px" /></div>
+                    </div>
+                </div>
             </div>
         }
         else if (_data is null)
@@ -27,51 +41,109 @@
         }
         else
         {
-            <div class="rg-mrm-kpi-strip">
-                <div class="rg-mrm-kpi">
-                    <div class="rg-mrm-kpi-value">@_data.InventoryCount</div>
-                    <div class="rg-mrm-kpi-label">Total Models</div>
-                </div>
-                <div class="rg-mrm-kpi">
-                    <div class="rg-mrm-kpi-value @(_data.DueValidationCount > 0 ? "rg-mrm-kpi-value--amber" : "")">@_data.DueValidationCount</div>
-                    <div class="rg-mrm-kpi-label">Due Validation</div>
-                </div>
-                <div class="rg-mrm-kpi">
-                    <div class="rg-mrm-kpi-value @(_data.PerformanceAlertCount > 0 ? "rg-mrm-kpi-value--red" : "rg-mrm-kpi-value--green")">@_data.PerformanceAlertCount</div>
-                    <div class="rg-mrm-kpi-label">Performance Alerts</div>
-                </div>
-                <div class="rg-mrm-kpi">
-                    <div class="rg-mrm-kpi-value">@_data.ApprovalQueueCount</div>
-                    <div class="rg-mrm-kpi-label">Pending Approvals</div>
-                </div>
-            </div>
+            <div class="rg-premium-flow">
+                <section class="rg-premium-banner @ResolveBannerTone()" aria-label="Model posture">
+                    <div class="rg-premium-banner__grid">
+                        <div>
+                            <div class="rg-premium-banner__eyebrow">Model posture</div>
+                            <h2 class="rg-premium-banner__headline">@BuildBannerHeadline()</h2>
+                            <p class="rg-premium-banner__detail">@BuildBannerDetail()</p>
+                        </div>
+                        <div class="rg-premium-banner__meta">
+                            <div class="rg-premium-banner__meta-label">Risk appetite</div>
+                            <div class="rg-premium-banner__meta-value">@_data.RiskAppetiteScore.ToString("F0")</div>
+                            <div class="rg-premium-banner__meta-copy">@BuildAppetiteCopy()</div>
+                        </div>
+                    </div>
+                </section>
 
-            <div class="rg-hub-grid">
-                <a class="rg-hub-card" href="/regulator/models/inventory" style="--stagger-i:0;">
-                    <div class="rg-hub-card-icon rg-hub-icon--blue"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="24" height="24" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div>
-                    <h3 class="rg-hub-card-title">Model Inventory</h3>
-                    <p class="rg-hub-card-desc">Model codes, tiers, owners, and validation status</p>
-                </a>
-                <a class="rg-hub-card" href="/regulator/models/validation" style="--stagger-i:1;">
-                    <div class="rg-hub-card-icon rg-hub-icon--green"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="24" height="24" aria-hidden="true"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg></div>
-                    <h3 class="rg-hub-card-title">Validation Framework</h3>
-                    <p class="rg-hub-card-desc">Validation schedules, types, and findings</p>
-                </a>
-                <a class="rg-hub-card" href="/regulator/models/performance" style="--stagger-i:2;">
-                    <div class="rg-hub-card-icon rg-hub-icon--amber"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="24" height="24" aria-hidden="true"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></div>
-                    <h3 class="rg-hub-card-title">Performance Monitoring</h3>
-                    <p class="rg-hub-card-desc">PSI, backtesting, stability, and calibration metrics</p>
-                </a>
-                <a class="rg-hub-card" href="/regulator/models/changes" style="--stagger-i:3;">
-                    <div class="rg-hub-card-icon rg-hub-icon--purple"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="24" height="24" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></div>
-                    <h3 class="rg-hub-card-title">Change Management</h3>
-                    <p class="rg-hub-card-desc">Approval queue, workflow stages, and audit trail</p>
-                </a>
-                <a class="rg-hub-card" href="/regulator/models/reporting" style="--stagger-i:4;">
-                    <div class="rg-hub-card-icon rg-hub-icon--red"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="24" height="24" aria-hidden="true"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg></div>
-                    <h3 class="rg-hub-card-title">Model Reporting</h3>
-                    <p class="rg-hub-card-desc">Risk appetite, reporting pack, and return status</p>
-                </a>
+                <section class="rg-premium-hero" aria-labelledby="model-hero-title">
+                    <div class="rg-premium-hero__grid">
+                        <div>
+                            <div class="rg-premium-hero__eyebrow">Model risk lane</div>
+                            <h1 id="model-hero-title" class="rg-premium-hero__title">Keep the model estate explainable, validated, and inside appetite.</h1>
+                            <p class="rg-premium-hero__subtitle">
+                                This dashboard makes model governance operational: what is due for validation, where performance has drifted,
+                                how much approval work is queued, and whether the estate still sits inside risk appetite.
+                            </p>
+                            <div class="rg-premium-badge-row">
+                                <span class="rg-premium-chip rg-premium-chip--info">@_data.InventoryCount models in estate</span>
+                                <span class="rg-premium-chip @BuildValidationChipClass()">@_data.DueValidationCount due validation</span>
+                                <span class="rg-premium-chip @BuildAlertChipClass()">@_data.PerformanceAlertCount performance alerts</span>
+                            </div>
+                        </div>
+                        <div class="rg-premium-hero__aside">
+                            <div class="rg-premium-note">
+                                <div class="rg-premium-note__label">Average accuracy</div>
+                                <div class="rg-premium-note__value">@((_data.AverageAccuracyScore ?? 0m).ToString("F1"))</div>
+                                <div class="rg-premium-note__copy">Average accuracy score across the model estate where supporting evidence is currently available.</div>
+                            </div>
+                            <div class="rg-premium-note">
+                                <div class="rg-premium-note__label">Approval queue</div>
+                                <div class="rg-premium-note__value">@_data.ApprovalQueueCount</div>
+                                <div class="rg-premium-note__copy">Artifacts or models currently waiting for governance progression or supervisory sign-off.</div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="rg-premium-stat-grid" aria-label="Model governance metrics">
+                    <article class="rg-premium-stat"><div class="rg-premium-stat__label">Inventory count</div><div class="rg-premium-stat__value rg-premium-stat__value--info">@_data.InventoryCount</div><div class="rg-premium-stat__note">Total models represented in the current governance estate.</div></article>
+                    <article class="rg-premium-stat"><div class="rg-premium-stat__label">Due validation</div><div class="rg-premium-stat__value @BuildValidationValueClass()">@_data.DueValidationCount</div><div class="rg-premium-stat__note">Models whose next validation checkpoint is due or overdue.</div></article>
+                    <article class="rg-premium-stat"><div class="rg-premium-stat__label">Performance alerts</div><div class="rg-premium-stat__value @BuildAlertValueClass()">@_data.PerformanceAlertCount</div><div class="rg-premium-stat__note">Monitoring signals that suggest model behaviour has drifted out of expected bounds.</div></article>
+                    <article class="rg-premium-stat"><div class="rg-premium-stat__label">Pending approvals</div><div class="rg-premium-stat__value rg-premium-stat__value--warning">@_data.ApprovalQueueCount</div><div class="rg-premium-stat__note">Open governance items still waiting for formal progression.</div></article>
+                    <article class="rg-premium-stat"><div class="rg-premium-stat__label">Risk appetite score</div><div class="rg-premium-stat__value @BuildAppetiteValueClass()">@_data.RiskAppetiteScore.ToString("F0")</div><div class="rg-premium-stat__note">Aggregate appetite signal across in-appetite, watch, and breach exposures.</div></article>
+                </section>
+
+                <section class="rg-premium-content-grid">
+                    <div class="rg-premium-main">
+                        <section class="rg-premium-panel">
+                            <div class="rg-premium-panel__header">
+                                <div>
+                                    <div class="rg-premium-panel__eyebrow">Execution lanes</div>
+                                    <h2 class="rg-premium-panel__title">Model governance workstreams</h2>
+                                    <p class="rg-premium-panel__subtitle">Move from top-level posture to the exact lane that needs model risk attention.</p>
+                                </div>
+                            </div>
+                            <div class="rg-premium-panel__body">
+                                <div class="rg-premium-action-grid">
+                                    @foreach (var card in ActionCards)
+                                    {
+                                        <a class="rg-premium-link-card" href="@card.Href">
+                                            <div class="rg-premium-link-card__icon" style="@card.IconStyle">@((MarkupString)card.IconSvg)</div>
+                                            <h3 class="rg-premium-link-card__title">@card.Title</h3>
+                                            <p class="rg-premium-link-card__desc">@card.Description</p>
+                                            <div class="rg-premium-link-card__footer"><span>@card.Footer</span><span class="rg-premium-link-card__arrow" aria-hidden="true">-&gt;</span></div>
+                                        </a>
+                                    }
+                                </div>
+                            </div>
+                        </section>
+                    </div>
+
+                    <aside class="rg-premium-side">
+                        <section class="rg-premium-panel">
+                            <div class="rg-premium-panel__header"><div><div class="rg-premium-panel__eyebrow">Appetite distribution</div><h2 class="rg-premium-panel__title">Current appetite spread</h2><p class="rg-premium-panel__subtitle">Compact view of how the model estate is distributed across appetite states.</p></div></div>
+                            <div class="rg-premium-panel__body">
+                                <div class="rg-premium-list">
+                                    <article class="rg-premium-list__item"><div class="rg-premium-list__top"><div class="rg-premium-list__heading">In appetite</div><div class="rg-premium-list__value">@_data.InAppetiteCount</div></div></article>
+                                    <article class="rg-premium-list__item"><div class="rg-premium-list__top"><div class="rg-premium-list__heading">Watch</div><div class="rg-premium-list__value">@_data.WatchCount</div></div></article>
+                                    <article class="rg-premium-list__item"><div class="rg-premium-list__top"><div class="rg-premium-list__heading">Breach</div><div class="rg-premium-list__value">@_data.BreachCount</div></div></article>
+                                </div>
+                            </div>
+                        </section>
+
+                        <section class="rg-premium-panel">
+                            <div class="rg-premium-panel__header"><div><div class="rg-premium-panel__eyebrow">Operating notes</div><h2 class="rg-premium-panel__title">Governance watchpoints</h2><p class="rg-premium-panel__subtitle">Secondary signals shaping the next governance cycle.</p></div></div>
+                            <div class="rg-premium-panel__body">
+                                <div class="rg-premium-list">
+                                    <article class="rg-premium-list__item"><div class="rg-premium-list__top"><div class="rg-premium-list__heading">Change reviews</div><div class="rg-premium-list__value">@_data.ChangeReviewCount</div></div><div class="rg-premium-list__meta">Recent model changes or artifacts waiting for structured review.</div></article>
+                                    <article class="rg-premium-list__item"><div class="rg-premium-list__top"><div class="rg-premium-list__heading">Average accuracy</div><div class="rg-premium-list__value">@((_data.AverageAccuracyScore ?? 0m).ToString("F1"))</div></div><div class="rg-premium-list__meta">Estate-wide accuracy signal where performance evidence is currently available.</div></article>
+                                </div>
+                            </div>
+                        </section>
+                    </aside>
+                </section>
             </div>
         }
     </SectionErrorBoundary>
@@ -82,12 +154,85 @@
     private Exception? _loadException;
     private FC.Engine.Admin.Services.ModelRisk.ModelDashboardData? _data;
 
+    private static readonly ActionCard[] ActionCards =
+    [
+        new("Model Inventory", "/regulator/models/inventory", "Review model codes, tiers, ownership, and control posture.", "Best for estate mapping", "background:linear-gradient(135deg,#2563EB,#0EA5E9);", "<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" width=\"24\" height=\"24\" aria-hidden=\"true\"><path d=\"M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z\"/><polyline points=\"14 2 14 8 20 8\"/></svg>"),
+        new("Validation Framework", "/regulator/models/validation", "Track schedules, validation scope, and findings across the estate.", "Best for cadence control", "background:linear-gradient(135deg,#006B3F,#0F766E);", "<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" width=\"24\" height=\"24\" aria-hidden=\"true\"><path d=\"M9 11l3 3L22 4\"/><path d=\"M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11\"/></svg>"),
+        new("Performance Monitoring", "/regulator/models/performance", "Inspect drift, PSI, calibration, and backtesting evidence.", "Best for model drift", "background:linear-gradient(135deg,#C8A415,#E07C24);", "<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" width=\"24\" height=\"24\" aria-hidden=\"true\"><line x1=\"18\" y1=\"20\" x2=\"18\" y2=\"10\"/><line x1=\"12\" y1=\"20\" x2=\"12\" y2=\"4\"/><line x1=\"6\" y1=\"20\" x2=\"6\" y2=\"14\"/></svg>"),
+        new("Change Management", "/regulator/models/changes", "Follow approval queue movement, workflow stages, and audit trail continuity.", "Best for approvals", "background:linear-gradient(135deg,#7C3AED,#2563EB);", "<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" width=\"24\" height=\"24\" aria-hidden=\"true\"><path d=\"M12 20h9\"/><path d=\"M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z\"/></svg>"),
+        new("Model Reporting", "/regulator/models/reporting", "Review reporting packs, appetite outputs, and return readiness.", "Best for oversight reporting", "background:linear-gradient(135deg,#D32F2F,#7C3AED);", "<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" width=\"24\" height=\"24\" aria-hidden=\"true\"><path d=\"M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z\"/><path d=\"M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z\"/></svg>")
+    ];
+
     protected override async Task OnInitializedAsync() => await ReloadAsync();
+
     private async Task ReloadAsync()
     {
-        _loading = true; _loadException = null;
+        _loading = true;
+        _loadException = null;
         try { _data = await ModelService.GetDashboardAsync(); }
         catch (Exception ex) { _loadException = ex; }
         finally { _loading = false; }
     }
+
+    private string ResolveStatusBadge() => _loading
+        ? "Refreshing"
+        : _data is null
+            ? "Awaiting data"
+            : _data.PerformanceAlertCount > 0
+                ? $"{_data.PerformanceAlertCount} alerts"
+                : _data.DueValidationCount > 0
+                    ? $"{_data.DueValidationCount} due validations"
+                    : "Governance steady";
+
+    private string ResolveStatusVariant() => _data is null
+        ? "neutral"
+        : _data.BreachCount > 0 || _data.PerformanceAlertCount > 0
+            ? "danger"
+            : _data.DueValidationCount > 0 || _data.ApprovalQueueCount > 0
+                ? "warning"
+                : "success";
+
+    private string ResolveBannerTone() => _data is null
+        ? "rg-premium-banner--info"
+        : _data.BreachCount > 0 || _data.PerformanceAlertCount > 0
+            ? "rg-premium-banner--danger"
+            : _data.DueValidationCount > 0 || _data.ApprovalQueueCount > 0 || _data.WatchCount > 0
+                ? "rg-premium-banner--warning"
+                : "rg-premium-banner--success";
+
+    private string BuildBannerHeadline()
+    {
+        if (_data is null)
+        {
+            return "Refreshing model governance posture.";
+        }
+
+        if (_data.BreachCount > 0 || _data.PerformanceAlertCount > 0)
+        {
+            return "Model drift or appetite breaches are strong enough to shape the governance agenda now.";
+        }
+
+        if (_data.DueValidationCount > 0 || _data.ApprovalQueueCount > 0)
+        {
+            return "The model estate is stable, but validation cadence and queue flow still need active management.";
+        }
+
+        return "The current model estate is broadly controlled and inside appetite.";
+    }
+
+    private string BuildBannerDetail() => _data is null
+        ? string.Empty
+        : $"The workspace is tracking {_data.InventoryCount} models, {_data.DueValidationCount} due validations, {_data.PerformanceAlertCount} performance alerts, and {_data.ApprovalQueueCount} pending approvals.";
+
+    private string BuildAppetiteCopy() => _data is null
+        ? string.Empty
+        : $"{_data.InAppetiteCount} models are in appetite, {_data.WatchCount} are on watch, and {_data.BreachCount} are in breach.";
+
+    private string BuildValidationChipClass() => _data is null ? "rg-premium-chip--info" : _data.DueValidationCount > 0 ? "rg-premium-chip--warning" : "rg-premium-chip--success";
+    private string BuildAlertChipClass() => _data is null ? "rg-premium-chip--info" : _data.PerformanceAlertCount > 0 ? "rg-premium-chip--danger" : "rg-premium-chip--success";
+    private string BuildValidationValueClass() => _data is null ? string.Empty : _data.DueValidationCount > 0 ? "rg-premium-stat__value--warning" : "rg-premium-stat__value--success";
+    private string BuildAlertValueClass() => _data is null ? string.Empty : _data.PerformanceAlertCount > 0 ? "rg-premium-stat__value--danger" : "rg-premium-stat__value--success";
+    private string BuildAppetiteValueClass() => _data is null ? string.Empty : _data.BreachCount > 0 ? "rg-premium-stat__value--danger" : _data.WatchCount > 0 ? "rg-premium-stat__value--warning" : "rg-premium-stat__value--success";
+
+    private sealed record ActionCard(string Title, string Href, string Description, string Footer, string IconStyle, string IconSvg);
 }

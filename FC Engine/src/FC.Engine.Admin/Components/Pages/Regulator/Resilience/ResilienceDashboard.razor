@@ -6,8 +6,10 @@
 <PageTitle>Operational Resilience</PageTitle>
 
 <PageHeader Title="Operational Resilience"
-            Subtitle="Monitor important business services, incidents, third-party risk, and recovery readiness."
-            BackUrl="/regulator">
+            Subtitle="Important business services, impact tolerance stress points, incident pressure, and board-facing resilience posture."
+            BackUrl="/regulator"
+            StatusBadge="@ResolveStatusBadge()"
+            StatusVariant="@ResolveStatusVariant()">
     <PrimaryAction>
         <button class="fc-btn fc-btn--primary" @onclick="ReloadAsync" disabled="@_loading">Refresh</button>
     </PrimaryAction>
@@ -17,11 +19,21 @@
     <SectionErrorBoundary Title="Failed to load resilience data" ExternalError="@_loadException" OnRetry="ReloadAsync">
         @if (_loading)
         {
-            <div class="rg-res-kpi-strip">
-                @for (var i = 0; i < 4; i++)
-                {
-                    <div class="rg-res-kpi"><SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Block" Height="88px" /></div>
-                }
+            <div class="rg-premium-flow">
+                <div class="rg-premium-banner"><SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Block" Height="138px" /></div>
+                <div class="rg-premium-stat-grid">
+                    @for (var i = 0; i < 5; i++)
+                    {
+                        <div class="rg-premium-stat"><SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Block" Height="140px" /></div>
+                    }
+                </div>
+                <div class="rg-premium-content-grid">
+                    <div class="rg-premium-main"><div class="rg-premium-panel"><SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Block" Height="460px" /></div></div>
+                    <div class="rg-premium-side">
+                        <div class="rg-premium-panel"><SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Block" Height="260px" /></div>
+                        <div class="rg-premium-panel"><SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Block" Height="320px" /></div>
+                    </div>
+                </div>
             </div>
         }
         else if (_data is null)
@@ -30,68 +42,145 @@
         }
         else
         {
-            <div class="rg-res-kpi-strip">
-                <div class="rg-res-kpi">
-                    <div class="rg-res-kpi-value">@_data.GapScore.ToString("F0")</div>
-                    <div class="rg-res-kpi-label">Gap Score</div>
-                </div>
-                <div class="rg-res-kpi">
-                    <div class="rg-res-kpi-value">@_data.ImportantServiceCount</div>
-                    <div class="rg-res-kpi-label">Business Services</div>
-                </div>
-                <div class="rg-res-kpi">
-                    <div class="rg-res-kpi-value @(_data.OpenIncidentCount > 0 ? "rg-res-kpi-value--red" : "rg-res-kpi-value--green")">@_data.OpenIncidentCount</div>
-                    <div class="rg-res-kpi-label">Open Incidents</div>
-                </div>
-                <div class="rg-res-kpi">
-                    <div class="rg-res-kpi-value">@_data.RcaCoveragePercent.ToString("F0")%</div>
-                    <div class="rg-res-kpi-label">RCA Coverage</div>
-                </div>
-            </div>
+            <div class="rg-premium-flow">
+                <section class="rg-premium-banner @ResolveBannerTone()" aria-label="Resilience posture">
+                    <div class="rg-premium-banner__grid">
+                        <div>
+                            <div class="rg-premium-banner__eyebrow">Resilience posture</div>
+                            <h2 class="rg-premium-banner__headline">@BuildBannerHeadline()</h2>
+                            <p class="rg-premium-banner__detail">@BuildBannerDetail()</p>
+                        </div>
+                        <div class="rg-premium-banner__meta">
+                            <div class="rg-premium-banner__meta-label">Board attention</div>
+                            <div class="rg-premium-banner__meta-value">@BuildBoardAttentionLabel()</div>
+                            <div class="rg-premium-banner__meta-copy">@(_data.BoardSummary.Narrative)</div>
+                        </div>
+                    </div>
+                </section>
 
-            <div class="rg-hub-grid">
-                <a class="rg-hub-card" href="/regulator/resilience/services" style="--stagger-i:0;">
-                    <div class="rg-hub-card-icon rg-hub-icon--blue">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="24" height="24" aria-hidden="true"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+                <section class="rg-premium-hero" aria-labelledby="resilience-hero-title">
+                    <div class="rg-premium-hero__grid">
+                        <div>
+                            <div class="rg-premium-hero__eyebrow">Operational resilience lane</div>
+                            <h1 id="resilience-hero-title" class="rg-premium-hero__title">See the service map, not just the incidents.</h1>
+                            <p class="rg-premium-hero__subtitle">
+                                This workspace blends service criticality, testing readiness, incident activity, and third-party risk
+                                so supervisory teams can escalate the real operational weak points earlier.
+                            </p>
+                            <div class="rg-premium-badge-row">
+                                <span class="rg-premium-chip @BuildGapChipClass()">@_data.GapScore.ToString("F0") gap score</span>
+                                <span class="rg-premium-chip @BuildIncidentChipClass()">@_data.OpenIncidentCount open incidents</span>
+                                <span class="rg-premium-chip rg-premium-chip--info">@_data.ImportantServiceCount critical services</span>
+                            </div>
+                        </div>
+                        <div class="rg-premium-hero__aside">
+                            <div class="rg-premium-note">
+                                <div class="rg-premium-note__label">RCA coverage</div>
+                                <div class="rg-premium-note__value">@_data.RcaCoveragePercent.ToString("F0")%</div>
+                                <div class="rg-premium-note__copy">Share of relevant incidents and disruption events already covered by completed root-cause analysis.</div>
+                            </div>
+                            <div class="rg-premium-note">
+                                <div class="rg-premium-note__label">Third-party estate</div>
+                                <div class="rg-premium-note__value">@_data.ThirdPartyProviderCount</div>
+                                <div class="rg-premium-note__copy">Providers currently represented in the resilience register and dependency map.</div>
+                            </div>
+                        </div>
                     </div>
-                    <h3 class="rg-hub-card-title">Business Services</h3>
-                    <p class="rg-hub-card-desc">Important business services, criticality, and dependencies</p>
-                </a>
-                <a class="rg-hub-card" href="/regulator/resilience/tolerances" style="--stagger-i:1;">
-                    <div class="rg-hub-card-icon rg-hub-icon--amber">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="24" height="24" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                </section>
+
+                <section class="rg-premium-stat-grid" aria-label="Resilience metrics">
+                    <article class="rg-premium-stat">
+                        <div class="rg-premium-stat__label">Gap score</div>
+                        <div class="rg-premium-stat__value @BuildGapValueClass()">@_data.GapScore.ToString("F0")</div>
+                        <div class="rg-premium-stat__note">Current resilience gap score across important business services and supporting controls.</div>
+                    </article>
+                    <article class="rg-premium-stat">
+                        <div class="rg-premium-stat__label">Business services</div>
+                        <div class="rg-premium-stat__value rg-premium-stat__value--info">@_data.ImportantServiceCount</div>
+                        <div class="rg-premium-stat__note">Important business services currently in the resilience perimeter.</div>
+                    </article>
+                    <article class="rg-premium-stat">
+                        <div class="rg-premium-stat__label">Open incidents</div>
+                        <div class="rg-premium-stat__value @BuildIncidentValueClass()">@_data.OpenIncidentCount</div>
+                        <div class="rg-premium-stat__note">Open incidents still affecting service continuity, recovery, or supervisory attention.</div>
+                    </article>
+                    <article class="rg-premium-stat">
+                        <div class="rg-premium-stat__label">Impact tolerance watch</div>
+                        <div class="rg-premium-stat__value @BuildToleranceValueClass()">@_data.ImpactToleranceWatchCount</div>
+                        <div class="rg-premium-stat__note">Services currently close to or beyond tolerance stress thresholds.</div>
+                    </article>
+                    <article class="rg-premium-stat">
+                        <div class="rg-premium-stat__label">Recovery breaches</div>
+                        <div class="rg-premium-stat__value @BuildRecoveryValueClass()">@_data.RecoveryTimeBreachCount</div>
+                        <div class="rg-premium-stat__note">Observed or modelled recovery-time breaches requiring follow-through.</div>
+                    </article>
+                </section>
+
+                <section class="rg-premium-content-grid">
+                    <div class="rg-premium-main">
+                        <section class="rg-premium-panel">
+                            <div class="rg-premium-panel__header">
+                                <div>
+                                    <div class="rg-premium-panel__eyebrow">Execution lanes</div>
+                                    <h2 class="rg-premium-panel__title">Resilience workstreams</h2>
+                                    <p class="rg-premium-panel__subtitle">Move from posture review into the exact resilience lane that needs attention.</p>
+                                </div>
+                            </div>
+                            <div class="rg-premium-panel__body">
+                                <div class="rg-premium-action-grid">
+                                    @foreach (var card in ActionCards)
+                                    {
+                                        <a class="rg-premium-link-card" href="@card.Href">
+                                            <div class="rg-premium-link-card__icon" style="@card.IconStyle">@((MarkupString)card.IconSvg)</div>
+                                            <h3 class="rg-premium-link-card__title">@card.Title</h3>
+                                            <p class="rg-premium-link-card__desc">@card.Description</p>
+                                            <div class="rg-premium-link-card__footer">
+                                                <span>@card.Footer</span>
+                                                <span class="rg-premium-link-card__arrow" aria-hidden="true">-&gt;</span>
+                                            </div>
+                                        </a>
+                                    }
+                                </div>
+                            </div>
+                        </section>
                     </div>
-                    <h3 class="rg-hub-card-title">Impact Tolerances</h3>
-                    <p class="rg-hub-card-desc">Disruption tolerances and recovery targets by service</p>
-                </a>
-                <a class="rg-hub-card" href="/regulator/resilience/third-party" style="--stagger-i:2;">
-                    <div class="rg-hub-card-icon rg-hub-icon--purple">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="24" height="24" aria-hidden="true"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-                    </div>
-                    <h3 class="rg-hub-card-title">Third-Party Risk</h3>
-                    <p class="rg-hub-card-desc">Provider concentration, service criticality, and risk tiers</p>
-                </a>
-                <a class="rg-hub-card" href="/regulator/resilience/incidents" style="--stagger-i:3;">
-                    <div class="rg-hub-card-icon rg-hub-icon--red">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="24" height="24" aria-hidden="true"><polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86 7.86 2"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-                    </div>
-                    <h3 class="rg-hub-card-title">Incident Management</h3>
-                    <p class="rg-hub-card-desc">Incident timeline, lifecycle, and security alerts</p>
-                </a>
-                <a class="rg-hub-card" href="/regulator/resilience/testing" style="--stagger-i:4;">
-                    <div class="rg-hub-card-icon rg-hub-icon--green">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="24" height="24" aria-hidden="true"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
-                    </div>
-                    <h3 class="rg-hub-card-title">Testing Schedule</h3>
-                    <p class="rg-hub-card-desc">Scenario testing, recovery time tests, and BCP exercises</p>
-                </a>
-                <a class="rg-hub-card" href="/regulator/resilience/board" style="--stagger-i:5;">
-                    <div class="rg-hub-card-icon rg-hub-icon--gold">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="24" height="24" aria-hidden="true"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
-                    </div>
-                    <h3 class="rg-hub-card-title">Board Oversight</h3>
-                    <p class="rg-hub-card-desc">Executive summary, gap analysis, and action tracker</p>
-                </a>
+
+                    <aside class="rg-premium-side">
+                        <section class="rg-premium-panel">
+                            <div class="rg-premium-panel__header">
+                                <div>
+                                    <div class="rg-premium-panel__eyebrow">Pressure points</div>
+                                    <h2 class="rg-premium-panel__title">Current watchpoints</h2>
+                                    <p class="rg-premium-panel__subtitle">Fast-read counts for the resilience signals most likely to change supervisory posture.</p>
+                                </div>
+                            </div>
+                            <div class="rg-premium-panel__body">
+                                <div class="rg-premium-list">
+                                    <article class="rg-premium-list__item"><div class="rg-premium-list__top"><div class="rg-premium-list__heading">Impact tolerance watch</div><div class="rg-premium-list__value">@_data.ImpactToleranceWatchCount</div></div><div class="rg-premium-list__meta">Services nearing or breaching disruption tolerance expectations.</div></article>
+                                    <article class="rg-premium-list__item"><div class="rg-premium-list__top"><div class="rg-premium-list__heading">Business continuity risks</div><div class="rg-premium-list__value">@_data.BusinessContinuityRiskCount</div></div><div class="rg-premium-list__meta">Open continuity gaps still requiring plan updates or targeted testing.</div></article>
+                                    <article class="rg-premium-list__item"><div class="rg-premium-list__top"><div class="rg-premium-list__heading">Change control reviews</div><div class="rg-premium-list__value">@_data.ChangeControlReviewCount</div></div><div class="rg-premium-list__meta">Operational changes needing resilience review before they move deeper into production.</div></article>
+                                </div>
+                            </div>
+                        </section>
+
+                        <section class="rg-premium-panel">
+                            <div class="rg-premium-panel__header">
+                                <div>
+                                    <div class="rg-premium-panel__eyebrow">Board summary</div>
+                                    <h2 class="rg-premium-panel__title">Executive oversight signals</h2>
+                                    <p class="rg-premium-panel__subtitle">The current board-facing view of unresolved resilience pressure.</p>
+                                </div>
+                            </div>
+                            <div class="rg-premium-panel__body">
+                                <div class="rg-premium-list">
+                                    <article class="rg-premium-list__item"><div class="rg-premium-list__top"><div class="rg-premium-list__heading">Critical issues</div><div class="rg-premium-list__value">@_data.BoardSummary.CriticalIssues</div></div></article>
+                                    <article class="rg-premium-list__item"><div class="rg-premium-list__top"><div class="rg-premium-list__heading">Overdue actions</div><div class="rg-premium-list__value">@_data.BoardSummary.OverdueActions</div></div></article>
+                                    <article class="rg-premium-list__item"><div class="rg-premium-list__top"><div class="rg-premium-list__heading">Due tests</div><div class="rg-premium-list__value">@_data.BoardSummary.DueTests</div></div></article>
+                                </div>
+                            </div>
+                        </section>
+                    </aside>
+                </section>
             </div>
         }
     </SectionErrorBoundary>
@@ -101,6 +190,16 @@
     private bool _loading = true;
     private Exception? _loadException;
     private FC.Engine.Admin.Services.Resilience.ResilienceDashboardData? _data;
+
+    private static readonly ActionCard[] ActionCards =
+    [
+        new("Business Services", "/regulator/resilience/services", "Review service criticality, dependencies, and resilience ownership.", "Best for service mapping", "background:linear-gradient(135deg,#2563EB,#0EA5E9);", "<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" width=\"24\" height=\"24\" aria-hidden=\"true\"><rect x=\"2\" y=\"3\" width=\"20\" height=\"14\" rx=\"2\"/><line x1=\"8\" y1=\"21\" x2=\"16\" y2=\"21\"/><line x1=\"12\" y1=\"17\" x2=\"12\" y2=\"21\"/></svg>"),
+        new("Impact Tolerances", "/regulator/resilience/tolerances", "Track disruption thresholds, recovery objectives, and watchpoints by service.", "Best for tolerance pressure", "background:linear-gradient(135deg,#C8A415,#E07C24);", "<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" width=\"24\" height=\"24\" aria-hidden=\"true\"><circle cx=\"12\" cy=\"12\" r=\"10\"/><polyline points=\"12 6 12 12 16 14\"/></svg>"),
+        new("Third-Party Risk", "/regulator/resilience/third-party", "Review provider concentration, dependency severity, and service exposure.", "Best for dependency risk", "background:linear-gradient(135deg,#7C3AED,#2563EB);", "<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" width=\"24\" height=\"24\" aria-hidden=\"true\"><path d=\"M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2\"/><circle cx=\"9\" cy=\"7\" r=\"4\"/><path d=\"M23 21v-2a4 4 0 0 0-3-3.87\"/><path d=\"M16 3.13a4 4 0 0 1 0 7.75\"/></svg>"),
+        new("Incident Management", "/regulator/resilience/incidents", "Follow incident timelines, security alerts, and operational disruption escalation.", "Best for live incidents", "background:linear-gradient(135deg,#D32F2F,#7C3AED);", "<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" width=\"24\" height=\"24\" aria-hidden=\"true\"><polygon points=\"7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86 7.86 2\"/><line x1=\"12\" y1=\"8\" x2=\"12\" y2=\"12\"/><line x1=\"12\" y1=\"16\" x2=\"12.01\" y2=\"16\"/></svg>"),
+        new("Testing Schedule", "/regulator/resilience/testing", "Review scenario tests, BCP exercises, and recovery validation readiness.", "Best for recovery validation", "background:linear-gradient(135deg,#006B3F,#0F766E);", "<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" width=\"24\" height=\"24\" aria-hidden=\"true\"><path d=\"M9 11l3 3L22 4\"/><path d=\"M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11\"/></svg>"),
+        new("Board Oversight", "/regulator/resilience/board", "Review executive summaries, hotspots, and overdue resilience actions.", "Best for board narrative", "background:linear-gradient(135deg,#64748B,#334155);", "<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" width=\"24\" height=\"24\" aria-hidden=\"true\"><path d=\"M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z\"/><path d=\"M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z\"/></svg>")
+    ];
 
     protected override async Task OnInitializedAsync() => await ReloadAsync();
 
@@ -112,4 +211,86 @@
         catch (Exception ex) { _loadException = ex; }
         finally { _loading = false; }
     }
+
+    private string ResolveStatusBadge() => _loading
+        ? "Refreshing"
+        : _data is null
+            ? "Awaiting data"
+            : _data.OpenIncidentCount > 0
+                ? $"{_data.OpenIncidentCount} open incidents"
+                : "Resilience steady";
+
+    private string ResolveStatusVariant() => _data is null
+        ? "neutral"
+        : _data.OpenIncidentCount > 0 || _data.RecoveryTimeBreachCount > 0
+            ? "danger"
+            : _data.GapScore >= 70m
+                ? "warning"
+                : "success";
+
+    private string ResolveBannerTone() => _data is null
+        ? "rg-premium-banner--info"
+        : _data.OpenIncidentCount > 0 || _data.RecoveryTimeBreachCount > 0
+            ? "rg-premium-banner--danger"
+            : _data.ImpactToleranceWatchCount > 0 || _data.BusinessContinuityRiskCount > 0 || _data.GapScore >= 70m
+                ? "rg-premium-banner--warning"
+                : "rg-premium-banner--success";
+
+    private string BuildBannerHeadline()
+    {
+        if (_data is null)
+        {
+            return "Refreshing operational resilience posture.";
+        }
+
+        if (_data.OpenIncidentCount > 0 || _data.RecoveryTimeBreachCount > 0)
+        {
+            return "Incident and recovery pressure are driving the resilience agenda right now.";
+        }
+
+        if (_data.ImpactToleranceWatchCount > 0 || _data.BusinessContinuityRiskCount > 0)
+        {
+            return "The resilience estate is stable, but several services are close enough to tolerance stress to need action.";
+        }
+
+        return "Operational resilience posture is broadly controlled across the current service perimeter.";
+    }
+
+    private string BuildBannerDetail() => _data is null
+        ? string.Empty
+        : $"The workspace is tracking {_data.ImportantServiceCount} important services, {_data.ThirdPartyProviderCount} providers, {_data.OpenIncidentCount} open incidents, and {_data.ChangeControlReviewCount} change control reviews.";
+
+    private string BuildBoardAttentionLabel() => _data is null
+        ? "No board summary"
+        : _data.BoardSummary.CriticalIssues > 0
+            ? $"{_data.BoardSummary.CriticalIssues} critical issues"
+            : _data.BoardSummary.OverdueActions > 0
+                ? $"{_data.BoardSummary.OverdueActions} overdue actions"
+                : "Board lane stable";
+
+    private string BuildGapChipClass() => _data is null
+        ? "rg-premium-chip--info"
+        : _data.GapScore >= 70m ? "rg-premium-chip--danger" : _data.GapScore >= 40m ? "rg-premium-chip--warning" : "rg-premium-chip--success";
+
+    private string BuildIncidentChipClass() => _data is null
+        ? "rg-premium-chip--info"
+        : _data.OpenIncidentCount > 0 ? "rg-premium-chip--danger" : "rg-premium-chip--success";
+
+    private string BuildGapValueClass() => _data is null
+        ? string.Empty
+        : _data.GapScore >= 70m ? "rg-premium-stat__value--danger" : _data.GapScore >= 40m ? "rg-premium-stat__value--warning" : "rg-premium-stat__value--success";
+
+    private string BuildIncidentValueClass() => _data is null
+        ? string.Empty
+        : _data.OpenIncidentCount > 0 ? "rg-premium-stat__value--danger" : "rg-premium-stat__value--success";
+
+    private string BuildToleranceValueClass() => _data is null
+        ? string.Empty
+        : _data.ImpactToleranceWatchCount > 0 ? "rg-premium-stat__value--warning" : "rg-premium-stat__value--success";
+
+    private string BuildRecoveryValueClass() => _data is null
+        ? string.Empty
+        : _data.RecoveryTimeBreachCount > 0 ? "rg-premium-stat__value--danger" : "rg-premium-stat__value--success";
+
+    private sealed record ActionCard(string Title, string Href, string Description, string Footer, string IconStyle, string IconSvg);
 }

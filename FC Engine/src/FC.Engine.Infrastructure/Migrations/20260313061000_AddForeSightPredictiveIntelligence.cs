@@ -19,7 +19,15 @@ public partial class AddForeSightPredictiveIntelligence : Migration
             BEGIN
                 ALTER TABLE [meta].[audit_log] ALTER COLUMN [Action] NVARCHAR(64) NOT NULL;
             END;
+            """);
 
+        if (ShouldSkipLegacyForeSightBootstrap())
+        {
+            return;
+        }
+
+        migrationBuilder.Sql(
+            """
             CREATE TABLE [meta].[foresight_config]
             (
                 [Id]            INT IDENTITY(1,1) NOT NULL,
@@ -267,6 +275,13 @@ public partial class AddForeSightPredictiveIntelligence : Migration
             ('SEC', 'BROKER_DEALER', 'CAPITAL_ADEQUACY', 'Capital Adequacy', 10.0000, 'MINIMUM', 'CRITICAL', 'Broker-dealers should maintain capital adequacy above 10%.', 'SEC Rules 2013', 1),
             ('SEC', 'BROKER_DEALER', 'SEGREGATION_RATIO', 'Client Funds Segregation Ratio', 100.0000, 'MINIMUM', 'CRITICAL', 'Client funds should remain fully segregated.', 'ISA 2007 s.148', 1);
             """);
+    }
+
+    private static bool ShouldSkipLegacyForeSightBootstrap()
+    {
+        // ForeSight schema ownership moved to Metadata/Migrations/20260326120000_AddForeSightSchema.
+        // Keep this migration in the chain only for the audit_log column widening above.
+        return true;
     }
 
     protected override void Down(MigrationBuilder migrationBuilder)

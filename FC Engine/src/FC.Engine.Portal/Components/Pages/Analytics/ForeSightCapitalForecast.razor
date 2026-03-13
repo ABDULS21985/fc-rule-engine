@@ -6,138 +6,256 @@
 
 <PageTitle>ForeSight Capital Forecast</PageTitle>
 
-<div class="container-fluid px-4">
-    <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
-        <div>
-            <div class="small text-muted mb-1"><a href="/analytics/foresight" class="link-secondary">ForeSight</a> / Capital Forecast</div>
-            <h1 class="h3 mb-1">Capital Forecast Detail</h1>
-            <p class="text-muted mb-0">Prudential forecast detail for capital and liquidity pressure, with regulatory thresholds and model drivers.</p>
-        </div>
-        <div class="d-flex gap-2">
+<div class="portal-page portal-fsd-shell">
+    <PortalPageHeader Title="ForeSight Capital Forecast"
+                      Subtitle="Prudential forecast detail for capital and liquidity pressure, with threshold context and explainability drivers."
+                      Breadcrumb="@_breadcrumb">
+        <SecondaryActions>
             @if (!string.IsNullOrWhiteSpace(Metric))
             {
-                <a class="btn btn-sm btn-outline-secondary" href="/analytics/foresight/capital-forecast">Clear filter</a>
+                <a class="portal-btn portal-btn-ghost portal-btn-sm" href="/analytics/foresight/capital-forecast">Clear filter</a>
             }
-            <a class="btn btn-sm btn-outline-primary" href="/analytics/foresight">Back to overview</a>
-        </div>
-    </div>
+            <button class="portal-btn portal-btn-ghost portal-btn-sm" @onclick="LoadAsync" disabled="@_loading">Refresh</button>
+        </SecondaryActions>
+        <PrimaryAction>
+            <a class="portal-btn portal-btn-primary portal-btn-sm" href="/analytics/foresight">Back to overview</a>
+        </PrimaryAction>
+    </PortalPageHeader>
 
     @if (_loading)
     {
-        <div class="text-center py-5" role="status" aria-live="polite">
-            <div class="spinner-border text-primary"></div>
-            <p class="text-muted mt-3 mb-0">Loading capital-forecast detail...</p>
-        </div>
+        <section class="portal-fsd-loading" role="status" aria-label="Loading capital forecast detail">
+            <div class="portal-fsd-loading-hero"></div>
+            <div class="portal-fsd-loading-grid">
+                @for (var i = 0; i < 4; i++)
+                {
+                    <div class="portal-fsd-loading-card"></div>
+                }
+            </div>
+            <div class="portal-fsd-loading-panels">
+                <div class="portal-fsd-loading-panel"></div>
+                <div class="portal-fsd-loading-panel"></div>
+            </div>
+        </section>
     }
     else if (!string.IsNullOrWhiteSpace(_error))
     {
-        <div class="alert alert-danger">@_error</div>
+        <section class="portal-fsd-error" role="alert">
+            <div class="portal-fsd-error-icon" aria-hidden="true">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9">
+                    <circle cx="12" cy="12" r="9"></circle>
+                    <path d="M12 8v5"></path>
+                    <path d="M12 16h.01"></path>
+                </svg>
+            </div>
+            <div>
+                <strong>Unable to load capital-forecast detail.</strong>
+                <span>@_error</span>
+            </div>
+        </section>
     }
     else
     {
-        <div class="row g-3 mb-4">
-            <div class="col-md-4">
-                <div class="card border-0 shadow-sm h-100">
-                    <div class="card-body">
-                        <div class="small text-muted">Forecasts in scope</div>
-                        <div class="display-6">@_items.Count</div>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-4">
-                <div class="card border-0 shadow-sm h-100">
-                    <div class="card-body">
-                        <div class="small text-muted">Projected breach or warning</div>
-                        <div class="display-6">@_items.Count(x => x.RiskBand is "HIGH" or "CRITICAL")</div>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-4">
-                <div class="card border-0 shadow-sm h-100">
-                    <div class="card-body">
-                        <div class="small text-muted">Average confidence</div>
-                        <div class="display-6">@(_items.Count == 0 ? "0%" : _items.Average(x => x.ConfidenceScore).ToString("P0"))</div>
-                    </div>
-                </div>
-            </div>
-        </div>
+        var elevatedCount = _items.Count(x => x.RiskBand is "HIGH" or "CRITICAL");
+        var breachCount = _items.Count(x => x.BreachPredicted);
+        var averageConfidence = _items.Count == 0 ? 0m : _items.Average(x => x.ConfidenceScore);
+        var closestMetric = _items.OrderBy(x => Math.Abs(x.ProjectedValue - x.ThresholdValue)).FirstOrDefault();
+        var leadMetric = _items.OrderByDescending(x => x.BreachPredicted).ThenBy(x => Math.Abs(x.ProjectedValue - x.ThresholdValue)).FirstOrDefault();
 
-        @if (_items.Count == 0)
-        {
-            <div class="alert alert-secondary mb-0">No unsuppressed capital forecasts are currently available for this institution.</div>
-        }
-        else
-        {
-            @foreach (var item in _items.OrderByDescending(x => x.RiskBand).ThenByDescending(x => x.ProjectedValue))
-            {
-                <div class="card border-0 shadow-sm mb-4">
-                    <div class="card-header bg-white d-flex justify-content-between align-items-center gap-3">
+        <section class="portal-fsd-banner portal-fsd-banner--@BuildBannerTone(breachCount, elevatedCount)">
+            <div>
+                <div class="portal-fsd-eyebrow">Capital pressure pulse</div>
+                <h1 class="portal-fsd-banner-title">@BuildBannerHeadline(breachCount, elevatedCount)</h1>
+                <p class="portal-fsd-banner-copy">@BuildBannerCopy(breachCount, averageConfidence, leadMetric)</p>
+            </div>
+            <div class="portal-fsd-banner-meta">
+                <span class="portal-fsd-meta-label">Current scope</span>
+                <strong class="portal-fsd-meta-value">@ScopeLabel</strong>
+                <span class="portal-fsd-banner-copy">@_items.Count forecast(s) in view, @breachCount projected breach(es), @elevatedCount elevated warning(s).</span>
+            </div>
+        </section>
+
+        <section class="portal-fsd-hero">
+            <div>
+                <div class="portal-fsd-eyebrow">Prudential monitoring lane</div>
+                <h2 class="portal-fsd-hero-title">See which prudential metric is heading toward the line first.</h2>
+                <p class="portal-fsd-hero-copy">
+                    ForeSight projects capital adequacy, liquidity, and related pressure metrics against known thresholds, then adds factor-level
+                    explanations so treasury, finance, and compliance teams can act before a buffer is exhausted.
+                </p>
+                <div class="portal-fsd-chip-row">
+                    <span class="portal-fsd-chip portal-fsd-chip--danger">@breachCount projected breach(es)</span>
+                    <span class="portal-fsd-chip portal-fsd-chip--warning">@elevatedCount elevated forecast(s)</span>
+                    <span class="portal-fsd-chip portal-fsd-chip--info">@averageConfidence.ToString("P0") average confidence</span>
+                </div>
+            </div>
+            <div class="portal-fsd-hero-aside">
+                <div class="portal-fsd-note">
+                    <span class="portal-fsd-note-label">Closest threshold</span>
+                    <strong class="portal-fsd-note-value">@(closestMetric?.MetricLabel ?? "No active metric")</strong>
+                    <span class="portal-fsd-note-copy">@(closestMetric is null ? "No capital forecasts are currently in scope." : $"Projected gap to threshold: {Math.Abs(closestMetric.ProjectedValue - closestMetric.ThresholdValue):F2}.")</span>
+                </div>
+                <div class="portal-fsd-note">
+                    <span class="portal-fsd-note-label">Lead pressure metric</span>
+                    <strong class="portal-fsd-note-value">@(leadMetric?.MetricLabel ?? "No elevated metric")</strong>
+                    <span class="portal-fsd-note-copy">@(leadMetric is null ? "When projected pressure builds, the leading metric will appear here." : $"Current projected value {leadMetric.ProjectedValue:F2} against threshold {leadMetric.ThresholdValue:F2}.")</span>
+                </div>
+            </div>
+        </section>
+
+        <section class="portal-fsd-stat-grid" aria-label="Capital forecast metrics">
+            <article class="portal-fsd-stat">
+                <div class="portal-fsd-stat-label">Forecasts in scope</div>
+                <div class="portal-fsd-stat-value">@_items.Count</div>
+                <div class="portal-fsd-stat-copy">Unsuppressed prudential forecasts currently visible for this institution.</div>
+            </article>
+            <article class="portal-fsd-stat">
+                <div class="portal-fsd-stat-label">Projected breaches</div>
+                <div class="portal-fsd-stat-value">@breachCount</div>
+                <div class="portal-fsd-stat-copy">Metrics where the forecast path crosses the configured threshold band.</div>
+            </article>
+            <article class="portal-fsd-stat">
+                <div class="portal-fsd-stat-label">Average confidence</div>
+                <div class="portal-fsd-stat-value">@averageConfidence.ToString("P0")</div>
+                <div class="portal-fsd-stat-copy">Visible model confidence across the current prudential forecast set.</div>
+            </article>
+            <article class="portal-fsd-stat">
+                <div class="portal-fsd-stat-label">Closest gap</div>
+                <div class="portal-fsd-stat-value">@(closestMetric is null ? "0.00" : Math.Abs(closestMetric.ProjectedValue - closestMetric.ThresholdValue).ToString("F2"))</div>
+                <div class="portal-fsd-stat-copy">Absolute distance between the closest projected metric and its threshold.</div>
+            </article>
+        </section>
+
+        <section class="portal-fsd-grid">
+            <article class="portal-card portal-fsd-panel">
+                <div class="portal-fsd-panel-head">
+                    <div>
+                        <span class="portal-fsd-panel-eyebrow">Prudential watchlist</span>
+                        <h3 class="portal-fsd-panel-title">Capital and liquidity metrics under the most pressure</h3>
+                        <p class="portal-fsd-panel-copy">Each metric shows current position, projected path, confidence band, and recommendation.</p>
+                    </div>
+                    <div class="portal-fsd-panel-metric">
+                        <small>Projected breaches</small>
+                        @breachCount
+                    </div>
+                </div>
+                <div class="portal-fsd-panel-body">
+                    @if (_items.Count == 0)
+                    {
+                        <div class="portal-fsd-empty">No unsuppressed capital forecasts are currently available for this institution.</div>
+                    }
+                    else
+                    {
+                        <div class="portal-fsd-list">
+                            @foreach (var item in _items.OrderByDescending(x => x.BreachPredicted).ThenBy(x => Math.Abs(x.ProjectedValue - x.ThresholdValue)))
+                            {
+                                <article class="portal-fsd-row">
+                                    <div class="portal-fsd-row-head">
+                                        <div>
+                                            <div class="portal-fsd-row-title">@item.MetricLabel</div>
+                                            <div class="portal-fsd-row-subtitle">@item.HorizonLabel</div>
+                                        </div>
+                                        <span class="portal-fsd-risk @BuildRiskClass(item.RiskBand)">@item.RiskBand</span>
+                                    </div>
+                                    <p class="portal-fsd-row-copy">@item.Explanation</p>
+                                    <div class="portal-fsd-row-meta">@item.RootCauseNarrative</div>
+                                    <div class="portal-fsd-metrics">
+                                        <div class="portal-fsd-metric"><small>Current</small><strong>@item.CurrentValue.ToString("F2")</strong></div>
+                                        <div class="portal-fsd-metric"><small>Projected</small><strong>@item.ProjectedValue.ToString("F2")</strong></div>
+                                        <div class="portal-fsd-metric"><small>Threshold</small><strong>@item.ThresholdValue.ToString("F2")</strong></div>
+                                        <div class="portal-fsd-metric"><small>Confidence</small><strong>@item.ConfidenceScore.ToString("P0")</strong></div>
+                                    </div>
+                                    <div class="portal-fsd-row-meta mt-2">Confidence band: @item.ConfidenceLower.ToString("F2") to @item.ConfidenceUpper.ToString("F2")</div>
+                                    @if (item.TopFactors.Count > 0)
+                                    {
+                                        <div class="portal-fsd-factor-list mt-3">
+                                            @foreach (var factor in item.TopFactors.OrderByDescending(x => x.ContributionScore).Take(4))
+                                            {
+                                                <span class="portal-fsd-factor @BuildFactorClass(factor.ImpactDirection)">@factor.FeatureLabel (@factor.ContributionScore.ToString("F2"))</span>
+                                            }
+                                        </div>
+                                    }
+                                    @if (!string.IsNullOrWhiteSpace(item.Recommendation))
+                                    {
+                                        <div class="portal-fsd-recommendation"><strong>Recommended action:</strong> @item.Recommendation</div>
+                                    }
+                                </article>
+                            }
+                        </div>
+                    }
+                </div>
+            </article>
+
+            <div class="portal-fsd-side">
+                <article class="portal-card portal-fsd-panel">
+                    <div class="portal-fsd-panel-head">
                         <div>
-                            <h2 class="h6 mb-0">@item.MetricLabel</h2>
-                            <div class="small text-muted">@item.HorizonLabel</div>
+                            <span class="portal-fsd-panel-eyebrow">Metric pressure</span>
+                            <h3 class="portal-fsd-panel-title">Nearest threshold gaps</h3>
+                            <p class="portal-fsd-panel-copy">Smallest projected distances between a metric and its threshold.</p>
                         </div>
-                        <span class="badge @(item.RiskBand is "HIGH" or "CRITICAL" ? "bg-danger" : item.RiskBand == "MEDIUM" ? "bg-warning text-dark" : "bg-success")">@item.RiskBand</span>
                     </div>
-                    <div class="card-body">
-                        <div class="row g-3 mb-3">
-                            <div class="col-md-3">
-                                <div class="small text-muted">Current value</div>
-                                <div class="h4 mb-0">@item.CurrentValue.ToString("F2")</div>
-                            </div>
-                            <div class="col-md-3">
-                                <div class="small text-muted">Projected value</div>
-                                <div class="h4 mb-0">@item.ProjectedValue.ToString("F2")</div>
-                            </div>
-                            <div class="col-md-3">
-                                <div class="small text-muted">Threshold</div>
-                                <div class="h4 mb-0">@item.ThresholdValue.ToString("F2")</div>
-                            </div>
-                            <div class="col-md-3">
-                                <div class="small text-muted">Confidence score</div>
-                                <div class="h4 mb-0">@item.ConfidenceScore.ToString("P0")</div>
-                            </div>
-                        </div>
-
-                        <div class="small text-muted mb-3">Confidence interval: @item.ConfidenceLower.ToString("F2") to @item.ConfidenceUpper.ToString("F2")</div>
-                        <p class="mb-2">@item.Explanation</p>
-                        <p class="text-muted mb-3">@item.RootCauseNarrative</p>
-
-                        @if (!string.IsNullOrWhiteSpace(item.Recommendation))
+                    <div class="portal-fsd-panel-body">
+                        @if (ClosestGaps.Count == 0)
                         {
-                            <div class="alert alert-light border">
-                                <strong>Recommendation:</strong> @item.Recommendation
+                            <div class="portal-fsd-empty">No gap summary is available yet.</div>
+                        }
+                        else
+                        {
+                            <div class="portal-fsd-side-list">
+                                @foreach (var gap in ClosestGaps)
+                                {
+                                    <div class="portal-fsd-side-item">
+                                        <div class="portal-fsd-side-item-head">
+                                            <div>
+                                                <strong>@gap.Label</strong>
+                                                <span>@gap.HorizonLabel</span>
+                                            </div>
+                                            <div class="portal-fsd-side-item-value">@gap.Gap.ToString("F2")</div>
+                                        </div>
+                                        <small>Projected distance to configured threshold.</small>
+                                    </div>
+                                }
                             </div>
                         }
+                    </div>
+                </article>
 
-                        <div class="table-responsive">
-                            <table class="table table-sm align-middle mb-0" aria-label="@($"{item.MetricLabel} forecast drivers")">
-                                <thead class="table-light">
-                                    <tr>
-                                        <th>Driver</th>
-                                        <th>Raw value</th>
-                                        <th>Weight</th>
-                                        <th>Contribution</th>
-                                        <th>Impact</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    @foreach (var factor in item.TopFactors.OrderByDescending(x => x.ContributionScore))
-                                    {
-                                        <tr>
-                                            <td>@factor.FeatureLabel</td>
-                                            <td>@factor.RawValue.ToString("F2")</td>
-                                            <td>@factor.Weight.ToString("F2")</td>
-                                            <td>@factor.ContributionScore.ToString("F3")</td>
-                                            <td>@FormatImpact(factor.ImpactDirection)</td>
-                                        </tr>
-                                    }
-                                </tbody>
-                            </table>
+                <article class="portal-card portal-fsd-panel">
+                    <div class="portal-fsd-panel-head">
+                        <div>
+                            <span class="portal-fsd-panel-eyebrow">Leading drivers</span>
+                            <h3 class="portal-fsd-panel-title">Signals contributing most to prudential pressure</h3>
+                            <p class="portal-fsd-panel-copy">Aggregated from the factor narratives across all visible capital forecasts.</p>
                         </div>
                     </div>
-                </div>
-            }
-        }
+                    <div class="portal-fsd-panel-body">
+                        @if (TopDrivers.Count == 0)
+                        {
+                            <div class="portal-fsd-empty">No factor explainability is currently available for the selected scope.</div>
+                        }
+                        else
+                        {
+                            <div class="portal-fsd-side-list">
+                                @foreach (var driver in TopDrivers)
+                                {
+                                    <div class="portal-fsd-side-item">
+                                        <div class="portal-fsd-side-item-head">
+                                            <div>
+                                                <strong>@driver.Label</strong>
+                                                <span>@driver.Appearances appearance(s)</span>
+                                            </div>
+                                            <div class="portal-fsd-side-item-value">@driver.Score.ToString("F2")</div>
+                                        </div>
+                                        <small>Total contribution across the current capital forecast set.</small>
+                                    </div>
+                                }
+                            </div>
+                        }
+                    </div>
+                </article>
+            </div>
+        </section>
     }
 </div>
 
@@ -145,9 +263,32 @@
     [CascadingParameter] private Task<AuthenticationState> AuthenticationStateTask { get; set; } = default!;
     [SupplyParameterFromQuery(Name = "metric")] public string? Metric { get; set; }
 
+    private readonly IReadOnlyList<BreadcrumbItem> _breadcrumb = new List<BreadcrumbItem>
+    {
+        new("Home", "/"),
+        new("ForeSight", "/analytics/foresight"),
+        new("Capital Forecast", IsCurrent: true)
+    };
+
     private List<CapitalForecastSummary> _items = new();
     private bool _loading = true;
     private string? _error;
+
+    private string ScopeLabel => string.IsNullOrWhiteSpace(Metric) ? "All prudential metrics" : $"{Metric} filter";
+
+    private IReadOnlyList<MetricGap> ClosestGaps => _items
+        .Select(item => new MetricGap(item.MetricLabel, item.HorizonLabel, Math.Abs(item.ProjectedValue - item.ThresholdValue)))
+        .OrderBy(item => item.Gap)
+        .Take(5)
+        .ToList();
+
+    private IReadOnlyList<DriverRollup> TopDrivers => _items
+        .SelectMany(item => item.TopFactors)
+        .GroupBy(factor => factor.FeatureLabel)
+        .Select(group => new DriverRollup(group.Key, group.Count(), group.Sum(item => item.ContributionScore)))
+        .OrderByDescending(item => item.Score)
+        .Take(5)
+        .ToList();
 
     protected override async Task OnParametersSetAsync()
     {
@@ -182,10 +323,46 @@
         }
     }
 
-    private static string FormatImpact(string impactDirection) => impactDirection switch
+    private static string BuildBannerTone(int breachCount, int elevatedCount) => breachCount switch
     {
-        "DECREASES_RISK" => "Reduces risk",
-        "DECREASES_RESILIENCE" => "Reduces resilience",
-        _ => "Increases risk"
+        > 0 => "danger",
+        _ when elevatedCount > 0 => "warning",
+        _ => "success"
     };
+
+    private static string BuildBannerHeadline(int breachCount, int elevatedCount) => breachCount switch
+    {
+        > 0 => "At least one prudential metric is projected to cross its threshold.",
+        _ when elevatedCount > 0 => "Warning pressure is building on a small set of prudential metrics.",
+        _ => "The current prudential forecast set remains inside its expected guardrails."
+    };
+
+    private static string BuildBannerCopy(int breachCount, decimal averageConfidence, CapitalForecastSummary? leadMetric)
+    {
+        if (leadMetric is null)
+        {
+            return "ForeSight will surface prudential forecast pressure here once enough reporting history is available for the current institution.";
+        }
+
+        return breachCount > 0
+            ? $"{leadMetric.MetricLabel} currently leads the pressure stack, with the visible forecast set averaging {averageConfidence:P0} confidence. Use the top-factor narrative to review buffer-building options early."
+            : $"{leadMetric.MetricLabel} is the closest visible metric to its threshold, but the current prudential posture remains monitorable rather than critical.";
+    }
+
+    private static string BuildRiskClass(string riskBand) => riskBand switch
+    {
+        "CRITICAL" or "HIGH" => "portal-fsd-risk--danger",
+        "MEDIUM" => "portal-fsd-risk--warning",
+        _ => "portal-fsd-risk--success"
+    };
+
+    private static string BuildFactorClass(string impactDirection) => impactDirection switch
+    {
+        "DECREASES_RISK" => "portal-fsd-factor--success",
+        "DECREASES_RESILIENCE" => "portal-fsd-factor--warning",
+        _ => "portal-fsd-factor--danger"
+    };
+
+    private sealed record MetricGap(string Label, string HorizonLabel, decimal Gap);
+    private sealed record DriverRollup(string Label, int Appearances, decimal Score);
 }

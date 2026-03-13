@@ -6,20 +6,37 @@
 <PageTitle>Executive Dashboard</PageTitle>
 
 <PageHeader Title="Executive Dashboard"
-            Subtitle="Filing compliance, upcoming deadlines, cross-domain risk summary, and peer benchmarks."
-            BackUrl="/regulator/dashboards/governor">
-    <PrimaryAction><button class="fc-btn fc-btn--primary" @onclick="ReloadAsync" disabled="@_loading">Refresh</button></PrimaryAction>
+            Subtitle="Deadline posture, cross-domain risk pressure, and institution attention queues for senior supervisory executives."
+            BackUrl="/regulator/dashboards/governor"
+            StatusBadge="@ResolveStatusBadge()"
+            StatusVariant="@ResolveStatusVariant()">
+    <PrimaryAction>
+        <button class="fc-btn fc-btn--primary" @onclick="ReloadAsync" disabled="@_loading">Refresh</button>
+    </PrimaryAction>
 </PageHeader>
 
 <div class="fc-page">
     <SectionErrorBoundary Title="Failed to load executive dashboard" ExternalError="@_loadException" OnRetry="ReloadAsync">
         @if (_loading)
         {
-            <div class="rg-dash-kpi-strip">
-                @for (var i = 0; i < 4; i++)
-                {
-                    <div class="rg-dash-kpi"><SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Block" Height="88px" /></div>
-                }
+            <div class="rg-premium-flow">
+                <div class="rg-premium-banner"><SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Block" Height="138px" /></div>
+                <div class="rg-premium-stat-grid">
+                    @for (var i = 0; i < 4; i++)
+                    {
+                        <div class="rg-premium-stat"><SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Block" Height="140px" /></div>
+                    }
+                </div>
+                <div class="rg-premium-content-grid">
+                    <div class="rg-premium-main">
+                        <div class="rg-premium-panel"><SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Block" Height="320px" /></div>
+                        <div class="rg-premium-panel"><SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Block" Height="420px" /></div>
+                    </div>
+                    <div class="rg-premium-side">
+                        <div class="rg-premium-panel"><SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Block" Height="260px" /></div>
+                        <div class="rg-premium-panel"><SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Block" Height="320px" /></div>
+                    </div>
+                </div>
             </div>
         }
         else if (_data is null)
@@ -28,106 +45,224 @@
         }
         else
         {
-            <div class="rg-dash-kpi-strip">
-                <div class="rg-dash-kpi">
-                    <div class="rg-dash-kpi-value @(_data.FilingCompliancePercent >= 95 ? "rg-dash-kpi-value--green" : _data.FilingCompliancePercent >= 80 ? "rg-dash-kpi-value--amber" : "rg-dash-kpi-value--red")">@_data.FilingCompliancePercent%</div>
-                    <div class="rg-dash-kpi-label">Filing Compliance</div>
-                </div>
-                <div class="rg-dash-kpi">
-                    <div class="rg-dash-kpi-value">@(_data.DaysToNextDeadline)d</div>
-                    <div class="rg-dash-kpi-label">Days to Deadline</div>
-                </div>
-                <div class="rg-dash-kpi">
-                    <div class="rg-dash-kpi-value @(_data.OpenFindings > 0 ? "rg-dash-kpi-value--amber" : "rg-dash-kpi-value--green")">@_data.OpenFindings</div>
-                    <div class="rg-dash-kpi-label">Open Findings</div>
-                </div>
-                <div class="rg-dash-kpi">
-                    <div class="rg-dash-kpi-value">@_data.ActiveInterventions</div>
-                    <div class="rg-dash-kpi-label">Active Interventions</div>
-                </div>
-            </div>
+            <div class="rg-premium-flow">
+                <section class="rg-premium-banner @ResolveBannerTone()" aria-label="Executive posture">
+                    <div class="rg-premium-banner__grid">
+                        <div>
+                            <div class="rg-premium-banner__eyebrow">Executive pulse</div>
+                            <h2 class="rg-premium-banner__headline">@BuildBannerHeadline()</h2>
+                            <p class="rg-premium-banner__detail">@BuildBannerDetail()</p>
+                        </div>
+                        <div class="rg-premium-banner__meta">
+                            <div class="rg-premium-banner__meta-label">Next decision window</div>
+                            <div class="rg-premium-banner__meta-value">@BuildDeadlineSummary()</div>
+                            <div class="rg-premium-banner__meta-copy">@BuildDomainMixCopy()</div>
+                        </div>
+                    </div>
+                </section>
 
-            @* Domain Risk Summary *@
-            <div class="fc-card fc-card--mb" style="margin-top:var(--space-4);">
-                <div class="fc-card__header"><h2 class="fc-card__title">Cross-Domain Risk Summary</h2></div>
-                <div class="fc-card__body">
-                    <canvas id="execDomainChart" style="max-height:280px;"></canvas>
-                </div>
-            </div>
+                <section class="rg-premium-hero" aria-labelledby="executive-hero-title">
+                    <div class="rg-premium-hero__grid">
+                        <div>
+                            <div class="rg-premium-hero__eyebrow">Executive command view</div>
+                            <h1 id="executive-hero-title" class="rg-premium-hero__title">Balance filing discipline with cross-domain risk pressure.</h1>
+                            <p class="rg-premium-hero__subtitle">
+                                This view is tuned for executive committee decisions: what is drifting, which domains are noisy,
+                                how much filing pressure is building, and which institutions need immediate management attention.
+                            </p>
+                            <div class="rg-premium-badge-row">
+                                <span class="rg-premium-chip @BuildComplianceChipClass()">@($"{_data.FilingCompliancePercent:F1}% compliant")</span>
+                                <span class="rg-premium-chip @BuildDeadlineChipClass()">@BuildDeadlineSummary()</span>
+                                <span class="rg-premium-chip rg-premium-chip--warning">@($"{_data.ActiveInterventions} interventions live")</span>
+                            </div>
+                        </div>
+                        <div class="rg-premium-hero__aside">
+                            <div class="rg-premium-note">
+                                <div class="rg-premium-note__label">Open findings</div>
+                                <div class="rg-premium-note__value">@_data.OpenFindings</div>
+                                <div class="rg-premium-note__copy">
+                                    Aggregate unresolved findings across compliance and resilience lanes. This is the fastest health check for execution drag.
+                                </div>
+                            </div>
+                            <div class="rg-premium-note">
+                                <div class="rg-premium-note__label">Dominant pressure lane</div>
+                                <div class="rg-premium-note__value">@BuildDominantDomainLabel()</div>
+                                <div class="rg-premium-note__copy">@BuildDominantDomainCopy()</div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
 
-            @* Top Institutions *@
-            <div class="fc-card fc-card--mb">
-                <div class="fc-card__header"><h2 class="fc-card__title">Institutions Requiring Attention</h2></div>
-                <div class="fc-card__body">
-                    @if (_data.TopInstitutions.Count == 0)
-                    {
-                        <p class="fc-text-muted">No institutions require immediate attention.</p>
-                    }
-                    else
-                    {
-                        <DataTable TItem="InstitutionScorecardRow" Items="@_data.TopInstitutions" PageSize="10" Sortable="true" ShowExport="true" ExportFileName="executive-institutions">
-                            <ChildContent>
-                                <DataColumn TItem="InstitutionScorecardRow" Title="Institution" SortKey="@(x => x.InstitutionName)">
-                                    <CellTemplate><strong>@context.InstitutionName</strong></CellTemplate>
-                                </DataColumn>
-                                <DataColumn TItem="InstitutionScorecardRow" Title="Licence" Width="120px" SortKey="@(x => x.LicenceType)">
-                                    <CellTemplate><span class="fc-badge fc-badge--neutral">@context.LicenceType</span></CellTemplate>
-                                </DataColumn>
-                                <DataColumn TItem="InstitutionScorecardRow" Title="Priority" Width="100px" SortKey="@(x => x.Priority)">
-                                    <CellTemplate><span class="fc-badge @PriorityBadge(context.Priority)">@context.Priority</span></CellTemplate>
-                                </DataColumn>
-                                <DataColumn TItem="InstitutionScorecardRow" Title="Capital" Width="90px" SortKey="@(x => x.CapitalScore)">
-                                    <CellTemplate>@(context.CapitalScore?.ToString("F1") ?? "—")</CellTemplate>
-                                </DataColumn>
-                                <DataColumn TItem="InstitutionScorecardRow" Title="Overdue" Width="90px" SortKey="@(x => x.OverdueObligations)">
-                                    <CellTemplate><span class="@(context.OverdueObligations > 0 ? "fc-text-danger" : "")">@context.OverdueObligations</span></CellTemplate>
-                                </DataColumn>
-                                <DataColumn TItem="InstitutionScorecardRow" Title="Incidents" Width="90px" SortKey="@(x => x.OpenResilienceIncidents)">
-                                    <CellTemplate>@context.OpenResilienceIncidents</CellTemplate>
-                                </DataColumn>
-                                <DataColumn TItem="InstitutionScorecardRow" Title="Model Items" Width="100px" SortKey="@(x => x.ModelReviewItems)">
-                                    <CellTemplate>@context.ModelReviewItems</CellTemplate>
-                                </DataColumn>
-                                <DataColumn TItem="InstitutionScorecardRow" Title="Summary" SortKey="@(x => x.Summary)">
-                                    <CellTemplate><span class="fc-text-muted">@context.Summary</span></CellTemplate>
-                                </DataColumn>
-                            </ChildContent>
-                        </DataTable>
-                    }
-                </div>
-            </div>
+                <section class="rg-premium-stat-grid" aria-label="Executive metrics">
+                    <article class="rg-premium-stat">
+                        <div class="rg-premium-stat__label">Filing compliance</div>
+                        <div class="rg-premium-stat__value @BuildComplianceValueClass()">@($"{_data.FilingCompliancePercent:F1}%")</div>
+                        <div class="rg-premium-stat__note">Current filing discipline across obligations represented in the knowledge graph workspace.</div>
+                    </article>
+                    <article class="rg-premium-stat">
+                        <div class="rg-premium-stat__label">Days to next deadline</div>
+                        <div class="rg-premium-stat__value @BuildDeadlineValueClass()">@($"{_data.DaysToNextDeadline}d")</div>
+                        <div class="rg-premium-stat__note">Calendar lead time to the nearest material supervisory due date across the active intervention calendar.</div>
+                    </article>
+                    <article class="rg-premium-stat">
+                        <div class="rg-premium-stat__label">Open findings</div>
+                        <div class="rg-premium-stat__value @BuildFindingsValueClass()">@_data.OpenFindings</div>
+                        <div class="rg-premium-stat__note">Combined unresolved issues currently requiring executive follow-through or remediation oversight.</div>
+                    </article>
+                    <article class="rg-premium-stat">
+                        <div class="rg-premium-stat__label">Active interventions</div>
+                        <div class="rg-premium-stat__value rg-premium-stat__value--warning">@_data.ActiveInterventions</div>
+                        <div class="rg-premium-stat__note">Live supervisory actions currently influencing the next operating and governance decisions.</div>
+                    </article>
+                </section>
 
-            @* Recent Activity *@
-            <div class="fc-card">
-                <div class="fc-card__header"><h2 class="fc-card__title">Recent Activity</h2></div>
-                <div class="fc-card__body">
-                    <DataTable TItem="ActivityTimelineRow" Items="@_data.RecentActivity" PageSize="10" Sortable="true">
-                        <ChildContent>
-                            <DataColumn TItem="ActivityTimelineRow" Title="Domain" Width="120px" SortKey="@(x => x.Domain)">
-                                <CellTemplate><span class="fc-badge fc-badge--neutral">@context.Domain</span></CellTemplate>
-                            </DataColumn>
-                            <DataColumn TItem="ActivityTimelineRow" Title="Event" SortKey="@(x => x.Title)">
-                                <CellTemplate>
-                                    <strong>@context.Title</strong>
-                                    <div class="fc-text-muted-sm">@context.Detail</div>
-                                </CellTemplate>
-                            </DataColumn>
-                            <DataColumn TItem="ActivityTimelineRow" Title="Severity" Width="100px" SortKey="@(x => x.Severity)">
-                                <CellTemplate><span class="fc-badge @SeverityBadge(context.Severity)">@context.Severity</span></CellTemplate>
-                            </DataColumn>
-                            <DataColumn TItem="ActivityTimelineRow" Title="When" Width="150px" SortKey="@(x => x.HappenedAt)">
-                                <CellTemplate>@context.HappenedAt.ToString("dd MMM yyyy HH:mm")</CellTemplate>
-                            </DataColumn>
-                        </ChildContent>
-                    </DataTable>
-                </div>
+                <section class="rg-premium-content-grid">
+                    <div class="rg-premium-main">
+                        <section class="rg-premium-panel">
+                            <div class="rg-premium-panel__header">
+                                <div>
+                                    <div class="rg-premium-panel__eyebrow">Domain signal</div>
+                                    <h2 class="rg-premium-panel__title">Cross-domain risk summary</h2>
+                                    <p class="rg-premium-panel__subtitle">Prioritise the domain lanes carrying the most open items before the next leadership review.</p>
+                                </div>
+                                <div class="rg-premium-panel__metric">
+                                    <span class="rg-premium-panel__metric-label">Highest pressure</span>
+                                    @BuildDominantDomainLabel()
+                                </div>
+                            </div>
+                            <div class="rg-premium-panel__body rg-premium-panel__body--chart">
+                                <canvas id="execDomainChart" style="max-height:280px;"></canvas>
+                            </div>
+                        </section>
+
+                        <section class="rg-premium-panel">
+                            <div class="rg-premium-panel__header">
+                                <div>
+                                    <div class="rg-premium-panel__eyebrow">Institution queue</div>
+                                    <h2 class="rg-premium-panel__title">Institutions requiring attention</h2>
+                                    <p class="rg-premium-panel__subtitle">The institutions below carry the heaviest combination of due-soon and overdue pressure.</p>
+                                </div>
+                                <div class="rg-premium-panel__metric">
+                                    <span class="rg-premium-panel__metric-label">Top institution</span>
+                                    @(_data.TopInstitutions.FirstOrDefault()?.InstitutionName ?? "No escalation")
+                                </div>
+                            </div>
+                            <div class="rg-premium-panel__body rg-premium-panel__body--table">
+                                @if (_data.TopInstitutions.Count == 0)
+                                {
+                                    <div class="rg-premium-empty">No institutions currently require immediate executive escalation.</div>
+                                }
+                                else
+                                {
+                                    <DataTable TItem="InstitutionScorecardRow" Items="@_data.TopInstitutions" PageSize="10" Sortable="true" ShowExport="true" ExportFileName="executive-institutions">
+                                        <ChildContent>
+                                            <DataColumn TItem="InstitutionScorecardRow" Title="Institution" SortKey="@(x => x.InstitutionName)">
+                                                <CellTemplate><strong>@context.InstitutionName</strong></CellTemplate>
+                                            </DataColumn>
+                                            <DataColumn TItem="InstitutionScorecardRow" Title="Licence" Width="120px" SortKey="@(x => x.LicenceType)">
+                                                <CellTemplate><span class="fc-badge fc-badge--neutral">@context.LicenceType</span></CellTemplate>
+                                            </DataColumn>
+                                            <DataColumn TItem="InstitutionScorecardRow" Title="Priority" Width="100px" SortKey="@(x => x.Priority)">
+                                                <CellTemplate><span class="fc-badge @PriorityBadge(context.Priority)">@context.Priority</span></CellTemplate>
+                                            </DataColumn>
+                                            <DataColumn TItem="InstitutionScorecardRow" Title="Capital" Width="90px" SortKey="@(x => x.CapitalScore)">
+                                                <CellTemplate>@(context.CapitalScore?.ToString("F1") ?? "—")</CellTemplate>
+                                            </DataColumn>
+                                            <DataColumn TItem="InstitutionScorecardRow" Title="Overdue" Width="90px" SortKey="@(x => x.OverdueObligations)">
+                                                <CellTemplate><span class="@(context.OverdueObligations > 0 ? "fc-text-danger" : string.Empty)">@context.OverdueObligations</span></CellTemplate>
+                                            </DataColumn>
+                                            <DataColumn TItem="InstitutionScorecardRow" Title="Incidents" Width="90px" SortKey="@(x => x.OpenResilienceIncidents)">
+                                                <CellTemplate>@context.OpenResilienceIncidents</CellTemplate>
+                                            </DataColumn>
+                                            <DataColumn TItem="InstitutionScorecardRow" Title="Model Items" Width="100px" SortKey="@(x => x.ModelReviewItems)">
+                                                <CellTemplate>@context.ModelReviewItems</CellTemplate>
+                                            </DataColumn>
+                                            <DataColumn TItem="InstitutionScorecardRow" Title="Summary" SortKey="@(x => x.Summary)">
+                                                <CellTemplate><span class="fc-text-muted">@context.Summary</span></CellTemplate>
+                                            </DataColumn>
+                                        </ChildContent>
+                                    </DataTable>
+                                }
+                            </div>
+                        </section>
+                    </div>
+
+                    <aside class="rg-premium-side">
+                        <section class="rg-premium-panel">
+                            <div class="rg-premium-panel__header">
+                                <div>
+                                    <div class="rg-premium-panel__eyebrow">Pressure stack</div>
+                                    <h2 class="rg-premium-panel__title">Domain priorities</h2>
+                                    <p class="rg-premium-panel__subtitle">A fast qualitative read on which domain lanes deserve the next executive checkpoint.</p>
+                                </div>
+                            </div>
+                            <div class="rg-premium-panel__body">
+                                @if (_data.DomainSummary.Count == 0)
+                                {
+                                    <div class="rg-premium-empty">Domain summary will appear here once intelligence refresh data is available.</div>
+                                }
+                                else
+                                {
+                                    <div class="rg-premium-list">
+                                        @foreach (var domain in _data.DomainSummary.OrderByDescending(x => x.Count).Take(5))
+                                        {
+                                            <article class="rg-premium-list__item">
+                                                <div class="rg-premium-list__top">
+                                                    <div class="rg-premium-list__heading">@domain.Label</div>
+                                                    <div class="rg-premium-list__value">@domain.Count</div>
+                                                </div>
+                                                <div class="rg-premium-list__meta">@BuildDomainItemCopy(domain)</div>
+                                            </article>
+                                        }
+                                    </div>
+                                }
+                            </div>
+                        </section>
+
+                        <section class="rg-premium-panel">
+                            <div class="rg-premium-panel__header">
+                                <div>
+                                    <div class="rg-premium-panel__eyebrow">Activity rail</div>
+                                    <h2 class="rg-premium-panel__title">Recent activity</h2>
+                                    <p class="rg-premium-panel__subtitle">Events most relevant to the current executive posture across domains.</p>
+                                </div>
+                            </div>
+                            <div class="rg-premium-panel__body">
+                                @if (_data.RecentActivity.Count == 0)
+                                {
+                                    <div class="rg-premium-empty">No recent activity is available yet.</div>
+                                }
+                                else
+                                {
+                                    <div class="rg-premium-list">
+                                        @foreach (var activity in _data.RecentActivity.Take(8))
+                                        {
+                                            <article class="rg-premium-list__item">
+                                                <div class="rg-premium-list__top">
+                                                    <div class="rg-premium-list__heading">@activity.Title</div>
+                                                    <span class="fc-badge @SeverityBadge(activity.Severity)">@activity.Severity</span>
+                                                </div>
+                                                <div class="rg-premium-list__meta">@activity.Detail</div>
+                                                <div class="rg-premium-list__tags">
+                                                    <span class="fc-badge fc-badge--neutral">@activity.Domain</span>
+                                                    <span class="fc-badge fc-badge--neutral">@activity.HappenedAt.ToString("dd MMM HH:mm")</span>
+                                                </div>
+                                            </article>
+                                        }
+                                    </div>
+                                }
+                            </div>
+                        </section>
+                    </aside>
+                </section>
             </div>
         }
     </SectionErrorBoundary>
 </div>
 
 @code {
-    private bool _loading = true, _chartsRendered;
+    private bool _loading = true;
+    private bool _chartsRendered;
     private Exception? _loadException;
     private FC.Engine.Admin.Services.Dashboards.ExecutiveDashboardData? _data;
 
@@ -138,6 +273,7 @@
         if (!_chartsRendered && _data is not null && _data.DomainSummary.Count > 0)
         {
             _chartsRendered = true;
+
             try
             {
                 await JS.InvokeVoidAsync("fcCharts.renderBar", "execDomainChart", new
@@ -145,22 +281,203 @@
                     labels = _data.DomainSummary.Select(d => d.Label).ToArray(),
                     datasets = new object[]
                     {
-                        new { label = "Open Items", data = _data.DomainSummary.Select(d => d.Count).ToArray(), backgroundColor = new[] { "#2563EB", "#C8A415", "#E07C24", "#7C3AED", "#D32F2F" } }
+                        new
+                        {
+                            label = "Open Items",
+                            data = _data.DomainSummary.Select(d => d.Count).ToArray(),
+                            backgroundColor = new[] { "#2563EB", "#C8A415", "#E07C24", "#7C3AED", "#D32F2F" }
+                        }
                     }
                 });
             }
-            catch { }
+            catch
+            {
+            }
         }
     }
 
     private async Task ReloadAsync()
     {
-        _loading = true; _loadException = null; _chartsRendered = false;
-        try { _data = await DashboardService.GetExecutiveDashboardAsync(); }
-        catch (Exception ex) { _loadException = ex; }
-        finally { _loading = false; }
+        _loading = true;
+        _loadException = null;
+        _chartsRendered = false;
+
+        try
+        {
+            _data = await DashboardService.GetExecutiveDashboardAsync();
+        }
+        catch (Exception ex)
+        {
+            _loadException = ex;
+        }
+        finally
+        {
+            _loading = false;
+        }
     }
 
-    private static string PriorityBadge(string p) => p switch { "Critical" => "fc-badge--danger", "High" => "fc-badge--warning", "Medium" => "fc-badge--info", _ => "fc-badge--neutral" };
-    private static string SeverityBadge(string s) => s switch { "Critical" => "fc-badge--danger", "High" or "Warning" => "fc-badge--warning", "Info" => "fc-badge--info", _ => "fc-badge--neutral" };
+    private string ResolveStatusBadge()
+    {
+        if (_loading)
+        {
+            return "Refreshing";
+        }
+
+        if (_data is null)
+        {
+            return "Awaiting data";
+        }
+
+        if (_data.DaysToNextDeadline <= 7)
+        {
+            return $"Deadline in {_data.DaysToNextDeadline}d";
+        }
+
+        return _data.FilingCompliancePercent >= 95m ? "Executive posture steady" : "Monitoring";
+    }
+
+    private string ResolveStatusVariant()
+    {
+        if (_data is null)
+        {
+            return "neutral";
+        }
+
+        if (_data.FilingCompliancePercent < 80m || _data.DaysToNextDeadline <= 3)
+        {
+            return "danger";
+        }
+
+        if (_data.FilingCompliancePercent < 95m || _data.DaysToNextDeadline <= 7 || _data.OpenFindings > 0)
+        {
+            return "warning";
+        }
+
+        return "success";
+    }
+
+    private string ResolveBannerTone()
+    {
+        if (_data is null)
+        {
+            return "rg-premium-banner--info";
+        }
+
+        if (_data.DaysToNextDeadline <= 3 || _data.FilingCompliancePercent < 80m)
+        {
+            return "rg-premium-banner--danger";
+        }
+
+        if (_data.DaysToNextDeadline <= 7 || _data.OpenFindings > 0 || _data.FilingCompliancePercent < 95m)
+        {
+            return "rg-premium-banner--warning";
+        }
+
+        return "rg-premium-banner--success";
+    }
+
+    private string BuildBannerHeadline()
+    {
+        if (_data is null)
+        {
+            return "Refreshing executive posture.";
+        }
+
+        if (_data.DaysToNextDeadline <= 3)
+        {
+            return "The next filing deadline is close enough to shape today’s executive agenda.";
+        }
+
+        if (_data.FilingCompliancePercent < 80m)
+        {
+            return "Filing discipline is soft enough to warrant direct executive intervention.";
+        }
+
+        return _data.OpenFindings > 0
+            ? "Open findings remain material even though the filing posture is manageable."
+            : "Executive posture is steady, with filing discipline broadly under control.";
+    }
+
+    private string BuildBannerDetail()
+    {
+        if (_data is null)
+        {
+            return string.Empty;
+        }
+
+        return $"There are {_data.ActiveInterventions} active interventions, {_data.OpenFindings} open findings, and the next decision window opens in {_data.DaysToNextDeadline} days.";
+    }
+
+    private string BuildDeadlineSummary() => _data is null ? "No deadline data" : $"{_data.DaysToNextDeadline} days";
+
+    private string BuildDomainMixCopy()
+    {
+        var dominant = _data?.DomainSummary.OrderByDescending(x => x.Count).FirstOrDefault();
+        return dominant is null
+            ? "No domain concentration is available yet."
+            : $"{dominant.Label} currently carries the heaviest open-item concentration across executive oversight lanes.";
+    }
+
+    private string BuildDominantDomainLabel()
+    {
+        var dominant = _data?.DomainSummary.OrderByDescending(x => x.Count).FirstOrDefault();
+        return dominant is null ? "Balanced" : dominant.Label;
+    }
+
+    private string BuildDominantDomainCopy()
+    {
+        var dominant = _data?.DomainSummary.OrderByDescending(x => x.Count).FirstOrDefault();
+        return dominant is null
+            ? "Domain pressure is broadly balanced right now."
+            : $"{dominant.Count} open items sit in the {dominant.Label.ToLowerInvariant()} lane, making it the current executive pressure point.";
+    }
+
+    private string BuildComplianceChipClass() =>
+        _data is null ? "rg-premium-chip--info" :
+        _data.FilingCompliancePercent >= 95m ? "rg-premium-chip--success" :
+        _data.FilingCompliancePercent >= 80m ? "rg-premium-chip--warning" :
+        "rg-premium-chip--danger";
+
+    private string BuildDeadlineChipClass() =>
+        _data is null ? "rg-premium-chip--info" :
+        _data.DaysToNextDeadline <= 3 ? "rg-premium-chip--danger" :
+        _data.DaysToNextDeadline <= 7 ? "rg-premium-chip--warning" :
+        "rg-premium-chip--success";
+
+    private string BuildComplianceValueClass() =>
+        _data is null ? string.Empty :
+        _data.FilingCompliancePercent >= 95m ? "rg-premium-stat__value--success" :
+        _data.FilingCompliancePercent >= 80m ? "rg-premium-stat__value--warning" :
+        "rg-premium-stat__value--danger";
+
+    private string BuildDeadlineValueClass() =>
+        _data is null ? string.Empty :
+        _data.DaysToNextDeadline <= 3 ? "rg-premium-stat__value--danger" :
+        _data.DaysToNextDeadline <= 7 ? "rg-premium-stat__value--warning" :
+        "rg-premium-stat__value--success";
+
+    private string BuildFindingsValueClass() =>
+        _data is null ? string.Empty :
+        _data.OpenFindings == 0 ? "rg-premium-stat__value--success" :
+        _data.OpenFindings < 10 ? "rg-premium-stat__value--warning" :
+        "rg-premium-stat__value--danger";
+
+    private static string BuildDomainItemCopy(FC.Engine.Admin.Services.Dashboards.LabelCount domain) =>
+        $"{domain.Count} open items are currently attached to this domain lane.";
+
+    private static string PriorityBadge(string priority) => priority switch
+    {
+        "Critical" => "fc-badge--danger",
+        "High" => "fc-badge--warning",
+        "Medium" => "fc-badge--info",
+        _ => "fc-badge--neutral"
+    };
+
+    private static string SeverityBadge(string severity) => severity switch
+    {
+        "Critical" => "fc-badge--danger",
+        "High" or "Warning" => "fc-badge--warning",
+        "Info" => "fc-badge--info",
+        _ => "fc-badge--neutral"
+    };
 }

@@ -19,139 +19,342 @@
 <SectionErrorBoundary Title="Couldn't load compliance health" ExternalError="@_loadException" OnRetry="Load">
     @if (_loading)
     {
-        <div class="rg-chs-kpi-grid">
+        <div class="rg-premium-flow">
+            <div class="rg-premium-banner">
+                <SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Block" Height="138px" />
+            </div>
+            <div class="rg-premium-hero">
+                <SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Block" Height="210px" />
+            </div>
+            <div class="rg-premium-stat-grid">
                 @for (var i = 0; i < 4; i++)
                 {
-                    <SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Card" />
+                    <div class="rg-premium-stat">
+                        <SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Block" Height="140px" />
+                    </div>
                 }
             </div>
-            <div class="rg-grid rg-grid-2" style="margin-top:1rem;">
-                <SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Card" Height="200px" />
-                <SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Card" Height="200px" />
+            <div class="rg-premium-content-grid">
+                <div class="rg-premium-main">
+                    <div class="rg-grid rg-grid-2">
+                        <div class="rg-premium-panel">
+                            <SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Block" Height="260px" />
+                        </div>
+                        <div class="rg-premium-panel">
+                            <SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Block" Height="260px" />
+                        </div>
+                    </div>
+                    <div class="rg-premium-panel" style="margin-top:1rem;">
+                        <SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.TableRows" RowCount="8" />
+                    </div>
+                </div>
+                <div class="rg-premium-side">
+                    <div class="rg-premium-panel">
+                        <SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Block" Height="240px" />
+                    </div>
+                    <div class="rg-premium-panel">
+                        <SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Block" Height="260px" />
+                    </div>
+                </div>
             </div>
-            <SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.TableRows" RowCount="8" />
-}
+        </div>
+    }
     else if (_summary is not null)
     {
-        <div class="rg-chs-kpi-grid">
-            <div class="rg-chs-kpi-card">
-                <span class="rg-chs-kpi-value">@_summary.SectorAverage.ToString("F1")</span>
-                <span class="rg-chs-kpi-label">Sector Average CHS</span>
-            </div>
-            <div class="rg-chs-kpi-card">
-                <span class="rg-chs-kpi-value">@_summary.SectorMedian.ToString("F1")</span>
-                <span class="rg-chs-kpi-label">Sector Median</span>
-            </div>
-            <div class="rg-chs-kpi-card">
-                <span class="rg-chs-kpi-value rg-chs-kpi-value--success">@GetABRatedCount()</span>
-                <span class="rg-chs-kpi-label">A / A+ Rated</span>
-            </div>
-            <div class="rg-chs-kpi-card">
-                <span class="rg-chs-kpi-value rg-chs-kpi-value--danger">@_watchList.Count</span>
-                <span class="rg-chs-kpi-label">Watch List</span>
-            </div>
-        </div>
+        var latestTrend = _summary.SectorTrend.LastOrDefault();
+        var strongestInstitution = _heatmap.OrderByDescending(x => x.OverallScore).FirstOrDefault();
+        var weakestInstitution = _heatmap.OrderBy(x => x.OverallScore).FirstOrDefault();
 
-        <div class="rg-grid rg-grid-2" style="margin-top:1rem;">
-            <div class="rg-card">
-                <h3 class="rg-chs-card-title">Rating Distribution</h3>
-                <div class="rg-chart">
-                    <canvas id="rg-rating-dist-chart"></canvas>
+        <div class="rg-premium-flow">
+            <section class="rg-premium-banner @ResolveSectorBannerTone()" aria-label="Sector compliance posture">
+                <div class="rg-premium-banner__grid">
+                    <div>
+                        <div class="rg-premium-banner__eyebrow">Sector posture</div>
+                        <h2 class="rg-premium-banner__headline">@BuildSectorBannerHeadline()</h2>
+                        <p class="rg-premium-banner__detail">@BuildSectorBannerDetail()</p>
+                    </div>
+                    <div class="rg-premium-banner__meta">
+                        <div class="rg-premium-banner__meta-label">Current supervised footprint</div>
+                        <div class="rg-premium-banner__meta-value">@_summary.TotalInstitutions</div>
+                        <div class="rg-premium-banner__meta-copy">
+                            @_watchList.Count on watch list · @(latestTrend?.PeriodLabel ?? "Current window") latest period
+                        </div>
+                    </div>
                 </div>
-            </div>
-            <div class="rg-card">
-                <h3 class="rg-chs-card-title">Sector CHS Trend (12 weeks)</h3>
-                <div class="rg-chart">
-                    <canvas id="rg-sector-trend-chart"></canvas>
+            </section>
+
+            <section class="rg-premium-hero" aria-labelledby="sector-health-hero-title">
+                <div class="rg-premium-hero__grid">
+                    <div>
+                        <div class="rg-premium-hero__eyebrow">Supervision lane</div>
+                        <h1 id="sector-health-hero-title" class="rg-premium-hero__title">See sector fragility before individual institutions become active cases.</h1>
+                        <p class="rg-premium-hero__subtitle">
+                            This command view combines rating distribution, weekly CHS movement, and the live watch list so examiners can focus
+                            on the supervised entities dragging the sector posture down.
+                        </p>
+                        <div class="rg-premium-badge-row">
+                            <span class="rg-premium-chip rg-premium-chip--info">@_summary.RegulatorCode sector scope</span>
+                            <span class="rg-premium-chip @(GetABRatedCount() >= Math.Max(1, _summary.TotalInstitutions / 2) ? "rg-premium-chip--success" : "rg-premium-chip--warning")">@GetABRatedCount() A / A+ rated</span>
+                            <span class="rg-premium-chip @(_watchList.Count == 0 ? "rg-premium-chip--success" : _watchList.Count >= 3 ? "rg-premium-chip--danger" : "rg-premium-chip--warning")">@_watchList.Count institutions flagged</span>
+                        </div>
+                    </div>
+                    <div class="rg-premium-hero__aside">
+                        <div class="rg-premium-note">
+                            <div class="rg-premium-note__label">Top performer</div>
+                            <div class="rg-premium-note__value">@(strongestInstitution?.InstitutionName ?? "No data")</div>
+                            <div class="rg-premium-note__copy">@(strongestInstitution is null ? "No sector heatmap entries are available yet." : $"{strongestInstitution.OverallScore:F0} CHS · {RatingLabel(strongestInstitution.Rating)} rating.")</div>
+                        </div>
+                        <div class="rg-premium-note">
+                            <div class="rg-premium-note__label">Lowest current score</div>
+                            <div class="rg-premium-note__value">@(weakestInstitution?.InstitutionName ?? "No data")</div>
+                            <div class="rg-premium-note__copy">@(weakestInstitution is null ? "Sector ranking has not materialised yet." : $"{weakestInstitution.OverallScore:F0} CHS with the highest current supervision pressure.")</div>
+                        </div>
+                    </div>
                 </div>
-            </div>
-        </div>
+            </section>
 
-        <div style="margin-top:1rem;">
-            <h3 class="rg-chs-card-title">Institution CHS Heatmap</h3>
-            <div class="rg-table-wrap">
-                <table class="rg-table">
-                    <thead>
-                        <tr>
-                            <th>#</th>
-                            <th>Institution</th>
-                            <th>Type</th>
-                            <th>Overall</th>
-                            <th>Rating</th>
-                            <th>Filing</th>
-                            <th>Data Quality</th>
-                            <th>Capital</th>
-                            <th>Governance</th>
-                            <th>Engagement</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @{ var rank = 0; }
-                        @foreach (var item in _heatmap)
-                        {
-                            rank++;
-                            <tr>
-                                <td>@rank</td>
-                                <td><strong>@item.InstitutionName</strong></td>
-                                <td><span class="rg-badge recd">@item.LicenceType</span></td>
-                                <td><span class="rg-chs-heat-cell @HeatClass(item.OverallScore)">@item.OverallScore.ToString("F0")</span></td>
-                                <td><span class="rg-badge @RatingBadgeClass(item.Rating)">@RatingLabel(item.Rating)</span></td>
-                                <td><span class="rg-chs-heat-cell @HeatClass(item.FilingTimeliness)">@item.FilingTimeliness.ToString("F0")</span></td>
-                                <td><span class="rg-chs-heat-cell @HeatClass(item.DataQuality)">@item.DataQuality.ToString("F0")</span></td>
-                                <td><span class="rg-chs-heat-cell @HeatClass(item.RegulatoryCapital)">@item.RegulatoryCapital.ToString("F0")</span></td>
-                                <td><span class="rg-chs-heat-cell @HeatClass(item.AuditGovernance)">@item.AuditGovernance.ToString("F0")</span></td>
-                                <td><span class="rg-chs-heat-cell @HeatClass(item.Engagement)">@item.Engagement.ToString("F0")</span></td>
-                            </tr>
-                        }
-                    </tbody>
-                </table>
-            </div>
-        </div>
+            <section class="rg-premium-stat-grid" aria-label="Sector compliance metrics">
+                <article class="rg-premium-stat">
+                    <div class="rg-premium-stat__label">Sector average CHS</div>
+                    <div class="rg-premium-stat__value @(GetScoreLevel(_summary.SectorAverage) == "green" ? "rg-premium-stat__value--success" : GetScoreLevel(_summary.SectorAverage) == "amber" ? "rg-premium-stat__value--warning" : "rg-premium-stat__value--danger")">@_summary.SectorAverage.ToString("F1")</div>
+                    <div class="rg-premium-stat__note">Current average posture across the regulator's supervised population.</div>
+                </article>
+                <article class="rg-premium-stat">
+                    <div class="rg-premium-stat__label">Sector median</div>
+                    <div class="rg-premium-stat__value rg-premium-stat__value--info">@_summary.SectorMedian.ToString("F1")</div>
+                    <div class="rg-premium-stat__note">Median CHS helps separate isolated distress from systemic deterioration.</div>
+                </article>
+                <article class="rg-premium-stat">
+                    <div class="rg-premium-stat__label">Watch list count</div>
+                    <div class="rg-premium-stat__value @(_watchList.Count == 0 ? "rg-premium-stat__value--success" : _watchList.Count >= 3 ? "rg-premium-stat__value--danger" : "rg-premium-stat__value--warning")">@_watchList.Count</div>
+                    <div class="rg-premium-stat__note">Institutions with score deterioration, low CHS, or repeated decline signals.</div>
+                </article>
+                <article class="rg-premium-stat">
+                    <div class="rg-premium-stat__label">A / A+ institutions</div>
+                    <div class="rg-premium-stat__value rg-premium-stat__value--success">@GetABRatedCount()</div>
+                    <div class="rg-premium-stat__note">Entities maintaining the strongest compliance posture in the latest cycle.</div>
+                </article>
+            </section>
 
-        @if (_watchList.Count > 0)
-        {
-            <div style="margin-top:1rem;">
-                <h3 class="rg-chs-card-title">
-                    Watch List
-                    <span class="rg-badge open" style="margin-left:0.5rem;">@_watchList.Count</span>
-                </h3>
-                <div class="rg-table-wrap">
-                    <table class="rg-table">
-                        <thead>
-                            <tr>
-                                <th>Institution</th>
-                                <th>Type</th>
-                                <th>CHS</th>
-                                <th>Rating</th>
-                                <th>Trend</th>
-                                <th>Consecutive Declines</th>
-                                <th>4-Week Change</th>
-                                <th>Reason</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            @foreach (var item in _watchList)
+            <section class="rg-premium-content-grid">
+                <div class="rg-premium-main">
+                    <div class="rg-grid rg-grid-2">
+                        <section class="rg-premium-panel">
+                            <div class="rg-premium-panel__header">
+                                <div>
+                                    <div class="rg-premium-panel__eyebrow">Rating spread</div>
+                                    <h2 class="rg-premium-panel__title">Distribution across CHS bands</h2>
+                                    <p class="rg-premium-panel__subtitle">See whether weakness is concentrated in a few entities or diffused across the sector.</p>
+                                </div>
+                            </div>
+                            <div class="rg-premium-panel__body rg-premium-panel__body--chart">
+                                <div class="rg-chart">
+                                    <canvas id="rg-rating-dist-chart"></canvas>
+                                </div>
+                            </div>
+                        </section>
+
+                        <section class="rg-premium-panel">
+                            <div class="rg-premium-panel__header">
+                                <div>
+                                    <div class="rg-premium-panel__eyebrow">Trend line</div>
+                                    <h2 class="rg-premium-panel__title">Sector CHS movement</h2>
+                                    <p class="rg-premium-panel__subtitle">Twelve-week trend showing whether the average posture is stabilising or deteriorating.</p>
+                                </div>
+                                <div class="rg-premium-panel__metric">
+                                    <span class="rg-premium-panel__metric-label">Latest period</span>
+                                    @(latestTrend?.PeriodLabel ?? "Current")
+                                </div>
+                            </div>
+                            <div class="rg-premium-panel__body rg-premium-panel__body--chart">
+                                <div class="rg-chart">
+                                    <canvas id="rg-sector-trend-chart"></canvas>
+                                </div>
+                            </div>
+                        </section>
+                    </div>
+
+                    <section class="rg-premium-panel" style="margin-top:1rem;">
+                        <div class="rg-premium-panel__header">
+                            <div>
+                                <div class="rg-premium-panel__eyebrow">Entity ranking</div>
+                                <h2 class="rg-premium-panel__title">Institution CHS heatmap</h2>
+                                <p class="rg-premium-panel__subtitle">Full sector ranking across overall CHS and the five underlying pillars.</p>
+                            </div>
+                            <div class="rg-premium-panel__metric">
+                                <span class="rg-premium-panel__metric-label">Visible institutions</span>
+                                @_heatmap.Count
+                            </div>
+                        </div>
+                        <div class="rg-premium-panel__body rg-premium-panel__body--table">
+                            <div class="rg-table-wrap">
+                                <table class="rg-table">
+                                    <thead>
+                                        <tr>
+                                            <th>#</th>
+                                            <th>Institution</th>
+                                            <th>Type</th>
+                                            <th>Overall</th>
+                                            <th>Rating</th>
+                                            <th>Filing</th>
+                                            <th>Data Quality</th>
+                                            <th>Capital</th>
+                                            <th>Governance</th>
+                                            <th>Engagement</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @{ var rank = 0; }
+                                        @foreach (var item in _heatmap)
+                                        {
+                                            rank++;
+                                            <tr>
+                                                <td>@rank</td>
+                                                <td><strong>@item.InstitutionName</strong></td>
+                                                <td><span class="rg-badge recd">@item.LicenceType</span></td>
+                                                <td><span class="rg-chs-heat-cell @HeatClass(item.OverallScore)">@item.OverallScore.ToString("F0")</span></td>
+                                                <td><span class="rg-badge @RatingBadgeClass(item.Rating)">@RatingLabel(item.Rating)</span></td>
+                                                <td><span class="rg-chs-heat-cell @HeatClass(item.FilingTimeliness)">@item.FilingTimeliness.ToString("F0")</span></td>
+                                                <td><span class="rg-chs-heat-cell @HeatClass(item.DataQuality)">@item.DataQuality.ToString("F0")</span></td>
+                                                <td><span class="rg-chs-heat-cell @HeatClass(item.RegulatoryCapital)">@item.RegulatoryCapital.ToString("F0")</span></td>
+                                                <td><span class="rg-chs-heat-cell @HeatClass(item.AuditGovernance)">@item.AuditGovernance.ToString("F0")</span></td>
+                                                <td><span class="rg-chs-heat-cell @HeatClass(item.Engagement)">@item.Engagement.ToString("F0")</span></td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </section>
+                </div>
+
+                <aside class="rg-premium-side">
+                    <section class="rg-premium-panel">
+                        <div class="rg-premium-panel__header">
+                            <div>
+                                <div class="rg-premium-panel__eyebrow">Watch list</div>
+                                <h2 class="rg-premium-panel__title">Institutions needing review</h2>
+                                <p class="rg-premium-panel__subtitle">Shortest path to the entities currently creating the most supervision pressure.</p>
+                            </div>
+                        </div>
+                        <div class="rg-premium-panel__body">
+                            @if (_watchList.Count == 0)
                             {
-                                <tr class="rg-chs-watch-row @(item.CurrentScore < 50 ? "rg-chs-watch-row--critical" : "rg-chs-watch-row--warning")">
-                                    <td><strong>@item.InstitutionName</strong></td>
-                                    <td><span class="rg-badge recd">@item.LicenceType</span></td>
-                                    <td><span class="rg-chs-heat-cell @HeatClass(item.CurrentScore)">@item.CurrentScore.ToString("F0")</span></td>
-                                    <td><span class="rg-badge @RatingBadgeClass(item.Rating)">@RatingLabel(item.Rating)</span></td>
-                                    <td>@TrendArrow(item.Trend) @item.Trend</td>
-                                    <td>@item.ConsecutiveDeclines</td>
-                                    <td>
-                                        <span class="@(item.ScoreChange >= 0 ? "" : "rg-danger-text")">
-                                            @(item.ScoreChange >= 0 ? "+" : "")@item.ScoreChange.ToString("F1")
-                                        </span>
-                                    </td>
-                                    <td>@item.WatchReason</td>
-                                </tr>
+                                <div class="rg-premium-empty">No institutions are currently on the sector watch list.</div>
                             }
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        }
+                            else
+                            {
+                                <div class="rg-premium-list">
+                                    @foreach (var item in _watchList.Take(5))
+                                    {
+                                        <article class="rg-premium-list__item">
+                                            <div class="rg-premium-list__top">
+                                                <div class="rg-premium-list__heading">@item.InstitutionName</div>
+                                                <div class="rg-premium-list__value">@item.CurrentScore.ToString("F0")</div>
+                                            </div>
+                                            <div class="rg-premium-list__meta">@item.WatchReason</div>
+                                            <div class="rg-premium-list__tags">
+                                                <span class="rg-premium-chip @(item.Trend == ChsTrend.Declining ? "rg-premium-chip--danger" : item.Trend == ChsTrend.Stable ? "rg-premium-chip--warning" : "rg-premium-chip--success")">@TrendArrow(item.Trend) @item.Trend</span>
+                                                <span class="rg-premium-chip @(item.ConsecutiveDeclines >= 3 ? "rg-premium-chip--danger" : "rg-premium-chip--warning")">@item.ConsecutiveDeclines declines</span>
+                                            </div>
+                                        </article>
+                                    }
+                                </div>
+                            }
+                        </div>
+                    </section>
+
+                    <section class="rg-premium-panel">
+                        <div class="rg-premium-panel__header">
+                            <div>
+                                <div class="rg-premium-panel__eyebrow">Lowest performers</div>
+                                <h2 class="rg-premium-panel__title">Weakest current CHS scores</h2>
+                                <p class="rg-premium-panel__subtitle">Use this rail to identify the bottom of the sector ranking immediately.</p>
+                            </div>
+                        </div>
+                        <div class="rg-premium-panel__body">
+                            @if (_heatmap.Count == 0)
+                            {
+                                <div class="rg-premium-empty">The sector heatmap has not been populated yet.</div>
+                            }
+                            else
+                            {
+                                <div class="rg-premium-list">
+                                    @foreach (var item in _heatmap.OrderBy(x => x.OverallScore).Take(4))
+                                    {
+                                        <article class="rg-premium-list__item">
+                                            <div class="rg-premium-list__top">
+                                                <div class="rg-premium-list__heading">@item.InstitutionName</div>
+                                                <div class="rg-premium-list__value">@item.OverallScore.ToString("F0")</div>
+                                            </div>
+                                            <div class="rg-premium-list__meta">@item.LicenceType · @RatingLabel(item.Rating) rating</div>
+                                        </article>
+                                    }
+                                </div>
+                            }
+                        </div>
+                    </section>
+                </aside>
+            </section>
+
+            @if (_watchList.Count > 0)
+            {
+                <section class="rg-premium-panel">
+                    <div class="rg-premium-panel__header">
+                        <div>
+                            <div class="rg-premium-panel__eyebrow">Detailed supervision queue</div>
+                            <h2 class="rg-premium-panel__title">Watch list detail</h2>
+                            <p class="rg-premium-panel__subtitle">All entities currently flagged for consecutive decline, low score, or other CHS deterioration signals.</p>
+                        </div>
+                        <div class="rg-premium-panel__metric">
+                            <span class="rg-premium-panel__metric-label">Flagged entities</span>
+                            @_watchList.Count
+                        </div>
+                    </div>
+                    <div class="rg-premium-panel__body rg-premium-panel__body--table">
+                        <div class="rg-table-wrap">
+                            <table class="rg-table">
+                                <thead>
+                                    <tr>
+                                        <th>Institution</th>
+                                        <th>Type</th>
+                                        <th>CHS</th>
+                                        <th>Rating</th>
+                                        <th>Trend</th>
+                                        <th>Consecutive Declines</th>
+                                        <th>4-Week Change</th>
+                                        <th>Reason</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var item in _watchList)
+                                    {
+                                        <tr class="rg-chs-watch-row @(item.CurrentScore < 50 ? "rg-chs-watch-row--critical" : "rg-chs-watch-row--warning")">
+                                            <td><strong>@item.InstitutionName</strong></td>
+                                            <td><span class="rg-badge recd">@item.LicenceType</span></td>
+                                            <td><span class="rg-chs-heat-cell @HeatClass(item.CurrentScore)">@item.CurrentScore.ToString("F0")</span></td>
+                                            <td><span class="rg-badge @RatingBadgeClass(item.Rating)">@RatingLabel(item.Rating)</span></td>
+                                            <td>@TrendArrow(item.Trend) @item.Trend</td>
+                                            <td>@item.ConsecutiveDeclines</td>
+                                            <td>
+                                                <span class="@(item.ScoreChange >= 0 ? "" : "rg-danger-text")">
+                                                    @(item.ScoreChange >= 0 ? "+" : "")@item.ScoreChange.ToString("F1")
+                                                </span>
+                                            </td>
+                                            <td>@item.WatchReason</td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </section>
+            }
+        </div>
+    }
+    else
+    {
+        <div class="rg-premium-empty">Sector compliance health data has not been generated yet.</div>
     }
 </SectionErrorBoundary>
 
@@ -257,6 +460,65 @@
         return _summary!.RatingDistribution.GetValueOrDefault(ChsRating.APlus, 0)
              + _summary.RatingDistribution.GetValueOrDefault(ChsRating.A, 0);
     }
+
+    private string ResolveSectorBannerTone()
+    {
+        if (_summary is null)
+        {
+            return "rg-premium-banner--info";
+        }
+
+        if (_summary.SectorAverage < 60 || _watchList.Count >= Math.Max(3, _summary.TotalInstitutions / 4))
+        {
+            return "rg-premium-banner--danger";
+        }
+
+        if (_summary.SectorAverage < 75 || _watchList.Count > 0)
+        {
+            return "rg-premium-banner--warning";
+        }
+
+        return "rg-premium-banner--success";
+    }
+
+    private string BuildSectorBannerHeadline()
+    {
+        if (_summary is null)
+        {
+            return "Sector compliance health is awaiting the next computation cycle.";
+        }
+
+        if (_summary.SectorAverage < 60)
+        {
+            return "Sector compliance posture is under pressure and requires supervisory focus.";
+        }
+
+        if (_watchList.Count > 0)
+        {
+            return "Sector compliance health is stable overall, but a meaningful watch list has formed.";
+        }
+
+        return "Sector compliance health remains resilient across the supervised population.";
+    }
+
+    private string BuildSectorBannerDetail()
+    {
+        if (_summary is null)
+        {
+            return "No sector trend is available yet.";
+        }
+
+        var latestPeriod = _summary.SectorTrend.LastOrDefault()?.PeriodLabel ?? "the current window";
+        return $"Average CHS is {_summary.SectorAverage:F1} against a median of {_summary.SectorMedian:F1}. " +
+               $"{_watchList.Count} institutions are on the active watch list, based on data from {latestPeriod}.";
+    }
+
+    private static string GetScoreLevel(decimal score) => score switch
+    {
+        >= 80 => "green",
+        >= 60 => "amber",
+        _ => "red"
+    };
 
     private static string RatingLabel(ChsRating r) => FC.Engine.Infrastructure.Services.ComplianceHealthService.RatingLabel(r);
     private static string TrendArrow(ChsTrend t) => FC.Engine.Infrastructure.Services.ComplianceHealthService.TrendArrow(t);

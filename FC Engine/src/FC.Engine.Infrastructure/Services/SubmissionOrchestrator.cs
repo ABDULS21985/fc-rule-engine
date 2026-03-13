@@ -186,6 +186,7 @@ public sealed class SubmissionOrchestrator : ISubmissionOrchestrator
                     StringComparison.OrdinalIgnoreCase) == true)
             {
                 // R-06: idempotency — this submission is already in a batch for this regulator+version
+                _db.Entry(item).State = EntityState.Detached;
                 _logger.LogWarning(
                     "[{CorrelationId}] Duplicate submission item rejected for SubmissionId={SubId}, " +
                     "RegulatorCode={Regulator}", correlationId, sub.Id, regulatorCode);
@@ -386,7 +387,10 @@ public sealed class SubmissionOrchestrator : ISubmissionOrchestrator
     public async Task<BatchSubmissionResult> RetryBatchAsync(
         int institutionId, long batchId, CancellationToken ct = default)
     {
+        _db.ChangeTracker.Clear();
+
         var batch = await _db.SubmissionBatches
+            .AsNoTracking()
             .Include(b => b.Items)
             .Include(b => b.Channel)
             .FirstOrDefaultAsync(b => b.Id == batchId && b.InstitutionId == institutionId, ct);

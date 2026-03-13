@@ -7,285 +7,949 @@
 
 <PageTitle>ForeSight</PageTitle>
 
-<div class="container-fluid px-4">
-    <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
-        <div>
-            <h1 class="h3 mb-1">ForeSight Predictive Dashboard</h1>
-            <p class="text-muted mb-0">Advisory-only forecasts for filing risk, capital pressure, and compliance-health deterioration.</p>
-        </div>
-        <div class="d-flex gap-2">
-            <button class="btn btn-outline-primary btn-sm" @onclick="RefreshAsync" disabled="@_busy">
-                <span class="me-1" aria-hidden="true">↻</span> Refresh
+<div class="portal-page portal-fs40-shell">
+    <PortalPageHeader Title="ForeSight Predictive Dashboard"
+                      Subtitle="Advisory-only forecasts for filing risk, capital pressure, and compliance-health deterioration.">
+        <SecondaryActions>
+            <button class="portal-btn portal-btn-ghost portal-btn-sm" @onclick="RefreshAsync" disabled="@_busy">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                    <polyline points="23 4 23 10 17 10"></polyline>
+                    <path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"></path>
+                </svg>
+                Refresh
             </button>
-            <button class="btn btn-primary btn-sm" @onclick="DownloadPdfAsync" disabled="@(_busy || _dashboard is null)">
-                Export PDF
+        </SecondaryActions>
+        <PrimaryAction>
+            <button class="portal-btn portal-btn-primary portal-btn-sm" @onclick="DownloadPdfAsync" disabled="@(_busy || _dashboard is null)">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                    <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"></path>
+                    <polyline points="7 10 12 15 17 10"></polyline>
+                    <line x1="12" y1="15" x2="12" y2="3"></line>
+                </svg>
+                Export filing-risk PDF
             </button>
-        </div>
-    </div>
+        </PrimaryAction>
+    </PortalPageHeader>
 
     @if (_isLoading)
     {
-        <div class="text-center py-5" role="status" aria-live="polite">
-            <div class="spinner-border text-primary"></div>
-            <p class="text-muted mt-3 mb-0">Computing predictive compliance signals...</p>
-        </div>
+        <section class="portal-fs40-loading" role="status" aria-label="Loading ForeSight workspace">
+            <div class="portal-fs40-loading-hero"></div>
+            <div class="portal-fs40-loading-grid">
+                @for (var i = 0; i < 4; i++)
+                {
+                    <div class="portal-fs40-loading-card"></div>
+                }
+            </div>
+            <div class="portal-fs40-loading-panels">
+                <div class="portal-fs40-loading-panel"></div>
+                <div class="portal-fs40-loading-panel"></div>
+                <div class="portal-fs40-loading-panel"></div>
+            </div>
+        </section>
     }
     else if (!string.IsNullOrWhiteSpace(_error))
     {
-        <div class="alert alert-danger">@_error</div>
+        <section class="portal-fs40-error" role="alert">
+            <div class="portal-fs40-error-icon" aria-hidden="true">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9">
+                    <circle cx="12" cy="12" r="9"></circle>
+                    <path d="M12 8v5"></path>
+                    <path d="M12 16h.01"></path>
+                </svg>
+            </div>
+            <div>
+                <span class="portal-fs40-kicker">ForeSight unavailable</span>
+                <h2>We could not generate the predictive workspace.</h2>
+                <p>@_error</p>
+            </div>
+        </section>
     }
     else if (_dashboard is not null)
     {
         var compliance = _dashboard.ComplianceForecast;
         var filingHigh = _dashboard.FilingRisks.Count(x => x.RiskBand is "HIGH" or "CRITICAL");
         var capitalHigh = _dashboard.CapitalForecasts.Count(x => x.RiskBand is "HIGH" or "CRITICAL");
+        var averageConfidence = BuildAverageConfidence(_dashboard);
+        var topFiling = _dashboard.FilingRisks.OrderByDescending(x => x.ProbabilityLate).FirstOrDefault();
+        var topCapital = _dashboard.CapitalForecasts.OrderByDescending(x => x.ProjectedValue).FirstOrDefault();
+        var bannerTone = ResolveBannerTone(filingHigh, capitalHigh, _dashboard.Alerts.Count);
 
-        @if (_dashboard.Alerts.Count > 0)
-        {
-            <div class="mb-4">
-                <div class="d-flex justify-content-between align-items-center mb-2">
-                    <h2 class="h5 mb-0">Active Advisory Alerts</h2>
-                    <span class="badge bg-warning text-dark">@_dashboard.Alerts.Count alert(s)</span>
+        <section class="portal-fs40-banner portal-fs40-banner--@bannerTone">
+            <div>
+                <span class="portal-fs40-kicker">Predictive pulse</span>
+                <h2>@BuildBannerHeadline(filingHigh, capitalHigh, _dashboard.Alerts.Count)</h2>
+                <p>@BuildBannerDetail(filingHigh, capitalHigh, averageConfidence)</p>
+            </div>
+            <div class="portal-fs40-banner-pills">
+                <span class="portal-fs40-pill">@_dashboard.FilingRisks.Count filing forecast(s)</span>
+                <span class="portal-fs40-pill">@_dashboard.CapitalForecasts.Count capital metric(s)</span>
+                <span class="portal-fs40-pill">Advisory only</span>
+            </div>
+        </section>
+
+        <section class="portal-fs40-overview">
+            <article class="portal-fs40-hero" style="--stagger: 0;">
+                <div class="portal-fs40-kicker">
+                    <span class="portal-fs40-kicker-dot" aria-hidden="true"></span>
+                    Compliance foresight workspace
                 </div>
-                <div class="row g-3">
-                    @foreach (var alert in _dashboard.Alerts.Take(4))
-                    {
-                        <div class="col-lg-6">
-                            <div class="card border-0 shadow-sm h-100 @alert.SeverityCssClass">
-                                <div class="card-body">
-                                    <div class="d-flex justify-content-between align-items-start gap-3">
-                                        <div>
-                                            <div class="small text-uppercase text-muted">@alert.AlertType.Replace("_", " ")</div>
-                                            <h3 class="h6 mb-2">@alert.Title</h3>
-                                            <p class="small text-muted mb-2">@alert.Body</p>
-                                            @if (!string.IsNullOrWhiteSpace(alert.Recommendation))
-                                            {
-                                                <p class="small mb-0"><strong>Recommendation:</strong> @alert.Recommendation</p>
-                                            }
-                                        </div>
-                                        <button class="btn btn-sm btn-outline-secondary"
-                                                @onclick="() => DismissAlertAsync(alert.Id)"
-                                                aria-label="Dismiss alert">
-                                            Dismiss
-                                        </button>
+                <div class="portal-fs40-hero-topline">
+                    <div>
+                        <h2>Know which filing, capital, and score signals are bending before they break.</h2>
+                        <p>
+                            ForeSight keeps the current institution ahead of likely late filings, prudential pressure, and compliance-score
+                            drift without turning forecasts into automated enforcement.
+                        </p>
+                    </div>
+                    <div class="portal-fs40-hero-score">
+                        <span>Average confidence</span>
+                        <strong>@averageConfidence.ToString("P0")</strong>
+                        <small>Across visible predictive models</small>
+                    </div>
+                </div>
+
+                <div class="portal-fs40-hero-metrics">
+                    <div class="portal-fs40-hero-metric">
+                        <span>High filing risks</span>
+                        <strong>@filingHigh</strong>
+                        <small>@(topFiling?.ModuleName ?? "No elevated filing risk in scope")</small>
+                    </div>
+                    <div class="portal-fs40-hero-metric">
+                        <span>Capital warnings</span>
+                        <strong>@capitalHigh</strong>
+                        <small>@(topCapital?.MetricLabel ?? "No capital pressure surfaced")</small>
+                    </div>
+                    <div class="portal-fs40-hero-metric">
+                        <span>Compliance forecast</span>
+                        <strong>@(compliance?.ProjectedScore.ToString("F1") ?? "N/A")</strong>
+                        <small>@(compliance is null ? "Insufficient history for an unsuppressed score forecast" : $"{compliance.CurrentRating} to {compliance.ProjectedRating}")</small>
+                    </div>
+                </div>
+
+                <div class="portal-fs40-storyline">
+                    <span class="portal-fs40-story-pill">Lead module: @(topFiling?.ModuleCode ?? "None")</span>
+                    <span class="portal-fs40-story-pill">Capital focus: @(topCapital?.MetricCode ?? "None")</span>
+                    <span class="portal-fs40-story-pill">Primary pillar: @(compliance?.DecliningPillar ?? "Stable")</span>
+                </div>
+            </article>
+
+            <aside class="portal-fs40-kpi-grid">
+                <div class="portal-fs40-kpi portal-fs40-kpi--emerald" style="--stagger: 1;">
+                    <span class="portal-fs40-kpi-label">Filing risks</span>
+                    <strong>@_dashboard.FilingRisks.Count</strong>
+                    <p>@filingHigh elevated forecast(s)</p>
+                </div>
+                <div class="portal-fs40-kpi portal-fs40-kpi--gold" style="--stagger: 2;">
+                    <span class="portal-fs40-kpi-label">Capital watch</span>
+                    <strong>@_dashboard.CapitalForecasts.Count</strong>
+                    <p>@capitalHigh prudential warning signal(s)</p>
+                </div>
+                <div class="portal-fs40-kpi portal-fs40-kpi--teal" style="--stagger: 3;">
+                    <span class="portal-fs40-kpi-label">Active alerts</span>
+                    <strong>@_dashboard.Alerts.Count</strong>
+                    <p>Dismissed manually, never auto-enforced</p>
+                </div>
+                <div class="portal-fs40-kpi portal-fs40-kpi--slate" style="--stagger: 4;">
+                    <span class="portal-fs40-kpi-label">Guardrail</span>
+                    <strong>Suppressed</strong>
+                    <p>Low-confidence predictions remain hidden by design</p>
+                </div>
+            </aside>
+        </section>
+
+        <section class="portal-fs40-grid">
+            <article class="portal-fs40-panel portal-fs40-panel--span-7" style="--stagger: 5;">
+                <div class="portal-fs40-panel-head">
+                    <div>
+                        <span class="portal-fs40-kicker">Filing risk watchlist</span>
+                        <h3>Upcoming returns most likely to drift late</h3>
+                    </div>
+                    <a class="portal-fs40-link" href="/analytics/foresight/filing-risks">Open detail</a>
+                </div>
+                <p class="portal-fs40-panel-copy">Sorted by probability of lateness, with due-date context and the strongest signal driver.</p>
+
+                @if (_dashboard.FilingRisks.Count == 0)
+                {
+                    <div class="portal-fs40-empty">No unsuppressed filing forecasts are currently available.</div>
+                }
+                else
+                {
+                    <div class="portal-fs40-list">
+                        @foreach (var item in _dashboard.FilingRisks.OrderByDescending(x => x.ProbabilityLate).Take(8))
+                        {
+                            var topFactor = item.TopFactors.FirstOrDefault();
+                            <a class="portal-fs40-row" href="@($"/analytics/foresight/filing-risks?module={Uri.EscapeDataString(item.ModuleCode)}")">
+                                <div class="portal-fs40-row-main">
+                                    <div class="portal-fs40-row-title">
+                                        <strong>@item.ModuleName</strong>
+                                        <span class="portal-fs40-chip">@item.PeriodCode</span>
+                                    </div>
+                                    <p>@item.RootCauseNarrative</p>
+                                    <div class="portal-fs40-row-meta">
+                                        <span>Due @item.DueDate.ToString("dd MMM yyyy")</span>
+                                        <span>@item.DaysToDeadline day(s) remaining</span>
+                                        @if (topFactor is not null)
+                                        {
+                                            <span>Top factor: @topFactor.FeatureLabel</span>
+                                        }
                                     </div>
                                 </div>
-                            </div>
-                        </div>
-                    }
-                </div>
-            </div>
-        }
-
-        <div class="row g-3 mb-4">
-            <div class="col-md-4">
-                <div class="card border-0 shadow-sm h-100">
-                    <div class="card-body">
-                        <div class="text-muted small">High Filing Risks</div>
-                        <div class="display-6 mb-1">@filingHigh</div>
-                        <div class="small text-muted">@_dashboard.FilingRisks.Count filing forecast(s) in scope</div>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-4">
-                <div class="card border-0 shadow-sm h-100">
-                    <div class="card-body">
-                        <div class="text-muted small">Capital Warning Signals</div>
-                        <div class="display-6 mb-1">@capitalHigh</div>
-                        <div class="small text-muted">@_dashboard.CapitalForecasts.Count prudential metric forecast(s)</div>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-4">
-                <div class="card border-0 shadow-sm h-100">
-                    <div class="card-body">
-                        <div class="text-muted small">Compliance Forecast</div>
-                        @if (compliance is null)
-                        {
-                            <div class="h4 mb-1">Unavailable</div>
-                            <div class="small text-muted">Insufficient scoring history for an unsuppressed forecast.</div>
-                        }
-                        else
-                        {
-                            <div class="display-6 mb-1">@compliance.ProjectedScore.ToString("F1")</div>
-                            <div class="small text-muted">
-                                @compliance.CurrentRating → @compliance.ProjectedRating
-                                <span class="ms-2 badge @(compliance.RiskBand is "HIGH" or "CRITICAL" ? "bg-danger" : compliance.RiskBand == "MEDIUM" ? "bg-warning text-dark" : "bg-success")">
-                                    @compliance.RiskBand
-                                </span>
-                            </div>
+                                <div class="portal-fs40-row-metrics">
+                                    <span class="portal-fs40-metric">
+                                        <small>P(late)</small>
+                                        <strong>@item.ProbabilityLate.ToString("P0")</strong>
+                                    </span>
+                                    <span class="portal-fs40-metric">
+                                        <small>Confidence</small>
+                                        <strong>@item.ConfidenceScore.ToString("P0")</strong>
+                                    </span>
+                                    <span class="portal-fs40-risk @BuildRiskClass(item.RiskBand)">@item.RiskBand</span>
+                                </div>
+                            </a>
                         }
                     </div>
-                </div>
-            </div>
-        </div>
+                }
+            </article>
 
-        @if (compliance is not null)
-        {
-                <div class="card border-0 shadow-sm mb-4">
-                    <div class="card-header bg-white">
-                        <div class="d-flex justify-content-between align-items-center gap-3">
-                            <h2 class="h6 mb-0">Compliance Health Trend Forecast</h2>
-                            <a class="btn btn-sm btn-outline-secondary" href="/analytics/foresight/compliance-trend">View detail</a>
-                        </div>
+            <article class="portal-fs40-panel portal-fs40-panel--span-5" style="--stagger: 6;">
+                <div class="portal-fs40-panel-head">
+                    <div>
+                        <span class="portal-fs40-kicker">Capital outlook</span>
+                        <h3>Prudential metrics under projected pressure</h3>
                     </div>
-                    <div class="card-body">
-                    <div class="row g-3">
-                        <div class="col-lg-4">
-                            <div class="small text-muted">Projected score</div>
-                            <div class="h3 mb-1">@compliance.ProjectedScore.ToString("F1")</div>
-                            <div class="small text-muted">
-                                Confidence interval: @compliance.ConfidenceLower.ToString("F1") to @compliance.ConfidenceUpper.ToString("F1")
+                    <a class="portal-fs40-link" href="/analytics/foresight/capital-forecast">Open detail</a>
+                </div>
+                <p class="portal-fs40-panel-copy">Confidence-banded forecasts against current thresholds and recommended response paths.</p>
+
+                @if (_dashboard.CapitalForecasts.Count == 0)
+                {
+                    <div class="portal-fs40-empty">No unsuppressed capital forecasts are available for this institution.</div>
+                }
+                else
+                {
+                    <div class="portal-fs40-card-stack">
+                        @foreach (var item in _dashboard.CapitalForecasts.OrderByDescending(x => x.BreachPredicted).ThenByDescending(x => x.ProjectedValue).Take(4))
+                        {
+                            <a class="portal-fs40-forecast-card" href="@($"/analytics/foresight/capital-forecast?metric={Uri.EscapeDataString(item.MetricCode)}")">
+                                <div class="portal-fs40-forecast-head">
+                                    <div>
+                                        <strong>@item.MetricLabel</strong>
+                                        <span>@item.HorizonLabel</span>
+                                    </div>
+                                    <span class="portal-fs40-risk @BuildRiskClass(item.RiskBand)">@item.RiskBand</span>
+                                </div>
+                                <div class="portal-fs40-forecast-grid">
+                                    <div>
+                                        <small>Current</small>
+                                        <strong>@item.CurrentValue.ToString("F2")</strong>
+                                    </div>
+                                    <div>
+                                        <small>Projected</small>
+                                        <strong>@item.ProjectedValue.ToString("F2")</strong>
+                                    </div>
+                                    <div>
+                                        <small>Threshold</small>
+                                        <strong>@item.ThresholdValue.ToString("F2")</strong>
+                                    </div>
+                                </div>
+                                <p>@item.Explanation</p>
+                            </a>
+                        }
+                    </div>
+                }
+            </article>
+
+            <article class="portal-fs40-panel portal-fs40-panel--span-5" style="--stagger: 7;">
+                <div class="portal-fs40-panel-head">
+                    <div>
+                        <span class="portal-fs40-kicker">Compliance trend</span>
+                        <h3>Projected score movement and pillar drag</h3>
+                    </div>
+                    <a class="portal-fs40-link" href="/analytics/foresight/compliance-trend">Open detail</a>
+                </div>
+                <p class="portal-fs40-panel-copy">Forecasted score path with confidence interval, drift explanation, and recommended action.</p>
+
+                @if (compliance is null)
+                {
+                    <div class="portal-fs40-empty">Insufficient scoring history for an unsuppressed compliance forecast.</div>
+                }
+                else
+                {
+                    var topFactor = compliance.TopFactors.FirstOrDefault();
+                    <div class="portal-fs40-compliance-card">
+                        <div class="portal-fs40-compliance-score">
+                            <span>Projected CHS</span>
+                            <strong>@compliance.ProjectedScore.ToString("F1")</strong>
+                            <small>@compliance.CurrentRating to @compliance.ProjectedRating</small>
+                        </div>
+                        <div class="portal-fs40-compliance-metrics">
+                            <div>
+                                <small>Expected change</small>
+                                <strong class="@(compliance.ScoreChange < 0 ? "portal-fs40-text-danger" : "portal-fs40-text-success")">
+                                    @(compliance.ScoreChange >= 0 ? "+" : "")@compliance.ScoreChange.ToString("F1")
+                                </strong>
+                            </div>
+                            <div>
+                                <small>Confidence</small>
+                                <strong>@compliance.ConfidenceScore.ToString("P0")</strong>
+                            </div>
+                            <div>
+                                <small>Primary pillar</small>
+                                <strong>@(string.IsNullOrWhiteSpace(compliance.DecliningPillar) ? "Stable" : compliance.DecliningPillar)</strong>
                             </div>
                         </div>
-                        <div class="col-lg-4">
-                            <div class="small text-muted">Expected change</div>
-                            <div class="h3 mb-1 @(compliance.ScoreChange < 0 ? "text-danger" : "text-success")">
-                                @(compliance.ScoreChange >= 0 ? "+" : "")@compliance.ScoreChange.ToString("F1")
-                            </div>
-                            <div class="small text-muted">Primary pillar: @compliance.DecliningPillar</div>
-                        </div>
-                        <div class="col-lg-4">
-                            <div class="small text-muted">Model confidence</div>
-                            <div class="h3 mb-1">@compliance.ConfidenceScore.ToString("P0")</div>
-                            <div class="small text-muted">Advisory narrative is suppressed below configured confidence.</div>
-                        </div>
+                        <p>@compliance.RootCauseNarrative</p>
+                        @if (topFactor is not null)
+                        {
+                            <span class="portal-fs40-factor">Top factor: @topFactor.FeatureLabel</span>
+                        }
+                        @if (!string.IsNullOrWhiteSpace(compliance.Recommendation))
+                        {
+                            <div class="portal-fs40-advice">@compliance.Recommendation</div>
+                        }
                     </div>
-                    <hr />
-                    <p class="mb-2">@compliance.Explanation</p>
-                    <p class="text-muted mb-2">@compliance.RootCauseNarrative</p>
-                    @if (!string.IsNullOrWhiteSpace(compliance.Recommendation))
-                    {
-                        <div class="alert alert-light border mb-0">
-                            <strong>Recommended action:</strong> @compliance.Recommendation
-                        </div>
-                    }
-                </div>
-            </div>
-        }
+                }
+            </article>
 
-        <div class="row g-4">
-            <div class="col-xl-7">
-                <div class="card border-0 shadow-sm h-100">
-                    <div class="card-header bg-white d-flex justify-content-between align-items-center">
-                        <h2 class="h6 mb-0">Filing Risk Forecasts</h2>
-                        <div class="d-flex align-items-center gap-2">
-                            <span class="badge bg-danger">@filingHigh high-risk</span>
-                            <a class="btn btn-sm btn-outline-secondary" href="/analytics/foresight/filing-risks">View all</a>
-                        </div>
+            <article class="portal-fs40-panel portal-fs40-panel--span-7" style="--stagger: 8;">
+                <div class="portal-fs40-panel-head">
+                    <div>
+                        <span class="portal-fs40-kicker">Advisory alerts</span>
+                        <h3>Human review queue</h3>
                     </div>
-                    <div class="table-responsive">
-                        <table class="table table-hover mb-0" aria-label="Filing risk forecasts">
-                            <thead class="table-light">
-                                <tr>
-                                    <th>Module</th>
-                                    <th>Period</th>
-                                    <th>Due date</th>
-                                    <th>P(Late)</th>
-                                    <th>Confidence</th>
-                                    <th>Risk</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                @if (_dashboard.FilingRisks.Count == 0)
-                                {
-                                    <tr>
-                                        <td colspan="6" class="text-center text-muted py-4">No unsuppressed filing forecasts are currently available.</td>
-                                    </tr>
-                                }
-                                else
-                                {
-                                    @foreach (var item in _dashboard.FilingRisks.OrderByDescending(x => x.ProbabilityLate).Take(10))
+                    <span class="portal-fs40-inline-note">@_dashboard.Alerts.Count visible alert(s)</span>
+                </div>
+                <p class="portal-fs40-panel-copy">Alerts are dismissible and informative only. They do not auto-reject, auto-escalate, or auto-enforce.</p>
+
+                @if (_dashboard.Alerts.Count == 0)
+                {
+                    <div class="portal-fs40-empty">No active advisory alerts are currently visible.</div>
+                }
+                else
+                {
+                    <div class="portal-fs40-list">
+                        @foreach (var alert in _dashboard.Alerts.Take(6))
+                        {
+                            <div class="portal-fs40-alert-row portal-fs40-alert-row--@alert.Severity.ToLowerInvariant()">
+                                <div class="portal-fs40-alert-copy">
+                                    <div class="portal-fs40-row-title">
+                                        <strong>@alert.Title</strong>
+                                        <span class="portal-fs40-chip">@alert.AlertType.Replace("_", " ")</span>
+                                    </div>
+                                    <p>@alert.Body</p>
+                                    @if (!string.IsNullOrWhiteSpace(alert.Recommendation))
                                     {
-                                        <tr>
-                                            <td>
-                                                <div class="fw-semibold">
-                                                    <a class="link-offset-2 link-underline link-underline-opacity-0"
-                                                       href="@($"/analytics/foresight/filing-risks?module={Uri.EscapeDataString(item.ModuleCode)}")">
-                                                        @item.ModuleName
-                                                    </a>
-                                                </div>
-                                                <div class="small text-muted">@item.RootCauseNarrative</div>
-                                            </td>
-                                            <td>@item.PeriodCode</td>
-                                            <td>@item.DueDate.ToString("dd MMM yyyy")</td>
-                                            <td>@item.ProbabilityLate.ToString("P0")</td>
-                                            <td>@item.ConfidenceScore.ToString("P0")</td>
-                                            <td><span class="badge @(item.RiskBand is "HIGH" or "CRITICAL" ? "bg-danger" : item.RiskBand == "MEDIUM" ? "bg-warning text-dark" : "bg-success")">@item.RiskBand</span></td>
-                                        </tr>
-                                    }
-                                }
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-
-            <div class="col-xl-5">
-                <div class="card border-0 shadow-sm h-100">
-                    <div class="card-header bg-white">
-                        <div class="d-flex justify-content-between align-items-center gap-3">
-                            <h2 class="h6 mb-0">Capital Forecasts</h2>
-                            <a class="btn btn-sm btn-outline-secondary" href="/analytics/foresight/capital-forecast">View all</a>
-                        </div>
-                    </div>
-                    <div class="card-body">
-                        @if (_dashboard.CapitalForecasts.Count == 0)
-                        {
-                            <div class="text-muted">No unsuppressed capital forecasts are available for the current institution.</div>
-                        }
-                        else
-                        {
-                            @foreach (var item in _dashboard.CapitalForecasts.OrderByDescending(x => x.RiskBand).ThenByDescending(x => x.ProjectedValue))
-                            {
-                                <div class="border rounded p-3 mb-3">
-                                    <div class="d-flex justify-content-between align-items-start gap-3">
-                                        <div>
-                                            <div class="fw-semibold">
-                                                <a class="link-offset-2 link-underline link-underline-opacity-0"
-                                                   href="@($"/analytics/foresight/capital-forecast?metric={Uri.EscapeDataString(item.MetricCode)}")">
-                                                    @item.MetricLabel
-                                                </a>
-                                            </div>
-                                            <div class="small text-muted">@item.HorizonLabel</div>
-                                        </div>
-                                        <span class="badge @(item.RiskBand is "HIGH" or "CRITICAL" ? "bg-danger" : item.RiskBand == "MEDIUM" ? "bg-warning text-dark" : "bg-success")">@item.RiskBand</span>
-                                    </div>
-                                    <div class="row g-2 mt-1">
-                                        <div class="col-4">
-                                            <div class="small text-muted">Current</div>
-                                            <div class="fw-semibold">@item.CurrentValue.ToString("F2")</div>
-                                        </div>
-                                        <div class="col-4">
-                                            <div class="small text-muted">Projected</div>
-                                            <div class="fw-semibold">@item.ProjectedValue.ToString("F2")</div>
-                                        </div>
-                                        <div class="col-4">
-                                            <div class="small text-muted">Threshold</div>
-                                            <div class="fw-semibold">@item.ThresholdValue.ToString("F2")</div>
-                                        </div>
-                                    </div>
-                                    <div class="small text-muted mt-2">
-                                        Confidence interval: @item.ConfidenceLower.ToString("F2") to @item.ConfidenceUpper.ToString("F2")
-                                    </div>
-                                    <p class="small mb-1 mt-2">@item.Explanation</p>
-                                    @if (!string.IsNullOrWhiteSpace(item.Recommendation))
-                                    {
-                                        <div class="small"><strong>Recommendation:</strong> @item.Recommendation</div>
+                                        <div class="portal-fs40-advice">@alert.Recommendation</div>
                                     }
                                 </div>
-                            }
+                                <button class="portal-btn portal-btn-ghost portal-btn-xs"
+                                        @onclick="() => DismissAlertAsync(alert.Id)"
+                                        aria-label="Dismiss alert">
+                                    Dismiss
+                                </button>
+                            </div>
                         }
                     </div>
-                </div>
-            </div>
-        </div>
+                }
+            </article>
+        </section>
 
-        <div class="alert alert-secondary mt-4 mb-0">
-            ForeSight outputs are advisory only. They do not trigger automatic enforcement, rejection, or escalation actions.
-        </div>
+        <section class="portal-fs40-guardrail" style="--stagger: 9;">
+            <span class="portal-fs40-kicker">Guardrail notice</span>
+            <h3>ForeSight outputs are advisory only.</h3>
+            <p>Predictions include confidence intervals, signal narratives, and recommendations, but they never trigger automatic enforcement, rejection, or escalation.</p>
+        </section>
     }
 </div>
+
+<style>
+    .portal-fs40-shell {
+        display: grid;
+        gap: 1.5rem;
+    }
+
+    .portal-fs40-loading {
+        display: grid;
+        gap: 1rem;
+    }
+
+    .portal-fs40-loading-hero,
+    .portal-fs40-loading-card,
+    .portal-fs40-loading-panel {
+        position: relative;
+        overflow: hidden;
+        border-radius: 30px;
+        background: linear-gradient(135deg, rgba(255, 255, 255, 0.94), rgba(244, 248, 242, 0.97));
+        border: 1px solid rgba(226, 232, 240, 0.9);
+    }
+
+    .portal-fs40-loading-hero::after,
+    .portal-fs40-loading-card::after,
+    .portal-fs40-loading-panel::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(110deg, transparent 8%, rgba(255, 255, 255, 0.8) 30%, transparent 52%);
+        transform: translateX(-100%);
+        animation: portal-fs40-shimmer 1.4s infinite;
+    }
+
+    .portal-fs40-loading-hero {
+        min-height: 250px;
+    }
+
+    .portal-fs40-loading-grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 1rem;
+    }
+
+    .portal-fs40-loading-card {
+        min-height: 150px;
+    }
+
+    .portal-fs40-loading-panels {
+        display: grid;
+        grid-template-columns: repeat(12, minmax(0, 1fr));
+        gap: 1rem;
+    }
+
+    .portal-fs40-loading-panel {
+        min-height: 340px;
+        grid-column: span 4;
+    }
+
+    .portal-fs40-banner,
+    .portal-fs40-hero,
+    .portal-fs40-kpi,
+    .portal-fs40-panel,
+    .portal-fs40-error,
+    .portal-fs40-guardrail {
+        position: relative;
+        overflow: hidden;
+        border-radius: 28px;
+        border: 1px solid rgba(226, 232, 240, 0.92);
+        background: rgba(255, 255, 255, 0.94);
+        box-shadow: 0 24px 56px rgba(15, 23, 42, 0.05);
+        animation: portal-fs40-rise 620ms cubic-bezier(.2, .75, .25, 1) both;
+        animation-delay: calc(var(--stagger, 0) * 70ms);
+    }
+
+    .portal-fs40-error {
+        display: grid;
+        grid-template-columns: auto 1fr;
+        gap: 1rem;
+        align-items: center;
+        padding: 1.35rem;
+    }
+
+    .portal-fs40-error-icon {
+        width: 54px;
+        height: 54px;
+        border-radius: 18px;
+        display: grid;
+        place-items: center;
+        background: linear-gradient(135deg, rgba(185, 28, 28, 0.12), rgba(251, 191, 36, 0.1));
+        color: #b91c1c;
+    }
+
+    .portal-fs40-error h2 {
+        margin: 0.3rem 0 0.45rem;
+        color: #1d2a3d;
+    }
+
+    .portal-fs40-error p {
+        margin: 0;
+        color: #607082;
+    }
+
+    .portal-fs40-banner {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 1rem;
+        align-items: center;
+        padding: 1.5rem;
+        color: #fff;
+    }
+
+    .portal-fs40-banner--critical {
+        background: linear-gradient(135deg, rgba(127, 29, 29, 0.98), rgba(185, 28, 28, 0.94));
+    }
+
+    .portal-fs40-banner--warning {
+        background: linear-gradient(135deg, rgba(120, 53, 15, 0.96), rgba(180, 83, 9, 0.92));
+    }
+
+    .portal-fs40-banner--success {
+        background: linear-gradient(135deg, rgba(0, 107, 63, 0.96), rgba(13, 148, 101, 0.9));
+    }
+
+    .portal-fs40-banner-copy h2 {
+        margin: 0.3rem 0 0.45rem;
+        font-size: clamp(1.35rem, 1.8vw, 1.95rem);
+    }
+
+    .portal-fs40-banner-copy p {
+        margin: 0;
+        color: rgba(255, 255, 255, 0.88);
+        max-width: 72ch;
+    }
+
+    .portal-fs40-banner-pills,
+    .portal-fs40-storyline {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.65rem;
+    }
+
+    .portal-fs40-pill,
+    .portal-fs40-story-pill,
+    .portal-fs40-chip,
+    .portal-fs40-risk {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0.55rem 0.8rem;
+        border-radius: 999px;
+        font-size: 0.83rem;
+        font-weight: 800;
+    }
+
+    .portal-fs40-pill {
+        background: rgba(255, 255, 255, 0.14);
+        border: 1px solid rgba(255, 255, 255, 0.16);
+        color: #fff;
+    }
+
+    .portal-fs40-overview {
+        display: grid;
+        grid-template-columns: minmax(0, 1.45fr) minmax(280px, 0.95fr);
+        gap: 1rem;
+    }
+
+    .portal-fs40-kicker {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.55rem;
+        text-transform: uppercase;
+        letter-spacing: 0.16em;
+        font-size: 0.72rem;
+        font-weight: 900;
+        color: #006b3f;
+    }
+
+    .portal-fs40-kicker-dot {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #0a8f56, #c8a415);
+        box-shadow: 0 0 0 5px rgba(0, 107, 63, 0.08);
+    }
+
+    .portal-fs40-hero {
+        padding: 1.55rem;
+        background:
+            radial-gradient(circle at top right, rgba(200, 164, 21, 0.18), transparent 34%),
+            linear-gradient(140deg, rgba(250, 252, 248, 0.98), rgba(255, 255, 255, 0.95));
+    }
+
+    .portal-fs40-hero-topline {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 1rem;
+        align-items: start;
+        margin-top: 1rem;
+    }
+
+    .portal-fs40-hero h2 {
+        margin: 0;
+        font-size: clamp(2rem, 3vw, 3rem);
+        line-height: 0.98;
+        letter-spacing: -0.05em;
+        color: #1d2a3d;
+        max-width: 14ch;
+    }
+
+    .portal-fs40-hero p,
+    .portal-fs40-panel-copy,
+    .portal-fs40-row-main p,
+    .portal-fs40-alert-copy p,
+    .portal-fs40-forecast-card p,
+    .portal-fs40-guardrail p {
+        color: #607082;
+        line-height: 1.55;
+    }
+
+    .portal-fs40-hero-score,
+    .portal-fs40-hero-metric,
+    .portal-fs40-kpi,
+    .portal-fs40-compliance-card,
+    .portal-fs40-forecast-card {
+        padding: 1rem 1.05rem;
+        border-radius: 24px;
+        border: 1px solid rgba(226, 232, 240, 0.9);
+        background: rgba(255, 255, 255, 0.8);
+    }
+
+    .portal-fs40-hero-score span,
+    .portal-fs40-hero-metric span,
+    .portal-fs40-kpi-label,
+    .portal-fs40-metric small,
+    .portal-fs40-compliance-score span,
+    .portal-fs40-compliance-metrics small,
+    .portal-fs40-forecast-grid small {
+        display: block;
+        text-transform: uppercase;
+        letter-spacing: 0.14em;
+        font-size: 0.72rem;
+        font-weight: 800;
+        color: #6b7280;
+    }
+
+    .portal-fs40-hero-score strong,
+    .portal-fs40-hero-metric strong,
+    .portal-fs40-kpi strong,
+    .portal-fs40-metric strong,
+    .portal-fs40-compliance-score strong,
+    .portal-fs40-compliance-metrics strong,
+    .portal-fs40-forecast-grid strong {
+        display: block;
+        margin-top: 0.45rem;
+        font-size: clamp(1.5rem, 2vw, 2.2rem);
+        line-height: 1;
+        letter-spacing: -0.04em;
+        color: #172335;
+    }
+
+    .portal-fs40-hero-score {
+        min-width: 180px;
+        text-align: right;
+    }
+
+    .portal-fs40-hero-score small,
+    .portal-fs40-hero-metric small,
+    .portal-fs40-kpi p {
+        display: block;
+        margin-top: 0.45rem;
+        color: #647082;
+    }
+
+    .portal-fs40-hero-metrics,
+    .portal-fs40-kpi-grid,
+    .portal-fs40-grid {
+        display: grid;
+        gap: 1rem;
+    }
+
+    .portal-fs40-hero-metrics {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        margin-top: 1.2rem;
+    }
+
+    .portal-fs40-kpi-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .portal-fs40-story-pill {
+        background: rgba(23, 50, 77, 0.05);
+        border: 1px solid rgba(23, 50, 77, 0.08);
+        color: #334155;
+    }
+
+    .portal-fs40-kpi--emerald {
+        background: linear-gradient(180deg, rgba(0, 107, 63, 0.1), rgba(255, 255, 255, 0.95));
+    }
+
+    .portal-fs40-kpi--gold {
+        background: linear-gradient(180deg, rgba(200, 164, 21, 0.14), rgba(255, 255, 255, 0.95));
+    }
+
+    .portal-fs40-kpi--teal {
+        background: linear-gradient(180deg, rgba(15, 118, 110, 0.12), rgba(255, 255, 255, 0.96));
+    }
+
+    .portal-fs40-kpi--slate {
+        background: linear-gradient(180deg, rgba(51, 65, 85, 0.08), rgba(255, 255, 255, 0.95));
+    }
+
+    .portal-fs40-grid {
+        grid-template-columns: repeat(12, minmax(0, 1fr));
+    }
+
+    .portal-fs40-panel,
+    .portal-fs40-guardrail {
+        padding: 1.35rem;
+    }
+
+    .portal-fs40-panel--span-5 {
+        grid-column: span 5;
+    }
+
+    .portal-fs40-panel--span-7 {
+        grid-column: span 7;
+    }
+
+    .portal-fs40-panel-head,
+    .portal-fs40-row-title,
+    .portal-fs40-forecast-head {
+        display: flex;
+        justify-content: space-between;
+        gap: 1rem;
+        align-items: flex-start;
+    }
+
+    .portal-fs40-panel-head h3,
+    .portal-fs40-guardrail h3 {
+        margin: 0.35rem 0 0;
+        color: #172335;
+        font-size: clamp(1.2rem, 1.5vw, 1.7rem);
+        letter-spacing: -0.03em;
+    }
+
+    .portal-fs40-link,
+    .portal-fs40-inline-note {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0.6rem 0.85rem;
+        border-radius: 999px;
+        background: rgba(23, 50, 77, 0.04);
+        border: 1px solid rgba(23, 50, 77, 0.08);
+        color: #334155;
+        text-decoration: none;
+        font-weight: 700;
+        white-space: nowrap;
+    }
+
+    .portal-fs40-link:hover {
+        color: #172335;
+    }
+
+    .portal-fs40-list,
+    .portal-fs40-card-stack {
+        display: grid;
+        gap: 0.8rem;
+    }
+
+    .portal-fs40-row,
+    .portal-fs40-alert-row {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 1rem;
+        padding: 1rem;
+        border-radius: 24px;
+        border: 1px solid rgba(226, 232, 240, 0.9);
+        background: rgba(248, 250, 252, 0.72);
+        text-decoration: none;
+        transition: transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
+    }
+
+    .portal-fs40-row:hover,
+    .portal-fs40-forecast-card:hover {
+        transform: translateY(-1px);
+        border-color: rgba(0, 107, 63, 0.18);
+        box-shadow: 0 14px 26px rgba(15, 23, 42, 0.05);
+        color: inherit;
+    }
+
+    .portal-fs40-chip {
+        background: rgba(23, 50, 77, 0.06);
+        border: 1px solid rgba(23, 50, 77, 0.08);
+        color: #4b5563;
+    }
+
+    .portal-fs40-row-title strong,
+    .portal-fs40-alert-copy strong,
+    .portal-fs40-forecast-head strong {
+        color: #172335;
+    }
+
+    .portal-fs40-row-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.65rem;
+        margin-top: 0.55rem;
+        color: #647082;
+        font-size: 0.86rem;
+    }
+
+    .portal-fs40-row-metrics {
+        display: grid;
+        grid-template-columns: repeat(3, auto);
+        gap: 0.7rem;
+        align-items: center;
+    }
+
+    .portal-fs40-metric {
+        min-width: 92px;
+        padding: 0.75rem 0.8rem;
+        border-radius: 18px;
+        background: rgba(255, 255, 255, 0.84);
+        border: 1px solid rgba(226, 232, 240, 0.92);
+        text-align: right;
+    }
+
+    .portal-fs40-risk {
+        min-width: 88px;
+        color: #fff;
+    }
+
+    .portal-fs40-risk--critical,
+    .portal-fs40-risk--high {
+        background: linear-gradient(135deg, #b91c1c, #dc2626);
+    }
+
+    .portal-fs40-risk--medium {
+        background: linear-gradient(135deg, #b45309, #f59e0b);
+    }
+
+    .portal-fs40-risk--low,
+    .portal-fs40-risk--none {
+        background: linear-gradient(135deg, #0f7a4b, #16a34a);
+    }
+
+    .portal-fs40-forecast-card {
+        display: grid;
+        gap: 0.9rem;
+        text-decoration: none;
+        transition: transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
+    }
+
+    .portal-fs40-forecast-head span,
+    .portal-fs40-compliance-score small {
+        color: #647082;
+    }
+
+    .portal-fs40-forecast-grid,
+    .portal-fs40-compliance-metrics {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 0.75rem;
+    }
+
+    .portal-fs40-compliance-card {
+        display: grid;
+        gap: 1rem;
+    }
+
+    .portal-fs40-factor,
+    .portal-fs40-advice {
+        display: inline-flex;
+        align-items: center;
+        padding: 0.58rem 0.78rem;
+        border-radius: 18px;
+        font-size: 0.88rem;
+        line-height: 1.45;
+    }
+
+    .portal-fs40-factor {
+        background: rgba(15, 118, 110, 0.08);
+        border: 1px solid rgba(15, 118, 110, 0.1);
+        color: #0f766e;
+        font-weight: 700;
+    }
+
+    .portal-fs40-advice {
+        background: rgba(0, 107, 63, 0.08);
+        border: 1px solid rgba(0, 107, 63, 0.1);
+        color: #0b6b47;
+    }
+
+    .portal-fs40-alert-row {
+        align-items: start;
+    }
+
+    .portal-fs40-alert-row--warning {
+        border-color: rgba(180, 83, 9, 0.22);
+        background: rgba(255, 251, 235, 0.7);
+    }
+
+    .portal-fs40-alert-row--critical {
+        border-color: rgba(185, 28, 28, 0.22);
+        background: rgba(254, 242, 242, 0.78);
+    }
+
+    .portal-fs40-alert-row--info {
+        border-color: rgba(14, 165, 233, 0.18);
+        background: rgba(240, 249, 255, 0.8);
+    }
+
+    .portal-fs40-empty {
+        min-height: 220px;
+        display: grid;
+        place-items: center;
+        text-align: center;
+        color: #647082;
+        border-radius: 24px;
+        border: 1px dashed rgba(148, 163, 184, 0.45);
+        background: linear-gradient(135deg, rgba(248, 250, 252, 0.82), rgba(255, 255, 255, 0.95));
+        padding: 1.25rem;
+    }
+
+    .portal-fs40-text-danger {
+        color: #b91c1c;
+    }
+
+    .portal-fs40-text-success {
+        color: #0f7a4b;
+    }
+
+    @@keyframes portal-fs40-rise {
+        from {
+            opacity: 0;
+            transform: translateY(14px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    @@keyframes portal-fs40-shimmer {
+        to {
+            transform: translateX(100%);
+        }
+    }
+
+    @@media (max-width: 1220px) {
+        .portal-fs40-overview,
+        .portal-fs40-grid,
+        .portal-fs40-loading-panels {
+            grid-template-columns: 1fr;
+        }
+
+        .portal-fs40-loading-grid,
+        .portal-fs40-kpi-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .portal-fs40-panel--span-5,
+        .portal-fs40-panel--span-7 {
+            grid-column: auto;
+        }
+    }
+
+    @@media (max-width: 860px) {
+        .portal-fs40-banner,
+        .portal-fs40-hero-topline,
+        .portal-fs40-hero-metrics,
+        .portal-fs40-kpi-grid,
+        .portal-fs40-loading-grid,
+        .portal-fs40-row,
+        .portal-fs40-alert-row,
+        .portal-fs40-row-metrics,
+        .portal-fs40-forecast-grid,
+        .portal-fs40-compliance-metrics {
+            grid-template-columns: 1fr;
+        }
+
+        .portal-fs40-row-metrics,
+        .portal-fs40-metric {
+            text-align: left;
+        }
+    }
+</style>
 
 @code {
     [CascadingParameter] private Task<AuthenticationState> AuthenticationStateTask { get; set; } = default!;
@@ -391,5 +1055,57 @@
         {
             _error = $"Unable to dismiss alert: {ex.Message}";
         }
+    }
+
+    private static decimal BuildAverageConfidence(ForeSightDashboardData dashboard)
+    {
+        var scores = dashboard.FilingRisks.Select(x => x.ConfidenceScore)
+            .Concat(dashboard.CapitalForecasts.Select(x => x.ConfidenceScore))
+            .Concat(dashboard.ComplianceForecast is null ? [] : [dashboard.ComplianceForecast.ConfidenceScore])
+            .ToList();
+
+        return scores.Count == 0 ? 0m : scores.Average();
+    }
+
+    private static string ResolveBannerTone(int filingHigh, int capitalHigh, int alertCount)
+    {
+        if (filingHigh >= 3 || capitalHigh >= 2 || alertCount >= 4)
+        {
+            return "critical";
+        }
+
+        if (filingHigh > 0 || capitalHigh > 0 || alertCount > 0)
+        {
+            return "warning";
+        }
+
+        return "success";
+    }
+
+    private static string BuildBannerHeadline(int filingHigh, int capitalHigh, int alertCount)
+    {
+        var totalSignals = filingHigh + capitalHigh + alertCount;
+        return totalSignals > 0
+            ? $"{totalSignals} live predictive signal(s) need human review."
+            : "The current institution is operating inside expected predictive bands.";
+    }
+
+    private static string BuildBannerDetail(int filingHigh, int capitalHigh, decimal averageConfidence)
+    {
+        return filingHigh + capitalHigh > 0
+            ? $"{filingHigh} filing risk(s) and {capitalHigh} capital warning(s) are currently elevated, with average confidence at {averageConfidence:P0}."
+            : $"All visible forecasts are currently in lower bands, with average confidence at {averageConfidence:P0}.";
+    }
+
+    private static string BuildRiskClass(string riskBand)
+    {
+        return riskBand.ToUpperInvariant() switch
+        {
+            "CRITICAL" => "portal-fs40-risk--critical",
+            "HIGH" => "portal-fs40-risk--high",
+            "MEDIUM" => "portal-fs40-risk--medium",
+            "LOW" => "portal-fs40-risk--low",
+            _ => "portal-fs40-risk--none"
+        };
     }
 }

@@ -10,18 +10,39 @@
 <PageTitle>ForeSight Regulatory Ranking</PageTitle>
 
 <PageHeader Title="Regulatory Action Ranking"
-            Subtitle="Cross-tenant supervisory-priority forecasts with regulator and licence filters.">
+            Subtitle="Cross-tenant supervisory-priority forecasts with regulator and licence filters."
+            StatusBadge="@StatusBadge"
+            StatusVariant="@StatusVariant">
     <SecondaryActions>
         <a class="fc-btn fc-btn--outline fc-btn--sm" href="/platform/foresight">Back to overview</a>
     </SecondaryActions>
+    <PrimaryAction>
+        <button class="fc-btn fc-btn--primary fc-btn--sm" @onclick="LoadAsync" disabled="@_loading">Refresh ranking</button>
+    </PrimaryAction>
 </PageHeader>
 
 <div class="fc-page">
     @if (_loading)
     {
-        <div class="fc-card">
-            <div class="fc-card__body">
-                <div class="fc-skel fc-skel-block" style="--skel-w:100%;--skel-h:320px"></div>
+        <div class="rg-premium-flow" aria-busy="true" aria-label="Loading regulatory ranking detail">
+            <div class="fc-skel fc-skel-block" style="--skel-w:100%;--skel-h:156px;"></div>
+            <div class="fc-skel-stats-row">
+                @for (var i = 0; i < 4; i++)
+                {
+                    <div class="fc-skel-card-body">
+                        <div class="fc-skel fc-skel-text" style="--skel-w:44%;--skel-h:12px;--skeleton-index:@(i * 3);"></div>
+                        <div class="fc-skel fc-skel-text-lg" style="--skel-w:56%;--skel-h:34px;--skeleton-index:@(i * 3 + 1);margin-top:var(--space-3);"></div>
+                        <div class="fc-skel fc-skel-text" style="--skel-w:82%;--skel-h:12px;--skeleton-index:@(i * 3 + 2);margin-top:var(--space-3);"></div>
+                    </div>
+                }
+            </div>
+            <div class="fc-skel-content-grid">
+                <div class="fc-skel-card-body">
+                    <SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Card" Index="20" />
+                </div>
+                <div class="fc-skel-card-body">
+                    <SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Card" Index="28" />
+                </div>
             </div>
         </div>
     }
@@ -33,109 +54,207 @@
     }
     else
     {
-        <div class="fc-card fc-mb-4">
-            <div class="fc-card__body">
-                <div class="fc-grid" style="grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem;">
-                    <label class="fc-field">
-                        <span class="fc-field__label">Regulator</span>
-                        <select class="fc-input" @bind="_selectedRegulator" @bind:after="OnRegulatorChangedAsync">
-                            @foreach (var regulator in RegulatorOptions)
-                            {
-                                <option value="@regulator">@regulator</option>
-                            }
-                        </select>
-                    </label>
-                    <label class="fc-field">
-                        <span class="fc-field__label">Licence type</span>
-                        <select class="fc-input" @bind="_selectedLicence" @bind:after="LoadAsync">
-                            <option value="">All licence types</option>
-                            @foreach (var licence in CurrentLicenceOptions)
-                            {
-                                <option value="@licence">@licence</option>
-                            }
-                        </select>
-                    </label>
-                </div>
-            </div>
-        </div>
+        var elevatedCount = _items.Count(x => x.RiskBand is "HIGH" or "CRITICAL");
+        var averageConfidence = _items.Count == 0 ? 0m : _items.Average(x => x.ConfidenceScore);
+        var averageProbability = _items.Count == 0 ? 0m : _items.Average(x => x.InterventionProbability);
+        var leadingInstitution = _items.OrderByDescending(x => x.InterventionProbability).FirstOrDefault();
 
-        <div class="fc-grid fc-grid-3 fc-mb-4">
-            <div class="fc-card">
-                <div class="fc-card__body">
-                    <div class="fc-stat-label">Entities ranked</div>
-                    <div class="fc-stat-value">@_items.Count</div>
+        <div class="rg-premium-flow">
+            <section class="rg-premium-banner rg-premium-banner--@ResolveBannerTone(elevatedCount, averageProbability)">
+                <div class="rg-premium-banner__grid">
+                    <div>
+                        <div class="rg-premium-banner__eyebrow">Supervisory focus lane</div>
+                        <h2 class="rg-premium-banner__headline">@BuildBannerHeadline(elevatedCount, averageProbability)</h2>
+                        <p class="rg-premium-banner__detail">@BuildBannerDetail(elevatedCount, averageConfidence, leadingInstitution)</p>
+                    </div>
+                    <div class="rg-premium-banner__meta">
+                        <div class="rg-premium-banner__meta-label">Current filter scope</div>
+                        <div class="rg-premium-banner__meta-value">@_selectedRegulator @BuildScopeSuffix()</div>
+                        <div class="rg-premium-banner__meta-copy">
+                            @(leadingInstitution is null
+                                ? "No unsuppressed regulatory-action forecasts are available for the current filter."
+                                : $"Current lead institution: {leadingInstitution.InstitutionName} at {leadingInstitution.InterventionProbability:P0} intervention probability.")
+                        </div>
+                    </div>
                 </div>
-            </div>
-            <div class="fc-card">
-                <div class="fc-card__body">
-                    <div class="fc-stat-label">High or critical</div>
-                    <div class="fc-stat-value">@_items.Count(x => x.RiskBand is "HIGH" or "CRITICAL")</div>
-                </div>
-            </div>
-            <div class="fc-card">
-                <div class="fc-card__body">
-                    <div class="fc-stat-label">Average confidence</div>
-                    <div class="fc-stat-value">@(_items.Count == 0 ? "0%" : _items.Average(x => x.ConfidenceScore).ToString("P0"))</div>
-                </div>
-            </div>
-        </div>
+            </section>
 
-        <div class="fc-card">
-            <div class="fc-card__body fc-table-responsive">
-                <table class="fc-table" aria-label="Regulatory action ranking detail">
-                    <thead>
-                        <tr>
-                            <th>Institution</th>
-                            <th>Licence</th>
-                            <th>Probability</th>
-                            <th>Confidence</th>
-                            <th>Risk</th>
-                            <th>Recommendation</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @if (_items.Count == 0)
-                        {
-                            <tr>
-                                <td colspan="6" class="fc-text-muted">No unsuppressed regulatory-action forecasts are available for this filter.</td>
-                            </tr>
-                        }
-                        else
-                        {
-                            @foreach (var item in _items)
+            <section class="rg-premium-hero">
+                <div class="rg-premium-hero__grid">
+                    <div>
+                        <div class="rg-premium-hero__eyebrow">ForeSight supervisory ranking</div>
+                        <h2 class="rg-premium-hero__title">Direct examiner attention to the institutions whose signals are deteriorating fastest.</h2>
+                        <p class="rg-premium-hero__subtitle">
+                            The ranking combines early-warning posture, capital proximity, filing discipline, and anomaly burden into a single advisory queue.
+                            Use it to prioritize reviews, not to automate enforcement decisions.
+                        </p>
+                        <div class="d-flex flex-wrap gap-2 mt-3">
+                            <span class="rg-premium-chip rg-premium-chip--danger">@elevatedCount elevated institution(s)</span>
+                            <span class="rg-premium-chip rg-premium-chip--info">@averageConfidence.ToString("P0") average confidence</span>
+                            <span class="rg-premium-chip rg-premium-chip--warning">@averageProbability.ToString("P0") average intervention probability</span>
+                        </div>
+                    </div>
+                    <div class="rg-premium-hero__aside">
+                        <div class="rg-premium-note">
+                            <div class="rg-premium-note__label">Regulator lens</div>
+                            <div class="rg-premium-note__value">@_selectedRegulator</div>
+                            <div class="rg-premium-note__copy">@(string.IsNullOrWhiteSpace(_selectedLicence) ? "All supported licence categories are currently in view." : $"Filtered to {_selectedLicence} institutions.")</div>
+                        </div>
+                        <div class="rg-premium-note">
+                            <div class="rg-premium-note__label">Governance guardrail</div>
+                            <div class="rg-premium-note__value">Advisory only</div>
+                            <div class="rg-premium-note__copy">These probabilities rank human review priority. They do not create actions, penalties, or escalations without examiner approval.</div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="rg-premium-stat-grid" aria-label="Regulatory-ranking metrics">
+                <article class="rg-premium-stat">
+                    <div class="rg-premium-stat__label">Entities ranked</div>
+                    <div class="rg-premium-stat__value">@_items.Count</div>
+                    <div class="rg-premium-stat__note">Unsuppressed entities in the current regulator filter.</div>
+                </article>
+                <article class="rg-premium-stat">
+                    <div class="rg-premium-stat__label">High or critical</div>
+                    <div class="rg-premium-stat__value @BuildStatValueClass(elevatedCount > 0 ? "HIGH" : "LOW")">@elevatedCount</div>
+                    <div class="rg-premium-stat__note">Institutions worth first-line examiner attention.</div>
+                </article>
+                <article class="rg-premium-stat">
+                    <div class="rg-premium-stat__label">Average confidence</div>
+                    <div class="rg-premium-stat__value @BuildConfidenceValueClass(averageConfidence)">@averageConfidence.ToString("P0")</div>
+                    <div class="rg-premium-stat__note">Visible model confidence across the ranking.</div>
+                </article>
+                <article class="rg-premium-stat">
+                    <div class="rg-premium-stat__label">Average intervention probability</div>
+                    <div class="rg-premium-stat__value @BuildStatValueClass(averageProbability >= 0.40m ? "MEDIUM" : "LOW")">@averageProbability.ToString("P0")</div>
+                    <div class="rg-premium-stat__note">Useful as a regulator-wide pressure reading for the chosen scope.</div>
+                </article>
+            </section>
+
+            <section class="rg-premium-content-grid">
+                <div class="rg-premium-main">
+                    <article class="rg-premium-panel">
+                        <div class="rg-premium-panel__header">
+                            <div>
+                                <div class="rg-premium-panel__eyebrow">Examiner queue</div>
+                                <h3 class="rg-premium-panel__title">Institutions ranked by supervisory pressure</h3>
+                                <p class="rg-premium-panel__subtitle">The list surfaces probability, confidence band, and the strongest explainability drivers for each institution in the current regulator scope.</p>
+                            </div>
+                            <div class="rg-premium-panel__metric">
+                                <span class="rg-premium-panel__metric-label">Average probability</span>
+                                @averageProbability.ToString("P0")
+                            </div>
+                        </div>
+                        <div class="rg-premium-panel__body">
+                            @if (_items.Count == 0)
                             {
-                                <tr>
-                                    <td>
-                                        <div class="fw-semibold">@item.InstitutionName</div>
-                                        <div class="fc-text-muted">@item.RootCauseNarrative</div>
-                                        @if (item.TopFactors.Count > 0)
-                                        {
-                                            <div class="d-flex flex-wrap gap-1 mt-2">
-                                                @foreach (var factor in item.TopFactors)
+                                <div class="rg-premium-empty">No unsuppressed regulatory-action forecasts are available for the selected regulator and licence combination.</div>
+                            }
+                            else
+                            {
+                                <div class="rg-premium-list">
+                                    @foreach (var item in _items.OrderByDescending(x => x.InterventionProbability))
+                                    {
+                                        <div class="rg-premium-list__item">
+                                            <div class="rg-premium-list__top">
+                                                <div>
+                                                    <div class="rg-premium-list__heading">@item.InstitutionName</div>
+                                                    <div class="rg-premium-list__meta">@item.LicenceType · @item.RegulatorCode</div>
+                                                </div>
+                                                <div class="text-end">
+                                                    <div class="rg-premium-list__value">@item.InterventionProbability.ToString("P0")</div>
+                                                    <span class="@BuildRiskChipClass(item.RiskBand)">@item.RiskBand</span>
+                                                </div>
+                                            </div>
+                                            <div class="rg-premium-list__meta">@item.Explanation</div>
+                                            <div class="rg-premium-list__meta">@item.RootCauseNarrative</div>
+                                            <div class="rg-premium-list__tags">
+                                                <span class="rg-premium-chip rg-premium-chip--info">Confidence @item.ConfidenceScore.ToString("P0")</span>
+                                                <span class="rg-premium-chip rg-premium-chip--warning">Band @item.ConfidenceLower.ToString("P0") to @item.ConfidenceUpper.ToString("P0")</span>
+                                                @foreach (var factor in item.TopFactors.OrderByDescending(x => x.ContributionScore).Take(3))
                                                 {
-                                                    <span class="fc-badge">@factor.FeatureLabel (@factor.ContributionScore.ToString("F2"))</span>
+                                                    <span class="rg-premium-chip @BuildFactorChipClass(factor.ImpactDirection)">@factor.FeatureLabel (@factor.ContributionScore.ToString("F2"))</span>
                                                 }
                                             </div>
-                                        }
-                                    </td>
-                                    <td>@item.LicenceType</td>
-                                    <td>@item.InterventionProbability.ToString("P0")</td>
-                                    <td>
-                                        <div>@item.ConfidenceScore.ToString("P0")</div>
-                                        <div class="fc-text-muted">@item.ConfidenceLower.ToString("P0") to @item.ConfidenceUpper.ToString("P0")</div>
-                                    </td>
-                                    <td>
-                                        <span class="fc-badge @(item.RiskBand is "HIGH" or "CRITICAL" ? "fc-badge--danger" : item.RiskBand == "MEDIUM" ? "fc-badge--warning" : "fc-badge--success")">
-                                            @item.RiskBand
-                                        </span>
-                                    </td>
-                                    <td>@item.Recommendation</td>
-                                </tr>
+                                            @if (!string.IsNullOrWhiteSpace(item.Recommendation))
+                                            {
+                                                <div class="rg-premium-table-note mt-3"><strong>Recommended action:</strong> @item.Recommendation</div>
+                                            }
+                                        </div>
+                                    }
+                                </div>
                             }
-                        }
-                    </tbody>
-                </table>
-            </div>
+                        </div>
+                    </article>
+                </div>
+
+                <div class="rg-premium-side">
+                    <article class="rg-premium-panel">
+                        <div class="rg-premium-panel__header">
+                            <div>
+                                <div class="rg-premium-panel__eyebrow">Filter scope</div>
+                                <h3 class="rg-premium-panel__title">Regulator and licence lens</h3>
+                                <p class="rg-premium-panel__subtitle">Use the filter panel to shift the ranking between regulators and licence cohorts without leaving the workspace.</p>
+                            </div>
+                        </div>
+                        <div class="rg-premium-panel__body">
+                            <div class="fc-grid" style="grid-template-columns:1fr;gap:1rem;">
+                                <label class="fc-field">
+                                    <span class="fc-field__label">Regulator</span>
+                                    <select class="fc-input" @bind="_selectedRegulator" @bind:after="OnRegulatorChangedAsync">
+                                        @foreach (var regulator in RegulatorOptions)
+                                        {
+                                            <option value="@regulator">@regulator</option>
+                                        }
+                                    </select>
+                                </label>
+                                <label class="fc-field">
+                                    <span class="fc-field__label">Licence type</span>
+                                    <select class="fc-input" @bind="_selectedLicence" @bind:after="LoadAsync">
+                                        <option value="">All licence types</option>
+                                        @foreach (var licence in CurrentLicenceOptions)
+                                        {
+                                            <option value="@licence">@licence</option>
+                                        }
+                                    </select>
+                                </label>
+                            </div>
+                        </div>
+                    </article>
+
+                    <article class="rg-premium-panel">
+                        <div class="rg-premium-panel__header">
+                            <div>
+                                <div class="rg-premium-panel__eyebrow">Signal concentration</div>
+                                <h3 class="rg-premium-panel__title">Top recurring drivers</h3>
+                                <p class="rg-premium-panel__subtitle">Shows which explainability factors appear most often across the current supervisory queue.</p>
+                            </div>
+                        </div>
+                        <div class="rg-premium-panel__body">
+                            @if (TopDriverGroups.Count == 0)
+                            {
+                                <div class="rg-premium-empty">Driver explainability data is not yet available for the current scope.</div>
+                            }
+                            else
+                            {
+                                <div class="rg-premium-stack">
+                                    @foreach (var driver in TopDriverGroups)
+                                    {
+                                        <div class="rg-premium-list__item">
+                                            <div class="rg-premium-list__top">
+                                                <div class="rg-premium-list__heading">@driver.Label</div>
+                                                <div class="rg-premium-list__value">@driver.TotalContribution.ToString("F2")</div>
+                                            </div>
+                                            <div class="rg-premium-list__meta">Appears in @driver.Appearances institution forecast(s).</div>
+                                        </div>
+                                    }
+                                </div>
+                            }
+                        </div>
+                    </article>
+                </div>
+            </section>
         </div>
     }
 </div>
@@ -161,10 +280,33 @@
     private Exception? _loadException;
     private bool _loading = true;
 
+    private string StatusBadge => _loading
+        ? "Refreshing"
+        : _items.Count == 0
+            ? "No active forecasts"
+            : $"{_items.Count(x => x.RiskBand is "HIGH" or "CRITICAL")} elevated institution(s)";
+
+    private string StatusVariant => _loading
+        ? "warning"
+        : _items.Any(x => x.RiskBand is "HIGH" or "CRITICAL")
+            ? "danger"
+            : "success";
+
     private IReadOnlyList<string> CurrentLicenceOptions =>
         LicenceOptions.TryGetValue(_selectedRegulator, out var options)
             ? options
             : Array.Empty<string>();
+
+    private IReadOnlyList<DriverRollup> TopDriverGroups => _items
+        .SelectMany(item => item.TopFactors)
+        .GroupBy(factor => factor.FeatureLabel)
+        .Select(group => new DriverRollup(
+            group.Key,
+            group.Sum(item => item.ContributionScore),
+            group.Count()))
+        .OrderByDescending(item => item.TotalContribution)
+        .Take(5)
+        .ToList();
 
     protected override async Task OnParametersSetAsync()
     {
@@ -214,4 +356,117 @@
             _loading = false;
         }
     }
+
+    private string BuildScopeSuffix() => string.IsNullOrWhiteSpace(_selectedLicence)
+        ? "portfolio"
+        : $"{_selectedLicence} portfolio";
+
+    private static string ResolveBannerTone(int elevatedCount, decimal averageProbability)
+    {
+        if (elevatedCount > 0)
+        {
+            return "danger";
+        }
+
+        if (averageProbability >= 0.35m)
+        {
+            return "warning";
+        }
+
+        return "info";
+    }
+
+    private static string BuildBannerHeadline(int elevatedCount, decimal averageProbability)
+    {
+        if (elevatedCount > 3)
+        {
+            return "Several institutions now warrant supervisory focus.";
+        }
+
+        if (elevatedCount > 0)
+        {
+            return "A small cluster of institutions is rising to the top of the supervisory queue.";
+        }
+
+        if (averageProbability >= 0.35m)
+        {
+            return "Pressure is building even though no institution has crossed the highest watch band yet.";
+        }
+
+        return "The current regulator queue is comparatively stable.";
+    }
+
+    private static string BuildBannerDetail(int elevatedCount, decimal averageConfidence, RegulatoryActionForecast? leadingInstitution)
+    {
+        if (leadingInstitution is null)
+        {
+            return "ForeSight will surface intervention-priority signals here once enough prudential, anomaly, and compliance evidence accumulates for the selected scope.";
+        }
+
+        return elevatedCount > 0
+            ? $"{leadingInstitution.InstitutionName} currently leads the queue at {leadingInstitution.InterventionProbability:P0}, while the visible portfolio average confidence sits at {averageConfidence:P0}. Use the factor narrative to shape examiner prioritization." 
+            : $"{leadingInstitution.InstitutionName} is the highest-ranked institution at {leadingInstitution.InterventionProbability:P0}, but the current queue still looks monitorable rather than escalatory.";
+    }
+
+    private static string BuildRiskChipClass(string riskBand)
+    {
+        if (riskBand is "CRITICAL" or "HIGH")
+        {
+            return "rg-premium-chip rg-premium-chip--danger";
+        }
+
+        if (riskBand == "MEDIUM")
+        {
+            return "rg-premium-chip rg-premium-chip--warning";
+        }
+
+        return "rg-premium-chip rg-premium-chip--success";
+    }
+
+    private static string BuildFactorChipClass(string impactDirection)
+    {
+        if (impactDirection == "DECREASES_RISK")
+        {
+            return "rg-premium-chip rg-premium-chip--success";
+        }
+
+        if (impactDirection == "DECREASES_RESILIENCE")
+        {
+            return "rg-premium-chip rg-premium-chip--warning";
+        }
+
+        return "rg-premium-chip rg-premium-chip--danger";
+    }
+
+    private static string BuildStatValueClass(string riskBand)
+    {
+        if (riskBand is "CRITICAL" or "HIGH")
+        {
+            return "rg-premium-stat__value--danger";
+        }
+
+        if (riskBand == "MEDIUM")
+        {
+            return "rg-premium-stat__value--warning";
+        }
+
+        return "rg-premium-stat__value--success";
+    }
+
+    private static string BuildConfidenceValueClass(decimal value)
+    {
+        if (value >= 0.70m)
+        {
+            return "rg-premium-stat__value--success";
+        }
+
+        if (value >= 0.50m)
+        {
+            return "rg-premium-stat__value--warning";
+        }
+
+        return "rg-premium-stat__value--danger";
+    }
+
+    private sealed record DriverRollup(string Label, decimal TotalContribution, int Appearances);
 }

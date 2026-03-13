@@ -11,115 +11,296 @@
 
 <PageTitle>@(_data?.ModuleName ?? moduleCode) Dashboard</PageTitle>
 
-@if (_loading)
-{
-    <SkeletonGuard OnRetry="ReloadAsync">
-        <div aria-busy="true" aria-label="Loading module dashboard…">
-            <div class="fc-skel-stats-row fc-skel-section">
-                <SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Stat" Index="0" />
-                <SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Stat" Index="3" />
-                <SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Stat" Index="6" />
-                <SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Stat" Index="9" />
-            </div>
-            <section class="dash17-period-grid fc-skel-section">
-                @for (int i = 0; i < 4; i++)
-                {
-                    var si = 12 + i * 4;
-                    <div class="fc-skel-card-body">
-                        <div style="display:flex; justify-content:space-between; margin-bottom:var(--space-3);">
-                            <div class="fc-skel fc-skel-text-lg" style="width: 40%; --skeleton-index: @si;"></div>
-                            <div class="fc-skel fc-skel-text" style="width: 20%; --skeleton-index: @si;"></div>
-                        </div>
-                        <div class="fc-skel fc-skel-block" style="height: 6px; --skeleton-index: @(si+1);"></div>
-                        <div style="display:flex; justify-content:space-between; margin-top:var(--space-2);">
-                            <div class="fc-skel fc-skel-text" style="width: 35%; --skeleton-index: @(si+2);"></div>
-                            <div class="fc-skel fc-skel-text" style="width: 25%; --skeleton-index: @(si+2);"></div>
-                        </div>
-                    </div>
-                }
-            </section>
-            <div class="fc-skel-chart-row fc-skel-section">
-                <SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.ChartBar" Index="28" />
-                <SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.ChartBar" Index="35" />
-            </div>
-        </div>
-    </SkeletonGuard>
-}
-else if (!string.IsNullOrWhiteSpace(_error))
-{
-    <div class="dash17-error">@_error</div>
-}
-else if (_data is not null)
-{
-    <div class="dash17-module">
-        <header class="dash17-header">
-            <div>
-                <h1>@_data.ModuleName Dashboard</h1>
-                <p>@_data.ModuleCode · compliance and filing analytics</p>
-            </div>
-            <a class="dash17-link" href="/dashboard/compliance">View Cross-Module Summary</a>
-        </header>
+<div class="portal-page portal-fsd-shell">
+    <PortalPageHeader Title="@($"{_data?.ModuleName ?? moduleCode} Dashboard")"
+                      Subtitle="Module-level readiness, filing discipline, quality movement, and peer context."
+                      Breadcrumb="@Breadcrumb">
+        <SecondaryActions>
+            <button class="portal-btn portal-btn-ghost portal-btn-sm" @onclick="ReloadAsync" disabled="@_loading">Refresh</button>
+        </SecondaryActions>
+        <PrimaryAction>
+            <a class="portal-btn portal-btn-primary portal-btn-sm" href="/dashboard/compliance">Back to summary</a>
+        </PrimaryAction>
+    </PortalPageHeader>
 
-        <section class="dash17-period-grid">
-            @foreach (var period in _data.Periods)
-            {
-                <article class="dash17-period-card @period.RagClass">
-                    <div class="dash17-period-head">
-                        <div class="dash17-period-label">@period.Label</div>
-                        <div class="dash17-period-status">@period.Status</div>
+    @if (_loading)
+    {
+        <section class="portal-fsd-loading" role="status" aria-label="Loading module dashboard">
+            <div class="portal-fsd-loading-hero"></div>
+            <div class="portal-fsd-loading-grid">
+                @for (var i = 0; i < 4; i++)
+                {
+                    <div class="portal-fsd-loading-card"></div>
+                }
+            </div>
+            <div class="portal-fsd-loading-panels">
+                <div class="portal-fsd-loading-panel"></div>
+                <div class="portal-fsd-loading-panel"></div>
+            </div>
+        </section>
+    }
+    else if (!string.IsNullOrWhiteSpace(_error))
+    {
+        <section class="portal-fsd-error" role="alert">
+            <div class="portal-fsd-error-icon" aria-hidden="true">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9">
+                    <circle cx="12" cy="12" r="9"></circle>
+                    <path d="M12 8v5"></path>
+                    <path d="M12 16h.01"></path>
+                </svg>
+            </div>
+            <div>
+                <strong>Unable to load module dashboard.</strong>
+                <span>@_error</span>
+            </div>
+        </section>
+    }
+    else if (_data is not null)
+    {
+        var redPeriods = _data.Periods.Count(x => string.Equals(x.RagClass, "rag-red", StringComparison.OrdinalIgnoreCase) || string.Equals(x.RagClass, "red", StringComparison.OrdinalIgnoreCase));
+        var amberPeriods = _data.Periods.Count(x => string.Equals(x.RagClass, "rag-amber", StringComparison.OrdinalIgnoreCase) || string.Equals(x.RagClass, "amber", StringComparison.OrdinalIgnoreCase));
+        var averageCompletion = _data.Periods.Count == 0 ? 0m : _data.Periods.Average(x => x.CompletionPercent);
+        var totalErrors = _data.Periods.Sum(x => x.ValidationErrorCount);
+        var totalWarnings = _data.Periods.Sum(x => x.ValidationWarningCount);
+        var upcomingPeriod = _data.Periods.OrderBy(x => x.Deadline).FirstOrDefault();
+        var onTimePeriods = _data.Periods.Count(x => x.OnTime);
+        var onTimeRate = _data.Periods.Count == 0 ? 0m : (decimal)onTimePeriods / _data.Periods.Count;
+
+        <section class="portal-fsd-banner portal-fsd-banner--@BuildBannerTone(redPeriods, amberPeriods)">
+            <div>
+                <div class="portal-fsd-eyebrow">Module readiness pulse</div>
+                <h1 class="portal-fsd-banner-title">@BuildBannerHeadline(redPeriods, amberPeriods)</h1>
+                <p class="portal-fsd-banner-copy">@BuildBannerCopy(redPeriods, amberPeriods, averageCompletion, upcomingPeriod)</p>
+            </div>
+            <div class="portal-fsd-banner-meta">
+                <span class="portal-fsd-meta-label">Current scope</span>
+                <strong class="portal-fsd-meta-value">@_data.ModuleCode</strong>
+                <span class="portal-fsd-banner-copy">@_data.Periods.Count period(s) tracked, @totalErrors validation error(s), @totalWarnings warning(s).</span>
+            </div>
+        </section>
+
+        <section class="portal-fsd-hero">
+            <div>
+                <div class="portal-fsd-eyebrow">Module operations lane</div>
+                <h2 class="portal-fsd-hero-title">See which filing periods are healthy, which are slipping, and how the module compares with peers.</h2>
+                <p class="portal-fsd-hero-copy">
+                    This workspace blends period readiness, validation friction, timeliness, and benchmarking into one module-level command surface.
+                    Use it to focus preparation effort on the periods that are most likely to drag down performance.
+                </p>
+                <div class="portal-fsd-chip-row">
+                    <span class="portal-fsd-chip portal-fsd-chip--danger">@redPeriods red period(s)</span>
+                    <span class="portal-fsd-chip portal-fsd-chip--warning">@amberPeriods amber period(s)</span>
+                    <span class="portal-fsd-chip portal-fsd-chip--info">@averageCompletion.ToString("F0")% average completion</span>
+                </div>
+            </div>
+            <div class="portal-fsd-hero-aside">
+                <div class="portal-fsd-note">
+                    <span class="portal-fsd-note-label">Nearest deadline</span>
+                    <strong class="portal-fsd-note-value">@(upcomingPeriod?.Deadline.ToString("dd MMM yyyy") ?? "No deadline")</strong>
+                    <span class="portal-fsd-note-copy">@(upcomingPeriod is null ? "No period deadlines are currently in scope." : $"{upcomingPeriod.Label} is due next with {upcomingPeriod.CompletionPercent:F0}% completion.")</span>
+                </div>
+                <div class="portal-fsd-note">
+                    <span class="portal-fsd-note-label">Peer context</span>
+                    <strong class="portal-fsd-note-value">@(_benchmark is null ? "Unavailable" : Ordinal(_benchmark.Percentile))</strong>
+                    <span class="portal-fsd-note-copy">@(_benchmark is null ? "Benchmarking is unavailable for this module or licence plan." : $"Position among {_benchmark.PeerCount} peers by submission timeliness.")</span>
+                </div>
+            </div>
+        </section>
+
+        <section class="portal-fsd-stat-grid" aria-label="Module dashboard metrics">
+            <article class="portal-fsd-stat">
+                <div class="portal-fsd-stat-label">Periods tracked</div>
+                <div class="portal-fsd-stat-value">@_data.Periods.Count</div>
+                <div class="portal-fsd-stat-copy">Reporting cycles currently visible in the module workspace.</div>
+            </article>
+            <article class="portal-fsd-stat">
+                <div class="portal-fsd-stat-label">Average completion</div>
+                <div class="portal-fsd-stat-value">@averageCompletion.ToString("F0")%</div>
+                <div class="portal-fsd-stat-copy">Readiness average across all visible filing periods.</div>
+            </article>
+            <article class="portal-fsd-stat">
+                <div class="portal-fsd-stat-label">Validation errors</div>
+                <div class="portal-fsd-stat-value">@totalErrors</div>
+                <div class="portal-fsd-stat-copy">Recorded validation errors across the current module periods.</div>
+            </article>
+            <article class="portal-fsd-stat">
+                <div class="portal-fsd-stat-label">On-time periods</div>
+                <div class="portal-fsd-stat-value">@onTimeRate.ToString("P0")</div>
+                <div class="portal-fsd-stat-copy">@onTimePeriods of @_data.Periods.Count visible period(s) are currently on time.</div>
+            </article>
+        </section>
+
+        <section class="portal-fsd-grid">
+            <article class="portal-card portal-fsd-panel">
+                <div class="portal-fsd-panel-head">
+                    <div>
+                        <span class="portal-fsd-panel-eyebrow">Period readiness</span>
+                        <h3 class="portal-fsd-panel-title">Current filing cycles</h3>
+                        <p class="portal-fsd-panel-copy">Each card shows readiness, deadline proximity, and validation friction for a visible module period.</p>
                     </div>
-                    <div class="dash17-completion-track">
-                        <div class="dash17-completion-fill" style="width:@period.CompletionPercent%"></div>
+                    <div class="portal-fsd-panel-metric">
+                        <small>On-time rate</small>
+                        @onTimeRate.ToString("P0")
                     </div>
-                    <div class="dash17-period-meta">
-                        <span>@period.CompletionPercent.ToString("0")% complete</span>
-                        <span>Due @period.Deadline.ToString("dd MMM")</span>
+                </div>
+                <div class="portal-fsd-panel-body">
+                    @if (_data.Periods.Count == 0)
+                    {
+                        <div class="portal-fsd-empty">No module periods are available yet for this institution.</div>
+                    }
+                    else
+                    {
+                        <section class="dash17-period-grid">
+                            @foreach (var period in _data.Periods)
+                            {
+                                <article class="dash17-period-card @period.RagClass">
+                                    <div class="dash17-period-head">
+                                        <div class="dash17-period-label">@period.Label</div>
+                                        <div class="dash17-period-status">@period.Status</div>
+                                    </div>
+                                    <div class="dash17-completion-track">
+                                        <div class="dash17-completion-fill" style="width:@period.CompletionPercent%"></div>
+                                    </div>
+                                    <div class="dash17-period-meta">
+                                        <span>@period.CompletionPercent.ToString("0")% complete</span>
+                                        <span>Due @period.Deadline.ToString("dd MMM")</span>
+                                    </div>
+                                    <div class="dash17-period-meta">
+                                        <span>@period.ValidationErrorCount error(s)</span>
+                                        <span>@period.ValidationWarningCount warning(s)</span>
+                                    </div>
+                                    @if (period.SubmissionId is int submissionId)
+                                    {
+                                        <div class="mt-3">
+                                            <a class="portal-btn portal-btn-ghost portal-btn-sm" href="@($"/submissions/{submissionId}")">Open submission</a>
+                                        </div>
+                                    }
+                                </article>
+                            }
+                        </section>
+                    }
+                </div>
+            </article>
+
+            <div class="portal-fsd-side">
+                <article class="portal-card portal-fsd-panel">
+                    <div class="portal-fsd-panel-head">
+                        <div>
+                            <span class="portal-fsd-panel-eyebrow">Peer benchmark</span>
+                            <h3 class="portal-fsd-panel-title">Comparative timing context</h3>
+                            <p class="portal-fsd-panel-copy">Benchmark data helps place this module’s filing discipline relative to similar institutions.</p>
+                        </div>
                     </div>
-                    <div class="dash17-period-meta">
-                        <span>@period.ValidationErrorCount errors</span>
-                        <span>@period.ValidationWarningCount warnings</span>
+                    <div class="portal-fsd-panel-body">
+                        @if (_benchmark is null)
+                        {
+                            <div class="portal-fsd-empty">Peer benchmarking is not available for this module in the current subscription scope.</div>
+                        }
+                        else
+                        {
+                            <div class="portal-fsd-side-list">
+                                <div class="portal-fsd-side-item">
+                                    <div class="portal-fsd-side-item-head">
+                                        <div>
+                                            <strong>Tenant average</strong>
+                                            <span>Submission timing</span>
+                                        </div>
+                                        <div class="portal-fsd-side-item-value">@FormatDays(_benchmark.TenantAverageDays)</div>
+                                    </div>
+                                    <small>This is the institution’s current average time relative to the filing deadline.</small>
+                                </div>
+                                <div class="portal-fsd-side-item">
+                                    <div class="portal-fsd-side-item-head">
+                                        <div>
+                                            <strong>Peer median</strong>
+                                            <span>@_benchmark.PeerCount peer(s)</span>
+                                        </div>
+                                        <div class="portal-fsd-side-item-value">@_benchmark.PeerMedianDays.ToString("0.##")d</div>
+                                    </div>
+                                    <small>P25 @_benchmark.PeerP25Days.ToString("0.##")d · P75 @_benchmark.PeerP75Days.ToString("0.##")d</small>
+                                </div>
+                            </div>
+                        }
                     </div>
                 </article>
-            }
+
+                <article class="portal-card portal-fsd-panel">
+                    <div class="portal-fsd-panel-head">
+                        <div>
+                            <span class="portal-fsd-panel-eyebrow">Operating notes</span>
+                            <h3 class="portal-fsd-panel-title">Where the module needs attention</h3>
+                            <p class="portal-fsd-panel-copy">A compact readout of the strongest module-level signals from the visible periods.</p>
+                        </div>
+                    </div>
+                    <div class="portal-fsd-panel-body">
+                        <div class="portal-fsd-side-list">
+                            <div class="portal-fsd-side-item">
+                                <div class="portal-fsd-side-item-head">
+                                    <div>
+                                        <strong>Warning pressure</strong>
+                                        <span>Amber and red periods</span>
+                                    </div>
+                                    <div class="portal-fsd-side-item-value">@(redPeriods + amberPeriods)</div>
+                                </div>
+                                <small>@redPeriods red and @amberPeriods amber periods are currently visible in the module lane.</small>
+                            </div>
+                            <div class="portal-fsd-side-item">
+                                <div class="portal-fsd-side-item-head">
+                                    <div>
+                                        <strong>Validation friction</strong>
+                                        <span>Error and warning load</span>
+                                    </div>
+                                    <div class="portal-fsd-side-item-value">@(totalErrors + totalWarnings)</div>
+                                </div>
+                                <small>@totalErrors error(s) and @totalWarnings warning(s) recorded across the visible periods.</small>
+                            </div>
+                            <div class="portal-fsd-side-item">
+                                <div class="portal-fsd-side-item-head">
+                                    <div>
+                                        <strong>Readiness anchor</strong>
+                                        <span>Most urgent cycle</span>
+                                    </div>
+                                    <div class="portal-fsd-side-item-value">@(upcomingPeriod?.Label ?? "None")</div>
+                                </div>
+                                <small>@(upcomingPeriod is null ? "No urgent period identified." : $"{upcomingPeriod.CompletionPercent:F0}% complete and due {upcomingPeriod.Deadline:dd MMM yyyy}.")</small>
+                            </div>
+                        </div>
+                    </div>
+                </article>
+            </div>
         </section>
 
-        @if (_benchmark is not null)
-        {
-            <section class="dash17-benchmark">
-                <h3>Peer Benchmarking</h3>
-                <p>
-                    Your average submission is <strong>@FormatDays(_benchmark.TenantAverageDays)</strong>.
-                    You are in the <strong>@Ordinal(_benchmark.Percentile)</strong> percentile among
-                    <strong>@_benchmark.PeerCount</strong> peer institutions.
-                </p>
-                <div class="dash17-benchmark-meta">
-                    <span>Peer median: @_benchmark.PeerMedianDays.ToString("0.##") days</span>
-                    <span>P25: @_benchmark.PeerP25Days.ToString("0.##")</span>
-                    <span>P75: @_benchmark.PeerP75Days.ToString("0.##")</span>
+        <article class="portal-card portal-fsd-panel">
+            <div class="portal-fsd-panel-head">
+                <div>
+                    <span class="portal-fsd-panel-eyebrow">Trend intelligence</span>
+                    <h3 class="portal-fsd-panel-title">Validation, timeliness, quality, and status movement</h3>
+                    <p class="portal-fsd-panel-copy">The chart suite keeps the main operational trends visible without leaving the module workspace.</p>
                 </div>
-            </section>
-        }
-
-        <section class="dash17-chart-grid">
-            <div class="dash17-chart-card">
-                <h3>Validation Error Trend</h3>
-                <div class="dash17-chart-wrap"><canvas id="moduleValidationChart"></canvas></div>
             </div>
-            <div class="dash17-chart-card">
-                <h3>Submission Timeliness</h3>
-                <div class="dash17-chart-wrap"><canvas id="moduleTimelinessChart"></canvas></div>
+            <div class="portal-fsd-panel-body">
+                <section class="dash17-chart-grid">
+                    <div class="dash17-chart-card">
+                        <h3>Validation Error Trend</h3>
+                        <div class="dash17-chart-wrap"><canvas id="moduleValidationChart"></canvas></div>
+                    </div>
+                    <div class="dash17-chart-card">
+                        <h3>Submission Timeliness</h3>
+                        <div class="dash17-chart-wrap"><canvas id="moduleTimelinessChart"></canvas></div>
+                    </div>
+                    <div class="dash17-chart-card">
+                        <h3>Data Quality Trend</h3>
+                        <div class="dash17-chart-wrap"><canvas id="moduleQualityChart"></canvas></div>
+                    </div>
+                    <div class="dash17-chart-card">
+                        <h3>Filing Status Breakdown</h3>
+                        <div class="dash17-chart-wrap"><canvas id="moduleStatusChart"></canvas></div>
+                    </div>
+                </section>
             </div>
-            <div class="dash17-chart-card">
-                <h3>Data Quality Trend</h3>
-                <div class="dash17-chart-wrap"><canvas id="moduleQualityChart"></canvas></div>
-            </div>
-            <div class="dash17-chart-card">
-                <h3>Filing Status Breakdown</h3>
-                <div class="dash17-chart-wrap"><canvas id="moduleStatusChart"></canvas></div>
-            </div>
-        </section>
-    </div>
-}
+        </article>
+    }
+</div>
 
 @code {
     [Parameter] public string moduleCode { get; set; } = string.Empty;
@@ -129,6 +310,13 @@ else if (_data is not null)
     private bool _loading = true;
     private bool _chartsRendered;
     private string? _error;
+
+    private IReadOnlyList<BreadcrumbItem> Breadcrumb => new List<BreadcrumbItem>
+    {
+        new("Home", "/"),
+        new("Compliance", "/dashboard/compliance"),
+        new(_data?.ModuleName ?? moduleCode, IsCurrent: true)
+    };
 
     protected override async Task OnParametersSetAsync() => await ReloadAsync();
 
@@ -179,6 +367,56 @@ else if (_data is not null)
         await Charts.RenderDoughnutChart("moduleStatusChart", _data.FilingStatusBreakdown);
 
         _chartsRendered = true;
+    }
+
+    private static string BuildBannerTone(int redPeriods, int amberPeriods)
+    {
+        if (redPeriods > 0)
+        {
+            return "danger";
+        }
+
+        if (amberPeriods > 0)
+        {
+            return "warning";
+        }
+
+        return "success";
+    }
+
+    private static string BuildBannerHeadline(int redPeriods, int amberPeriods)
+    {
+        if (redPeriods > 0)
+        {
+            return "At least one module period is in a critical readiness band.";
+        }
+
+        if (amberPeriods > 0)
+        {
+            return "The module is workable, but some periods need pressure relief.";
+        }
+
+        return "The current module periods look healthy and on track.";
+    }
+
+    private static string BuildBannerCopy(int redPeriods, int amberPeriods, decimal averageCompletion, ModulePeriodStatusItem? upcomingPeriod)
+    {
+        if (upcomingPeriod is null)
+        {
+            return "Module readiness detail will appear here once filing periods are available for the current tenant.";
+        }
+
+        if (redPeriods > 0)
+        {
+            return $"{upcomingPeriod.Label} is currently the key watchpoint, and the visible module periods are averaging {averageCompletion:F0}% completion. Shift review effort to the periods that are red before the deadline cluster gets tighter.";
+        }
+
+        if (amberPeriods > 0)
+        {
+            return $"{amberPeriods} amber period(s) need closer supervision. The visible module periods are averaging {averageCompletion:F0}% completion, with {upcomingPeriod.Label} due next.";
+        }
+
+        return $"The visible module periods are averaging {averageCompletion:F0}% completion, with {upcomingPeriod.Label} due next and no current red periods in scope.";
     }
 
     private static string FormatDays(decimal days)

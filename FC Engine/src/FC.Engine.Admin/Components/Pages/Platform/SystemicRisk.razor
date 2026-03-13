@@ -65,51 +65,77 @@
     }
     else if (_data is not null)
     {
-        <!-- ── Systemic Risk Index Banner ─────────────────────────── -->
-        <div class="fc-sr-banner fc-sr-banner--@GetIndexLevel(_data.Summary.SystemicRiskIndex)">
-            <div class="fc-sr-banner__orb"></div>
-            <div class="fc-sr-banner__body">
-                <span class="fc-sr-banner__headline">
-                    Systemic Risk Index: @_data.Summary.SystemicRiskIndex.ToString("0.#") / 100
-                </span>
-                <span class="fc-sr-banner__sub">
-                    @_data.Summary.TotalEntities entities monitored &middot;
-                    @_data.Summary.TotalActiveFlags active warnings &middot;
-                    Last computed @DateTime.UtcNow.ToString("HH:mm") UTC
-                </span>
-            </div>
-        </div>
+        var topRiskEntity = _data.Scores.OrderByDescending(x => x.Composite).ThenByDescending(x => x.ActiveFlags).FirstOrDefault();
+        var topContagionPair = _data.Contagion.Links.OrderByDescending(x => x.CorrelationStrength).FirstOrDefault();
 
-        <!-- ── KPI Cards ──────────────────────────────────────────── -->
-        <div class="fc-grid fc-grid-4 fc-mb-4">
-            <div class="fc-card fc-kpi-card fc-kpi-card--success">
-                <div class="fc-card__body">
-                    <div class="fc-stat-label">Stable (Green)</div>
-                    <div class="fc-stat-value fc-sr-stat--green">@_data.Summary.GreenCount</div>
-                    <div class="fc-kpi-delta">of @_data.Summary.TotalEntities entities</div>
+        <div class="rg-premium-flow">
+            <section class="rg-premium-banner @ResolveSystemicBannerTone()" aria-label="Systemic risk posture">
+                <div class="rg-premium-banner__grid">
+                    <div>
+                        <div class="rg-premium-banner__eyebrow">Systemic risk pulse</div>
+                        <h2 class="rg-premium-banner__headline">@BuildSystemicBannerHeadline()</h2>
+                        <p class="rg-premium-banner__detail">@BuildSystemicBannerDetail(topRiskEntity, topContagionPair)</p>
+                    </div>
+                    <div class="rg-premium-banner__meta">
+                        <div class="rg-premium-banner__meta-label">Current monitoring scope</div>
+                        <div class="rg-premium-banner__meta-value">@_regulatorCode</div>
+                        <div class="rg-premium-banner__meta-copy">@_data.Summary.TotalEntities entities · @_data.Summary.TotalActiveFlags active warnings</div>
+                    </div>
                 </div>
-            </div>
-            <div class="fc-card fc-kpi-card fc-kpi-card--warning">
-                <div class="fc-card__body">
-                    <div class="fc-stat-label">Watch (Amber)</div>
-                    <div class="fc-stat-value fc-sr-stat--amber">@_data.Summary.AmberCount</div>
-                    <div class="fc-kpi-delta">require monitoring</div>
+            </section>
+
+            <section class="rg-premium-hero" aria-labelledby="systemic-risk-hero-title">
+                <div class="rg-premium-hero__grid">
+                    <div>
+                        <div class="rg-premium-hero__eyebrow">Early warning lane</div>
+                        <h1 id="systemic-risk-hero-title" class="rg-premium-hero__title">Read sector fragility through risk concentration, contagion links, and active supervisory flags.</h1>
+                        <p class="rg-premium-hero__subtitle">
+                            This workspace combines CAMELS scores, systemic early warnings, contagion paths, and pending supervisory actions so operators
+                            can see when sector weakness is concentrating into a real supervisory event.
+                        </p>
+                        <div class="rg-premium-badge-row">
+                            <span class="rg-premium-chip @(GetIndexLevel(_data.Summary.SystemicRiskIndex) == "red" ? "rg-premium-chip--danger" : GetIndexLevel(_data.Summary.SystemicRiskIndex) == "amber" ? "rg-premium-chip--warning" : "rg-premium-chip--success")">@_data.Summary.SystemicRiskIndex.ToString("0.#") systemic risk index</span>
+                            <span class="rg-premium-chip @(_data.Summary.RedCount > 0 ? "rg-premium-chip--danger" : _data.Summary.AmberCount > 0 ? "rg-premium-chip--warning" : "rg-premium-chip--success")">@_data.Summary.RedCount red · @_data.Summary.AmberCount amber</span>
+                            <span class="rg-premium-chip rg-premium-chip--info">@_data.Summary.TotalActiveFlags active flags</span>
+                        </div>
+                    </div>
+                    <div class="rg-premium-hero__aside">
+                        <div class="rg-premium-note">
+                            <div class="rg-premium-note__label">Highest composite risk</div>
+                            <div class="rg-premium-note__value">@(topRiskEntity?.InstitutionName ?? "No data")</div>
+                            <div class="rg-premium-note__copy">@(topRiskEntity is null ? "No CAMELS scorecard is available yet." : $"{topRiskEntity.Composite:0.00} composite with {topRiskEntity.ActiveFlags} active flags.")</div>
+                        </div>
+                        <div class="rg-premium-note">
+                            <div class="rg-premium-note__label">Strongest contagion link</div>
+                            <div class="rg-premium-note__value">@(topContagionPair is null ? "None" : $"{topContagionPair.SourceName} → {topContagionPair.TargetName}")</div>
+                            <div class="rg-premium-note__copy">@(topContagionPair is null ? "No material contagion path is currently active." : $"{topContagionPair.CorrelationStrength:0.00} correlation strength.")</div>
+                        </div>
+                    </div>
                 </div>
-            </div>
-            <div class="fc-card fc-kpi-card fc-kpi-card--critical">
-                <div class="fc-card__body">
-                    <div class="fc-stat-label">Intervene (Red)</div>
-                    <div class="fc-stat-value fc-sr-stat--red">@_data.Summary.RedCount</div>
-                    <div class="fc-kpi-delta">require supervisory action</div>
-                </div>
-            </div>
-            <div class="fc-card fc-kpi-card">
-                <div class="fc-card__body">
-                    <div class="fc-stat-label">Active Warnings</div>
-                    <div class="fc-stat-value">@_data.Summary.TotalActiveFlags</div>
-                    <div class="fc-kpi-delta">across all entities</div>
-                </div>
-            </div>
+            </section>
+
+            <section class="rg-premium-stat-grid" aria-label="Systemic risk metrics">
+                <article class="rg-premium-stat">
+                    <div class="rg-premium-stat__label">Stable (green)</div>
+                    <div class="rg-premium-stat__value rg-premium-stat__value--success">@_data.Summary.GreenCount</div>
+                    <div class="rg-premium-stat__note">Entities currently sitting in the stable systemic-risk band.</div>
+                </article>
+                <article class="rg-premium-stat">
+                    <div class="rg-premium-stat__label">Watch (amber)</div>
+                    <div class="rg-premium-stat__value rg-premium-stat__value--warning">@_data.Summary.AmberCount</div>
+                    <div class="rg-premium-stat__note">Entities requiring closer monitoring because pressure is building.</div>
+                </article>
+                <article class="rg-premium-stat">
+                    <div class="rg-premium-stat__label">Intervene (red)</div>
+                    <div class="rg-premium-stat__value @(_data.Summary.RedCount > 0 ? "rg-premium-stat__value--danger" : "rg-premium-stat__value--success")">@_data.Summary.RedCount</div>
+                    <div class="rg-premium-stat__note">Entities currently demanding supervisory action or immediate review.</div>
+                </article>
+                <article class="rg-premium-stat">
+                    <div class="rg-premium-stat__label">Active warnings</div>
+                    <div class="rg-premium-stat__value @(_data.Summary.TotalActiveFlags > 0 ? "rg-premium-stat__value--warning" : "rg-premium-stat__value--success")">@_data.Summary.TotalActiveFlags</div>
+                    <div class="rg-premium-stat__note">Current early warning triggers across the visible sector scope.</div>
+                </article>
+            </section>
         </div>
 
         <!-- ── Heatmap & CAMELS Distribution ──────────────────────── -->
@@ -408,6 +434,7 @@
     private SystemicRiskDashboard? _data;
     private Exception? _error;
     private bool _loading = true;
+    private bool _chartsRendered;
     private bool _showLetterModal;
     private SupervisoryAction? _selectedAction;
 
@@ -428,6 +455,7 @@
         try
         {
             _data = await RiskService.GetDashboard(_regulatorCode);
+            _chartsRendered = false;
         }
         catch (Exception ex)
         {
@@ -442,7 +470,8 @@
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (!firstRender || _data is null) return;
+        if (_data is null || _chartsRendered) return;
+        _chartsRendered = true;
         await RenderCharts();
     }
 
@@ -548,6 +577,40 @@
     private void ExportDashboard()
     {
         Toast.Info("Export feature will generate a PDF supervisory report. Coming soon.");
+    }
+
+    private string ResolveSystemicBannerTone() => GetIndexLevel(_data!.Summary.SystemicRiskIndex) switch
+    {
+        "red" => "rg-premium-banner--danger",
+        "amber" => "rg-premium-banner--warning",
+        _ => "rg-premium-banner--success"
+    };
+
+    private string BuildSystemicBannerHeadline()
+    {
+        var summary = _data!.Summary;
+        if (summary.RedCount > 0 || summary.SystemicRiskIndex >= 60m)
+        {
+            return "Systemic-risk conditions are elevated and concentrated in the highest supervisory bands.";
+        }
+
+        if (summary.AmberCount > 0 || summary.TotalActiveFlags > 0)
+        {
+            return "Systemic-risk signals are building and require active sector monitoring.";
+        }
+
+        return "Systemic-risk signals remain broadly contained across the monitored sector.";
+    }
+
+    private string BuildSystemicBannerDetail(CamelsScore? topRiskEntity, ContagionLink? topContagionPair)
+    {
+        var riskText = topRiskEntity is null
+            ? "No CAMELS entity ranking is available yet."
+            : $"{topRiskEntity.InstitutionName} currently has the highest composite score at {topRiskEntity.Composite:0.00}.";
+        var contagionText = topContagionPair is null
+            ? "No material contagion link is currently active."
+            : $"Strongest contagion path is {topContagionPair.SourceName} to {topContagionPair.TargetName} at {topContagionPair.CorrelationStrength:0.00}.";
+        return $"{riskText} {contagionText}";
     }
 
     // ── UI Helpers ──────────────────────────────────────────────────

@@ -5,20 +5,37 @@
 <PageTitle>Examiner Dashboard</PageTitle>
 
 <PageHeader Title="Examiner Dashboard"
-            Subtitle="Assigned institutions, overdue reviews, pending examinations, and upcoming deadlines."
-            BackUrl="/regulator/dashboards/governor">
-    <PrimaryAction><button class="fc-btn fc-btn--primary" @onclick="ReloadAsync" disabled="@_loading">Refresh</button></PrimaryAction>
+            Subtitle="Assigned institutions, overdue reviews, queue control, and field execution signals."
+            BackUrl="/regulator/dashboards/governor"
+            StatusBadge="@ResolveStatusBadge()"
+            StatusVariant="@ResolveStatusVariant()">
+    <PrimaryAction>
+        <button class="fc-btn fc-btn--primary" @onclick="ReloadAsync" disabled="@_loading">Refresh</button>
+    </PrimaryAction>
 </PageHeader>
 
 <div class="fc-page">
     <SectionErrorBoundary Title="Failed to load examiner dashboard" ExternalError="@_loadException" OnRetry="ReloadAsync">
         @if (_loading)
         {
-            <div class="rg-dash-kpi-strip">
-                @for (var i = 0; i < 4; i++)
-                {
-                    <div class="rg-dash-kpi"><SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Block" Height="88px" /></div>
-                }
+            <div class="rg-premium-flow">
+                <div class="rg-premium-banner"><SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Block" Height="138px" /></div>
+                <div class="rg-premium-stat-grid">
+                    @for (var i = 0; i < 4; i++)
+                    {
+                        <div class="rg-premium-stat"><SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Block" Height="140px" /></div>
+                    }
+                </div>
+                <div class="rg-premium-content-grid">
+                    <div class="rg-premium-main">
+                        <div class="rg-premium-panel"><SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Block" Height="420px" /></div>
+                        <div class="rg-premium-panel"><SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Block" Height="420px" /></div>
+                    </div>
+                    <div class="rg-premium-side">
+                        <div class="rg-premium-panel"><SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Block" Height="260px" /></div>
+                        <div class="rg-premium-panel"><SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Block" Height="320px" /></div>
+                    </div>
+                </div>
             </div>
         }
         else if (_data is null)
@@ -27,127 +44,263 @@
         }
         else
         {
-            <div class="rg-dash-kpi-strip">
-                <div class="rg-dash-kpi">
-                    <div class="rg-dash-kpi-value">@_data.AssignedInstitutions</div>
-                    <div class="rg-dash-kpi-label">Assigned Institutions</div>
-                </div>
-                <div class="rg-dash-kpi">
-                    <div class="rg-dash-kpi-value @(_data.OverdueReviews > 0 ? "rg-dash-kpi-value--red" : "rg-dash-kpi-value--green")">@_data.OverdueReviews</div>
-                    <div class="rg-dash-kpi-label">Overdue Reviews</div>
-                </div>
-                <div class="rg-dash-kpi">
-                    <div class="rg-dash-kpi-value">@_data.PendingExams</div>
-                    <div class="rg-dash-kpi-label">Pending Exams</div>
-                </div>
-                <div class="rg-dash-kpi">
-                    <div class="rg-dash-kpi-value @(_data.UpcomingDeadlines > 5 ? "rg-dash-kpi-value--amber" : "")">@_data.UpcomingDeadlines</div>
-                    <div class="rg-dash-kpi-label">Upcoming Deadlines</div>
-                </div>
-            </div>
+            <div class="rg-premium-flow">
+                <section class="rg-premium-banner @ResolveBannerTone()" aria-label="Examiner posture">
+                    <div class="rg-premium-banner__grid">
+                        <div>
+                            <div class="rg-premium-banner__eyebrow">Field posture</div>
+                            <h2 class="rg-premium-banner__headline">@BuildBannerHeadline()</h2>
+                            <p class="rg-premium-banner__detail">@BuildBannerDetail()</p>
+                        </div>
+                        <div class="rg-premium-banner__meta">
+                            <div class="rg-premium-banner__meta-label">Next workload cue</div>
+                            <div class="rg-premium-banner__meta-value">@BuildNextQueueLabel()</div>
+                            <div class="rg-premium-banner__meta-copy">@BuildQueueCopy()</div>
+                        </div>
+                    </div>
+                </section>
 
-            @* Overdue Institutions *@
-            <div class="fc-card fc-card--mb" style="margin-top:var(--space-4);">
-                <div class="fc-card__header"><h2 class="fc-card__title">Overdue Institutions</h2></div>
-                <div class="fc-card__body">
-                    @if (_data.OverdueItems.Count == 0)
-                    {
-                        <p class="fc-text-muted">No overdue items. All institutions are current.</p>
-                    }
-                    else
-                    {
-                        <DataTable TItem="InstitutionScorecardRow" Items="@_data.OverdueItems" PageSize="20" Sortable="true" ShowExport="true" ExportFileName="examiner-overdue">
-                            <ChildContent>
-                                <DataColumn TItem="InstitutionScorecardRow" Title="Institution" SortKey="@(x => x.InstitutionName)">
-                                    <CellTemplate><strong>@context.InstitutionName</strong></CellTemplate>
-                                </DataColumn>
-                                <DataColumn TItem="InstitutionScorecardRow" Title="Licence" Width="120px" SortKey="@(x => x.LicenceType)">
-                                    <CellTemplate><span class="fc-badge fc-badge--neutral">@context.LicenceType</span></CellTemplate>
-                                </DataColumn>
-                                <DataColumn TItem="InstitutionScorecardRow" Title="Overdue" Width="90px" SortKey="@(x => x.OverdueObligations)">
-                                    <CellTemplate><span class="fc-text-danger"><strong>@context.OverdueObligations</strong></span></CellTemplate>
-                                </DataColumn>
-                                <DataColumn TItem="InstitutionScorecardRow" Title="Due Soon" Width="90px" SortKey="@(x => x.DueSoonObligations)">
-                                    <CellTemplate>@context.DueSoonObligations</CellTemplate>
-                                </DataColumn>
-                                <DataColumn TItem="InstitutionScorecardRow" Title="Capital" Width="90px" SortKey="@(x => x.CapitalScore)">
-                                    <CellTemplate>@(context.CapitalScore?.ToString("F1") ?? "—")</CellTemplate>
-                                </DataColumn>
-                                <DataColumn TItem="InstitutionScorecardRow" Title="Incidents" Width="90px" SortKey="@(x => x.OpenResilienceIncidents)">
-                                    <CellTemplate>@context.OpenResilienceIncidents</CellTemplate>
-                                </DataColumn>
-                                <DataColumn TItem="InstitutionScorecardRow" Title="Priority" Width="100px" SortKey="@(x => x.Priority)">
-                                    <CellTemplate><span class="fc-badge @PriorityBadge(context.Priority)">@context.Priority</span></CellTemplate>
-                                </DataColumn>
-                                <DataColumn TItem="InstitutionScorecardRow" Title="Summary" SortKey="@(x => x.Summary)">
-                                    <CellTemplate><span class="fc-text-muted">@context.Summary</span></CellTemplate>
-                                </DataColumn>
-                            </ChildContent>
-                        </DataTable>
-                    }
-                </div>
-            </div>
+                <section class="rg-premium-hero" aria-labelledby="examiner-hero-title">
+                    <div class="rg-premium-hero__grid">
+                        <div>
+                            <div class="rg-premium-hero__eyebrow">Examiner control room</div>
+                            <h1 id="examiner-hero-title" class="rg-premium-hero__title">Work the queue with clearer urgency and less noise.</h1>
+                            <p class="rg-premium-hero__subtitle">
+                                The examiner view surfaces what needs action now: overdue institutions, pending examinations, near-term deadlines,
+                                and the most recent events affecting your assigned supervisory lane.
+                            </p>
+                            <div class="rg-premium-badge-row">
+                                <span class="rg-premium-chip rg-premium-chip--info">@($"{_data.AssignedInstitutions} assigned institutions")</span>
+                                <span class="rg-premium-chip @BuildOverdueChipClass()">@($"{_data.OverdueReviews} overdue reviews")</span>
+                                <span class="rg-premium-chip @BuildDeadlineChipClass()">@($"{_data.UpcomingDeadlines} upcoming deadlines")</span>
+                            </div>
+                        </div>
+                        <div class="rg-premium-hero__aside">
+                            <div class="rg-premium-note">
+                                <div class="rg-premium-note__label">Pending exams</div>
+                                <div class="rg-premium-note__value">@_data.PendingExams</div>
+                                <div class="rg-premium-note__copy">
+                                    Examinations or review actions still waiting to be started or advanced through the queue.
+                                </div>
+                            </div>
+                            <div class="rg-premium-note">
+                                <div class="rg-premium-note__label">Overdue institutions</div>
+                                <div class="rg-premium-note__value">@_data.OverdueItems.Count</div>
+                                <div class="rg-premium-note__copy">
+                                    Institutions currently carrying overdue obligations and therefore most likely to dominate the next supervisory sprint.
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
 
-            @* Exam Queue *@
-            <div class="fc-card fc-card--mb">
-                <div class="fc-card__header"><h2 class="fc-card__title">Examination Queue</h2></div>
-                <div class="fc-card__body">
-                    @if (_data.ExamQueue.Count == 0)
-                    {
-                        <p class="fc-text-muted">No pending examinations.</p>
-                    }
-                    else
-                    {
-                        <DataTable TItem="InterventionQueueRow" Items="@_data.ExamQueue" PageSize="20" Sortable="true" ShowExport="true" ExportFileName="examiner-queue">
-                            <ChildContent>
-                                <DataColumn TItem="InterventionQueueRow" Title="Domain" Width="120px" SortKey="@(x => x.Domain)">
-                                    <CellTemplate><span class="fc-badge fc-badge--neutral">@context.Domain</span></CellTemplate>
-                                </DataColumn>
-                                <DataColumn TItem="InterventionQueueRow" Title="Subject" SortKey="@(x => x.Subject)">
-                                    <CellTemplate><strong>@context.Subject</strong></CellTemplate>
-                                </DataColumn>
-                                <DataColumn TItem="InterventionQueueRow" Title="Signal" Width="90px" SortKey="@(x => x.Signal)">
-                                    <CellTemplate><span class="fc-badge @SignalBadge(context.Signal)">@context.Signal</span></CellTemplate>
-                                </DataColumn>
-                                <DataColumn TItem="InterventionQueueRow" Title="Priority" Width="100px" SortKey="@(x => x.Priority)">
-                                    <CellTemplate><span class="fc-badge @PriorityBadge(context.Priority)">@context.Priority</span></CellTemplate>
-                                </DataColumn>
-                                <DataColumn TItem="InterventionQueueRow" Title="Next Action" SortKey="@(x => x.NextAction)">
-                                    <CellTemplate>@context.NextAction</CellTemplate>
-                                </DataColumn>
-                                <DataColumn TItem="InterventionQueueRow" Title="Due" Width="120px" SortKey="@(x => x.DueDate)">
-                                    <CellTemplate>@context.DueDate.ToString("dd MMM yyyy")</CellTemplate>
-                                </DataColumn>
-                            </ChildContent>
-                        </DataTable>
-                    }
-                </div>
-            </div>
+                <section class="rg-premium-stat-grid" aria-label="Examiner metrics">
+                    <article class="rg-premium-stat">
+                        <div class="rg-premium-stat__label">Assigned institutions</div>
+                        <div class="rg-premium-stat__value">@_data.AssignedInstitutions</div>
+                        <div class="rg-premium-stat__note">Current institution workload attributed to this supervisory operating lane.</div>
+                    </article>
+                    <article class="rg-premium-stat">
+                        <div class="rg-premium-stat__label">Overdue reviews</div>
+                        <div class="rg-premium-stat__value @BuildOverdueValueClass()">@_data.OverdueReviews</div>
+                        <div class="rg-premium-stat__note">Total overdue review count across assigned institutions.</div>
+                    </article>
+                    <article class="rg-premium-stat">
+                        <div class="rg-premium-stat__label">Pending exams</div>
+                        <div class="rg-premium-stat__value @BuildPendingExamValueClass()">@_data.PendingExams</div>
+                        <div class="rg-premium-stat__note">Queue items whose next action is an examination or review motion.</div>
+                    </article>
+                    <article class="rg-premium-stat">
+                        <div class="rg-premium-stat__label">Upcoming deadlines</div>
+                        <div class="rg-premium-stat__value @BuildDeadlineValueClass()">@_data.UpcomingDeadlines</div>
+                        <div class="rg-premium-stat__note">Interventions and obligations coming due inside the near-term supervisory window.</div>
+                    </article>
+                </section>
 
-            @* Recent Activity *@
-            <div class="fc-card">
-                <div class="fc-card__header"><h2 class="fc-card__title">Recent Activity</h2></div>
-                <div class="fc-card__body">
-                    <DataTable TItem="ActivityTimelineRow" Items="@_data.RecentActivity" PageSize="10" Sortable="true">
-                        <ChildContent>
-                            <DataColumn TItem="ActivityTimelineRow" Title="Domain" Width="120px" SortKey="@(x => x.Domain)">
-                                <CellTemplate><span class="fc-badge fc-badge--neutral">@context.Domain</span></CellTemplate>
-                            </DataColumn>
-                            <DataColumn TItem="ActivityTimelineRow" Title="Event" SortKey="@(x => x.Title)">
-                                <CellTemplate>
-                                    <strong>@context.Title</strong>
-                                    <div class="fc-text-muted-sm">@context.Detail</div>
-                                </CellTemplate>
-                            </DataColumn>
-                            <DataColumn TItem="ActivityTimelineRow" Title="Severity" Width="100px" SortKey="@(x => x.Severity)">
-                                <CellTemplate><span class="fc-badge @SeverityBadge(context.Severity)">@context.Severity</span></CellTemplate>
-                            </DataColumn>
-                            <DataColumn TItem="ActivityTimelineRow" Title="When" Width="150px" SortKey="@(x => x.HappenedAt)">
-                                <CellTemplate>@context.HappenedAt.ToString("dd MMM yyyy HH:mm")</CellTemplate>
-                            </DataColumn>
-                        </ChildContent>
-                    </DataTable>
-                </div>
+                <section class="rg-premium-content-grid">
+                    <div class="rg-premium-main">
+                        <section class="rg-premium-panel">
+                            <div class="rg-premium-panel__header">
+                                <div>
+                                    <div class="rg-premium-panel__eyebrow">Overdue queue</div>
+                                    <h2 class="rg-premium-panel__title">Overdue institutions</h2>
+                                    <p class="rg-premium-panel__subtitle">Institutions ordered by overdue pressure so the most urgent field reviews stay visible first.</p>
+                                </div>
+                                <div class="rg-premium-panel__metric">
+                                    <span class="rg-premium-panel__metric-label">Most overdue</span>
+                                    @(_data.OverdueItems.FirstOrDefault()?.InstitutionName ?? "No overdue institutions")
+                                </div>
+                            </div>
+                            <div class="rg-premium-panel__body rg-premium-panel__body--table">
+                                @if (_data.OverdueItems.Count == 0)
+                                {
+                                    <div class="rg-premium-empty">No overdue institutions. Assigned institutions are currently up to date.</div>
+                                }
+                                else
+                                {
+                                    <DataTable TItem="InstitutionScorecardRow" Items="@_data.OverdueItems" PageSize="20" Sortable="true" ShowExport="true" ExportFileName="examiner-overdue">
+                                        <ChildContent>
+                                            <DataColumn TItem="InstitutionScorecardRow" Title="Institution" SortKey="@(x => x.InstitutionName)">
+                                                <CellTemplate><strong>@context.InstitutionName</strong></CellTemplate>
+                                            </DataColumn>
+                                            <DataColumn TItem="InstitutionScorecardRow" Title="Licence" Width="120px" SortKey="@(x => x.LicenceType)">
+                                                <CellTemplate><span class="fc-badge fc-badge--neutral">@context.LicenceType</span></CellTemplate>
+                                            </DataColumn>
+                                            <DataColumn TItem="InstitutionScorecardRow" Title="Overdue" Width="90px" SortKey="@(x => x.OverdueObligations)">
+                                                <CellTemplate><span class="fc-text-danger"><strong>@context.OverdueObligations</strong></span></CellTemplate>
+                                            </DataColumn>
+                                            <DataColumn TItem="InstitutionScorecardRow" Title="Due Soon" Width="90px" SortKey="@(x => x.DueSoonObligations)">
+                                                <CellTemplate>@context.DueSoonObligations</CellTemplate>
+                                            </DataColumn>
+                                            <DataColumn TItem="InstitutionScorecardRow" Title="Capital" Width="90px" SortKey="@(x => x.CapitalScore)">
+                                                <CellTemplate>@(context.CapitalScore?.ToString("F1") ?? "—")</CellTemplate>
+                                            </DataColumn>
+                                            <DataColumn TItem="InstitutionScorecardRow" Title="Incidents" Width="90px" SortKey="@(x => x.OpenResilienceIncidents)">
+                                                <CellTemplate>@context.OpenResilienceIncidents</CellTemplate>
+                                            </DataColumn>
+                                            <DataColumn TItem="InstitutionScorecardRow" Title="Priority" Width="100px" SortKey="@(x => x.Priority)">
+                                                <CellTemplate><span class="fc-badge @PriorityBadge(context.Priority)">@context.Priority</span></CellTemplate>
+                                            </DataColumn>
+                                            <DataColumn TItem="InstitutionScorecardRow" Title="Summary" SortKey="@(x => x.Summary)">
+                                                <CellTemplate><span class="fc-text-muted">@context.Summary</span></CellTemplate>
+                                            </DataColumn>
+                                        </ChildContent>
+                                    </DataTable>
+                                }
+                            </div>
+                        </section>
+
+                        <section class="rg-premium-panel">
+                            <div class="rg-premium-panel__header">
+                                <div>
+                                    <div class="rg-premium-panel__eyebrow">Execution queue</div>
+                                    <h2 class="rg-premium-panel__title">Examination queue</h2>
+                                    <p class="rg-premium-panel__subtitle">Pending examinations and reviews, ordered toward due-date urgency so the next field move is obvious.</p>
+                                </div>
+                                <div class="rg-premium-panel__metric">
+                                    <span class="rg-premium-panel__metric-label">Next due</span>
+                                    @BuildNextDueDate()
+                                </div>
+                            </div>
+                            <div class="rg-premium-panel__body rg-premium-panel__body--table">
+                                @if (_data.ExamQueue.Count == 0)
+                                {
+                                    <div class="rg-premium-empty">There are no pending examinations in the queue right now.</div>
+                                }
+                                else
+                                {
+                                    <DataTable TItem="InterventionQueueRow" Items="@_data.ExamQueue" PageSize="20" Sortable="true" ShowExport="true" ExportFileName="examiner-queue">
+                                        <ChildContent>
+                                            <DataColumn TItem="InterventionQueueRow" Title="Domain" Width="120px" SortKey="@(x => x.Domain)">
+                                                <CellTemplate><span class="fc-badge fc-badge--neutral">@context.Domain</span></CellTemplate>
+                                            </DataColumn>
+                                            <DataColumn TItem="InterventionQueueRow" Title="Subject" SortKey="@(x => x.Subject)">
+                                                <CellTemplate><strong>@context.Subject</strong></CellTemplate>
+                                            </DataColumn>
+                                            <DataColumn TItem="InterventionQueueRow" Title="Signal" Width="90px" SortKey="@(x => x.Signal)">
+                                                <CellTemplate><span class="fc-badge @SignalBadge(context.Signal)">@context.Signal</span></CellTemplate>
+                                            </DataColumn>
+                                            <DataColumn TItem="InterventionQueueRow" Title="Priority" Width="100px" SortKey="@(x => x.Priority)">
+                                                <CellTemplate><span class="fc-badge @PriorityBadge(context.Priority)">@context.Priority</span></CellTemplate>
+                                            </DataColumn>
+                                            <DataColumn TItem="InterventionQueueRow" Title="Next Action" SortKey="@(x => x.NextAction)">
+                                                <CellTemplate>@context.NextAction</CellTemplate>
+                                            </DataColumn>
+                                            <DataColumn TItem="InterventionQueueRow" Title="Due" Width="120px" SortKey="@(x => x.DueDate)">
+                                                <CellTemplate>@context.DueDate.ToString("dd MMM yyyy")</CellTemplate>
+                                            </DataColumn>
+                                        </ChildContent>
+                                    </DataTable>
+                                }
+                            </div>
+                        </section>
+                    </div>
+
+                    <aside class="rg-premium-side">
+                        <section class="rg-premium-panel">
+                            <div class="rg-premium-panel__header">
+                                <div>
+                                    <div class="rg-premium-panel__eyebrow">Workload pressure</div>
+                                    <h2 class="rg-premium-panel__title">Priority workload cards</h2>
+                                    <p class="rg-premium-panel__subtitle">Fast-read cards for the most urgent institution and queue actions in your current lane.</p>
+                                </div>
+                            </div>
+                            <div class="rg-premium-panel__body">
+                                <div class="rg-premium-list">
+                                    @if (_data.OverdueItems.Any())
+                                    {
+                                        var firstOverdue = _data.OverdueItems.First();
+                                        <article class="rg-premium-list__item">
+                                            <div class="rg-premium-list__top">
+                                                <div class="rg-premium-list__heading">@firstOverdue.InstitutionName</div>
+                                                <span class="fc-badge @PriorityBadge(firstOverdue.Priority)">@firstOverdue.Priority</span>
+                                            </div>
+                                            <div class="rg-premium-list__meta">@firstOverdue.Summary</div>
+                                            <div class="rg-premium-list__tags">
+                                                <span class="fc-badge fc-badge--danger">@($"{firstOverdue.OverdueObligations} overdue")</span>
+                                                <span class="fc-badge fc-badge--neutral">@firstOverdue.LicenceType</span>
+                                            </div>
+                                        </article>
+                                    }
+                                    @if (_data.ExamQueue.Any())
+                                    {
+                                        var firstQueue = _data.ExamQueue.First();
+                                        <article class="rg-premium-list__item">
+                                            <div class="rg-premium-list__top">
+                                                <div class="rg-premium-list__heading">@firstQueue.Subject</div>
+                                                <span class="fc-badge @SignalBadge(firstQueue.Signal)">@firstQueue.Signal</span>
+                                            </div>
+                                            <div class="rg-premium-list__meta">@firstQueue.NextAction</div>
+                                            <div class="rg-premium-list__tags">
+                                                <span class="fc-badge fc-badge--neutral">@firstQueue.Domain</span>
+                                                <span class="fc-badge fc-badge--neutral">@firstQueue.DueDate.ToString("dd MMM")</span>
+                                            </div>
+                                        </article>
+                                    }
+                                    @if (!_data.OverdueItems.Any() && !_data.ExamQueue.Any())
+                                    {
+                                        <div class="rg-premium-empty">No urgent workload cards are available right now.</div>
+                                    }
+                                </div>
+                            </div>
+                        </section>
+
+                        <section class="rg-premium-panel">
+                            <div class="rg-premium-panel__header">
+                                <div>
+                                    <div class="rg-premium-panel__eyebrow">Recent activity</div>
+                                    <h2 class="rg-premium-panel__title">Field activity rail</h2>
+                                    <p class="rg-premium-panel__subtitle">Recent events affecting the examiner lane and likely to alter queue priorities.</p>
+                                </div>
+                            </div>
+                            <div class="rg-premium-panel__body">
+                                @if (_data.RecentActivity.Count == 0)
+                                {
+                                    <div class="rg-premium-empty">No recent field activity is available yet.</div>
+                                }
+                                else
+                                {
+                                    <div class="rg-premium-list">
+                                        @foreach (var activity in _data.RecentActivity.Take(8))
+                                        {
+                                            <article class="rg-premium-list__item">
+                                                <div class="rg-premium-list__top">
+                                                    <div class="rg-premium-list__heading">@activity.Title</div>
+                                                    <span class="fc-badge @SeverityBadge(activity.Severity)">@activity.Severity</span>
+                                                </div>
+                                                <div class="rg-premium-list__meta">@activity.Detail</div>
+                                                <div class="rg-premium-list__tags">
+                                                    <span class="fc-badge fc-badge--neutral">@activity.Domain</span>
+                                                    <span class="fc-badge fc-badge--neutral">@activity.HappenedAt.ToString("dd MMM HH:mm")</span>
+                                                </div>
+                                            </article>
+                                        }
+                                    </div>
+                                }
+                            </div>
+                        </section>
+                    </aside>
+                </section>
             </div>
         }
     </SectionErrorBoundary>
@@ -162,13 +315,186 @@
 
     private async Task ReloadAsync()
     {
-        _loading = true; _loadException = null;
-        try { _data = await DashboardService.GetExaminerDashboardAsync(); }
-        catch (Exception ex) { _loadException = ex; }
-        finally { _loading = false; }
+        _loading = true;
+        _loadException = null;
+
+        try
+        {
+            _data = await DashboardService.GetExaminerDashboardAsync();
+        }
+        catch (Exception ex)
+        {
+            _loadException = ex;
+        }
+        finally
+        {
+            _loading = false;
+        }
     }
 
-    private static string PriorityBadge(string p) => p switch { "Critical" => "fc-badge--danger", "High" => "fc-badge--warning", "Medium" => "fc-badge--info", _ => "fc-badge--neutral" };
-    private static string SignalBadge(string s) => s switch { "Critical" or "Alert" => "fc-badge--danger", "Warning" or "Watch" => "fc-badge--warning", "Resolved" => "fc-badge--success", _ => "fc-badge--neutral" };
-    private static string SeverityBadge(string s) => s switch { "Critical" => "fc-badge--danger", "High" or "Warning" => "fc-badge--warning", "Info" => "fc-badge--info", _ => "fc-badge--neutral" };
+    private string ResolveStatusBadge()
+    {
+        if (_loading)
+        {
+            return "Refreshing";
+        }
+
+        if (_data is null)
+        {
+            return "Awaiting data";
+        }
+
+        if (_data.OverdueReviews > 0)
+        {
+            return $"{_data.OverdueReviews} overdue reviews";
+        }
+
+        return _data.PendingExams > 0 ? $"{_data.PendingExams} pending exams" : "Field lane clear";
+    }
+
+    private string ResolveStatusVariant()
+    {
+        if (_data is null)
+        {
+            return "neutral";
+        }
+
+        if (_data.OverdueReviews >= 10 || _data.PendingExams >= 10)
+        {
+            return "danger";
+        }
+
+        if (_data.OverdueReviews > 0 || _data.UpcomingDeadlines > 5 || _data.PendingExams > 0)
+        {
+            return "warning";
+        }
+
+        return "success";
+    }
+
+    private string ResolveBannerTone()
+    {
+        if (_data is null)
+        {
+            return "rg-premium-banner--info";
+        }
+
+        if (_data.OverdueReviews >= 10 || _data.PendingExams >= 10)
+        {
+            return "rg-premium-banner--danger";
+        }
+
+        if (_data.OverdueReviews > 0 || _data.UpcomingDeadlines > 5 || _data.PendingExams > 0)
+        {
+            return "rg-premium-banner--warning";
+        }
+
+        return "rg-premium-banner--success";
+    }
+
+    private string BuildBannerHeadline()
+    {
+        if (_data is null)
+        {
+            return "Refreshing examiner posture.";
+        }
+
+        if (_data.OverdueReviews >= 10)
+        {
+            return "Overdue review pressure is high enough to dictate the field agenda.";
+        }
+
+        if (_data.PendingExams >= 10)
+        {
+            return "Pending examination volume is building and needs aggressive queue discipline.";
+        }
+
+        return _data.OverdueReviews > 0
+            ? "The queue is workable, but overdue institutions still need decisive field movement."
+            : "The examiner lane is broadly under control with manageable active demand.";
+    }
+
+    private string BuildBannerDetail()
+    {
+        if (_data is null)
+        {
+            return string.Empty;
+        }
+
+        return $"The lane carries {_data.AssignedInstitutions} assigned institutions, {_data.PendingExams} pending exams, and {_data.UpcomingDeadlines} upcoming deadlines.";
+    }
+
+    private string BuildNextQueueLabel()
+    {
+        var nextQueue = _data?.ExamQueue.OrderBy(x => x.DueDate).FirstOrDefault();
+        return nextQueue is null ? "Queue clear" : nextQueue.DueDate.ToString("dd MMM");
+    }
+
+    private string BuildQueueCopy()
+    {
+        var nextQueue = _data?.ExamQueue.OrderBy(x => x.DueDate).FirstOrDefault();
+        return nextQueue is null
+            ? "No near-term queue item is currently waiting for field execution."
+            : $"{nextQueue.Subject} is the next queue item coming due and should anchor the next field review block.";
+    }
+
+    private string BuildNextDueDate()
+    {
+        var nextQueue = _data?.ExamQueue.OrderBy(x => x.DueDate).FirstOrDefault();
+        return nextQueue is null ? "No due date" : nextQueue.DueDate.ToString("dd MMM");
+    }
+
+    private string BuildOverdueValueClass() =>
+        _data is null ? string.Empty :
+        _data.OverdueReviews == 0 ? "rg-premium-stat__value--success" :
+        _data.OverdueReviews < 10 ? "rg-premium-stat__value--warning" :
+        "rg-premium-stat__value--danger";
+
+    private string BuildPendingExamValueClass() =>
+        _data is null ? string.Empty :
+        _data.PendingExams == 0 ? "rg-premium-stat__value--success" :
+        _data.PendingExams < 10 ? "rg-premium-stat__value--warning" :
+        "rg-premium-stat__value--danger";
+
+    private string BuildDeadlineValueClass() =>
+        _data is null ? string.Empty :
+        _data.UpcomingDeadlines <= 2 ? "rg-premium-stat__value--success" :
+        _data.UpcomingDeadlines <= 5 ? "rg-premium-stat__value--warning" :
+        "rg-premium-stat__value--danger";
+
+    private string BuildOverdueChipClass() =>
+        _data is null ? "rg-premium-chip--info" :
+        _data.OverdueReviews == 0 ? "rg-premium-chip--success" :
+        _data.OverdueReviews < 10 ? "rg-premium-chip--warning" :
+        "rg-premium-chip--danger";
+
+    private string BuildDeadlineChipClass() =>
+        _data is null ? "rg-premium-chip--info" :
+        _data.UpcomingDeadlines <= 2 ? "rg-premium-chip--success" :
+        _data.UpcomingDeadlines <= 5 ? "rg-premium-chip--warning" :
+        "rg-premium-chip--danger";
+
+    private static string PriorityBadge(string priority) => priority switch
+    {
+        "Critical" => "fc-badge--danger",
+        "High" => "fc-badge--warning",
+        "Medium" => "fc-badge--info",
+        _ => "fc-badge--neutral"
+    };
+
+    private static string SignalBadge(string signal) => signal switch
+    {
+        "Critical" or "Alert" => "fc-badge--danger",
+        "Warning" or "Watch" => "fc-badge--warning",
+        "Resolved" => "fc-badge--success",
+        _ => "fc-badge--neutral"
+    };
+
+    private static string SeverityBadge(string severity) => severity switch
+    {
+        "Critical" => "fc-badge--danger",
+        "High" or "Warning" => "fc-badge--warning",
+        "Info" => "fc-badge--info",
+        _ => "fc-badge--neutral"
+    };
 }

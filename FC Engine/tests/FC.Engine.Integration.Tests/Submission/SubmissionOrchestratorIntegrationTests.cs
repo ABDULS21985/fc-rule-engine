@@ -313,8 +313,8 @@ public sealed class SubmissionOrchestratorIntegrationTests : IClassFixture<Submi
         var suffix = Guid.NewGuid().ToString("N")[..8];
 
         var tenant = Tenant.Create(
-            $"RG34 Test Tenant {suffix}"[..30],
-            $"rg34-test-{suffix}"[..20],
+            Truncate($"RG34 Test Tenant {suffix}", 30),
+            Truncate($"rg34-test-{suffix}", 20),
             TenantType.Institution,
             $"rg34-{suffix}@test.local");
         tenant.Activate();
@@ -371,6 +371,11 @@ public sealed class SubmissionOrchestratorIntegrationTests : IClassFixture<Submi
 
         return (institution.Id, submission.Id);
     }
+
+    private static string Truncate(string value, int maxLength)
+        => value.Length <= maxLength
+            ? value
+            : value[..maxLength];
 
     // ── Orchestrator factory helpers ─────────────────────────────────────
 

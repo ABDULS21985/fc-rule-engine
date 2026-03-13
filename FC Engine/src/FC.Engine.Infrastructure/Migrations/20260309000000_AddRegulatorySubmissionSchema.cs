@@ -1,4 +1,6 @@
 using System;
+using FC.Engine.Infrastructure.Metadata;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
@@ -6,6 +8,8 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace FC.Engine.Infrastructure.Migrations
 {
     /// <inheritdoc />
+    [DbContext(typeof(MetadataDbContext))]
+    [Migration("20260309000000_AddRegulatorySubmissionSchema")]
     public partial class AddRegulatorySubmissionSchema : Migration
     {
         /// <inheritdoc />
@@ -358,21 +362,48 @@ namespace FC.Engine.Infrastructure.Migrations
                 descending: [true]);
 
             // ── Seed: RegulatoryChannels ──────────────────────────────────
-            migrationBuilder.InsertData(
-                schema: "meta",
-                table: "regulatory_channels",
-                columns: ["Id", "RegulatorCode", "RegulatorName", "PortalName",
-                          "IntegrationMethod", "RequiresCertificate", "TimeoutSeconds",
-                          "IsActive", "CreatedAt", "UpdatedAt"],
-                values: new object[,]
-                {
-                    { 1, "CBN",    "Central Bank of Nigeria",                     "eFASS",          "REST",       true, 120, true, DateTime.UtcNow, DateTime.UtcNow },
-                    { 2, "NDIC",   "Nigeria Deposit Insurance Corporation",        "NDIC Portal",    "REST",       true, 120, true, DateTime.UtcNow, DateTime.UtcNow },
-                    { 3, "NFIU",   "Nigerian Financial Intelligence Unit",         "goAML",          "XML_UPLOAD", true, 180, true, DateTime.UtcNow, DateTime.UtcNow },
-                    { 4, "SEC",    "Securities and Exchange Commission Nigeria",   "SEC e-Filing",   "REST",       true,  90, true, DateTime.UtcNow, DateTime.UtcNow },
-                    { 5, "NAICOM", "National Insurance Commission",                "NAICOM Portal",  "REST",       true, 120, true, DateTime.UtcNow, DateTime.UtcNow },
-                    { 6, "PENCOM", "National Pension Commission",                  "PenCom Portal",  "REST",       true,  90, true, DateTime.UtcNow, DateTime.UtcNow }
-                });
+            migrationBuilder.Sql(
+                """
+                SET IDENTITY_INSERT [meta].[regulatory_channels] ON;
+
+                IF NOT EXISTS (SELECT 1 FROM [meta].[regulatory_channels] WHERE [RegulatorCode] = 'CBN')
+                INSERT INTO [meta].[regulatory_channels]
+                    ([Id], [RegulatorCode], [RegulatorName], [PortalName], [IntegrationMethod], [RequiresCertificate], [TimeoutSeconds], [IsActive], [CreatedAt], [UpdatedAt])
+                VALUES
+                    (1, 'CBN', 'Central Bank of Nigeria', 'eFASS', 'REST', 1, 120, 1, SYSUTCDATETIME(), SYSUTCDATETIME());
+
+                IF NOT EXISTS (SELECT 1 FROM [meta].[regulatory_channels] WHERE [RegulatorCode] = 'NDIC')
+                INSERT INTO [meta].[regulatory_channels]
+                    ([Id], [RegulatorCode], [RegulatorName], [PortalName], [IntegrationMethod], [RequiresCertificate], [TimeoutSeconds], [IsActive], [CreatedAt], [UpdatedAt])
+                VALUES
+                    (2, 'NDIC', 'Nigeria Deposit Insurance Corporation', 'NDIC Portal', 'REST', 1, 120, 1, SYSUTCDATETIME(), SYSUTCDATETIME());
+
+                IF NOT EXISTS (SELECT 1 FROM [meta].[regulatory_channels] WHERE [RegulatorCode] = 'NFIU')
+                INSERT INTO [meta].[regulatory_channels]
+                    ([Id], [RegulatorCode], [RegulatorName], [PortalName], [IntegrationMethod], [RequiresCertificate], [TimeoutSeconds], [IsActive], [CreatedAt], [UpdatedAt])
+                VALUES
+                    (3, 'NFIU', 'Nigerian Financial Intelligence Unit', 'goAML', 'XML_UPLOAD', 1, 180, 1, SYSUTCDATETIME(), SYSUTCDATETIME());
+
+                IF NOT EXISTS (SELECT 1 FROM [meta].[regulatory_channels] WHERE [RegulatorCode] = 'SEC')
+                INSERT INTO [meta].[regulatory_channels]
+                    ([Id], [RegulatorCode], [RegulatorName], [PortalName], [IntegrationMethod], [RequiresCertificate], [TimeoutSeconds], [IsActive], [CreatedAt], [UpdatedAt])
+                VALUES
+                    (4, 'SEC', 'Securities and Exchange Commission Nigeria', 'SEC e-Filing', 'REST', 1, 90, 1, SYSUTCDATETIME(), SYSUTCDATETIME());
+
+                IF NOT EXISTS (SELECT 1 FROM [meta].[regulatory_channels] WHERE [RegulatorCode] = 'NAICOM')
+                INSERT INTO [meta].[regulatory_channels]
+                    ([Id], [RegulatorCode], [RegulatorName], [PortalName], [IntegrationMethod], [RequiresCertificate], [TimeoutSeconds], [IsActive], [CreatedAt], [UpdatedAt])
+                VALUES
+                    (5, 'NAICOM', 'National Insurance Commission', 'NAICOM Portal', 'REST', 1, 120, 1, SYSUTCDATETIME(), SYSUTCDATETIME());
+
+                IF NOT EXISTS (SELECT 1 FROM [meta].[regulatory_channels] WHERE [RegulatorCode] = 'PENCOM')
+                INSERT INTO [meta].[regulatory_channels]
+                    ([Id], [RegulatorCode], [RegulatorName], [PortalName], [IntegrationMethod], [RequiresCertificate], [TimeoutSeconds], [IsActive], [CreatedAt], [UpdatedAt])
+                VALUES
+                    (6, 'PENCOM', 'National Pension Commission', 'PenCom Portal', 'REST', 1, 90, 1, SYSUTCDATETIME(), SYSUTCDATETIME());
+
+                SET IDENTITY_INSERT [meta].[regulatory_channels] OFF;
+                """);
         }
 
         /// <inheritdoc />

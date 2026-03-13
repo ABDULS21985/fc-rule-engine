@@ -8,211 +8,864 @@
 
 <PageTitle>ForeSight Platform Overview</PageTitle>
 
-<PageHeader Title="ForeSight Platform Overview"
-            Subtitle="Cross-tenant predictive intelligence for supervisory prioritisation and churn-risk management.">
-    <SecondaryActions>
-        <button class="fc-btn fc-btn--outline fc-btn--sm" @onclick="ReloadAsync" disabled="@_loading">
-            Refresh
-        </button>
-    </SecondaryActions>
-</PageHeader>
+<div class="fc-fsa-shell">
+    <PageHeader Title="ForeSight Platform Overview"
+                Subtitle="Cross-tenant predictive intelligence for supervisory prioritisation and retention intervention."
+                StatusBadge="@ResolveStatusBadge()"
+                StatusVariant="@ResolveStatusVariant()">
+        <PrimaryAction>
+            <div class="fc-fsa-header-actions">
+                <span class="fc-fsa-header-chip">
+                    <span class="fc-fsa-header-chip-label">Scope</span>
+                    <strong>@BuildScopeLabel()</strong>
+                </span>
+                <button class="fc-fsa-header-btn" @onclick="ReloadAsync" disabled="@_loading">
+                    Refresh
+                </button>
+            </div>
+        </PrimaryAction>
+    </PageHeader>
 
-<div class="fc-page">
     @if (_loading)
     {
-        <div class="fc-grid fc-grid-3 fc-mb-4">
-            @for (var index = 0; index < 3; index++)
-            {
-                <div class="fc-card">
-                    <div class="fc-card__body">
-                        <div class="fc-skel fc-skel-text" style="--skel-w:100px;--skel-mb:0.75rem"></div>
-                        <div class="fc-skel fc-skel-text" style="--skel-w:80px;--skel-h:2rem"></div>
-                    </div>
-                </div>
-            }
-        </div>
-        <div class="fc-card">
-            <div class="fc-card__body">
-                <div class="fc-skel fc-skel-block" style="--skel-w:100%;--skel-h:360px"></div>
+        <section class="fc-fsa-loading" role="status" aria-label="Loading ForeSight platform overview">
+            <div class="fc-fsa-loading-hero"></div>
+            <div class="fc-fsa-loading-grid">
+                @for (var i = 0; i < 4; i++)
+                {
+                    <div class="fc-fsa-loading-card"></div>
+                }
             </div>
-        </div>
+            <div class="fc-fsa-loading-panels">
+                <div class="fc-fsa-loading-panel"></div>
+                <div class="fc-fsa-loading-panel"></div>
+            </div>
+        </section>
     }
     else if (!string.IsNullOrWhiteSpace(_error))
     {
-        <SectionErrorBoundary Title="Failed to load ForeSight platform data"
-                              ExternalError="@_loadException"
-                              OnRetry="ReloadAsync" />
+        <section class="fc-fsa-error" role="alert">
+            <div class="fc-fsa-error-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" width="24" height="24">
+                    <circle cx="12" cy="12" r="9"></circle>
+                    <path d="M12 8v5"></path>
+                    <path d="M12 16h.01"></path>
+                </svg>
+            </div>
+            <div>
+                <span class="fc-fsa-kicker">ForeSight unavailable</span>
+                <h2>We could not load the predictive control room.</h2>
+                <p>@_error</p>
+            </div>
+            <button class="fc-fsa-btn" @onclick="ReloadAsync">Retry</button>
+        </section>
     }
     else
     {
-        <div class="fc-grid fc-grid-3 fc-mb-4">
-            <div class="fc-card">
-                <div class="fc-card__body">
-                    <div class="fc-stat-label">Regulatory Priorities</div>
-                    <div class="fc-stat-value">@_regulatoryRanking.Count</div>
-                    <div class="fc-kpi-delta">@_regulatoryRanking.Count(x => x.RiskBand is "HIGH" or "CRITICAL") high-priority entity forecasts</div>
-                </div>
-            </div>
-            <div class="fc-card">
-                <div class="fc-card__body">
-                    <div class="fc-stat-label">Churn Watchlist</div>
-                    <div class="fc-stat-value">@_churnRisks.Count</div>
-                    <div class="fc-kpi-delta">@_churnRisks.Count(x => x.RiskBand is "HIGH" or "CRITICAL") tenants with elevated retention risk</div>
-                </div>
-            </div>
-            <div class="fc-card">
-                <div class="fc-card__body">
-                    <div class="fc-stat-label">Regulator Filter</div>
-                    <div class="fc-stat-value">@_selectedRegulator</div>
-                    <div class="fc-kpi-delta">Licence scope: @(string.IsNullOrWhiteSpace(_selectedLicence) ? "All" : _selectedLicence)</div>
-                </div>
-            </div>
-        </div>
+        var highPriorityCount = _regulatoryRanking.Count(x => x.RiskBand is "HIGH" or "CRITICAL");
+        var elevatedChurnCount = _churnRisks.Count(x => x.RiskBand is "HIGH" or "CRITICAL");
+        var combinedConfidence = BuildAverageConfidence();
+        var leadPriority = _regulatoryRanking.FirstOrDefault();
+        var leadChurn = _churnRisks.FirstOrDefault();
+        var bannerTone = ResolveBannerTone(highPriorityCount, elevatedChurnCount);
 
-        <div class="fc-card fc-mb-4">
-            <div class="fc-card__body">
-                <div class="fc-grid" style="grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem;">
-                    <label class="fc-field">
-                        <span class="fc-field__label">Regulator</span>
-                        <select class="fc-input" @bind="_selectedRegulator" @bind:after="OnRegulatorChangedAsync">
-                            @foreach (var regulator in RegulatorOptions)
-                            {
-                                <option value="@regulator">@regulator</option>
-                            }
-                        </select>
-                    </label>
-                    <label class="fc-field">
-                        <span class="fc-field__label">Licence type</span>
-                        <select class="fc-input" @bind="_selectedLicence" @bind:after="ReloadAsync">
-                            <option value="">All licence types</option>
-                            @foreach (var licence in CurrentLicenceOptions)
-                            {
-                                <option value="@licence">@licence</option>
-                            }
-                        </select>
-                    </label>
-                </div>
+        <section class="fc-fsa-banner fc-fsa-banner--@bannerTone">
+            <div class="fc-fsa-banner-copy">
+                <span class="fc-fsa-kicker">Advisory pulse</span>
+                <h2>@BuildBannerHeadline(highPriorityCount, elevatedChurnCount)</h2>
+                <p>@BuildBannerDetail(highPriorityCount, elevatedChurnCount, combinedConfidence)</p>
             </div>
-        </div>
+            <div class="fc-fsa-banner-pills">
+                <span class="fc-fsa-pill">Regulator: @_selectedRegulator</span>
+                <span class="fc-fsa-pill">Licence: @(string.IsNullOrWhiteSpace(_selectedLicence) ? "All" : _selectedLicence)</span>
+                <span class="fc-fsa-pill">Advisory only</span>
+            </div>
+        </section>
 
-        <div class="fc-grid fc-grid-2 fc-mb-4">
-            <div class="fc-card">
-                <div class="fc-card__header">
-                    <div class="d-flex align-items-center gap-2">
-                        <h2 class="fc-card__title mb-0">Regulatory Action Ranking</h2>
-                        <span class="fc-badge fc-badge--danger">@_regulatoryRanking.Count(x => x.RiskBand is "HIGH" or "CRITICAL") priority</span>
+        <section class="fc-fsa-overview">
+            <article class="fc-fsa-hero" style="--stagger: 0;">
+                <div class="fc-fsa-kicker">
+                    <span class="fc-fsa-kicker-dot" aria-hidden="true"></span>
+                    Supervisory intelligence workspace
+                </div>
+                <div class="fc-fsa-hero-topline">
+                    <div>
+                        <h2>Cross-tenant early warning signals, ranked for operator judgment.</h2>
+                        <p>
+                            ForeSight is currently tracking <strong>@_regulatoryRanking.Count</strong> regulatory-action forecasts and
+                            <strong> @_churnRisks.Count</strong> churn assessments. Use the filtered watchlists below to focus supervision
+                            and commercial retention effort without automating enforcement.
+                        </p>
                     </div>
-                    <a class="fc-btn fc-btn--outline fc-btn--sm"
+                    <div class="fc-fsa-hero-score">
+                        <span>Average confidence</span>
+                        <strong>@combinedConfidence.ToString("P0")</strong>
+                        <small>Unsuppressed forecasts in the current portfolio scope</small>
+                    </div>
+                </div>
+
+                <div class="fc-fsa-hero-metrics">
+                    <div class="fc-fsa-hero-metric">
+                        <span>Priority entities</span>
+                        <strong>@highPriorityCount</strong>
+                        <small>@(leadPriority?.InstitutionName ?? "No high-priority entity in scope")</small>
+                    </div>
+                    <div class="fc-fsa-hero-metric">
+                        <span>Elevated churn cases</span>
+                        <strong>@elevatedChurnCount</strong>
+                        <small>@(leadChurn?.TenantName ?? "No tenant retention pressure in scope")</small>
+                    </div>
+                    <div class="fc-fsa-hero-metric">
+                        <span>Primary scope</span>
+                        <strong>@_selectedRegulator</strong>
+                        <small>@(string.IsNullOrWhiteSpace(_selectedLicence) ? "All licence categories" : _selectedLicence)</small>
+                    </div>
+                </div>
+
+                <div class="fc-fsa-storyline">
+                    <span class="fc-fsa-story-pill">Lead institution: @(leadPriority?.InstitutionName ?? "None")</span>
+                    <span class="fc-fsa-story-pill">Lead tenant: @(leadChurn?.TenantName ?? "None")</span>
+                    <span class="fc-fsa-story-pill fc-fsa-story-pill--accent">@BuildPriorityLabel(highPriorityCount, elevatedChurnCount)</span>
+                </div>
+            </article>
+
+            <aside class="fc-fsa-side">
+                <div class="fc-fsa-kpi fc-fsa-kpi--emerald" style="--stagger: 1;">
+                    <span class="fc-fsa-kpi-label">Regulatory priorities</span>
+                    <strong>@_regulatoryRanking.Count</strong>
+                    <p>@highPriorityCount high-risk entity forecasts</p>
+                </div>
+                <div class="fc-fsa-kpi fc-fsa-kpi--gold" style="--stagger: 2;">
+                    <span class="fc-fsa-kpi-label">Churn watchlist</span>
+                    <strong>@_churnRisks.Count</strong>
+                    <p>@elevatedChurnCount tenants in elevated bands</p>
+                </div>
+                <div class="fc-fsa-kpi fc-fsa-kpi--teal" style="--stagger: 3;">
+                    <span class="fc-fsa-kpi-label">Scope confidence</span>
+                    <strong>@combinedConfidence.ToString("P0")</strong>
+                    <p>Average confidence across all visible forecasts</p>
+                </div>
+                <div class="fc-fsa-kpi fc-fsa-kpi--slate" style="--stagger: 4;">
+                    <span class="fc-fsa-kpi-label">Guardrail</span>
+                    <strong>Suppression on</strong>
+                    <p>Low-confidence predictions stay hidden instead of polluting operator trust.</p>
+                </div>
+            </aside>
+        </section>
+
+        <section class="fc-fsa-filter-card" style="--stagger: 5;">
+            <div class="fc-fsa-filter-head">
+                <div>
+                    <span class="fc-fsa-kicker">Filter scope</span>
+                    <h3>Refine the supervisory lens</h3>
+                </div>
+                <div class="fc-fsa-filter-pills">
+                    <span class="fc-fsa-filter-pill">Regulator-specific ranking</span>
+                    <span class="fc-fsa-filter-pill">Cross-tenant churn watch</span>
+                </div>
+            </div>
+
+            <div class="fc-fsa-filter-grid">
+                <label class="fc-fsa-field">
+                    <span>Regulator</span>
+                    <select class="fc-input" @bind="_selectedRegulator" @bind:after="OnRegulatorChangedAsync">
+                        @foreach (var regulator in RegulatorOptions)
+                        {
+                            <option value="@regulator">@regulator</option>
+                        }
+                    </select>
+                </label>
+                <label class="fc-fsa-field">
+                    <span>Licence type</span>
+                    <select class="fc-input" @bind="_selectedLicence" @bind:after="ReloadAsync">
+                        <option value="">All licence types</option>
+                        @foreach (var licence in CurrentLicenceOptions)
+                        {
+                            <option value="@licence">@licence</option>
+                        }
+                    </select>
+                </label>
+            </div>
+        </section>
+
+        <section class="fc-fsa-grid">
+            <article class="fc-fsa-panel" style="--stagger: 6;">
+                <div class="fc-fsa-panel-head">
+                    <div>
+                        <span class="fc-fsa-kicker">Regulatory action ranking</span>
+                        <h3>Who merits supervisory attention first</h3>
+                    </div>
+                    <a class="fc-fsa-link-btn"
                        href="@($"/platform/foresight/regulatory-ranking?regulator={Uri.EscapeDataString(_selectedRegulator)}{(string.IsNullOrWhiteSpace(_selectedLicence) ? string.Empty : $"&licence={Uri.EscapeDataString(_selectedLicence)}")}")">
-                        View all
+                        View full ranking
                     </a>
                 </div>
-                <div class="fc-card__body fc-table-responsive">
-                    <table class="fc-table" aria-label="Regulatory action ranking">
-                        <thead>
-                            <tr>
-                                <th>Institution</th>
-                                <th>Licence</th>
-                                <th>Probability</th>
-                                <th>Confidence</th>
-                                <th>Risk</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            @if (_regulatoryRanking.Count == 0)
-                            {
-                                <tr>
-                                    <td colspan="5" class="fc-text-muted">No unsuppressed regulatory-action forecasts are available for this filter.</td>
-                                </tr>
-                            }
-                            else
-                            {
-                                @foreach (var item in _regulatoryRanking.Take(20))
-                                {
-                                    <tr>
-                                        <td>
-                                            <div class="fw-semibold">@item.InstitutionName</div>
-                                            <div class="fc-text-muted">@item.RootCauseNarrative</div>
-                                        </td>
-                                        <td>@item.LicenceType</td>
-                                        <td>@item.InterventionProbability.ToString("P0")</td>
-                                        <td>@item.ConfidenceScore.ToString("P0")</td>
-                                        <td>
-                                            <span class="fc-badge @(item.RiskBand is "HIGH" or "CRITICAL" ? "fc-badge--danger" : item.RiskBand == "MEDIUM" ? "fc-badge--warning" : "fc-badge--success")">
-                                                @item.RiskBand
-                                            </span>
-                                        </td>
-                                    </tr>
-                                }
-                            }
-                        </tbody>
-                    </table>
-                </div>
-            </div>
+                <p class="fc-fsa-panel-copy">Sorted by predicted intervention probability within the selected regulator and licence scope.</p>
 
-            <div class="fc-card">
-                <div class="fc-card__header">
-                    <div class="d-flex align-items-center gap-2">
-                        <h2 class="fc-card__title mb-0">Tenant Churn Risk</h2>
-                        <span class="fc-badge fc-badge--warning">@_churnRisks.Count(x => x.RiskBand is "HIGH" or "CRITICAL") elevated</span>
+                @if (_regulatoryRanking.Count == 0)
+                {
+                    <div class="fc-fsa-empty">No unsuppressed regulatory forecasts are available for this scope.</div>
+                }
+                else
+                {
+                    <div class="fc-fsa-list">
+                        @foreach (var item in _regulatoryRanking.Take(8))
+                        {
+                            var topFactor = item.TopFactors.FirstOrDefault();
+                            <a href="/platform/tenants/@item.TenantId" class="fc-fsa-row">
+                                <div class="fc-fsa-row-main">
+                                    <div class="fc-fsa-row-title">
+                                        <strong>@item.InstitutionName</strong>
+                                        <span class="fc-fsa-chip">@item.LicenceType</span>
+                                    </div>
+                                    <p>@item.RootCauseNarrative</p>
+                                    @if (topFactor is not null)
+                                    {
+                                        <span class="fc-fsa-factor">Top factor: @topFactor.FeatureLabel</span>
+                                    }
+                                </div>
+                                <div class="fc-fsa-row-metrics">
+                                    <span class="fc-fsa-metric">
+                                        <small>Probability</small>
+                                        <strong>@item.InterventionProbability.ToString("P0")</strong>
+                                    </span>
+                                    <span class="fc-fsa-metric">
+                                        <small>Confidence</small>
+                                        <strong>@item.ConfidenceScore.ToString("P0")</strong>
+                                    </span>
+                                    <span class="fc-fsa-risk @GetRiskClass(item.RiskBand)">@item.RiskBand</span>
+                                </div>
+                            </a>
+                        }
                     </div>
-                    <a class="fc-btn fc-btn--outline fc-btn--sm" href="/platform/foresight/churn-risk">View all</a>
-                </div>
-                <div class="fc-card__body fc-table-responsive">
-                    <table class="fc-table" aria-label="Tenant churn risk ranking">
-                        <thead>
-                            <tr>
-                                <th>Tenant</th>
-                                <th>Licence</th>
-                                <th>Probability</th>
-                                <th>Confidence</th>
-                                <th>Risk</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            @if (_churnRisks.Count == 0)
-                            {
-                                <tr>
-                                    <td colspan="5" class="fc-text-muted">No unsuppressed churn-risk forecasts are available.</td>
-                                </tr>
-                            }
-                            else
-                            {
-                                @foreach (var item in _churnRisks.Take(20))
-                                {
-                                    <tr>
-                                        <td>
-                                            <div class="fw-semibold">@item.TenantName</div>
-                                            <div class="fc-text-muted">@item.RootCauseNarrative</div>
-                                        </td>
-                                        <td>@item.LicenceType</td>
-                                        <td>@item.ChurnProbability.ToString("P0")</td>
-                                        <td>@item.ConfidenceScore.ToString("P0")</td>
-                                        <td>
-                                            <span class="fc-badge @(item.RiskBand is "HIGH" or "CRITICAL" ? "fc-badge--danger" : item.RiskBand == "MEDIUM" ? "fc-badge--warning" : "fc-badge--success")">
-                                                @item.RiskBand
-                                            </span>
-                                        </td>
-                                    </tr>
-                                }
-                            }
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
+                }
+            </article>
 
-        <div class="fc-card">
-            <div class="fc-card__header">
-                <h2 class="fc-card__title">Explainability and Advisory Guardrails</h2>
+            <article class="fc-fsa-panel" style="--stagger: 7;">
+                <div class="fc-fsa-panel-head">
+                    <div>
+                        <span class="fc-fsa-kicker">Tenant churn risk</span>
+                        <h3>Where retention effort should focus next</h3>
+                    </div>
+                    <a class="fc-fsa-link-btn" href="/platform/foresight/churn-risk">View full watchlist</a>
+                </div>
+                <p class="fc-fsa-panel-copy">Ranked across all tenants to help the platform team intervene before logos silently degrade or leave.</p>
+
+                @if (_churnRisks.Count == 0)
+                {
+                    <div class="fc-fsa-empty">No unsuppressed churn forecasts are currently available.</div>
+                }
+                else
+                {
+                    <div class="fc-fsa-list">
+                        @foreach (var item in _churnRisks.Take(8))
+                        {
+                            var topFactor = item.TopFactors.FirstOrDefault();
+                            <a href="/platform/tenants/@item.TenantId" class="fc-fsa-row">
+                                <div class="fc-fsa-row-main">
+                                    <div class="fc-fsa-row-title">
+                                        <strong>@item.TenantName</strong>
+                                        <span class="fc-fsa-chip">@item.LicenceType</span>
+                                    </div>
+                                    <p>@item.RootCauseNarrative</p>
+                                    @if (topFactor is not null)
+                                    {
+                                        <span class="fc-fsa-factor">Top factor: @topFactor.FeatureLabel</span>
+                                    }
+                                </div>
+                                <div class="fc-fsa-row-metrics">
+                                    <span class="fc-fsa-metric">
+                                        <small>Probability</small>
+                                        <strong>@item.ChurnProbability.ToString("P0")</strong>
+                                    </span>
+                                    <span class="fc-fsa-metric">
+                                        <small>Confidence</small>
+                                        <strong>@item.ConfidenceScore.ToString("P0")</strong>
+                                    </span>
+                                    <span class="fc-fsa-risk @GetRiskClass(item.RiskBand)">@item.RiskBand</span>
+                                </div>
+                            </a>
+                        }
+                    </div>
+                }
+            </article>
+        </section>
+
+        <section class="fc-fsa-guardrail" style="--stagger: 8;">
+            <div>
+                <span class="fc-fsa-kicker">Explainability and guardrails</span>
+                <h3>Predictions advise; they do not enforce.</h3>
+                <p>
+                    ForeSight surfaces likely supervisory and commercial risks with confidence scores, feature drivers, and narrative
+                    explanations. It never auto-escalates institutions, rejects submissions, or triggers platform actions without human review.
+                </p>
             </div>
-            <div class="fc-card__body">
-                <p class="mb-2">ForeSight predictions are advisory only. They surface cross-tenant signals for prioritisation, but they do not trigger automatic enforcement, rejection, or examiner escalation.</p>
-                <p class="mb-0 fc-text-muted">Predictions are suppressed when confidence falls below the configured threshold or when historical data is insufficient.</p>
+            <div class="fc-fsa-guardrail-pills">
+                <span class="fc-fsa-pill">Confidence thresholds enforced</span>
+                <span class="fc-fsa-pill">Human decision required</span>
+                <span class="fc-fsa-pill">Tenant-safe aggregation</span>
             </div>
-        </div>
+        </section>
     }
 </div>
+
+<style>
+    .fc-fsa-shell {
+        display: grid;
+        gap: 1.5rem;
+    }
+
+    .fc-fsa-header-actions {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+        gap: 0.75rem;
+        align-items: center;
+    }
+
+    .fc-fsa-header-chip,
+    .fc-fsa-header-btn,
+    .fc-fsa-link-btn {
+        border-radius: 999px;
+        border: 1px solid rgba(0, 107, 63, 0.14);
+        background: rgba(255, 255, 255, 0.86);
+        box-shadow: 0 18px 34px rgba(15, 23, 42, 0.06);
+        color: #17324d;
+    }
+
+    .fc-fsa-header-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.55rem;
+        padding: 0.72rem 1rem;
+    }
+
+    .fc-fsa-header-chip-label {
+        text-transform: uppercase;
+        letter-spacing: 0.11em;
+        font-size: 0.68rem;
+        font-weight: 800;
+        color: #6b7280;
+    }
+
+    .fc-fsa-header-btn,
+    .fc-fsa-link-btn,
+    .fc-fsa-btn {
+        padding: 0.78rem 1rem;
+        font-weight: 800;
+        transition: transform 180ms ease, box-shadow 180ms ease;
+    }
+
+    .fc-fsa-header-btn:hover,
+    .fc-fsa-link-btn:hover,
+    .fc-fsa-btn:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 22px 40px rgba(15, 23, 42, 0.08);
+        color: #17324d;
+    }
+
+    .fc-fsa-loading {
+        display: grid;
+        gap: 1rem;
+    }
+
+    .fc-fsa-loading-hero,
+    .fc-fsa-loading-card,
+    .fc-fsa-loading-panel {
+        position: relative;
+        overflow: hidden;
+        border-radius: 28px;
+        background: linear-gradient(135deg, rgba(255, 255, 255, 0.92), rgba(245, 248, 242, 0.96));
+        border: 1px solid rgba(226, 232, 240, 0.9);
+    }
+
+    .fc-fsa-loading-hero::after,
+    .fc-fsa-loading-card::after,
+    .fc-fsa-loading-panel::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(110deg, transparent 8%, rgba(255, 255, 255, 0.78) 30%, transparent 52%);
+        transform: translateX(-100%);
+        animation: fc-fsa-shimmer 1.4s infinite;
+    }
+
+    .fc-fsa-loading-hero {
+        min-height: 240px;
+    }
+
+    .fc-fsa-loading-grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 1rem;
+    }
+
+    .fc-fsa-loading-card {
+        min-height: 150px;
+    }
+
+    .fc-fsa-loading-panels {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 1rem;
+    }
+
+    .fc-fsa-loading-panel {
+        min-height: 420px;
+    }
+
+    .fc-fsa-banner,
+    .fc-fsa-hero,
+    .fc-fsa-kpi,
+    .fc-fsa-filter-card,
+    .fc-fsa-panel,
+    .fc-fsa-guardrail,
+    .fc-fsa-error {
+        position: relative;
+        overflow: hidden;
+        border-radius: 28px;
+        border: 1px solid rgba(226, 232, 240, 0.92);
+        background: rgba(255, 255, 255, 0.94);
+        box-shadow: 0 22px 56px rgba(15, 23, 42, 0.06);
+        animation: fc-fsa-rise 620ms cubic-bezier(.2, .75, .25, 1) both;
+        animation-delay: calc(var(--stagger, 0) * 70ms);
+    }
+
+    .fc-fsa-error {
+        display: grid;
+        grid-template-columns: auto 1fr auto;
+        align-items: center;
+        gap: 1rem;
+        padding: 1.5rem;
+    }
+
+    .fc-fsa-error-icon {
+        width: 60px;
+        height: 60px;
+        border-radius: 20px;
+        display: grid;
+        place-items: center;
+        background: linear-gradient(135deg, rgba(185, 28, 28, 0.12), rgba(251, 191, 36, 0.1));
+        color: #b91c1c;
+    }
+
+    .fc-fsa-error h2 {
+        margin: 0.3rem 0 0.45rem;
+        color: #172335;
+    }
+
+    .fc-fsa-error p {
+        margin: 0;
+        color: #647082;
+    }
+
+    .fc-fsa-banner {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 1rem;
+        padding: 1.5rem;
+        align-items: center;
+        color: #fff;
+    }
+
+    .fc-fsa-banner--critical {
+        background: linear-gradient(135deg, rgba(127, 29, 29, 0.98), rgba(185, 28, 28, 0.94));
+    }
+
+    .fc-fsa-banner--warning {
+        background: linear-gradient(135deg, rgba(120, 53, 15, 0.96), rgba(180, 83, 9, 0.92));
+    }
+
+    .fc-fsa-banner--success {
+        background: linear-gradient(135deg, rgba(0, 107, 63, 0.96), rgba(13, 148, 101, 0.9));
+    }
+
+    .fc-fsa-banner-copy h2 {
+        margin: 0.3rem 0 0.45rem;
+        font-size: clamp(1.35rem, 1.8vw, 1.9rem);
+    }
+
+    .fc-fsa-banner-copy p {
+        margin: 0;
+        color: rgba(255, 255, 255, 0.88);
+        max-width: 70ch;
+    }
+
+    .fc-fsa-banner-pills,
+    .fc-fsa-filter-pills,
+    .fc-fsa-guardrail-pills {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.65rem;
+    }
+
+    .fc-fsa-pill,
+    .fc-fsa-filter-pill,
+    .fc-fsa-story-pill,
+    .fc-fsa-chip,
+    .fc-fsa-risk {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0.55rem 0.8rem;
+        border-radius: 999px;
+        font-size: 0.84rem;
+        font-weight: 800;
+    }
+
+    .fc-fsa-pill,
+    .fc-fsa-filter-pill {
+        background: rgba(255, 255, 255, 0.14);
+        border: 1px solid rgba(255, 255, 255, 0.16);
+        color: #fff;
+    }
+
+    .fc-fsa-overview {
+        display: grid;
+        grid-template-columns: minmax(0, 1.45fr) minmax(280px, 0.95fr);
+        gap: 1rem;
+    }
+
+    .fc-fsa-kicker {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.55rem;
+        text-transform: uppercase;
+        letter-spacing: 0.16em;
+        font-size: 0.72rem;
+        font-weight: 900;
+        color: #006b3f;
+    }
+
+    .fc-fsa-kicker-dot {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #0a8f56, #c8a415);
+        box-shadow: 0 0 0 5px rgba(0, 107, 63, 0.08);
+    }
+
+    .fc-fsa-hero {
+        padding: 1.55rem;
+        background:
+            radial-gradient(circle at top right, rgba(200, 164, 21, 0.18), transparent 34%),
+            linear-gradient(140deg, rgba(250, 252, 248, 0.98), rgba(255, 255, 255, 0.94));
+    }
+
+    .fc-fsa-hero-topline {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 1rem;
+        align-items: start;
+        margin-top: 1rem;
+    }
+
+    .fc-fsa-hero h2 {
+        margin: 0;
+        font-size: clamp(2rem, 3vw, 3rem);
+        line-height: 0.98;
+        letter-spacing: -0.05em;
+        color: #1d2a3d;
+        max-width: 14ch;
+    }
+
+    .fc-fsa-hero p,
+    .fc-fsa-panel-copy,
+    .fc-fsa-row-main p,
+    .fc-fsa-guardrail p {
+        color: #5f6877;
+        line-height: 1.55;
+    }
+
+    .fc-fsa-hero-score,
+    .fc-fsa-hero-metric,
+    .fc-fsa-kpi {
+        padding: 1rem 1.05rem;
+        border-radius: 24px;
+        border: 1px solid rgba(226, 232, 240, 0.9);
+        background: rgba(255, 255, 255, 0.8);
+    }
+
+    .fc-fsa-hero-score span,
+    .fc-fsa-hero-metric span,
+    .fc-fsa-kpi-label,
+    .fc-fsa-metric small,
+    .fc-fsa-field span {
+        display: block;
+        text-transform: uppercase;
+        letter-spacing: 0.14em;
+        font-size: 0.72rem;
+        font-weight: 800;
+        color: #6b7280;
+    }
+
+    .fc-fsa-hero-score strong,
+    .fc-fsa-hero-metric strong,
+    .fc-fsa-kpi strong,
+    .fc-fsa-metric strong {
+        display: block;
+        margin-top: 0.45rem;
+        font-size: clamp(1.5rem, 2vw, 2.25rem);
+        line-height: 1;
+        letter-spacing: -0.04em;
+        color: #172335;
+    }
+
+    .fc-fsa-hero-score {
+        min-width: 180px;
+        text-align: right;
+    }
+
+    .fc-fsa-hero-score small,
+    .fc-fsa-hero-metric small,
+    .fc-fsa-kpi p {
+        display: block;
+        margin-top: 0.45rem;
+        color: #647082;
+    }
+
+    .fc-fsa-hero-metrics,
+    .fc-fsa-side,
+    .fc-fsa-grid {
+        display: grid;
+        gap: 1rem;
+    }
+
+    .fc-fsa-hero-metrics {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        margin-top: 1.2rem;
+    }
+
+    .fc-fsa-side {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .fc-fsa-storyline {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.7rem;
+        margin-top: 1.15rem;
+    }
+
+    .fc-fsa-story-pill {
+        background: rgba(23, 50, 77, 0.05);
+        border: 1px solid rgba(23, 50, 77, 0.08);
+        color: #334155;
+    }
+
+    .fc-fsa-story-pill--accent {
+        background: rgba(200, 164, 21, 0.14);
+        border: 1px solid rgba(200, 164, 21, 0.16);
+        color: #8a6b00;
+    }
+
+    .fc-fsa-kpi--emerald {
+        background: linear-gradient(180deg, rgba(0, 107, 63, 0.1), rgba(255, 255, 255, 0.95));
+    }
+
+    .fc-fsa-kpi--gold {
+        background: linear-gradient(180deg, rgba(200, 164, 21, 0.14), rgba(255, 255, 255, 0.95));
+    }
+
+    .fc-fsa-kpi--teal {
+        background: linear-gradient(180deg, rgba(15, 118, 110, 0.12), rgba(255, 255, 255, 0.96));
+    }
+
+    .fc-fsa-kpi--slate {
+        background: linear-gradient(180deg, rgba(51, 65, 85, 0.08), rgba(255, 255, 255, 0.95));
+    }
+
+    .fc-fsa-filter-card,
+    .fc-fsa-panel,
+    .fc-fsa-guardrail {
+        padding: 1.35rem;
+    }
+
+    .fc-fsa-filter-head,
+    .fc-fsa-panel-head,
+    .fc-fsa-row-title {
+        display: flex;
+        justify-content: space-between;
+        gap: 1rem;
+        align-items: flex-start;
+    }
+
+    .fc-fsa-filter-head h3,
+    .fc-fsa-panel-head h3,
+    .fc-fsa-guardrail h3 {
+        margin: 0.35rem 0 0;
+        color: #172335;
+        font-size: clamp(1.2rem, 1.5vw, 1.7rem);
+        letter-spacing: -0.03em;
+    }
+
+    .fc-fsa-filter-grid,
+    .fc-fsa-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .fc-fsa-filter-grid {
+        display: grid;
+        gap: 1rem;
+        margin-top: 1rem;
+    }
+
+    .fc-fsa-field {
+        display: grid;
+        gap: 0.45rem;
+    }
+
+    .fc-fsa-list {
+        display: grid;
+        gap: 0.8rem;
+    }
+
+    .fc-fsa-row {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 1rem;
+        padding: 1rem;
+        border-radius: 24px;
+        border: 1px solid rgba(226, 232, 240, 0.9);
+        background: rgba(248, 250, 252, 0.72);
+        text-decoration: none;
+        transition: transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
+    }
+
+    .fc-fsa-row:hover {
+        transform: translateY(-1px);
+        border-color: rgba(0, 107, 63, 0.18);
+        box-shadow: 0 14px 26px rgba(15, 23, 42, 0.05);
+        color: inherit;
+    }
+
+    .fc-fsa-row-title strong {
+        color: #172335;
+    }
+
+    .fc-fsa-chip {
+        background: rgba(23, 50, 77, 0.06);
+        border: 1px solid rgba(23, 50, 77, 0.08);
+        color: #4b5563;
+    }
+
+    .fc-fsa-factor {
+        display: inline-flex;
+        margin-top: 0.55rem;
+        padding: 0.48rem 0.68rem;
+        border-radius: 999px;
+        background: rgba(15, 118, 110, 0.08);
+        border: 1px solid rgba(15, 118, 110, 0.1);
+        color: #0f766e;
+        font-size: 0.82rem;
+        font-weight: 700;
+    }
+
+    .fc-fsa-row-metrics {
+        display: grid;
+        grid-template-columns: repeat(3, auto);
+        gap: 0.7rem;
+        align-items: center;
+    }
+
+    .fc-fsa-metric {
+        min-width: 92px;
+        padding: 0.75rem 0.8rem;
+        border-radius: 18px;
+        background: rgba(255, 255, 255, 0.84);
+        border: 1px solid rgba(226, 232, 240, 0.92);
+        text-align: right;
+    }
+
+    .fc-fsa-risk {
+        min-width: 90px;
+        color: #fff;
+    }
+
+    .fc-fsa-risk--critical,
+    .fc-fsa-risk--high {
+        background: linear-gradient(135deg, #b91c1c, #dc2626);
+    }
+
+    .fc-fsa-risk--medium {
+        background: linear-gradient(135deg, #b45309, #f59e0b);
+    }
+
+    .fc-fsa-risk--low,
+    .fc-fsa-risk--none {
+        background: linear-gradient(135deg, #0f7a4b, #16a34a);
+    }
+
+    .fc-fsa-empty {
+        min-height: 220px;
+        display: grid;
+        place-items: center;
+        text-align: center;
+        color: #647082;
+        border-radius: 24px;
+        border: 1px dashed rgba(148, 163, 184, 0.45);
+        background: linear-gradient(135deg, rgba(248, 250, 252, 0.82), rgba(255, 255, 255, 0.95));
+        padding: 1.25rem;
+    }
+
+    @@keyframes fc-fsa-rise {
+        from {
+            opacity: 0;
+            transform: translateY(14px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    @@keyframes fc-fsa-shimmer {
+        to {
+            transform: translateX(100%);
+        }
+    }
+
+    @@media (max-width: 1180px) {
+        .fc-fsa-overview,
+        .fc-fsa-grid,
+        .fc-fsa-loading-panels {
+            grid-template-columns: 1fr;
+        }
+
+        .fc-fsa-filter-grid,
+        .fc-fsa-side,
+        .fc-fsa-loading-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+    }
+
+    @@media (max-width: 860px) {
+        .fc-fsa-banner,
+        .fc-fsa-error,
+        .fc-fsa-hero-topline,
+        .fc-fsa-hero-metrics,
+        .fc-fsa-filter-grid,
+        .fc-fsa-side,
+        .fc-fsa-loading-grid {
+            grid-template-columns: 1fr;
+        }
+
+        .fc-fsa-banner-pills,
+        .fc-fsa-filter-pills,
+        .fc-fsa-header-actions {
+            justify-content: flex-start;
+        }
+
+        .fc-fsa-row,
+        .fc-fsa-row-metrics {
+            grid-template-columns: 1fr;
+        }
+
+        .fc-fsa-metric {
+            text-align: left;
+        }
+    }
+</style>
 
 @code {
     private static readonly string[] RegulatorOptions = ["CBN", "NDIC", "NAICOM", "SEC"];
@@ -276,5 +929,114 @@
         {
             _loading = false;
         }
+    }
+
+    private string ResolveStatusBadge()
+    {
+        if (_loading)
+        {
+            return "Refreshing signals";
+        }
+
+        if (!string.IsNullOrWhiteSpace(_error))
+        {
+            return "Data unavailable";
+        }
+
+        var highPriorityCount = _regulatoryRanking.Count(x => x.RiskBand is "HIGH" or "CRITICAL");
+        var elevatedChurnCount = _churnRisks.Count(x => x.RiskBand is "HIGH" or "CRITICAL");
+
+        return highPriorityCount + elevatedChurnCount > 0
+            ? "Priority signals live"
+            : "Portfolio stable";
+    }
+
+    private string ResolveStatusVariant()
+    {
+        if (_loading)
+        {
+            return "info";
+        }
+
+        if (!string.IsNullOrWhiteSpace(_error))
+        {
+            return "danger";
+        }
+
+        var highPriorityCount = _regulatoryRanking.Count(x => x.RiskBand is "HIGH" or "CRITICAL");
+        var elevatedChurnCount = _churnRisks.Count(x => x.RiskBand is "HIGH" or "CRITICAL");
+
+        return highPriorityCount + elevatedChurnCount > 0
+            ? "warning"
+            : "success";
+    }
+
+    private string BuildScopeLabel()
+    {
+        return string.IsNullOrWhiteSpace(_selectedLicence)
+            ? $"{_selectedRegulator} · All licences"
+            : $"{_selectedRegulator} · {_selectedLicence}";
+    }
+
+    private static string ResolveBannerTone(int highPriorityCount, int elevatedChurnCount)
+    {
+        if (highPriorityCount >= 5 || elevatedChurnCount >= 5)
+        {
+            return "critical";
+        }
+
+        if (highPriorityCount > 0 || elevatedChurnCount > 0)
+        {
+            return "warning";
+        }
+
+        return "success";
+    }
+
+    private static string BuildBannerHeadline(int highPriorityCount, int elevatedChurnCount)
+    {
+        var combined = highPriorityCount + elevatedChurnCount;
+        return combined > 0
+            ? $"{combined} elevated forecasts are competing for operator attention."
+            : "No elevated forecasts are currently pressing this supervisory scope.";
+    }
+
+    private static string BuildBannerDetail(int highPriorityCount, int elevatedChurnCount, decimal averageConfidence)
+    {
+        return highPriorityCount + elevatedChurnCount > 0
+            ? $"{highPriorityCount} regulatory priority signal(s) and {elevatedChurnCount} churn case(s) remain visible, with average confidence at {averageConfidence:P0}."
+            : $"All visible forecasts are sitting in lower bands, with average confidence at {averageConfidence:P0}.";
+    }
+
+    private static string BuildPriorityLabel(int highPriorityCount, int elevatedChurnCount)
+    {
+        var combined = highPriorityCount + elevatedChurnCount;
+        return combined switch
+        {
+            0 => "No elevated watchlist pressure",
+            1 => "1 elevated case in play",
+            _ => $"{combined} elevated cases in play"
+        };
+    }
+
+    private decimal BuildAverageConfidence()
+    {
+        var allScores = _regulatoryRanking.Select(x => x.ConfidenceScore)
+            .Concat(_churnRisks.Select(x => x.ConfidenceScore))
+            .ToList();
+
+        return allScores.Count == 0 ? 0m : allScores.Average();
+    }
+
+    private static string GetRiskClass(string riskBand)
+    {
+        return riskBand.ToUpperInvariant() switch
+        {
+            "CRITICAL" => "fc-fsa-risk--critical",
+            "HIGH" => "fc-fsa-risk--high",
+            "MEDIUM" => "fc-fsa-risk--medium",
+            "LOW" => "fc-fsa-risk--low",
+            _ => "fc-fsa-risk--none"
+        };
     }
 }

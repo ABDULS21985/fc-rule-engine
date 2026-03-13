@@ -55,6 +55,83 @@
     }
     else if (_overview is not null)
     {
+        var flaggedJurisdictions = _overview.ByJurisdiction.Count(j => !j.AllCompliant || j.OpenDivergences > 0);
+        var bannerTone = ResolveOverviewTone(_overview);
+        var weakestJurisdiction = _overview.ByJurisdiction
+            .OrderByDescending(j => j.OpenDivergences)
+            .ThenBy(j => j.AllCompliant ? 1 : 0)
+            .FirstOrDefault();
+
+        <div class="rg-premium-flow">
+            <section class="rg-premium-banner rg-premium-banner--@bannerTone">
+                <div class="rg-premium-banner__grid">
+                    <div>
+                        <span class="rg-premium-banner__eyebrow">Cross-border pulse</span>
+                        <h2 class="rg-premium-banner__headline">@BuildOverviewHeadline(_overview, flaggedJurisdictions)</h2>
+                        <p class="rg-premium-banner__detail">@BuildOverviewDetail(_overview, weakestJurisdiction)</p>
+                    </div>
+                    <div class="rg-premium-banner__meta">
+                        <span class="rg-premium-banner__meta-label">Group scope</span>
+                        <strong class="rg-premium-banner__meta-value">@_overview.GroupCode · @_overview.BaseCurrency</strong>
+                        <span class="rg-premium-banner__meta-copy">@_overview.TotalSubsidiaries subsidiaries across @_overview.TotalJurisdictions jurisdictions</span>
+                    </div>
+                </div>
+            </section>
+
+            <section class="rg-premium-hero">
+                <div class="rg-premium-hero__grid">
+                    <div>
+                        <span class="rg-premium-hero__eyebrow">Supervisory narrative</span>
+                        <h2 class="rg-premium-hero__title">Track multinational posture as one risk network, not a stack of local snapshots.</h2>
+                        <p class="rg-premium-hero__subtitle">
+                            The harmonisation workspace consolidates capital posture, divergence pressure, and deadline stress so the regulator
+                            can decide where cross-jurisdiction coordination is actually required.
+                        </p>
+                        <div class="rg-premium-badge-row">
+                            <span class="rg-premium-chip rg-premium-chip--@(flaggedJurisdictions > 0 ? "warning" : "success")">@flaggedJurisdictions jurisdiction@(flaggedJurisdictions == 1 ? "" : "s") flagged</span>
+                            <span class="rg-premium-chip rg-premium-chip--@(_overview.OpenDivergences > 0 ? "danger" : "success")">@_overview.OpenDivergences divergence@( _overview.OpenDivergences == 1 ? "" : "s")</span>
+                            <span class="rg-premium-chip rg-premium-chip--@((_overview.ConsolidatedCAR ?? 0m) >= 15m ? "success" : (_overview.ConsolidatedCAR ?? 0m) >= 10m ? "warning" : "danger")">CAR @((_overview.ConsolidatedCAR ?? 0m).ToString("F1"))%</span>
+                        </div>
+                    </div>
+                    <aside class="rg-premium-hero__aside">
+                        <div class="rg-premium-note">
+                            <span class="rg-premium-note__label">Priority jurisdiction</span>
+                            <strong class="rg-premium-note__value">@(weakestJurisdiction?.CountryName ?? "None")</strong>
+                            <span class="rg-premium-note__copy">@(weakestJurisdiction is null ? "No single jurisdiction is currently distorting the portfolio." : $"{weakestJurisdiction.OpenDivergences} divergence(s) and {(weakestJurisdiction.AllCompliant ? "nominal compliance" : "breach status")} currently visible.")</span>
+                        </div>
+                        <div class="rg-premium-note">
+                            <span class="rg-premium-note__label">Upcoming deadlines</span>
+                            <strong class="rg-premium-note__value">@_overview.UpcomingDeadlines</strong>
+                            <span class="rg-premium-note__copy">Deadlines nearing maturity across the currently selected financial group.</span>
+                        </div>
+                    </aside>
+                </div>
+            </section>
+
+            <section class="rg-premium-stat-grid" aria-label="Cross-border control metrics">
+                <article class="rg-premium-stat">
+                    <span class="rg-premium-stat__label">Compliant subsidiaries</span>
+                    <strong class="rg-premium-stat__value rg-premium-stat__value--success">@_overview.SubsidiariesCompliant</strong>
+                    <p class="rg-premium-stat__note">Subsidiaries currently inside the preferred compliance posture.</p>
+                </article>
+                <article class="rg-premium-stat">
+                    <span class="rg-premium-stat__label">Breach cases</span>
+                    <strong class="rg-premium-stat__value @(_overview.SubsidiariesInBreach > 0 ? "rg-premium-stat__value--danger" : "rg-premium-stat__value--success")">@_overview.SubsidiariesInBreach</strong>
+                    <p class="rg-premium-stat__note">Active local entities sitting in an explicit breach state.</p>
+                </article>
+                <article class="rg-premium-stat">
+                    <span class="rg-premium-stat__label">Divergence load</span>
+                    <strong class="rg-premium-stat__value @(_overview.OpenDivergences > 0 ? "rg-premium-stat__value--warning" : "rg-premium-stat__value--success")">@_overview.OpenDivergences</strong>
+                    <p class="rg-premium-stat__note">Open framework or threshold divergences across the group map.</p>
+                </article>
+                <article class="rg-premium-stat">
+                    <span class="rg-premium-stat__label">Consolidated LCR</span>
+                    <strong class="rg-premium-stat__value rg-premium-stat__value--info">@((_overview.ConsolidatedLCR ?? 0m).ToString("F1"))%</strong>
+                    <p class="rg-premium-stat__note">Liquidity posture in the same cross-jurisdiction scope as the CAR view.</p>
+                </article>
+            </section>
+        </div>
+
         @* -- KPI Cards -- *@
         <div class="rg-cb-kpis">
             <div class="rg-card rg-cb-kpi rg-cb-kpi--success">
@@ -311,4 +388,33 @@
         var upper = isoCode[..2].ToUpperInvariant();
         return string.Concat(upper.Select(c => char.ConvertFromUtf32(0x1F1E6 + c - 'A')));
     }
+
+    private static string ResolveOverviewTone(GroupComplianceOverview overview)
+    {
+        if (overview.SubsidiariesInBreach > 0 || overview.OpenDivergences >= 3) return "danger";
+        if (overview.OpenDivergences > 0 || overview.UpcomingDeadlines > 0) return "warning";
+        return "success";
+    }
+
+    private static string BuildOverviewHeadline(GroupComplianceOverview overview, int flaggedJurisdictions)
+    {
+        if (overview.SubsidiariesInBreach > 0)
+            return $"{overview.SubsidiariesInBreach} subsidiary breach case{(overview.SubsidiariesInBreach == 1 ? "" : "s")} need coordinated supervisory follow-up.";
+
+        if (overview.OpenDivergences > 0)
+            return $"{overview.OpenDivergences} cross-border divergence{(overview.OpenDivergences == 1 ? "" : "s")} are shaping the current harmonisation workload.";
+
+        return $"{flaggedJurisdictions} jurisdiction{(flaggedJurisdictions == 1 ? "" : "s")} are under watch, but the overall multinational posture is stable.";
+    }
+
+    private static string BuildOverviewDetail(GroupComplianceOverview overview, JurisdictionSummary? weakestJurisdiction)
+    {
+        if (weakestJurisdiction is null)
+            return "No single jurisdiction is materially distorting the consolidated picture right now.";
+
+        return $"{weakestJurisdiction.CountryName} currently leads the watchlist with {weakestJurisdiction.OpenDivergences} divergence(s), while consolidated CAR stands at {(overview.ConsolidatedCAR ?? 0m):F1}% and {_PluralizeDeadline(overview.UpcomingDeadlines)} approaching maturity.";
+    }
+
+    private static string _PluralizeDeadline(int deadlines)
+        => deadlines == 1 ? "1 deadline is" : $"{deadlines} deadlines are";
 }

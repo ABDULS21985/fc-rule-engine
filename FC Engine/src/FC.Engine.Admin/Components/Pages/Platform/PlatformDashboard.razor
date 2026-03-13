@@ -8,107 +8,1251 @@
 
 <PageTitle>Platform Dashboard</PageTitle>
 
-@if (_loading)
-{
-    <div class="fc-dash17-loading">Loading platform dashboard...</div>
-}
-else if (!string.IsNullOrWhiteSpace(_error))
-{
-    <div class="fc-dash17-error">@_error</div>
-}
-else if (_data is not null)
-{
-    <div class="fc-dash17-platform">
-        <PageHeader Title="Platform Dashboard"
-                    Subtitle="Revenue, adoption, health, and filing analytics across tenants" />
+<div class="fc-platform37-shell">
+    <PageHeader Title="Platform Dashboard"
+                Subtitle="Commercial pulse, tenant adoption, and filing reliability across the live portfolio"
+                CountBadge="@(_data?.TenantStats.TotalActiveTenants)"
+                StatusBadge="@ResolveStatusBadge()"
+                StatusVariant="@ResolveStatusVariant()">
+        <PrimaryAction>
+            <div class="fc-platform37-header-actions">
+                <span class="fc-platform37-header-chip">
+                    <span class="fc-platform37-header-chip-label">Snapshot</span>
+                    <strong>@(_data?.GeneratedAt.ToString("dd MMM yyyy · HH:mm 'UTC'") ?? "Refreshing live view")</strong>
+                </span>
+                <a href="/platform/health" class="fc-platform37-header-link">Platform Health</a>
+                <a href="/platform/tenants" class="fc-platform37-header-link">Tenant Portfolio</a>
+                <a href="/billing/revenue" class="fc-platform37-header-link fc-platform37-header-link--accent">Revenue</a>
+            </div>
+        </PrimaryAction>
+    </PageHeader>
 
-        <section class="fc-dash17-kpi-grid">
-            <article class="fc-dash17-kpi-card">
-                <h3>Active Tenants</h3>
-                <div class="fc-dash17-kpi-value">@_data.TenantStats.TotalActiveTenants</div>
-                <p>@_data.TenantStats.NewThisMonth new · @_data.TenantStats.ChurnedThisMonth churned</p>
-            </article>
-            <article class="fc-dash17-kpi-card">
-                <h3>MRR</h3>
-                <div class="fc-dash17-kpi-value">NGN @_data.Revenue.Mrr.ToString("N2")</div>
-                <p>ARR: NGN @_data.Revenue.Arr.ToString("N2")</p>
-            </article>
-            <article class="fc-dash17-kpi-card">
-                <h3>API Latency</h3>
-                <div class="fc-dash17-kpi-value">p95 @_data.PlatformHealth.ApiLatencyP95Ms.ToString("0") ms</div>
-                <p>p50 @_data.PlatformHealth.ApiLatencyP50Ms.ToString("0") · p99 @_data.PlatformHealth.ApiLatencyP99Ms.ToString("0")</p>
-            </article>
-            <article class="fc-dash17-kpi-card">
-                <h3>On-Time Filing Rate</h3>
-                <div class="fc-dash17-kpi-value">@_data.FilingAnalytics.OnTimeRatePercent.ToString("0.##")%</div>
-                <p>@_data.FilingAnalytics.TotalReturnsSubmittedThisPeriod returns this period</p>
-            </article>
+    @if (_loading)
+    {
+        <section class="fc-platform37-loading" role="status" aria-label="Loading platform dashboard">
+            <div class="fc-platform37-loading-hero"></div>
+            <div class="fc-platform37-loading-grid">
+                @for (var i = 0; i < 6; i++)
+                {
+                    <div class="fc-platform37-loading-card"></div>
+                }
+            </div>
+            <div class="fc-platform37-loading-panels">
+                @for (var i = 0; i < 5; i++)
+                {
+                    <div class="fc-platform37-loading-panel"></div>
+                }
+            </div>
+        </section>
+    }
+    else if (!string.IsNullOrWhiteSpace(_error))
+    {
+        <section class="fc-platform37-error-card" role="alert">
+            <div class="fc-platform37-error-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" width="26" height="26">
+                    <circle cx="12" cy="12" r="9"></circle>
+                    <path d="M12 8v5"></path>
+                    <path d="M12 16h.01"></path>
+                </svg>
+            </div>
+            <div class="fc-platform37-error-copy">
+                <span class="fc-platform37-section-kicker">Platform data unavailable</span>
+                <h2>We could not materialise the control-room snapshot.</h2>
+                <p>@_error</p>
+            </div>
+            <div class="fc-platform37-error-actions">
+                <a href="/platform/health" class="fc-platform37-btn fc-platform37-btn--ghost">Review platform health</a>
+                <a href="/billing/revenue" class="fc-platform37-btn">Open revenue cockpit</a>
+            </div>
+        </section>
+    }
+    else if (_data is not null)
+    {
+        var attentionSignals = BuildAttentionSignals(_data);
+        var bannerTone = ResolveBannerTone(attentionSignals);
+        var controlScore = ComputeControlScore(_data);
+        var topPlan = _data.Revenue.RevenueByPlan.FirstOrDefault();
+        var topModule = _data.ModuleAdoption.FirstOrDefault();
+        var topTenant = _data.TopTenantsByUsage.FirstOrDefault();
+        var totalModuleRevenue = _data.Revenue.RevenueByModule.Sum(x => x.Amount);
+        var totalUsage = Math.Max(1, _data.FilingAnalytics.TotalReturnsSubmittedThisPeriod);
+        var validationTotal = _data.FilingAnalytics.TopValidationErrors.Sum(x => x.Count);
+
+        <section class="fc-platform37-alertbar fc-platform37-alertbar--@bannerTone">
+            <div class="fc-platform37-alert-copy">
+                <span class="fc-platform37-section-kicker">Control pulse</span>
+                <h2>@BuildBannerHeadline(attentionSignals, _data)</h2>
+                <p>@BuildBannerDetail(attentionSignals, _data)</p>
+            </div>
+            <div class="fc-platform37-alert-pills">
+                @foreach (var signal in attentionSignals.Take(3))
+                {
+                    <a href="@signal.Href" class="fc-platform37-alert-pill fc-platform37-alert-pill--@signal.Tone">
+                        <span class="fc-platform37-alert-pill-dot" aria-hidden="true"></span>
+                        <span>@signal.Title</span>
+                    </a>
+                }
+            </div>
         </section>
 
-        <section class="fc-dash17-chart-grid">
-            <article class="fc-dash17-chart-card">
-                <h3>Revenue by Plan</h3>
-                <div class="fc-dash17-chart-wrap"><canvas id="platformRevenuePlanChart"></canvas></div>
+        <section class="fc-platform37-overview">
+            <article class="fc-platform37-hero-card" style="--stagger: 0;">
+                <div class="fc-platform37-hero-kicker">
+                    <span class="fc-platform37-hero-kicker-dot" aria-hidden="true"></span>
+                    Platform command center
+                </div>
+
+                <div class="fc-platform37-hero-topline">
+                    <div class="fc-platform37-hero-copy">
+                        <h2>Revenue, reliability, and tenant momentum in one live cockpit.</h2>
+                        <p>
+                            The platform is currently carrying <strong>@FormatCurrencyCompact(_data.Revenue.Mrr)</strong> in monthly run-rate
+                            across <strong>@_data.TenantStats.TotalActiveTenants active tenants</strong>, with
+                            <strong> @FormatPercentage(_data.FilingAnalytics.OnTimeRatePercent)</strong> on-time filing performance this period.
+                        </p>
+                    </div>
+                    <div class="fc-platform37-control-score">
+                        <span>Control score</span>
+                        <strong>@controlScore.ToString("0")</strong>
+                        <small>@BuildControlNarrative(controlScore)</small>
+                    </div>
+                </div>
+
+                <div class="fc-platform37-hero-metrics">
+                    <div class="fc-platform37-hero-metric">
+                        <span class="fc-platform37-hero-metric-label">Monthly recurring revenue</span>
+                        <strong>@FormatCurrencyCompact(_data.Revenue.Mrr)</strong>
+                        <small>@topPlan?.Label contributing most to the run-rate</small>
+                    </div>
+                    <div class="fc-platform37-hero-metric">
+                        <span class="fc-platform37-hero-metric-label">Annualised run-rate</span>
+                        <strong>@FormatCurrencyCompact(_data.Revenue.Arr)</strong>
+                        <small>Current contract mix extrapolated over 12 months</small>
+                    </div>
+                    <div class="fc-platform37-hero-metric">
+                        <span class="fc-platform37-hero-metric-label">Submission throughput</span>
+                        <strong>@_data.FilingAnalytics.TotalReturnsSubmittedThisPeriod.ToString("N0")</strong>
+                        <small>@FormatPercentage(_data.FilingAnalytics.OnTimeRatePercent) filed on time this period</small>
+                    </div>
+                </div>
+
+                <div class="fc-platform37-story-pills">
+                    <span class="fc-platform37-story-pill">Lead plan: @(topPlan?.Label ?? "No plan revenue yet")</span>
+                    <span class="fc-platform37-story-pill">Top module: @(topModule?.ModuleName ?? "No module adoption yet")</span>
+                    <span class="fc-platform37-story-pill">Lead tenant: @(topTenant?.TenantName ?? "No tenant activity yet")</span>
+                    <span class="fc-platform37-story-pill fc-platform37-story-pill--accent">@BuildNetMovementLabel(_data.TenantStats)</span>
+                </div>
+
+                <div class="fc-platform37-hero-actions">
+                    <a href="/platform/tenants" class="fc-platform37-btn">Explore tenant portfolio</a>
+                    <a href="/platform/module-analytics" class="fc-platform37-btn fc-platform37-btn--ghost">Module analytics</a>
+                    <a href="/platform/billing-ops" class="fc-platform37-btn fc-platform37-btn--ghost">Billing operations</a>
+                </div>
             </article>
-            <article class="fc-dash17-chart-card">
-                <h3>Revenue by Module</h3>
-                <div class="fc-dash17-chart-wrap"><canvas id="platformRevenueModuleChart"></canvas></div>
-            </article>
-            <article class="fc-dash17-chart-card">
-                <h3>Module Adoption</h3>
-                <div class="fc-dash17-chart-wrap"><canvas id="platformAdoptionChart"></canvas></div>
-            </article>
-            <article class="fc-dash17-chart-card">
-                <h3>Platform Health</h3>
-                <div class="fc-dash17-chart-wrap"><canvas id="platformHealthChart"></canvas></div>
-            </article>
+
+            <div class="fc-platform37-kpi-bento">
+                <article class="fc-platform37-kpi-card fc-platform37-kpi-card--emerald" style="--stagger: 1;">
+                    <span class="fc-platform37-kpi-label">Active tenants</span>
+                    <strong>@_data.TenantStats.TotalActiveTenants.ToString("N0")</strong>
+                    <p>@_data.TenantStats.NewThisMonth.ToString("N0") new this month</p>
+                </article>
+                <article class="fc-platform37-kpi-card fc-platform37-kpi-card--gold" style="--stagger: 2;">
+                    <span class="fc-platform37-kpi-label">Net movement</span>
+                    <strong>@BuildNetMovementNumber(_data.TenantStats)</strong>
+                    <p>@_data.TenantStats.ChurnedThisMonth.ToString("N0") churned this month</p>
+                </article>
+                <article class="fc-platform37-kpi-card fc-platform37-kpi-card--teal" style="--stagger: 3;">
+                    <span class="fc-platform37-kpi-label">Active sessions</span>
+                    <strong>@_data.PlatformHealth.ActiveSessions.ToString("N0")</strong>
+                    <p>Institution and portal users active in the last 30 minutes</p>
+                </article>
+                <article class="fc-platform37-kpi-card fc-platform37-kpi-card--blue" style="--stagger: 4;">
+                    <span class="fc-platform37-kpi-label">P95 latency</span>
+                    <strong>@FormatMilliseconds(_data.PlatformHealth.ApiLatencyP95Ms)</strong>
+                    <p>P99 tail at @FormatMilliseconds(_data.PlatformHealth.ApiLatencyP99Ms)</p>
+                </article>
+                <article class="fc-platform37-kpi-card fc-platform37-kpi-card--coral" style="--stagger: 5;">
+                    <span class="fc-platform37-kpi-label">Error rate</span>
+                    <strong>@FormatPercentage(_data.PlatformHealth.ErrorRatePercent)</strong>
+                    <p>Rejected or failed submissions within the 30-day operating window</p>
+                </article>
+                <article class="fc-platform37-kpi-card fc-platform37-kpi-card--sage" style="--stagger: 6;">
+                    <span class="fc-platform37-kpi-label">Validation volume</span>
+                    <strong>@validationTotal.ToString("N0")</strong>
+                    <p>@_data.FilingAnalytics.TopValidationErrors.Count hotspot rules surfaced in the latest analysis</p>
+                </article>
+            </div>
         </section>
 
-        <section class="fc-dash17-table-wrap">
-            <h3>Top Tenants by Usage</h3>
-            <table class="fc-dash17-table" aria-label="Top tenants by usage">
-                <thead>
-                    <tr>
-                        <th>Tenant</th>
-                        <th>Returns Submitted</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @foreach (var tenant in _data.TopTenantsByUsage)
+        <section class="fc-platform37-grid">
+            <article class="fc-platform37-panel fc-platform37-panel--span-5" style="--stagger: 7;">
+                <div class="fc-platform37-panel-head">
+                    <div>
+                        <span class="fc-platform37-section-kicker">Revenue architecture</span>
+                        <h3>Plan mix and commercial concentration</h3>
+                    </div>
+                    <span class="fc-platform37-panel-pill">@FormatCurrencyCompact(_data.Revenue.Mrr) MRR</span>
+                </div>
+                <p class="fc-platform37-panel-copy">The doughnut shows where monthly revenue is concentrated across subscription plans.</p>
+
+                <div class="fc-platform37-plan-layout">
+                    @if (_data.Revenue.RevenueByPlan.Count > 0)
                     {
-                        <tr>
-                            <td>@tenant.TenantName</td>
-                            <td>@tenant.ReturnsSubmitted</td>
-                        </tr>
+                        <div class="fc-platform37-chart-wrap fc-platform37-chart-wrap--compact">
+                            <canvas id="platformRevenuePlanChart"></canvas>
+                        </div>
                     }
-                </tbody>
-            </table>
-        </section>
-
-        <section class="fc-dash17-table-wrap">
-            <h3>Top Validation Errors</h3>
-            <table class="fc-dash17-table" aria-label="Top validation errors">
-                <thead>
-                    <tr>
-                        <th>Rule</th>
-                        <th>Field</th>
-                        <th>Count</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @foreach (var item in _data.FilingAnalytics.TopValidationErrors)
+                    else
                     {
-                        <tr>
-                            <td>@item.RuleId</td>
-                            <td>@item.Field</td>
-                            <td>@item.Count</td>
-                        </tr>
+                        <div class="fc-platform37-empty">No active subscription revenue has been recorded yet.</div>
                     }
-                </tbody>
-            </table>
+
+                    <div class="fc-platform37-ranking-list">
+                        @foreach (var row in _data.Revenue.RevenueByPlan.Take(5))
+                        {
+                            <div class="fc-platform37-ranking-row">
+                                <div>
+                                    <strong>@row.Label</strong>
+                                    <span>@BuildShareLabel(row.Amount, _data.Revenue.Mrr) of MRR</span>
+                                </div>
+                                <span class="fc-platform37-ranking-value">@FormatCurrencyCompact(row.Amount)</span>
+                            </div>
+                        }
+                    </div>
+                </div>
+            </article>
+
+            <article class="fc-platform37-panel fc-platform37-panel--span-7" style="--stagger: 8;">
+                <div class="fc-platform37-panel-head">
+                    <div>
+                        <span class="fc-platform37-section-kicker">Tenant momentum</span>
+                        <h3>Who is driving filing activity right now</h3>
+                    </div>
+                    <span class="fc-platform37-panel-pill">@_data.TopTenantsByUsage.Count active leaders</span>
+                </div>
+                <p class="fc-platform37-panel-copy">Ranked by submitted returns in the current reporting window.</p>
+
+                @if (_data.TopTenantsByUsage.Count == 0)
+                {
+                    <div class="fc-platform37-empty">Tenant activity will appear here once submissions begin flowing this period.</div>
+                }
+                else
+                {
+                    <div class="fc-platform37-tenant-stack">
+                        @foreach (var entry in _data.TopTenantsByUsage.Take(6).Select((tenant, index) => new { tenant, index }))
+                        {
+                            var share = BuildSharePercent(entry.tenant.ReturnsSubmitted, totalUsage);
+                            <a href="/platform/tenants/@entry.tenant.TenantId" class="fc-platform37-tenant-row">
+                                <div class="fc-platform37-rank">@((entry.index + 1).ToString("00"))</div>
+                                <div class="fc-platform37-tenant-main">
+                                    <strong>@entry.tenant.TenantName</strong>
+                                    <span>@entry.tenant.ReturnsSubmitted.ToString("N0") returns submitted</span>
+                                </div>
+                                <div class="fc-platform37-tenant-meter" aria-hidden="true">
+                                    <span style="width: @share.ToString("0.##")%;"></span>
+                                </div>
+                                <div class="fc-platform37-tenant-share">@share.ToString("0.#")%</div>
+                            </a>
+                        }
+                    </div>
+                }
+            </article>
+
+            <article class="fc-platform37-panel fc-platform37-panel--span-4" style="--stagger: 9;">
+                <div class="fc-platform37-panel-head">
+                    <div>
+                        <span class="fc-platform37-section-kicker">Latency profile</span>
+                        <h3>Processing tail under the microscope</h3>
+                    </div>
+                    <span class="fc-platform37-panel-pill">@FormatMilliseconds(_data.PlatformHealth.ApiLatencyP95Ms)</span>
+                </div>
+                <p class="fc-platform37-panel-copy">P50, P95, and P99 submission processing speeds over the rolling 30-day window.</p>
+
+                <div class="fc-platform37-chart-wrap">
+                    <canvas id="platformLatencyChart"></canvas>
+                </div>
+
+                <div class="fc-platform37-inline-metrics">
+                    <div class="fc-platform37-inline-metric">
+                        <span>P50</span>
+                        <strong>@FormatMilliseconds(_data.PlatformHealth.ApiLatencyP50Ms)</strong>
+                    </div>
+                    <div class="fc-platform37-inline-metric">
+                        <span>P95</span>
+                        <strong>@FormatMilliseconds(_data.PlatformHealth.ApiLatencyP95Ms)</strong>
+                    </div>
+                    <div class="fc-platform37-inline-metric">
+                        <span>P99</span>
+                        <strong>@FormatMilliseconds(_data.PlatformHealth.ApiLatencyP99Ms)</strong>
+                    </div>
+                </div>
+            </article>
+
+            <article class="fc-platform37-panel fc-platform37-panel--span-4" style="--stagger: 10;">
+                <div class="fc-platform37-panel-head">
+                    <div>
+                        <span class="fc-platform37-section-kicker">Attention queue</span>
+                        <h3>Signals requiring operator judgment</h3>
+                    </div>
+                    <span class="fc-platform37-panel-pill">@attentionSignals.Count signal@(attentionSignals.Count == 1 ? string.Empty : "s")</span>
+                </div>
+                <p class="fc-platform37-panel-copy">Advisory only. These are platform signals, not automated actions.</p>
+
+                <div class="fc-platform37-signal-stack">
+                    @foreach (var signal in attentionSignals.Take(4))
+                    {
+                        <a href="@signal.Href" class="fc-platform37-signal-row fc-platform37-signal-row--@signal.Tone">
+                            <div class="fc-platform37-signal-marker" aria-hidden="true"></div>
+                            <div class="fc-platform37-signal-copy">
+                                <strong>@signal.Title</strong>
+                                <span>@signal.Detail</span>
+                            </div>
+                            <span class="fc-platform37-signal-link">@signal.LinkLabel</span>
+                        </a>
+                    }
+                </div>
+            </article>
+
+            <article class="fc-platform37-panel fc-platform37-panel--span-4" style="--stagger: 11;">
+                <div class="fc-platform37-panel-head">
+                    <div>
+                        <span class="fc-platform37-section-kicker">Validation hotspots</span>
+                        <h3>Where filing friction is concentrating</h3>
+                    </div>
+                    <span class="fc-platform37-panel-pill">@validationTotal.ToString("N0") findings</span>
+                </div>
+                <p class="fc-platform37-panel-copy">The heaviest validation failures over the last 90 days.</p>
+
+                @if (_data.FilingAnalytics.TopValidationErrors.Count > 0)
+                {
+                    <div class="fc-platform37-chart-wrap">
+                        <canvas id="platformValidationChart"></canvas>
+                    </div>
+                    var leadValidation = _data.FilingAnalytics.TopValidationErrors[0];
+                    <div class="fc-platform37-footnote">
+                        Lead hotspot: <strong>@leadValidation.RuleId</strong> on <strong>@leadValidation.Field</strong> with
+                        <strong> @leadValidation.Count.ToString("N0")</strong> occurrences.
+                    </div>
+                }
+                else
+                {
+                    <div class="fc-platform37-empty">No recurring validation hotspots are recorded in the current lookback window.</div>
+                }
+            </article>
+
+            <article class="fc-platform37-panel fc-platform37-panel--span-6" style="--stagger: 12;">
+                <div class="fc-platform37-panel-head">
+                    <div>
+                        <span class="fc-platform37-section-kicker">Adoption velocity</span>
+                        <h3>Which modules are becoming portfolio defaults</h3>
+                    </div>
+                    <span class="fc-platform37-panel-pill">@_data.ModuleAdoption.Count modules</span>
+                </div>
+                <p class="fc-platform37-panel-copy">Adoption rate is measured as the percentage of active tenants with the module enabled.</p>
+
+                @if (_data.ModuleAdoption.Count > 0)
+                {
+                    <div class="fc-platform37-chart-wrap">
+                        <canvas id="platformAdoptionChart"></canvas>
+                    </div>
+
+                    <div class="fc-platform37-ranking-list fc-platform37-ranking-list--spaced">
+                        @foreach (var module in _data.ModuleAdoption.Take(5))
+                        {
+                            var share = BuildSharePercent(module.AdoptionRate, 100m);
+                            <div class="fc-platform37-ranking-row">
+                                <div class="fc-platform37-ranking-main">
+                                    <strong>@module.ModuleName</strong>
+                                    <span>@module.ActiveTenants.ToString("N0") active tenants</span>
+                                </div>
+                                <div class="fc-platform37-progress-track" aria-hidden="true">
+                                    <span style="width: @share.ToString("0.##")%;"></span>
+                                </div>
+                                <span class="fc-platform37-ranking-value">@FormatPercentage(module.AdoptionRate)</span>
+                            </div>
+                        }
+                    </div>
+                }
+                else
+                {
+                    <div class="fc-platform37-empty">Module adoption will populate once subscriptions and active modules are provisioned.</div>
+                }
+            </article>
+
+            <article class="fc-platform37-panel fc-platform37-panel--span-6" style="--stagger: 13;">
+                <div class="fc-platform37-panel-head">
+                    <div>
+                        <span class="fc-platform37-section-kicker">Module monetisation</span>
+                        <h3>Revenue concentration across active module catalog</h3>
+                    </div>
+                    <span class="fc-platform37-panel-pill">@FormatCurrencyCompact(totalModuleRevenue) module billings</span>
+                </div>
+                <p class="fc-platform37-panel-copy">Shows which optional modules are driving recurring commercial uplift.</p>
+
+                @if (_data.Revenue.RevenueByModule.Count > 0)
+                {
+                    <div class="fc-platform37-chart-wrap">
+                        <canvas id="platformRevenueModuleChart"></canvas>
+                    </div>
+
+                    <div class="fc-platform37-ranking-list fc-platform37-ranking-list--spaced">
+                        @foreach (var row in _data.Revenue.RevenueByModule.Take(5))
+                        {
+                            <div class="fc-platform37-ranking-row">
+                                <div class="fc-platform37-ranking-main">
+                                    <strong>@row.Label</strong>
+                                    <span>@BuildShareLabel(row.Amount, totalModuleRevenue) of module revenue</span>
+                                </div>
+                                <span class="fc-platform37-ranking-value">@FormatCurrencyCompact(row.Amount)</span>
+                            </div>
+                        }
+                    </div>
+                }
+                else
+                {
+                    <div class="fc-platform37-empty">No module-specific recurring revenue has been booked yet.</div>
+                }
+            </article>
         </section>
-    </div>
-}
+    }
+</div>
+
+<style>
+    .fc-platform37-shell {
+        display: grid;
+        gap: 1.5rem;
+    }
+
+    .fc-platform37-header-actions {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+        gap: 0.75rem;
+        align-items: center;
+    }
+
+    .fc-platform37-header-chip,
+    .fc-platform37-header-link {
+        border-radius: 999px;
+        border: 1px solid rgba(0, 107, 63, 0.12);
+        background: rgba(255, 255, 255, 0.85);
+        box-shadow: 0 18px 40px rgba(15, 23, 42, 0.06);
+        backdrop-filter: blur(18px);
+        color: #17324d;
+    }
+
+    .fc-platform37-header-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.55rem;
+        padding: 0.72rem 1rem;
+        font-size: 0.88rem;
+    }
+
+    .fc-platform37-header-chip-label {
+        color: #6a7280;
+        text-transform: uppercase;
+        letter-spacing: 0.11em;
+        font-size: 0.68rem;
+        font-weight: 700;
+    }
+
+    .fc-platform37-header-link {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0.72rem 1rem;
+        text-decoration: none;
+        font-weight: 700;
+        transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease;
+    }
+
+    .fc-platform37-header-link:hover {
+        transform: translateY(-1px);
+        border-color: rgba(0, 107, 63, 0.2);
+        box-shadow: 0 22px 48px rgba(15, 23, 42, 0.09);
+        color: #17324d;
+    }
+
+    .fc-platform37-header-link--accent {
+        background: linear-gradient(135deg, rgba(200, 164, 21, 0.16), rgba(255, 255, 255, 0.96));
+    }
+
+    .fc-platform37-loading {
+        display: grid;
+        gap: 1rem;
+        min-height: 60vh;
+    }
+
+    .fc-platform37-loading-hero,
+    .fc-platform37-loading-card,
+    .fc-platform37-loading-panel {
+        position: relative;
+        overflow: hidden;
+        border-radius: 28px;
+        background: linear-gradient(135deg, rgba(255, 255, 255, 0.92), rgba(245, 248, 242, 0.96));
+        border: 1px solid rgba(226, 232, 240, 0.9);
+        box-shadow: 0 18px 44px rgba(15, 23, 42, 0.05);
+    }
+
+    .fc-platform37-loading-hero::after,
+    .fc-platform37-loading-card::after,
+    .fc-platform37-loading-panel::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(110deg, transparent 8%, rgba(255, 255, 255, 0.78) 30%, transparent 52%);
+        transform: translateX(-100%);
+        animation: fc-platform37-shimmer 1.4s infinite;
+    }
+
+    .fc-platform37-loading-hero {
+        min-height: 260px;
+    }
+
+    .fc-platform37-loading-grid {
+        display: grid;
+        grid-template-columns: repeat(6, minmax(0, 1fr));
+        gap: 1rem;
+    }
+
+    .fc-platform37-loading-card {
+        min-height: 150px;
+    }
+
+    .fc-platform37-loading-panels {
+        display: grid;
+        grid-template-columns: repeat(12, minmax(0, 1fr));
+        gap: 1rem;
+    }
+
+    .fc-platform37-loading-panel {
+        min-height: 320px;
+        grid-column: span 4;
+    }
+
+    .fc-platform37-error-card,
+    .fc-platform37-alertbar,
+    .fc-platform37-hero-card,
+    .fc-platform37-kpi-card,
+    .fc-platform37-panel {
+        position: relative;
+        overflow: hidden;
+        border-radius: 28px;
+        border: 1px solid rgba(226, 232, 240, 0.92);
+        background: rgba(255, 255, 255, 0.94);
+        box-shadow: 0 22px 60px rgba(15, 23, 42, 0.06);
+        backdrop-filter: blur(18px);
+        animation: fc-platform37-rise 620ms cubic-bezier(.2, .75, .25, 1) both;
+        animation-delay: calc(var(--stagger, 0) * 70ms);
+    }
+
+    .fc-platform37-error-card {
+        display: grid;
+        grid-template-columns: auto 1fr auto;
+        gap: 1.25rem;
+        padding: 1.5rem;
+        align-items: center;
+    }
+
+    .fc-platform37-error-icon {
+        width: 64px;
+        height: 64px;
+        border-radius: 22px;
+        display: grid;
+        place-items: center;
+        background: linear-gradient(135deg, rgba(185, 28, 28, 0.12), rgba(251, 191, 36, 0.1));
+        color: #b91c1c;
+    }
+
+    .fc-platform37-error-copy h2 {
+        margin: 0.3rem 0 0.55rem;
+        font-size: clamp(1.5rem, 2vw, 2rem);
+        color: #142033;
+    }
+
+    .fc-platform37-error-copy p {
+        margin: 0;
+        color: #5f6877;
+        max-width: 58ch;
+    }
+
+    .fc-platform37-error-actions {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+        gap: 0.75rem;
+    }
+
+    .fc-platform37-alertbar {
+        display: grid;
+        grid-template-columns: minmax(0, 1.1fr) auto;
+        gap: 1.5rem;
+        padding: 1.45rem 1.55rem;
+        align-items: center;
+    }
+
+    .fc-platform37-alertbar::before,
+    .fc-platform37-hero-card::before,
+    .fc-platform37-panel::before {
+        content: "";
+        position: absolute;
+        inset: -25% auto auto -10%;
+        width: 240px;
+        height: 240px;
+        border-radius: 50%;
+        background: radial-gradient(circle, rgba(0, 107, 63, 0.12), transparent 68%);
+        pointer-events: none;
+    }
+
+    .fc-platform37-alertbar--critical {
+        background: linear-gradient(135deg, rgba(127, 29, 29, 0.98), rgba(185, 28, 28, 0.96));
+        border-color: rgba(127, 29, 29, 0.35);
+        color: #fff;
+    }
+
+    .fc-platform37-alertbar--warning {
+        background: linear-gradient(135deg, rgba(120, 53, 15, 0.96), rgba(180, 83, 9, 0.92));
+        border-color: rgba(120, 53, 15, 0.35);
+        color: #fff;
+    }
+
+    .fc-platform37-alertbar--success {
+        background: linear-gradient(135deg, rgba(0, 107, 63, 0.96), rgba(13, 148, 101, 0.9));
+        border-color: rgba(0, 107, 63, 0.35);
+        color: #fff;
+    }
+
+    .fc-platform37-alertbar--info {
+        background: linear-gradient(135deg, rgba(15, 118, 110, 0.95), rgba(14, 165, 233, 0.9));
+        border-color: rgba(15, 118, 110, 0.35);
+        color: #fff;
+    }
+
+    .fc-platform37-alert-copy h2 {
+        margin: 0.35rem 0 0.45rem;
+        font-size: clamp(1.3rem, 1.6vw, 1.85rem);
+        line-height: 1.1;
+    }
+
+    .fc-platform37-alert-copy p {
+        margin: 0;
+        max-width: 70ch;
+        color: rgba(255, 255, 255, 0.86);
+    }
+
+    .fc-platform37-alert-pills {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+        gap: 0.7rem;
+    }
+
+    .fc-platform37-alert-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.55rem;
+        padding: 0.75rem 0.95rem;
+        border-radius: 999px;
+        text-decoration: none;
+        color: #fff;
+        background: rgba(255, 255, 255, 0.14);
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        transition: transform 180ms ease, background 180ms ease;
+    }
+
+    .fc-platform37-alert-pill:hover {
+        transform: translateY(-1px);
+        background: rgba(255, 255, 255, 0.22);
+        color: #fff;
+    }
+
+    .fc-platform37-alert-pill-dot {
+        width: 9px;
+        height: 9px;
+        border-radius: 50%;
+        background: currentColor;
+        opacity: 0.9;
+    }
+
+    .fc-platform37-overview {
+        display: grid;
+        grid-template-columns: minmax(0, 1.45fr) minmax(320px, 0.95fr);
+        gap: 1rem;
+        align-items: stretch;
+    }
+
+    .fc-platform37-hero-card {
+        padding: 1.6rem;
+        background:
+            radial-gradient(circle at top right, rgba(200, 164, 21, 0.2), transparent 34%),
+            linear-gradient(140deg, rgba(250, 252, 248, 0.98), rgba(255, 255, 255, 0.94));
+    }
+
+    .fc-platform37-hero-kicker,
+    .fc-platform37-section-kicker {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.55rem;
+        font-size: 0.72rem;
+        font-weight: 800;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        color: #006b3f;
+    }
+
+    .fc-platform37-hero-kicker-dot {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #0a8f56, #c8a415);
+        box-shadow: 0 0 0 5px rgba(0, 107, 63, 0.08);
+    }
+
+    .fc-platform37-hero-topline {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 1rem;
+        align-items: start;
+        margin-top: 1rem;
+    }
+
+    .fc-platform37-hero-copy h2 {
+        margin: 0;
+        font-size: clamp(2rem, 3vw, 3rem);
+        line-height: 0.98;
+        letter-spacing: -0.04em;
+        color: #1d2a3d;
+        max-width: 11ch;
+    }
+
+    .fc-platform37-hero-copy p {
+        margin: 0.95rem 0 0;
+        max-width: 64ch;
+        color: #596272;
+        font-size: 1rem;
+    }
+
+    .fc-platform37-control-score {
+        min-width: 180px;
+        padding: 1rem 1.05rem;
+        border-radius: 24px;
+        border: 1px solid rgba(0, 107, 63, 0.14);
+        background: rgba(255, 255, 255, 0.78);
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
+        text-align: right;
+    }
+
+    .fc-platform37-control-score span,
+    .fc-platform37-kpi-label,
+    .fc-platform37-hero-metric-label {
+        display: block;
+        font-size: 0.74rem;
+        text-transform: uppercase;
+        letter-spacing: 0.14em;
+        font-weight: 800;
+        color: #6a7280;
+    }
+
+    .fc-platform37-control-score strong {
+        display: block;
+        margin-top: 0.35rem;
+        font-size: clamp(2.2rem, 4vw, 3.35rem);
+        line-height: 1;
+        letter-spacing: -0.05em;
+        color: #0f172a;
+    }
+
+    .fc-platform37-control-score small {
+        display: block;
+        margin-top: 0.4rem;
+        color: #556071;
+        max-width: 18ch;
+        margin-left: auto;
+    }
+
+    .fc-platform37-hero-metrics {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 0.85rem;
+        margin-top: 1.25rem;
+    }
+
+    .fc-platform37-hero-metric,
+    .fc-platform37-kpi-card {
+        padding: 1rem 1.05rem;
+        border-radius: 24px;
+        border: 1px solid rgba(226, 232, 240, 0.92);
+        background: rgba(255, 255, 255, 0.78);
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.84);
+    }
+
+    .fc-platform37-hero-metric strong,
+    .fc-platform37-kpi-card strong {
+        display: block;
+        margin-top: 0.45rem;
+        font-size: clamp(1.55rem, 2vw, 2.2rem);
+        line-height: 1;
+        letter-spacing: -0.04em;
+        color: #172335;
+    }
+
+    .fc-platform37-hero-metric small,
+    .fc-platform37-kpi-card p {
+        display: block;
+        margin-top: 0.5rem;
+        color: #5f6877;
+        line-height: 1.45;
+        font-size: 0.94rem;
+        margin-bottom: 0;
+    }
+
+    .fc-platform37-story-pills {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.7rem;
+        margin-top: 1.15rem;
+    }
+
+    .fc-platform37-story-pill,
+    .fc-platform37-panel-pill {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0.6rem 0.85rem;
+        border-radius: 999px;
+        background: rgba(23, 50, 77, 0.04);
+        border: 1px solid rgba(23, 50, 77, 0.08);
+        color: #334155;
+        font-size: 0.86rem;
+        font-weight: 700;
+    }
+
+    .fc-platform37-story-pill--accent {
+        background: rgba(200, 164, 21, 0.14);
+        border-color: rgba(200, 164, 21, 0.18);
+        color: #8a6b00;
+    }
+
+    .fc-platform37-hero-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.75rem;
+        margin-top: 1.2rem;
+    }
+
+    .fc-platform37-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.45rem;
+        padding: 0.86rem 1.05rem;
+        border-radius: 999px;
+        border: 1px solid rgba(0, 107, 63, 0.14);
+        background: linear-gradient(135deg, #006b3f, #0a8f56);
+        color: #fff;
+        text-decoration: none;
+        font-weight: 800;
+        box-shadow: 0 18px 30px rgba(0, 107, 63, 0.18);
+        transition: transform 180ms ease, box-shadow 180ms ease;
+    }
+
+    .fc-platform37-btn:hover {
+        color: #fff;
+        transform: translateY(-1px);
+        box-shadow: 0 24px 36px rgba(0, 107, 63, 0.22);
+    }
+
+    .fc-platform37-btn--ghost {
+        background: rgba(255, 255, 255, 0.8);
+        color: #17324d;
+        box-shadow: none;
+    }
+
+    .fc-platform37-kpi-bento {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 1rem;
+    }
+
+    .fc-platform37-kpi-card {
+        min-height: 168px;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+    }
+
+    .fc-platform37-kpi-card--emerald {
+        background: linear-gradient(180deg, rgba(0, 107, 63, 0.09), rgba(255, 255, 255, 0.95));
+    }
+
+    .fc-platform37-kpi-card--gold {
+        background: linear-gradient(180deg, rgba(200, 164, 21, 0.14), rgba(255, 255, 255, 0.95));
+    }
+
+    .fc-platform37-kpi-card--teal {
+        background: linear-gradient(180deg, rgba(15, 118, 110, 0.12), rgba(255, 255, 255, 0.96));
+    }
+
+    .fc-platform37-kpi-card--blue {
+        background: linear-gradient(180deg, rgba(14, 165, 233, 0.12), rgba(255, 255, 255, 0.96));
+    }
+
+    .fc-platform37-kpi-card--coral {
+        background: linear-gradient(180deg, rgba(239, 68, 68, 0.12), rgba(255, 255, 255, 0.96));
+    }
+
+    .fc-platform37-kpi-card--sage {
+        background: linear-gradient(180deg, rgba(132, 204, 22, 0.12), rgba(255, 255, 255, 0.96));
+    }
+
+    .fc-platform37-grid {
+        display: grid;
+        grid-template-columns: repeat(12, minmax(0, 1fr));
+        gap: 1rem;
+    }
+
+    .fc-platform37-panel {
+        padding: 1.35rem;
+    }
+
+    .fc-platform37-panel--span-4 {
+        grid-column: span 4;
+    }
+
+    .fc-platform37-panel--span-5 {
+        grid-column: span 5;
+    }
+
+    .fc-platform37-panel--span-6 {
+        grid-column: span 6;
+    }
+
+    .fc-platform37-panel--span-7 {
+        grid-column: span 7;
+    }
+
+    .fc-platform37-panel-head {
+        display: flex;
+        justify-content: space-between;
+        gap: 1rem;
+        align-items: flex-start;
+    }
+
+    .fc-platform37-panel-head h3 {
+        margin: 0.35rem 0 0;
+        color: #172335;
+        font-size: clamp(1.2rem, 1.4vw, 1.65rem);
+        letter-spacing: -0.03em;
+    }
+
+    .fc-platform37-panel-copy {
+        margin: 0.6rem 0 1rem;
+        color: #5f6877;
+        max-width: 62ch;
+    }
+
+    .fc-platform37-plan-layout {
+        display: grid;
+        grid-template-columns: minmax(240px, 1fr) minmax(220px, 0.9fr);
+        gap: 1rem;
+        align-items: center;
+    }
+
+    .fc-platform37-chart-wrap {
+        position: relative;
+        min-height: 260px;
+        padding: 0.5rem 0.3rem 0 0;
+    }
+
+    .fc-platform37-chart-wrap--compact {
+        min-height: 300px;
+    }
+
+    .fc-platform37-ranking-list,
+    .fc-platform37-tenant-stack,
+    .fc-platform37-signal-stack {
+        display: grid;
+        gap: 0.75rem;
+    }
+
+    .fc-platform37-ranking-list--spaced {
+        margin-top: 1rem;
+    }
+
+    .fc-platform37-ranking-row,
+    .fc-platform37-tenant-row,
+    .fc-platform37-signal-row {
+        display: grid;
+        align-items: center;
+        gap: 0.8rem;
+        border-radius: 22px;
+        border: 1px solid rgba(226, 232, 240, 0.9);
+        background: rgba(248, 250, 252, 0.7);
+        padding: 0.92rem 1rem;
+    }
+
+    .fc-platform37-ranking-row {
+        grid-template-columns: minmax(0, 1fr) auto;
+    }
+
+    .fc-platform37-ranking-main strong,
+    .fc-platform37-ranking-row strong,
+    .fc-platform37-signal-copy strong {
+        display: block;
+        color: #142033;
+    }
+
+    .fc-platform37-ranking-main span,
+    .fc-platform37-ranking-row span,
+    .fc-platform37-signal-copy span {
+        display: block;
+        color: #647082;
+        margin-top: 0.2rem;
+        line-height: 1.45;
+    }
+
+    .fc-platform37-ranking-value,
+    .fc-platform37-tenant-share {
+        font-weight: 800;
+        color: #17324d;
+        white-space: nowrap;
+    }
+
+    .fc-platform37-tenant-row {
+        grid-template-columns: auto minmax(0, 1.2fr) minmax(120px, 1fr) auto;
+        text-decoration: none;
+        transition: transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
+    }
+
+    .fc-platform37-tenant-row:hover,
+    .fc-platform37-signal-row:hover {
+        transform: translateY(-1px);
+        border-color: rgba(0, 107, 63, 0.18);
+        box-shadow: 0 14px 30px rgba(15, 23, 42, 0.05);
+        color: inherit;
+    }
+
+    .fc-platform37-rank {
+        width: 42px;
+        height: 42px;
+        border-radius: 14px;
+        display: grid;
+        place-items: center;
+        background: linear-gradient(135deg, rgba(0, 107, 63, 0.12), rgba(200, 164, 21, 0.18));
+        color: #0b6b47;
+        font-weight: 900;
+        letter-spacing: 0.04em;
+    }
+
+    .fc-platform37-tenant-main strong {
+        display: block;
+        color: #172335;
+    }
+
+    .fc-platform37-tenant-main span {
+        display: block;
+        margin-top: 0.2rem;
+        color: #677182;
+    }
+
+    .fc-platform37-tenant-meter,
+    .fc-platform37-progress-track {
+        width: 100%;
+        height: 10px;
+        border-radius: 999px;
+        overflow: hidden;
+        background: rgba(15, 23, 42, 0.06);
+    }
+
+    .fc-platform37-tenant-meter span,
+    .fc-platform37-progress-track span {
+        display: block;
+        height: 100%;
+        border-radius: inherit;
+        background: linear-gradient(90deg, #006b3f, #0ea5e9);
+    }
+
+    .fc-platform37-inline-metrics {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 0.75rem;
+        margin-top: 1rem;
+    }
+
+    .fc-platform37-inline-metric {
+        padding: 0.9rem;
+        border-radius: 20px;
+        background: rgba(248, 250, 252, 0.85);
+        border: 1px solid rgba(226, 232, 240, 0.86);
+    }
+
+    .fc-platform37-inline-metric span {
+        display: block;
+        font-size: 0.74rem;
+        text-transform: uppercase;
+        letter-spacing: 0.14em;
+        font-weight: 800;
+        color: #6b7280;
+    }
+
+    .fc-platform37-inline-metric strong {
+        display: block;
+        margin-top: 0.4rem;
+        font-size: 1.2rem;
+        color: #172335;
+    }
+
+    .fc-platform37-signal-row {
+        grid-template-columns: auto minmax(0, 1fr) auto;
+        text-decoration: none;
+        color: inherit;
+    }
+
+    .fc-platform37-signal-marker {
+        width: 14px;
+        height: 14px;
+        border-radius: 50%;
+        background: currentColor;
+        opacity: 0.9;
+        box-shadow: 0 0 0 8px rgba(15, 23, 42, 0.04);
+    }
+
+    .fc-platform37-signal-row--critical {
+        color: #b91c1c;
+    }
+
+    .fc-platform37-signal-row--warning {
+        color: #b45309;
+    }
+
+    .fc-platform37-signal-row--success {
+        color: #0f7a4b;
+    }
+
+    .fc-platform37-signal-row--info {
+        color: #0f766e;
+    }
+
+    .fc-platform37-signal-link {
+        font-weight: 800;
+        color: #17324d;
+        white-space: nowrap;
+    }
+
+    .fc-platform37-footnote {
+        margin-top: 0.95rem;
+        color: #5f6877;
+        line-height: 1.5;
+    }
+
+    .fc-platform37-empty {
+        min-height: 240px;
+        border-radius: 24px;
+        border: 1px dashed rgba(148, 163, 184, 0.45);
+        display: grid;
+        place-items: center;
+        text-align: center;
+        padding: 1.25rem;
+        color: #647082;
+        background: linear-gradient(135deg, rgba(248, 250, 252, 0.82), rgba(255, 255, 255, 0.95));
+    }
+
+    @@keyframes fc-platform37-rise {
+        from {
+            opacity: 0;
+            transform: translateY(14px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    @@keyframes fc-platform37-shimmer {
+        to {
+            transform: translateX(100%);
+        }
+    }
+
+    @@media (max-width: 1280px) {
+        .fc-platform37-loading-grid {
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
+
+        .fc-platform37-panel--span-4,
+        .fc-platform37-panel--span-5,
+        .fc-platform37-panel--span-6,
+        .fc-platform37-panel--span-7 {
+            grid-column: span 6;
+        }
+    }
+
+    @@media (max-width: 1080px) {
+        .fc-platform37-overview,
+        .fc-platform37-alertbar,
+        .fc-platform37-error-card {
+            grid-template-columns: 1fr;
+        }
+
+        .fc-platform37-alert-pills,
+        .fc-platform37-error-actions,
+        .fc-platform37-header-actions {
+            justify-content: flex-start;
+        }
+
+        .fc-platform37-hero-topline,
+        .fc-platform37-plan-layout {
+            grid-template-columns: 1fr;
+        }
+
+        .fc-platform37-kpi-bento {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+    }
+
+    @@media (max-width: 820px) {
+        .fc-platform37-loading-grid,
+        .fc-platform37-kpi-bento,
+        .fc-platform37-inline-metrics {
+            grid-template-columns: 1fr;
+        }
+
+        .fc-platform37-loading-panels,
+        .fc-platform37-grid {
+            grid-template-columns: 1fr;
+        }
+
+        .fc-platform37-loading-panel,
+        .fc-platform37-panel--span-4,
+        .fc-platform37-panel--span-5,
+        .fc-platform37-panel--span-6,
+        .fc-platform37-panel--span-7 {
+            grid-column: auto;
+        }
+
+        .fc-platform37-hero-metrics {
+            grid-template-columns: 1fr;
+        }
+
+        .fc-platform37-tenant-row {
+            grid-template-columns: auto minmax(0, 1fr);
+        }
+
+        .fc-platform37-tenant-meter,
+        .fc-platform37-tenant-share {
+            grid-column: 2;
+        }
+
+        .fc-platform37-signal-row {
+            grid-template-columns: auto minmax(0, 1fr);
+        }
+
+        .fc-platform37-signal-link {
+            grid-column: 2;
+        }
+    }
+</style>
 
 @code {
     private PlatformDashboardData? _data;
@@ -142,68 +1286,418 @@ else if (_data is not null)
             return;
         }
 
-        await Charts.RenderBarChart("platformRevenuePlanChart", BuildRevenueTrend(_data.Revenue.RevenueByPlan, "MRR by Plan"));
-        await Charts.RenderBarChart("platformRevenueModuleChart", BuildRevenueTrend(_data.Revenue.RevenueByModule, "MRR by Module"));
-        await Charts.RenderBarChart("platformAdoptionChart", BuildAdoptionTrend(_data.ModuleAdoption));
-        await Charts.RenderDoughnutChart("platformHealthChart", BuildHealthTrend(_data.PlatformHealth));
+        if (_data.Revenue.RevenueByPlan.Count > 0)
+        {
+            await Charts.InitChart("platformRevenuePlanChart", BuildRevenuePlanSpec(_data.Revenue.RevenueByPlan));
+        }
+
+        if (_data.Revenue.RevenueByModule.Count > 0)
+        {
+            await Charts.InitChart("platformRevenueModuleChart", BuildRevenueModuleSpec(_data.Revenue.RevenueByModule));
+        }
+
+        if (_data.ModuleAdoption.Count > 0)
+        {
+            await Charts.InitChart("platformAdoptionChart", BuildAdoptionSpec(_data.ModuleAdoption));
+        }
+
+        await Charts.InitChart("platformLatencyChart", BuildLatencySpec(_data.PlatformHealth));
+
+        if (_data.FilingAnalytics.TopValidationErrors.Count > 0)
+        {
+            await Charts.InitChart("platformValidationChart", BuildValidationSpec(_data.FilingAnalytics.TopValidationErrors));
+        }
 
         _chartsRendered = true;
     }
 
-    private static TrendData BuildRevenueTrend(List<RevenueBreakdownItem> rows, string title)
+    private string ResolveStatusBadge()
     {
-        return new TrendData
+        if (_loading)
         {
-            Title = title,
-            Labels = rows.Select(r => r.Label).ToList(),
-            Datasets =
+            return "Refreshing snapshot";
+        }
+
+        if (!string.IsNullOrWhiteSpace(_error))
+        {
+            return "Data unavailable";
+        }
+
+        if (_data is null)
+        {
+            return "Awaiting snapshot";
+        }
+
+        var score = ComputeControlScore(_data);
+        return score >= 85m
+            ? "Operationally live"
+            : score >= 70m
+                ? "Monitoring closely"
+                : "Attention required";
+    }
+
+    private string ResolveStatusVariant()
+    {
+        if (_loading)
+        {
+            return "info";
+        }
+
+        if (!string.IsNullOrWhiteSpace(_error))
+        {
+            return "danger";
+        }
+
+        if (_data is null)
+        {
+            return "neutral";
+        }
+
+        var score = ComputeControlScore(_data);
+        return score >= 85m
+            ? "success"
+            : score >= 70m
+                ? "warning"
+                : "danger";
+    }
+
+    private static object BuildRevenuePlanSpec(List<RevenueBreakdownItem> rows)
+    {
+        return new
+        {
+            type = "doughnut",
+            labels = rows.Select(r => r.Label).ToArray(),
+            datasets = new[]
             {
-                new TrendDataset
+                new
                 {
-                    Label = "Amount",
-                    Data = rows.Select(r => r.Amount).ToList(),
-                    BackgroundColor = "#1d4ed8",
-                    BorderColor = "#1d4ed8"
+                    label = "Plan mix",
+                    data = rows.Select(r => r.Amount).ToArray()
                 }
             }
         };
     }
 
-    private static TrendData BuildAdoptionTrend(List<ModuleAdoptionItem> rows)
+    private static object BuildRevenueModuleSpec(List<RevenueBreakdownItem> rows)
     {
-        return new TrendData
+        return new
         {
-            Title = "Module Adoption",
-            Labels = rows.Select(r => r.ModuleCode).ToList(),
-            Datasets =
+            type = "bar",
+            yFormat = "currency",
+            tooltipFormat = "currency",
+            labels = rows.Select(r => r.Label).ToArray(),
+            datasets = new[]
             {
-                new TrendDataset
+                new
                 {
-                    Label = "Adoption %",
-                    Data = rows.Select(r => r.AdoptionRate).ToList(),
-                    BackgroundColor = "#0f766e",
-                    BorderColor = "#0f766e"
+                    label = "Monthly revenue",
+                    data = rows.Select(r => r.Amount).ToArray(),
+                    color = "primary"
                 }
             }
         };
     }
 
-    private static TrendData BuildHealthTrend(PlatformHealthMetrics health)
+    private static object BuildAdoptionSpec(List<ModuleAdoptionItem> rows)
     {
-        return new TrendData
+        return new
         {
-            Title = "Platform Health",
-            Labels = new List<string> { "Active Sessions", "Error Rate %" },
-            Datasets =
+            type = "bar",
+            yFormat = "percent",
+            labels = rows.Select(r => BuildModuleAxisLabel(r)).ToArray(),
+            datasets = new[]
             {
-                new TrendDataset
+                new
                 {
-                    Label = "Health",
-                    Data = new List<decimal> { health.ActiveSessions, health.ErrorRatePercent },
-                    BackgroundColor = "#d97706",
-                    BorderColor = "#d97706"
+                    label = "Adoption %",
+                    data = rows.Select(r => r.AdoptionRate).ToArray(),
+                    color = "success"
                 }
             }
         };
     }
+
+    private static object BuildLatencySpec(PlatformHealthMetrics health)
+    {
+        return new
+        {
+            type = "line",
+            yLabel = "Milliseconds",
+            labels = new[] { "P50", "P95", "P99" },
+            datasets = new[]
+            {
+                new
+                {
+                    label = "Latency",
+                    data = new[] { health.ApiLatencyP50Ms, health.ApiLatencyP95Ms, health.ApiLatencyP99Ms },
+                    color = "info",
+                    fill = false
+                }
+            }
+        };
+    }
+
+    private static object BuildValidationSpec(List<ValidationErrorAggregate> rows)
+    {
+        var displayRows = rows.Take(6).ToList();
+
+        return new
+        {
+            type = "bar",
+            yFormat = "compact",
+            labels = displayRows.Select(BuildValidationAxisLabel).ToArray(),
+            datasets = new[]
+            {
+                new
+                {
+                    label = "Occurrences",
+                    data = displayRows.Select(r => (decimal)r.Count).ToArray(),
+                    color = "warning"
+                }
+            }
+        };
+    }
+
+    private static decimal ComputeControlScore(PlatformDashboardData data)
+    {
+        var latencyScore = ComputeLatencyScore(data.PlatformHealth.ApiLatencyP95Ms);
+        var reliabilityScore = ComputeReliabilityScore(data.PlatformHealth.ErrorRatePercent);
+        return Math.Round((latencyScore + reliabilityScore + data.FilingAnalytics.OnTimeRatePercent) / 3m, 1);
+    }
+
+    private static decimal ComputeLatencyScore(decimal p95Ms)
+    {
+        return p95Ms switch
+        {
+            <= 500m => 100m,
+            <= 900m => 92m,
+            <= 1500m => 82m,
+            <= 2200m => 70m,
+            <= 3200m => 56m,
+            <= 4500m => 42m,
+            _ => 28m
+        };
+    }
+
+    private static decimal ComputeReliabilityScore(decimal errorRatePercent)
+    {
+        return Math.Max(0m, Math.Min(100m, 100m - (errorRatePercent * 12m)));
+    }
+
+    private static string BuildControlNarrative(decimal score)
+    {
+        return score switch
+        {
+            >= 90m => "Strong posture across revenue, reliability, and filing discipline.",
+            >= 80m => "Healthy operating state with only light friction pockets.",
+            >= 70m => "Stable overall, but several signals deserve operator attention.",
+            >= 60m => "Mixed posture. Reliability or filing pressure is softening the portfolio.",
+            _ => "Fragile posture. Escalate operating issues before the platform absorbs more drag."
+        };
+    }
+
+    private static List<AttentionSignal> BuildAttentionSignals(PlatformDashboardData data)
+    {
+        var signals = new List<AttentionSignal>();
+
+        if (data.PlatformHealth.ErrorRatePercent >= 2m)
+        {
+            signals.Add(new AttentionSignal(
+                "critical",
+                "Reliability slippage",
+                $"{FormatPercentage(data.PlatformHealth.ErrorRatePercent)} of processed submissions were rejected or failed in the rolling 30-day window.",
+                "/platform/health",
+                "Health center"));
+        }
+
+        if (data.PlatformHealth.ApiLatencyP95Ms >= 1800m)
+        {
+            signals.Add(new AttentionSignal(
+                "warning",
+                "Latency pressure",
+                $"P95 processing is at {FormatMilliseconds(data.PlatformHealth.ApiLatencyP95Ms)} and the long tail is stretching to {FormatMilliseconds(data.PlatformHealth.ApiLatencyP99Ms)}.",
+                "/platform/health",
+                "Inspect latency"));
+        }
+
+        if (data.FilingAnalytics.OnTimeRatePercent < 95m)
+        {
+            signals.Add(new AttentionSignal(
+                "warning",
+                "Timeliness softening",
+                $"{FormatPercentage(data.FilingAnalytics.OnTimeRatePercent)} of returns are arriving on time this period.",
+                "/platform/compliance-health",
+                "Review filing health"));
+        }
+
+        if (data.TenantStats.ChurnedThisMonth > 0)
+        {
+            var tone = data.TenantStats.ChurnedThisMonth > data.TenantStats.NewThisMonth ? "critical" : "warning";
+            signals.Add(new AttentionSignal(
+                tone,
+                "Tenant churn watch",
+                $"{data.TenantStats.ChurnedThisMonth.ToString("N0")} tenants churned this month against {data.TenantStats.NewThisMonth.ToString("N0")} new logos added.",
+                "/platform/foresight/churn-risk",
+                "Churn dashboard"));
+        }
+
+        var leadValidation = data.FilingAnalytics.TopValidationErrors.FirstOrDefault();
+        if (leadValidation is not null && leadValidation.Count >= 5)
+        {
+            signals.Add(new AttentionSignal(
+                "info",
+                "Validation hotspot",
+                $"{leadValidation.RuleId} on {leadValidation.Field} is the dominant recurring failure pattern.",
+                "/platform/module-analytics",
+                "Analyze modules"));
+        }
+
+        if (signals.Count == 0)
+        {
+            signals.Add(new AttentionSignal(
+                "success",
+                "Platform operating within expected thresholds",
+                "Commercial, reliability, and filing indicators are all currently inside their normal operating bands.",
+                "/platform/health",
+                "View health"));
+        }
+
+        return signals
+            .OrderBy(s => ToneRank(s.Tone))
+            .ThenBy(s => s.Title)
+            .ToList();
+    }
+
+    private static int ToneRank(string tone)
+    {
+        return tone switch
+        {
+            "critical" => 0,
+            "warning" => 1,
+            "info" => 2,
+            "success" => 3,
+            _ => 4
+        };
+    }
+
+    private static string ResolveBannerTone(IReadOnlyList<AttentionSignal> signals)
+    {
+        return signals.FirstOrDefault()?.Tone ?? "info";
+    }
+
+    private static string BuildBannerHeadline(IReadOnlyList<AttentionSignal> signals, PlatformDashboardData data)
+    {
+        var lead = signals.FirstOrDefault();
+        if (lead is null)
+        {
+            return "Platform pulse unavailable";
+        }
+
+        if (lead.Tone == "success")
+        {
+            return "The platform is running inside expected control bands.";
+        }
+
+        return $"{signals.Count} live signal{(signals.Count == 1 ? string.Empty : "s")} surfaced across tenants, filing reliability, and platform health.";
+    }
+
+    private static string BuildBannerDetail(IReadOnlyList<AttentionSignal> signals, PlatformDashboardData data)
+    {
+        var lead = signals.FirstOrDefault();
+        if (lead is null)
+        {
+            return "Refresh the dashboard to regenerate the control-room snapshot.";
+        }
+
+        if (lead.Tone == "success")
+        {
+            return $"Current view: {FormatCurrencyCompact(data.Revenue.Mrr)} MRR, {FormatPercentage(data.FilingAnalytics.OnTimeRatePercent)} on-time filings, and {data.PlatformHealth.ActiveSessions.ToString("N0")} active sessions.";
+        }
+
+        return lead.Detail;
+    }
+
+    private static string BuildNetMovementLabel(PlatformTenantStats stats)
+    {
+        var net = stats.NewThisMonth - stats.ChurnedThisMonth;
+        return net switch
+        {
+            > 0 => $"+{net} net tenant movement",
+            < 0 => $"{net} net tenant movement",
+            _ => "Flat tenant movement"
+        };
+    }
+
+    private static string BuildNetMovementNumber(PlatformTenantStats stats)
+    {
+        var net = stats.NewThisMonth - stats.ChurnedThisMonth;
+        return net >= 0 ? $"+{net}" : net.ToString();
+    }
+
+    private static string BuildShareLabel(decimal value, decimal total)
+    {
+        return $"{BuildSharePercent(value, total).ToString("0.#")}%";
+    }
+
+    private static decimal BuildSharePercent(decimal value, decimal total)
+    {
+        if (total <= 0)
+        {
+            return 0m;
+        }
+
+        return Math.Round(value * 100m / total, 2);
+    }
+
+    private static string FormatCurrencyCompact(decimal value)
+    {
+        var abs = Math.Abs(value);
+
+        if (abs >= 1_000_000_000m)
+        {
+            return $"NGN {(value / 1_000_000_000m):0.##}B";
+        }
+
+        if (abs >= 1_000_000m)
+        {
+            return $"NGN {(value / 1_000_000m):0.##}M";
+        }
+
+        if (abs >= 1_000m)
+        {
+            return $"NGN {(value / 1_000m):0.#}K";
+        }
+
+        return $"NGN {value:0.##}";
+    }
+
+    private static string FormatPercentage(decimal value)
+    {
+        return $"{value:0.##}%";
+    }
+
+    private static string FormatMilliseconds(decimal value)
+    {
+        return $"{value:0} ms";
+    }
+
+    private static string BuildModuleAxisLabel(ModuleAdoptionItem row)
+    {
+        if (!string.IsNullOrWhiteSpace(row.ModuleCode) && row.ModuleCode.Length <= 14)
+        {
+            return row.ModuleCode;
+        }
+
+        return row.ModuleName.Length > 16
+            ? row.ModuleName[..16] + "..."
+            : row.ModuleName;
+    }
+
+    private static string BuildValidationAxisLabel(ValidationErrorAggregate row)
+    {
+        var field = row.Field.Length > 12 ? row.Field[..12] + "..." : row.Field;
+        return $"{row.RuleId}/{field}";
+    }
+
+    private sealed record AttentionSignal(string Tone, string Title, string Detail, string Href, string LinkLabel);
 }

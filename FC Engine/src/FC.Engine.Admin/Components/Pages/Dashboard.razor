@@ -8,12 +8,14 @@
 @inject ISubmissionRepository SubmissionRepo
 @inject ITemplateRepository TemplateRepo
 @inject IFormulaRepository FormulaRepo
-@inject NavigationManager Nav
 
 <PageHeader Title="Executive Dashboard"
-            Subtitle="Financial Returns Collection &amp; Analysis System — Operational Overview"
-            StatusBadge="System Operational"
-            StatusVariant="success">
+            Subtitle="Financial Returns Collection & Analysis System operational overview across templates, rules, and submissions."
+            StatusBadge="@StatusBadge"
+            StatusVariant="@StatusVariant">
+    <SecondaryActions>
+        <a class="fc-btn fc-btn--outline fc-btn--sm" href="/dashboard/platform">Platform dashboard</a>
+    </SecondaryActions>
     <PrimaryAction>
         <time class="fc-ph-date fc-ph-date-meta" datetime="@DateTime.UtcNow.ToString("yyyy-MM-dd")">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14" aria-hidden="true">
@@ -29,351 +31,268 @@
 
 @if (_loading)
 {
-    <div class="fc-skel-dashboard" role="status" aria-label="Loading dashboard">
+    <div class="rg-premium-flow" role="status" aria-label="Loading dashboard">
+        <div class="fc-skel fc-skel-block" style="--skel-w:100%;--skel-h:156px;"></div>
         <div class="fc-skel-stats-row">
             @for (var i = 0; i < 4; i++)
             {
-                <div class="fc-skel-stat-card">
-                    <div class="fc-skel fc-skel-icon" style="--skel-w:44px;--skel-h:44px;"></div>
-                    <div class="fc-skel fc-skel-number" style="--skel-w:60px;--skel-h:28px;"></div>
-                    <div class="fc-skel fc-skel-label" style="--skel-w:100px;--skel-h:12px;"></div>
+                <div class="fc-skel-card-body">
+                    <div class="fc-skel fc-skel-text" style="--skel-w:44%;--skel-h:12px;--skeleton-index:@(i * 3);"></div>
+                    <div class="fc-skel fc-skel-text-lg" style="--skel-w:58%;--skel-h:34px;--skeleton-index:@(i * 3 + 1);margin-top:var(--space-3);"></div>
+                    <div class="fc-skel fc-skel-text" style="--skel-w:82%;--skel-h:12px;--skeleton-index:@(i * 3 + 2);margin-top:var(--space-3);"></div>
                 </div>
             }
         </div>
         <div class="fc-skel-content-grid">
-            <div class="fc-skel-card">
-                <div class="fc-skel-card-header">
-                    <div class="fc-skel fc-skel-card-title" style="--skel-w:140px;--skel-h:18px;"></div>
-                    <div class="fc-skel" style="--skel-w:60px;--skel-h:14px;"></div>
-                </div>
-                @for (var i = 0; i < 5; i++)
-                {
-                    <div class="fc-skel-table-row">
-                        <div class="fc-skel" style="--skel-w:70px;--skel-h:12px;"></div>
-                        <div class="fc-skel" style="--skel-w:100%;--skel-h:12px;"></div>
-                        <div class="fc-skel" style="--skel-w:60px;--skel-h:12px;"></div>
-                        <div class="fc-skel" style="--skel-w:50px;--skel-h:12px;"></div>
-                    </div>
-                }
+            <div class="fc-skel-card-body">
+                <div class="fc-skel fc-skel-block" style="--skel-w:100%;--skel-h:420px;"></div>
             </div>
-            <div class="fc-skel-card">
-                <div class="fc-skel-card-header">
-                    <div class="fc-skel fc-skel-card-title" style="--skel-w:130px;--skel-h:18px;"></div>
-                    <div class="fc-skel" style="--skel-w:60px;--skel-h:14px;"></div>
-                </div>
-                @for (var i = 0; i < 3; i++)
-                {
-                    <div class="fc-mb-4">
-                        <div class="fc-skel" style="--skel-w:80px;--skel-h:10px;--skel-mb:var(--space-2);"></div>
-                        <div class="fc-skel fc-skel-block" style="--skel-w:100%;--skel-h:8px;"></div>
-                    </div>
-                }
+            <div class="fc-skel-card-body">
+                <div class="fc-skel fc-skel-block" style="--skel-w:100%;--skel-h:420px;"></div>
             </div>
         </div>
     </div>
 }
 else
 {
-    <!-- Stat Cards Row -->
-    <div class="fc-dash-stats-row" role="region" aria-label="Key metrics">
-        <!-- Card 1: Active Templates -->
-        <div class="fc-dash-stat-card fc-dash-stat-green" style="--stagger-i: 0;">
-            <div class="fc-dash-stat-accent"></div>
-            <div class="fc-dash-stat-body">
-                <div class="fc-dash-stat-icon-wrap fc-dash-icon-green">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="22" height="22" aria-hidden="true">
-                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                        <polyline points="14 2 14 8 20 8"/>
-                        <line x1="16" y1="13" x2="8" y2="13"/>
-                        <line x1="16" y1="17" x2="8" y2="17"/>
-                        <polyline points="10 9 9 9 8 9"/>
-                    </svg>
-                </div>
-                <div class="fc-dash-stat-data">
-                    <span class="fc-dash-stat-number">@_templateCount</span>
-                    <span class="fc-dash-stat-label">Active Templates</span>
-                </div>
-                <div class="fc-dash-stat-change fc-dash-change-neutral">
-                    <span>@_totalFields fields configured</span>
-                </div>
-            </div>
-        </div>
+    var workflowPressure = _pendingReviewCount + _draftCount;
+    var totalVersions = _publishedVersionCount + _pendingReviewCount + _draftCount;
+    var topCategory = _categoryBreakdown.FirstOrDefault();
+    var topFrequency = _frequencyBreakdown.FirstOrDefault();
 
-        <!-- Card 2: Pending Review -->
-        <div class="fc-dash-stat-card fc-dash-stat-gold" style="--stagger-i: 1;">
-            <div class="fc-dash-stat-accent"></div>
-            <div class="fc-dash-stat-body">
-                <div class="fc-dash-stat-icon-wrap fc-dash-icon-gold">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="22" height="22" aria-hidden="true">
-                        <circle cx="12" cy="12" r="10"/>
-                        <polyline points="12 6 12 12 16 14"/>
-                    </svg>
-                </div>
-                <div class="fc-dash-stat-data">
-                    <span class="fc-dash-stat-number">@(_pendingReviewCount + _draftCount)</span>
-                    <span class="fc-dash-stat-label">Awaiting Action</span>
-                </div>
-                <div class="fc-dash-stat-change fc-dash-change-neutral">
-                    @if (_pendingReviewCount > 0 || _draftCount > 0)
-                    {
-                        <span>@_pendingReviewCount in review, @_draftCount drafts</span>
-                    }
-                    else
-                    {
-                        <span>all versions published</span>
-                    }
-                </div>
-            </div>
-        </div>
-
-        <!-- Card 3: Validation Rules -->
-        <div class="fc-dash-stat-card fc-dash-stat-blue" style="--stagger-i: 2;">
-            <div class="fc-dash-stat-accent"></div>
-            <div class="fc-dash-stat-body">
-                <div class="fc-dash-stat-icon-wrap fc-dash-icon-blue">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="22" height="22" aria-hidden="true">
-                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
-                    </svg>
-                </div>
-                <div class="fc-dash-stat-data">
-                    <span class="fc-dash-stat-number">@_totalRules</span>
-                    <span class="fc-dash-stat-label">Validation Rules</span>
-                </div>
-                <div class="fc-dash-stat-change fc-dash-change-neutral">
-                    <span>@_totalFormulas intra-sheet, @_crossSheetRuleCount cross-sheet, @_businessRuleCount business</span>
-                </div>
-            </div>
-        </div>
-
-        <!-- Card 4: Total Submissions (with 7-day sparkline) -->
-        <div class="fc-dash-stat-card fc-dash-stat-green" style="--stagger-i: 3;">
-            <div class="fc-dash-stat-accent"></div>
-            <div class="fc-dash-stat-body">
-                <div class="fc-dash-stat-icon-wrap fc-dash-icon-green">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="22" height="22" aria-hidden="true">
-                        <polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/>
-                        <path d="M5.45 5.11L2 12v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.45-6.89A2 2 0 0016.76 4H7.24a2 2 0 00-1.79 1.11z"/>
-                    </svg>
-                </div>
-                <div class="fc-dash-stat-data">
-                    <span class="fc-dash-stat-number">@_totalSubmissions</span>
-                    <span class="fc-dash-stat-label">Total Submissions</span>
-                </div>
-                @if (_submissionSparkline.Count > 1)
-                {
-                    <svg class="fc-dash-sparkline"
-                         viewBox="0 0 60 20"
-                         preserveAspectRatio="none"
-                         aria-hidden="true"
-                         focusable="false">
-                        <polyline points="@BuildSparklinePoints(_submissionSparkline)"
-                                  fill="none"
-                                  stroke="currentColor"
-                                  stroke-width="1.5"
-                                  stroke-linejoin="round"
-                                  stroke-linecap="round" />
-                    </svg>
-                }
-                <div class="fc-dash-stat-change @(_acceptanceRate > 0 ? "fc-dash-change-up" : "fc-dash-change-neutral")">
-                    @if (_totalSubmissions > 0)
-                    {
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14" aria-hidden="true">
-                            <polyline points="22 4 12 14.01 9 11.01"/>
-                        </svg>
-                        <span>@_acceptanceRate% acceptance rate</span>
-                    }
-                    else
-                    {
-                        <span>no submissions yet</span>
-                    }
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Two-Column Content Grid -->
-    <div class="fc-dash-content-grid">
-        <!-- Left: Recent Submissions -->
-        <div class="fc-card" style="--stagger-i: 4;">
-            <div class="fc-card__header">
-                <h2>
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="18" height="18" aria-hidden="true">
-                        <polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/>
-                        <path d="M5.45 5.11L2 12v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.45-6.89A2 2 0 0016.76 4H7.24a2 2 0 00-1.79 1.11z"/>
-                    </svg>
-                    Recent Submissions
-                </h2>
-                <a href="/submissions" class="fc-card__link">View all</a>
-            </div>
-            <div class="fc-card__body">
-                @if (_recentSubmissions.Count == 0)
-                {
-                    <div class="fc-dash-empty-state">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="40" height="40" class="fc-icon-muted" aria-hidden="true">
-                            <polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/>
-                            <path d="M5.45 5.11L2 12v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.45-6.89A2 2 0 0016.76 4H7.24a2 2 0 00-1.79 1.11z"/>
-                        </svg>
-                        <p>No submissions recorded yet</p>
+    <div class="fc-page">
+        <div class="rg-premium-flow">
+            <section class="rg-premium-banner rg-premium-banner--@BuildBannerTone(workflowPressure, _rejectedCount)">
+                <div class="rg-premium-banner__grid">
+                    <div>
+                        <div class="rg-premium-banner__eyebrow">Control posture</div>
+                        <h2 class="rg-premium-banner__headline">@BuildBannerHeadline(workflowPressure, _rejectedCount)</h2>
+                        <p class="rg-premium-banner__detail">@BuildBannerDetail(workflowPressure, topCategory.Cat, topFrequency.Freq)</p>
                     </div>
-                }
-                else
-                {
-                    <table class="fc-dash-mini-table" aria-label="Recent submissions">
-                        <thead>
-                            <tr>
-                                <th scope="col">Return Code</th>
-                                <th scope="col">Institution</th>
-                                <th scope="col">Status</th>
-                                <th scope="col">Submitted</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            @foreach (var sub in _recentSubmissions)
+                    <div class="rg-premium-banner__meta">
+                        <div class="rg-premium-banner__meta-label">Current operating scope</div>
+                        <div class="rg-premium-banner__meta-value">@_templateCount template(s), @_totalSubmissions submission(s)</div>
+                        <div class="rg-premium-banner__meta-copy">
+                            @_totalRules validation rule(s) are currently protecting the live reporting estate, with @_acceptanceRate% submission acceptance across the visible history.
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="rg-premium-hero">
+                <div class="rg-premium-hero__grid">
+                    <div>
+                        <div class="rg-premium-hero__eyebrow">Governance workspace</div>
+                        <h2 class="rg-premium-hero__title">Keep the template estate clean, the validation stack current, and the submission queue moving.</h2>
+                        <p class="rg-premium-hero__subtitle">
+                            This command surface is built for the core operating layer of the platform: published templates, review bottlenecks,
+                            validation coverage, and live submission throughput. It should tell you where the workflow is slowing before users feel it.
+                        </p>
+                        <div class="d-flex flex-wrap gap-2 mt-3">
+                            <span class="rg-premium-chip rg-premium-chip--info">@_totalFields configured field(s)</span>
+                            <span class="rg-premium-chip rg-premium-chip--warning">@workflowPressure awaiting action</span>
+                            <span class="rg-premium-chip rg-premium-chip--success">@_publishedVersionCount published version(s)</span>
+                        </div>
+                    </div>
+                    <div class="rg-premium-hero__aside">
+                        <div class="rg-premium-note">
+                            <div class="rg-premium-note__label">Top structure</div>
+                            <div class="rg-premium-note__value">@(topCategory == default ? "No data" : topCategory.Cat)</div>
+                            <div class="rg-premium-note__copy">@(topCategory == default ? "Template categorisation appears once published templates are available." : $"{topCategory.Count} template(s) currently dominate the structural mix.")</div>
+                        </div>
+                        <div class="rg-premium-note">
+                            <div class="rg-premium-note__label">Top frequency</div>
+                            <div class="rg-premium-note__value">@(topFrequency == default ? "No data" : topFrequency.Freq)</div>
+                            <div class="rg-premium-note__copy">@(topFrequency == default ? "Filing cadence posture will appear once the template estate is populated." : $"{topFrequency.Count} template(s) currently sit in this cadence bucket.")</div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="rg-premium-stat-grid" aria-label="Executive dashboard metrics">
+                <article class="rg-premium-stat">
+                    <div class="rg-premium-stat__label">Active templates</div>
+                    <div class="rg-premium-stat__value">@_templateCount</div>
+                    <div class="rg-premium-stat__note">@_totalFields total field(s) configured across the live published estate.</div>
+                </article>
+                <article class="rg-premium-stat">
+                    <div class="rg-premium-stat__label">Awaiting action</div>
+                    <div class="rg-premium-stat__value @BuildStatValueClass(workflowPressure > 0 ? "MEDIUM" : "LOW")">@workflowPressure</div>
+                    <div class="rg-premium-stat__note">@_pendingReviewCount in review, @_draftCount remaining as drafts.</div>
+                </article>
+                <article class="rg-premium-stat">
+                    <div class="rg-premium-stat__label">Validation rules</div>
+                    <div class="rg-premium-stat__value">@_totalRules</div>
+                    <div class="rg-premium-stat__note">@_totalFormulas intra-sheet, @_crossSheetRuleCount cross-sheet, @_businessRuleCount business rules.</div>
+                </article>
+                <article class="rg-premium-stat">
+                    <div class="rg-premium-stat__label">Submission acceptance</div>
+                    <div class="rg-premium-stat__value @BuildStatValueClass(_acceptanceRate >= 80 ? "LOW" : "HIGH")">@_acceptanceRate%</div>
+                    <div class="rg-premium-stat__note">@_acceptedCount accepted, @_rejectedCount rejected from @_totalSubmissions total submission(s).</div>
+                </article>
+            </section>
+
+            <section class="rg-premium-content-grid">
+                <div class="rg-premium-main">
+                    <article class="rg-premium-panel">
+                        <div class="rg-premium-panel__header">
+                            <div>
+                                <div class="rg-premium-panel__eyebrow">Live submission lane</div>
+                                <h3 class="rg-premium-panel__title">Recent submissions</h3>
+                                <p class="rg-premium-panel__subtitle">The newest returns stay visible here so operators can spot acceptance friction, review backlog, and unusual status drift immediately.</p>
+                            </div>
+                            <div class="rg-premium-panel__metric">
+                                <span class="rg-premium-panel__metric-label">Acceptance</span>
+                                @_acceptanceRate%
+                            </div>
+                        </div>
+                        <div class="rg-premium-panel__body">
+                            @if (_recentSubmissions.Count == 0)
                             {
-                                <tr @onclick="() => NavigateToSubmission(sub.Id)" class="fc-dash-row-clickable" tabindex="0" role="link" @onkeydown="(e) => HandleRowKey(e, sub.Id)">
-                                    <td class="fc-dash-cell-code">@sub.ReturnCode</td>
-                                    <td>@(sub.Institution?.InstitutionName ?? "\u2014")</td>
-                                    <td>
-                                        <span class="fc-dash-status-badge fc-dash-status-@sub.Status.ToString().ToLowerInvariant()">
-                                            @FormatStatus(sub.Status)
-                                        </span>
-                                    </td>
-                                    <td class="fc-dash-cell-time">@FormatTimeAgo(sub.SubmittedAt)</td>
-                                </tr>
+                                <div class="rg-premium-empty">No submissions are available yet. Once live traffic arrives, the newest returns and their status shifts will appear here.</div>
                             }
-                        </tbody>
-                    </table>
-                }
-            </div>
-        </div>
-
-        <!-- Right: Template Health -->
-        <div class="fc-card" style="--stagger-i: 5;">
-            <div class="fc-card__header">
-                <h2>
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="18" height="18" aria-hidden="true">
-                        <path d="M22 11.08V12a10 10 0 11-5.93-9.14"/>
-                        <polyline points="22 4 12 14.01 9 11.01"/>
-                    </svg>
-                    Template Health
-                </h2>
-                <a href="/templates" class="fc-card__link">Manage</a>
-            </div>
-            <div class="fc-card__body">
-                <!-- Structural Category Breakdown — conic-gradient ring charts -->
-                <div class="fc-dash-health-section" role="group" aria-label="Templates by structure">
-                    <div class="fc-dash-health-label">By Structure</div>
-                    <div class="fc-dash-rings-row">
-                        @foreach (var (cat, count) in _categoryBreakdown)
-                        {
-                            var pct = _templateCount > 0 ? (int)Math.Round((double)count / _templateCount * 100) : 0;
-                            <div class="fc-dash-ring-item">
-                                <div class="fc-dash-ring"
-                                     style="--ring-pct: @pct; --ring-color: var(--cbn-primary);"
-                                     role="img"
-                                     aria-label="@cat: @pct%">
-                                    <div class="fc-dash-ring-hole">
-                                        <span class="fc-dash-ring-val">@pct<span class="fc-dash-ring-sym">%</span></span>
-                                    </div>
+                            else
+                            {
+                                <div class="rg-premium-list">
+                                    @foreach (var sub in _recentSubmissions)
+                                    {
+                                        <a class="rg-premium-list__item text-decoration-none" href="@($"/submissions/{sub.Id}")">
+                                            <div class="rg-premium-list__top">
+                                                <div>
+                                                    <div class="rg-premium-list__heading">@sub.ReturnCode</div>
+                                                    <div class="rg-premium-list__meta">@(sub.Institution?.InstitutionName ?? "Institution unavailable")</div>
+                                                </div>
+                                                <div class="text-end">
+                                                    <div class="rg-premium-list__value">@FormatTimeAgo(sub.SubmittedAt)</div>
+                                                    <span class="@BuildSubmissionChipClass(sub.Status)">@FormatStatus(sub.Status)</span>
+                                                </div>
+                                            </div>
+                                            <div class="rg-premium-list__meta">Submitted @sub.SubmittedAt.ToString("dd MMM yyyy HH:mm") UTC</div>
+                                        </a>
+                                    }
                                 </div>
-                                <span class="fc-dash-ring-name">@cat</span>
-                                <span class="fc-dash-ring-count">@count templates</span>
-                            </div>
-                        }
-                    </div>
-                </div>
+                            }
+                        </div>
+                    </article>
 
-                <!-- Frequency Breakdown — conic-gradient ring charts -->
-                <div class="fc-dash-health-section" role="group" aria-label="Templates by frequency">
-                    <div class="fc-dash-health-label">By Frequency</div>
-                    <div class="fc-dash-rings-row">
-                        @{ var freqColors = new[] { "--cbn-accent", "--cbn-info", "--cbn-success", "--cbn-warning" }; }
-                        @for (var fi = 0; fi < _frequencyBreakdown.Count; fi++)
-                        {
-                            var (freq, count) = _frequencyBreakdown[fi];
-                            var pct = _templateCount > 0 ? (int)Math.Round((double)count / _templateCount * 100) : 0;
-                            var ringColor = freqColors[fi % freqColors.Length];
-                            <div class="fc-dash-ring-item">
-                                <div class="fc-dash-ring"
-                                     style="--ring-pct: @pct; --ring-color: var(@ringColor);"
-                                     role="img"
-                                     aria-label="@freq: @pct%">
-                                    <div class="fc-dash-ring-hole">
-                                        <span class="fc-dash-ring-val">@pct<span class="fc-dash-ring-sym">%</span></span>
-                                    </div>
+                    <article class="rg-premium-panel">
+                        <div class="rg-premium-panel__header">
+                            <div>
+                                <div class="rg-premium-panel__eyebrow">Template topology</div>
+                                <h3 class="rg-premium-panel__title">Structure and cadence mix</h3>
+                                <p class="rg-premium-panel__subtitle">Understand how the reporting estate is distributed across structural categories and return frequencies.</p>
+                            </div>
+                            <div class="rg-premium-panel__metric">
+                                <span class="rg-premium-panel__metric-label">Published versions</span>
+                                @_publishedVersionCount
+                            </div>
+                        </div>
+                        <div class="rg-premium-panel__body">
+                            <div class="rg-premium-dual-grid">
+                                <div class="rg-premium-stack">
+                                    <h4 class="rg-premium-section-title">By structure</h4>
+                                    <p class="rg-premium-section-copy">The mix below shows which template structures currently dominate the live estate.</p>
+                                    @foreach (var item in _categoryBreakdown)
+                                    {
+                                        var percent = _templateCount == 0 ? 0 : (int)Math.Round((double)item.Count / _templateCount * 100);
+                                        <div class="rg-premium-list__item">
+                                            <div class="rg-premium-list__top">
+                                                <div class="rg-premium-list__heading">@item.Cat</div>
+                                                <div class="rg-premium-list__value">@percent%</div>
+                                            </div>
+                                            <div class="rg-premium-list__meta">@item.Count template(s) in this structural category.</div>
+                                        </div>
+                                    }
                                 </div>
-                                <span class="fc-dash-ring-name">@freq</span>
-                                <span class="fc-dash-ring-count">@count templates</span>
+                                <div class="rg-premium-stack">
+                                    <h4 class="rg-premium-section-title">By frequency</h4>
+                                    <p class="rg-premium-section-copy">Cadence distribution helps reveal where operations will feel the most recurring filing pressure.</p>
+                                    @foreach (var item in _frequencyBreakdown)
+                                    {
+                                        var percent = _templateCount == 0 ? 0 : (int)Math.Round((double)item.Count / _templateCount * 100);
+                                        <div class="rg-premium-list__item">
+                                            <div class="rg-premium-list__top">
+                                                <div class="rg-premium-list__heading">@item.Freq</div>
+                                                <div class="rg-premium-list__value">@percent%</div>
+                                            </div>
+                                            <div class="rg-premium-list__meta">@item.Count template(s) currently sit in this filing cadence.</div>
+                                        </div>
+                                    }
+                                </div>
                             </div>
-                        }
-                    </div>
+                        </div>
+                    </article>
                 </div>
 
-                <!-- Version Status Summary -->
-                <div class="fc-dash-health-section" role="group" aria-label="Template version status">
-                    <div class="fc-dash-health-label">Version Status</div>
-                    <div class="fc-dash-version-chips">
-                        <div class="fc-dash-chip fc-dash-chip-published">
-                            <span class="fc-dash-chip-dot" aria-hidden="true"></span>
-                            <span>@_publishedVersionCount Published</span>
+                <div class="rg-premium-side">
+                    <article class="rg-premium-panel">
+                        <div class="rg-premium-panel__header">
+                            <div>
+                                <div class="rg-premium-panel__eyebrow">Workflow pressure</div>
+                                <h3 class="rg-premium-panel__title">Version and review posture</h3>
+                                <p class="rg-premium-panel__subtitle">A compact operating snapshot of where the template and review pipeline currently stands.</p>
+                            </div>
                         </div>
-                        <div class="fc-dash-chip fc-dash-chip-review">
-                            <span class="fc-dash-chip-dot" aria-hidden="true"></span>
-                            <span>@_pendingReviewCount In Review</span>
+                        <div class="rg-premium-panel__body">
+                            <div class="rg-premium-stack">
+                                <div class="rg-premium-list__item">
+                                    <div class="rg-premium-list__top">
+                                        <div class="rg-premium-list__heading">Published</div>
+                                        <div class="rg-premium-list__value">@_publishedVersionCount</div>
+                                    </div>
+                                    <div class="rg-premium-list__meta">@totalVersions total version(s) tracked in the template estate.</div>
+                                </div>
+                                <div class="rg-premium-list__item">
+                                    <div class="rg-premium-list__top">
+                                        <div class="rg-premium-list__heading">In review</div>
+                                        <div class="rg-premium-list__value">@_pendingReviewCount</div>
+                                    </div>
+                                    <div class="rg-premium-list__meta">Versions awaiting governance review before they can move into production.</div>
+                                </div>
+                                <div class="rg-premium-list__item">
+                                    <div class="rg-premium-list__top">
+                                        <div class="rg-premium-list__heading">Drafts</div>
+                                        <div class="rg-premium-list__value">@_draftCount</div>
+                                    </div>
+                                    <div class="rg-premium-list__meta">Draft-only versions still requiring authoring or structural cleanup.</div>
+                                </div>
+                                <div class="rg-premium-list__item">
+                                    <div class="rg-premium-list__top">
+                                        <div class="rg-premium-list__heading">Rejected submissions</div>
+                                        <div class="rg-premium-list__value">@_rejectedCount</div>
+                                    </div>
+                                    <div class="rg-premium-list__meta">Recent rejected returns are a fast proxy for downstream quality friction.</div>
+                                </div>
+                            </div>
                         </div>
-                        <div class="fc-dash-chip fc-dash-chip-draft">
-                            <span class="fc-dash-chip-dot" aria-hidden="true"></span>
-                            <span>@_draftCount Drafts</span>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
+                    </article>
 
-    <!-- Quick Actions -->
-    <div class="fc-card fc-card--actions" style="--stagger-i: 6;" role="region" aria-label="Quick actions">
-        <div class="fc-card__header">
-            <h2>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="18" height="18" aria-hidden="true">
-                    <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
-                </svg>
-                Quick Actions
-            </h2>
-        </div>
-        <div class="fc-dash-actions-grid fc-stagger-group">
-            <a href="/templates" class="fc-btn fc-btn--action-card">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="22" height="22" aria-hidden="true">
-                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                    <polyline points="14 2 14 8 20 8"/>
-                    <line x1="12" y1="18" x2="12" y2="12"/>
-                    <line x1="9" y1="15" x2="15" y2="15"/>
-                </svg>
-                <span>New Template</span>
-            </a>
-            <a href="/submissions" class="fc-btn fc-btn--action-card">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="22" height="22" aria-hidden="true">
-                    <polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/>
-                    <path d="M5.45 5.11L2 12v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.45-6.89A2 2 0 0016.76 4H7.24a2 2 0 00-1.79 1.11z"/>
-                </svg>
-                <span>Review Submissions</span>
-            </a>
-            <a href="/formulas" class="fc-btn fc-btn--action-card">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="22" height="22" aria-hidden="true">
-                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
-                </svg>
-                <span>Manage Rules</span>
-            </a>
-            <a href="/audit" class="fc-btn fc-btn--action-card">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="22" height="22" aria-hidden="true">
-                    <path d="M16 4h2a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h2"/>
-                    <rect x="8" y="2" width="8" height="4" rx="1" ry="1"/>
-                    <line x1="8" y1="10" x2="16" y2="10"/>
-                    <line x1="8" y1="14" x2="16" y2="14"/>
-                    <line x1="8" y1="18" x2="12" y2="18"/>
-                </svg>
-                <span>View Audit Log</span>
-            </a>
+                    <article class="rg-premium-panel">
+                        <div class="rg-premium-panel__header">
+                            <div>
+                                <div class="rg-premium-panel__eyebrow">Quick actions</div>
+                                <h3 class="rg-premium-panel__title">Move directly to the operational tools</h3>
+                                <p class="rg-premium-panel__subtitle">Fast paths for the areas most likely to need intervention from this dashboard.</p>
+                            </div>
+                        </div>
+                        <div class="rg-premium-panel__body">
+                            <div class="rg-premium-action-grid">
+                                @foreach (var action in QuickActions)
+                                {
+                                    <a class="rg-premium-link-card" href="@action.Href">
+                                        <span class="rg-premium-link-card__icon">@action.Code</span>
+                                        <div>
+                                            <div class="rg-premium-link-card__title">@action.Title</div>
+                                            <div class="rg-premium-link-card__desc">@action.Description</div>
+                                        </div>
+                                        <span class="rg-premium-link-card__arrow">Go</span>
+                                    </a>
+                                }
+                            </div>
+                        </div>
+                    </article>
+                </div>
+            </section>
         </div>
     </div>
 }
@@ -388,33 +307,49 @@ else
     private List<(string Freq, int Count)> _frequencyBreakdown = new();
     private List<(string Cat, int Count)> _categoryBreakdown = new();
     private List<Submission> _recentSubmissions = new();
-    // 7-day submission count for sparkline (index 0 = 6 days ago, index 6 = today)
     private List<int> _submissionSparkline = new();
+
+    private string StatusBadge => (_pendingReviewCount + _draftCount, _rejectedCount) switch
+    {
+        (> 0, _) => $"{_pendingReviewCount + _draftCount} awaiting action",
+        (_, > 0) => $"{_rejectedCount} rejected return(s)",
+        _ => "System operational"
+    };
+
+    private string StatusVariant => _rejectedCount > 0
+        ? "danger"
+        : _pendingReviewCount + _draftCount > 0
+            ? "warning"
+            : "success";
+
+    private static readonly IReadOnlyList<ActionCard> QuickActions = new List<ActionCard>
+    {
+        new("TPL", "Template Console", "Create and refine live reporting templates.", "/templates"),
+        new("SUB", "Submissions", "Review incoming returns and their workflow state.", "/submissions"),
+        new("VAL", "Validation Rules", "Inspect formula, business, and cross-sheet rules.", "/formulas"),
+        new("AUD", "Audit Log", "Track changes, governance events, and user actions.", "/audit")
+    };
 
     protected override async Task OnInitializedAsync()
     {
-        // Load templates from cache
         var templates = await Cache.GetAllPublishedTemplates();
 
         _templateCount = templates.Count;
         _totalFields = templates.Sum(t => t.CurrentVersion.Fields.Count);
         _totalFormulas = templates.Sum(t => t.CurrentVersion.IntraSheetFormulas.Count);
 
-        // Frequency breakdown
         _frequencyBreakdown = templates
             .GroupBy(t => FrequencyLabel(t.Frequency))
             .Select(g => (g.Key, g.Count()))
             .OrderByDescending(x => x.Item2)
             .ToList();
 
-        // Category breakdown
         _categoryBreakdown = templates
             .GroupBy(t => t.StructuralCategory)
             .Select(g => (g.Key, g.Count()))
             .OrderByDescending(x => x.Item2)
             .ToList();
 
-        // Template version status counts
         try
         {
             var allTemplates = await TemplateRepo.GetAll();
@@ -428,7 +363,6 @@ else
             _publishedVersionCount = _templateCount;
         }
 
-        // Validation rule counts
         try
         {
             var crossSheetRules = await FormulaRepo.GetAllActiveCrossSheetRules();
@@ -439,12 +373,10 @@ else
         }
         catch
         {
-            // Formula tables may not be populated yet
         }
 
         _totalRules = _totalFormulas + _crossSheetRuleCount + _businessRuleCount;
 
-        // Submission stats
         try
         {
             _totalSubmissions = await SubmissionRepo.GetTotalCount();
@@ -456,7 +388,6 @@ else
                 ? (int)Math.Round((double)_acceptedCount / _totalSubmissions * 100)
                 : 0;
 
-            // Build 7-day sparkline from recent submissions
             var today = DateTime.UtcNow.Date;
             _submissionSparkline = Enumerable.Range(0, 7)
                 .Select(i => _recentSubmissions.Count(s => s.SubmittedAt.Date == today.AddDays(i - 6)))
@@ -464,18 +395,80 @@ else
         }
         catch
         {
-            // Submissions table may not have data yet
         }
 
         _loading = false;
     }
 
-    private void NavigateToSubmission(int id) => Nav.NavigateTo($"/submissions/{id}");
-
-    private void HandleRowKey(KeyboardEventArgs e, int id)
+    private static string BuildBannerTone(int workflowPressure, int rejectedCount)
     {
-        if (e.Key is "Enter" or " ")
-            NavigateToSubmission(id);
+        if (rejectedCount > 0)
+        {
+            return "danger";
+        }
+
+        if (workflowPressure > 0)
+        {
+            return "warning";
+        }
+
+        return "success";
+    }
+
+    private string BuildBannerHeadline(int workflowPressure, int rejectedCount)
+    {
+        if (rejectedCount > 0)
+        {
+            return "Submission quality needs immediate attention.";
+        }
+
+        if (workflowPressure > 0)
+        {
+            return "Template workflow pressure is building.";
+        }
+
+        return "Template governance and submission flow are currently stable.";
+    }
+
+    private string BuildBannerDetail(int workflowPressure, string categoryLabel, string frequencyLabel)
+    {
+        if (_rejectedCount > 0)
+        {
+            return $"{_rejectedCount} rejected submission(s) are currently the strongest operational warning. Review the newest returns and validation coverage before that rejection pattern spreads.";
+        }
+
+        if (workflowPressure > 0)
+        {
+            return $"{workflowPressure} version(s) still need authoring or review. The template estate is currently led by {categoryLabel ?? "the active structural mix"} and {frequencyLabel ?? "the current reporting cadence"} filings.";
+        }
+
+        return $"Published templates, rule coverage, and live submissions are moving without obvious pressure. The current estate is led by {categoryLabel ?? "the active structural mix"} and {frequencyLabel ?? "the current reporting cadence"} filings.";
+    }
+
+    private static string BuildStatValueClass(string riskBand)
+    {
+        if (riskBand is "CRITICAL" or "HIGH")
+        {
+            return "rg-premium-stat__value--danger";
+        }
+
+        if (riskBand == "MEDIUM")
+        {
+            return "rg-premium-stat__value--warning";
+        }
+
+        return "rg-premium-stat__value--success";
+    }
+
+    private static string BuildSubmissionChipClass(SubmissionStatus status)
+    {
+        return status switch
+        {
+            SubmissionStatus.Accepted => "rg-premium-chip rg-premium-chip--success",
+            SubmissionStatus.AcceptedWithWarnings => "rg-premium-chip rg-premium-chip--warning",
+            SubmissionStatus.Rejected => "rg-premium-chip rg-premium-chip--danger",
+            _ => "rg-premium-chip rg-premium-chip--info"
+        };
     }
 
     private static string FormatStatus(SubmissionStatus status) => status switch
@@ -494,26 +487,6 @@ else
         _ => frequency.ToString()
     };
 
-    /// <summary>
-    /// Converts a list of integer counts into SVG polyline points within a 60×20 viewBox.
-    /// Y is inverted so higher values appear at the top.
-    /// </summary>
-    private static string BuildSparklinePoints(List<int> values)
-    {
-        if (values.Count < 2) return string.Empty;
-        var max = values.Max();
-        var min = values.Min();
-        var range = max - min;
-        var step = 60.0 / (values.Count - 1);
-        return string.Join(" ", values.Select((v, i) =>
-        {
-            var x = i * step;
-            // Map value to Y: 18 (bottom) when value=min, 2 (top) when value=max
-            var y = range == 0 ? 10.0 : 18.0 - (v - min) * 16.0 / range;
-            return $"{x:F1},{y:F1}";
-        }));
-    }
-
     private static string FormatTimeAgo(DateTime utcTime)
     {
         var span = DateTime.UtcNow - utcTime;
@@ -523,4 +496,6 @@ else
         if (span.TotalDays < 7) return $"{(int)span.TotalDays}d ago";
         return utcTime.ToString("dd MMM yyyy");
     }
+
+    private sealed record ActionCard(string Code, string Title, string Description, string Href);
 }

@@ -9,18 +9,39 @@
 <PageTitle>ForeSight Churn Risk</PageTitle>
 
 <PageHeader Title="Tenant Churn Risk"
-            Subtitle="Platform-wide retention-risk detail with explainability drivers and advisory recommendations.">
+            Subtitle="Platform-wide retention pressure ranked by probability, confidence, and the strongest behavioural drivers."
+            StatusBadge="@StatusBadge"
+            StatusVariant="@StatusVariant">
     <SecondaryActions>
         <a class="fc-btn fc-btn--outline fc-btn--sm" href="/platform/foresight">Back to overview</a>
     </SecondaryActions>
+    <PrimaryAction>
+        <button class="fc-btn fc-btn--primary fc-btn--sm" @onclick="LoadAsync" disabled="@_loading">Refresh ranking</button>
+    </PrimaryAction>
 </PageHeader>
 
 <div class="fc-page">
     @if (_loading)
     {
-        <div class="fc-card">
-            <div class="fc-card__body">
-                <div class="fc-skel fc-skel-block" style="--skel-w:100%;--skel-h:320px"></div>
+        <div class="rg-premium-flow" aria-busy="true" aria-label="Loading churn-risk detail">
+            <div class="fc-skel fc-skel-block" style="--skel-w:100%;--skel-h:156px;"></div>
+            <div class="fc-skel-stats-row">
+                @for (var i = 0; i < 4; i++)
+                {
+                    <div class="fc-skel-card-body">
+                        <div class="fc-skel fc-skel-text" style="--skel-w:44%;--skel-h:12px;--skeleton-index:@(i * 3);"></div>
+                        <div class="fc-skel fc-skel-text-lg" style="--skel-w:56%;--skel-h:34px;--skeleton-index:@(i * 3 + 1);margin-top:var(--space-3);"></div>
+                        <div class="fc-skel fc-skel-text" style="--skel-w:82%;--skel-h:12px;--skeleton-index:@(i * 3 + 2);margin-top:var(--space-3);"></div>
+                    </div>
+                }
+            </div>
+            <div class="fc-skel-content-grid">
+                <div class="fc-skel-card-body">
+                    <SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Card" Index="20" />
+                </div>
+                <div class="fc-skel-card-body">
+                    <SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Card" Index="28" />
+                </div>
             </div>
         </div>
     }
@@ -32,83 +53,204 @@
     }
     else
     {
-        <div class="fc-grid fc-grid-3 fc-mb-4">
-            <div class="fc-card">
-                <div class="fc-card__body">
-                    <div class="fc-stat-label">Tenants ranked</div>
-                    <div class="fc-stat-value">@_items.Count</div>
-                </div>
-            </div>
-            <div class="fc-card">
-                <div class="fc-card__body">
-                    <div class="fc-stat-label">High or critical</div>
-                    <div class="fc-stat-value">@_items.Count(x => x.RiskBand is "HIGH" or "CRITICAL")</div>
-                </div>
-            </div>
-            <div class="fc-card">
-                <div class="fc-card__body">
-                    <div class="fc-stat-label">Average confidence</div>
-                    <div class="fc-stat-value">@(_items.Count == 0 ? "0%" : _items.Average(x => x.ConfidenceScore).ToString("P0"))</div>
-                </div>
-            </div>
-        </div>
+        var elevatedCount = _items.Count(x => x.RiskBand is "HIGH" or "CRITICAL");
+        var averageConfidence = _items.Count == 0 ? 0m : _items.Average(x => x.ConfidenceScore);
+        var averageProbability = _items.Count == 0 ? 0m : _items.Average(x => x.ChurnProbability);
+        var leadingTenant = _items.OrderByDescending(x => x.ChurnProbability).FirstOrDefault();
 
-        <div class="fc-card">
-            <div class="fc-card__body fc-table-responsive">
-                <table class="fc-table" aria-label="Churn risk detail">
-                    <thead>
-                        <tr>
-                            <th>Tenant</th>
-                            <th>Licence</th>
-                            <th>Probability</th>
-                            <th>Confidence</th>
-                            <th>Risk</th>
-                            <th>Recommendation</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @if (_items.Count == 0)
-                        {
-                            <tr>
-                                <td colspan="6" class="fc-text-muted">No unsuppressed churn-risk forecasts are available.</td>
-                            </tr>
-                        }
-                        else
-                        {
-                            @foreach (var item in _items)
+        <div class="rg-premium-flow">
+            <section class="rg-premium-banner rg-premium-banner--@ResolveBannerTone(elevatedCount, averageProbability)">
+                <div class="rg-premium-banner__grid">
+                    <div>
+                        <div class="rg-premium-banner__eyebrow">Retention risk lane</div>
+                        <h2 class="rg-premium-banner__headline">@BuildBannerHeadline(elevatedCount, averageProbability)</h2>
+                        <p class="rg-premium-banner__detail">@BuildBannerDetail(elevatedCount, averageConfidence, leadingTenant)</p>
+                    </div>
+                    <div class="rg-premium-banner__meta">
+                        <div class="rg-premium-banner__meta-label">Platform scope</div>
+                        <div class="rg-premium-banner__meta-value">@_items.Count tenant forecast(s)</div>
+                        <div class="rg-premium-banner__meta-copy">
+                            @(leadingTenant is null
+                                ? "No unsuppressed churn forecasts are currently visible."
+                                : $"Highest current pressure: {leadingTenant.TenantName} at {leadingTenant.ChurnProbability:P0} churn probability.")
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="rg-premium-hero">
+                <div class="rg-premium-hero__grid">
+                    <div>
+                        <div class="rg-premium-hero__eyebrow">ForeSight advisory workspace</div>
+                        <h2 class="rg-premium-hero__title">Spot declining engagement before the tenant asks to leave.</h2>
+                        <p class="rg-premium-hero__subtitle">
+                            This view isolates the institutions whose engagement, payment, filing, and quality signals are moving in the
+                            wrong direction so commercial and customer-success teams can intervene early without turning forecasts into automation.
+                        </p>
+                        <div class="d-flex flex-wrap gap-2 mt-3">
+                            <span class="rg-premium-chip rg-premium-chip--danger">@elevatedCount elevated tenant(s)</span>
+                            <span class="rg-premium-chip rg-premium-chip--info">@averageConfidence.ToString("P0") average confidence</span>
+                            <span class="rg-premium-chip rg-premium-chip--warning">@averageProbability.ToString("P0") average churn probability</span>
+                        </div>
+                    </div>
+                    <div class="rg-premium-hero__aside">
+                        <div class="rg-premium-note">
+                            <div class="rg-premium-note__label">Lead watchpoint</div>
+                            <div class="rg-premium-note__value">@(leadingTenant?.TenantName ?? "No elevated tenant")</div>
+                            <div class="rg-premium-note__copy">
+                                @(leadingTenant is null
+                                    ? "When new risk signals appear, the most exposed tenant will surface here with probability and narrative context."
+                                    : $"{leadingTenant.LicenceType} portfolio, confidence band {leadingTenant.ConfidenceLower:P0} to {leadingTenant.ConfidenceUpper:P0}.")
+                            </div>
+                        </div>
+                        <div class="rg-premium-note">
+                            <div class="rg-premium-note__label">Recommended operating posture</div>
+                            <div class="rg-premium-note__value">Human intervention only</div>
+                            <div class="rg-premium-note__copy">Use this ranking to prioritize outreach, renewal discussions, and product adoption plays. Do not auto-trigger account actions from forecast output.</div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="rg-premium-stat-grid" aria-label="Churn-risk metrics">
+                <article class="rg-premium-stat">
+                    <div class="rg-premium-stat__label">Tenants ranked</div>
+                    <div class="rg-premium-stat__value">@_items.Count</div>
+                    <div class="rg-premium-stat__note">Unsuppressed churn forecasts available across the platform.</div>
+                </article>
+                <article class="rg-premium-stat">
+                    <div class="rg-premium-stat__label">High or critical</div>
+                    <div class="rg-premium-stat__value @BuildStatValueClass(elevatedCount > 0 ? "HIGH" : "LOW")">@elevatedCount</div>
+                    <div class="rg-premium-stat__note">Tenants currently worth immediate retention attention.</div>
+                </article>
+                <article class="rg-premium-stat">
+                    <div class="rg-premium-stat__label">Average confidence</div>
+                    <div class="rg-premium-stat__value @BuildConfidenceValueClass(averageConfidence)">@averageConfidence.ToString("P0")</div>
+                    <div class="rg-premium-stat__note">Visible model confidence across the current ranking.</div>
+                </article>
+                <article class="rg-premium-stat">
+                    <div class="rg-premium-stat__label">Average churn probability</div>
+                    <div class="rg-premium-stat__value @BuildStatValueClass(averageProbability >= 0.40m ? "MEDIUM" : "LOW")">@averageProbability.ToString("P0")</div>
+                    <div class="rg-premium-stat__note">Useful as a portfolio-level retention pressure gauge.</div>
+                </article>
+            </section>
+
+            <section class="rg-premium-content-grid">
+                <div class="rg-premium-main">
+                    <article class="rg-premium-panel">
+                        <div class="rg-premium-panel__header">
+                            <div>
+                                <div class="rg-premium-panel__eyebrow">Ranked tenants</div>
+                                <h3 class="rg-premium-panel__title">Retention priority list</h3>
+                                <p class="rg-premium-panel__subtitle">Each tenant shows the probability band, root-cause story, and strongest contributing signals so outreach teams can act with context.</p>
+                            </div>
+                            <div class="rg-premium-panel__metric">
+                                <span class="rg-premium-panel__metric-label">Average probability</span>
+                                @averageProbability.ToString("P0")
+                            </div>
+                        </div>
+                        <div class="rg-premium-panel__body">
+                            @if (_items.Count == 0)
                             {
-                                <tr>
-                                    <td>
-                                        <div class="fw-semibold">@item.TenantName</div>
-                                        <div class="fc-text-muted">@item.RootCauseNarrative</div>
-                                        @if (item.TopFactors.Count > 0)
-                                        {
-                                            <div class="d-flex flex-wrap gap-1 mt-2">
-                                                @foreach (var factor in item.TopFactors)
+                                <div class="rg-premium-empty">No unsuppressed churn-risk forecasts are available yet. Once tenant activity and adoption signals accumulate, this ranking will populate automatically.</div>
+                            }
+                            else
+                            {
+                                <div class="rg-premium-list">
+                                    @foreach (var item in _items.OrderByDescending(x => x.ChurnProbability))
+                                    {
+                                        <div class="rg-premium-list__item">
+                                            <div class="rg-premium-list__top">
+                                                <div>
+                                                    <div class="rg-premium-list__heading">@item.TenantName</div>
+                                                    <div class="rg-premium-list__meta">@item.LicenceType</div>
+                                                </div>
+                                                <div class="text-end">
+                                                    <div class="rg-premium-list__value">@item.ChurnProbability.ToString("P0")</div>
+                                                    <span class="@BuildRiskChipClass(item.RiskBand)">@item.RiskBand</span>
+                                                </div>
+                                            </div>
+                                            <div class="rg-premium-list__meta">@item.Explanation</div>
+                                            <div class="rg-premium-list__meta">@item.RootCauseNarrative</div>
+                                            <div class="rg-premium-list__tags">
+                                                <span class="rg-premium-chip rg-premium-chip--info">Confidence @item.ConfidenceScore.ToString("P0")</span>
+                                                <span class="rg-premium-chip rg-premium-chip--warning">Band @item.ConfidenceLower.ToString("P0") to @item.ConfidenceUpper.ToString("P0")</span>
+                                                @foreach (var factor in item.TopFactors.OrderByDescending(x => x.ContributionScore).Take(3))
                                                 {
-                                                    <span class="fc-badge">@factor.FeatureLabel (@factor.ContributionScore.ToString("F2"))</span>
+                                                    <span class="rg-premium-chip @BuildFactorChipClass(factor.ImpactDirection)">@factor.FeatureLabel (@factor.ContributionScore.ToString("F2"))</span>
                                                 }
                                             </div>
-                                        }
-                                    </td>
-                                    <td>@item.LicenceType</td>
-                                    <td>@item.ChurnProbability.ToString("P0")</td>
-                                    <td>
-                                        <div>@item.ConfidenceScore.ToString("P0")</div>
-                                        <div class="fc-text-muted">@item.ConfidenceLower.ToString("P0") to @item.ConfidenceUpper.ToString("P0")</div>
-                                    </td>
-                                    <td>
-                                        <span class="fc-badge @(item.RiskBand is "HIGH" or "CRITICAL" ? "fc-badge--danger" : item.RiskBand == "MEDIUM" ? "fc-badge--warning" : "fc-badge--success")">
-                                            @item.RiskBand
-                                        </span>
-                                    </td>
-                                    <td>@item.Recommendation</td>
-                                </tr>
+                                            @if (!string.IsNullOrWhiteSpace(item.Recommendation))
+                                            {
+                                                <div class="rg-premium-table-note mt-3"><strong>Recommended action:</strong> @item.Recommendation</div>
+                                            }
+                                        </div>
+                                    }
+                                </div>
                             }
-                        }
-                    </tbody>
-                </table>
-            </div>
+                        </div>
+                    </article>
+                </div>
+
+                <div class="rg-premium-side">
+                    <article class="rg-premium-panel">
+                        <div class="rg-premium-panel__header">
+                            <div>
+                                <div class="rg-premium-panel__eyebrow">Signal concentration</div>
+                                <h3 class="rg-premium-panel__title">Top recurring drivers</h3>
+                                <p class="rg-premium-panel__subtitle">Aggregates the strongest behavioural signals across all visible churn forecasts.</p>
+                            </div>
+                        </div>
+                        <div class="rg-premium-panel__body">
+                            @if (TopDriverGroups.Count == 0)
+                            {
+                                <div class="rg-premium-empty">Driver explainability data is not yet available for the current scope.</div>
+                            }
+                            else
+                            {
+                                <div class="rg-premium-stack">
+                                    @foreach (var driver in TopDriverGroups)
+                                    {
+                                        <div class="rg-premium-list__item">
+                                            <div class="rg-premium-list__top">
+                                                <div class="rg-premium-list__heading">@driver.Label</div>
+                                                <div class="rg-premium-list__value">@driver.TotalContribution.ToString("F2")</div>
+                                            </div>
+                                            <div class="rg-premium-list__meta">Appears in @driver.Appearances forecast(s).</div>
+                                        </div>
+                                    }
+                                </div>
+                            }
+                        </div>
+                    </article>
+
+                    <article class="rg-premium-panel">
+                        <div class="rg-premium-panel__header">
+                            <div>
+                                <div class="rg-premium-panel__eyebrow">Operating guidance</div>
+                                <h3 class="rg-premium-panel__title">What to do next</h3>
+                                <p class="rg-premium-panel__subtitle">Recommended human actions based on the visible portfolio pattern.</p>
+                            </div>
+                        </div>
+                        <div class="rg-premium-panel__body">
+                            <div class="rg-premium-stack">
+                                <div class="rg-premium-list__item">
+                                    <div class="rg-premium-list__heading">Prioritize high-confidence cases</div>
+                                    <div class="rg-premium-list__meta">Start with tenants whose churn probability is above 40% and whose confidence score is above 60% so outreach lands on the clearest signals first.</div>
+                                </div>
+                                <div class="rg-premium-list__item">
+                                    <div class="rg-premium-list__heading">Use the factor narrative</div>
+                                    <div class="rg-premium-list__meta">Root-cause notes and top factors should shape the playbook: product enablement for adoption drops, billing outreach for payment friction, and compliance coaching for filing deterioration.</div>
+                                </div>
+                                <div class="rg-premium-list__item">
+                                    <div class="rg-premium-list__heading">Advisory only</div>
+                                    <div class="rg-premium-list__meta">Do not automate suspension, downgrade, or contract actions from this page. Forecasts are designed to prioritize human review, not trigger enforcement.</div>
+                                </div>
+                            </div>
+                        </div>
+                    </article>
+                </div>
+            </section>
         </div>
     }
 </div>
@@ -118,6 +260,29 @@
     private string? _error;
     private Exception? _loadException;
     private bool _loading = true;
+
+    private string StatusBadge => _loading
+        ? "Refreshing"
+        : _items.Count == 0
+            ? "No active forecasts"
+            : $"{_items.Count(x => x.RiskBand is "HIGH" or "CRITICAL")} elevated tenant(s)";
+
+    private string StatusVariant => _loading
+        ? "warning"
+        : _items.Any(x => x.RiskBand is "HIGH" or "CRITICAL")
+            ? "danger"
+            : "success";
+
+    private IReadOnlyList<DriverRollup> TopDriverGroups => _items
+        .SelectMany(item => item.TopFactors)
+        .GroupBy(factor => factor.FeatureLabel)
+        .Select(group => new DriverRollup(
+            group.Key,
+            group.Sum(item => item.ContributionScore),
+            group.Count()))
+        .OrderByDescending(item => item.TotalContribution)
+        .Take(5)
+        .ToList();
 
     protected override async Task OnInitializedAsync()
     {
@@ -145,4 +310,113 @@
             _loading = false;
         }
     }
+
+    private static string ResolveBannerTone(int elevatedCount, decimal averageProbability)
+    {
+        if (elevatedCount > 0)
+        {
+            return "danger";
+        }
+
+        if (averageProbability >= 0.35m)
+        {
+            return "warning";
+        }
+
+        return "success";
+    }
+
+    private static string BuildBannerHeadline(int elevatedCount, decimal averageProbability)
+    {
+        if (elevatedCount > 2)
+        {
+            return "Multiple tenants now need retention attention.";
+        }
+
+        if (elevatedCount > 0)
+        {
+            return "A small set of tenants is showing clear churn pressure.";
+        }
+
+        if (averageProbability >= 0.35m)
+        {
+            return "Portfolio pressure is building even without a critical cluster yet.";
+        }
+
+        return "Tenant retention posture is currently stable.";
+    }
+
+    private static string BuildBannerDetail(int elevatedCount, decimal averageConfidence, ChurnRiskAssessment? leadingTenant)
+    {
+        if (leadingTenant is null)
+        {
+            return "ForeSight will surface churn pressure here once enough behavioural and payment signals accumulate across active tenants.";
+        }
+
+        return elevatedCount > 0
+            ? $"{leadingTenant.TenantName} leads the ranking at {leadingTenant.ChurnProbability:P0}, while the visible portfolio average confidence sits at {averageConfidence:P0}. Use the factor narrative to direct human outreach." 
+            : $"The current leader is {leadingTenant.TenantName} at {leadingTenant.ChurnProbability:P0}, but the overall risk picture remains contained and should be monitored rather than escalated.";
+    }
+
+    private static string BuildRiskChipClass(string riskBand)
+    {
+        if (riskBand is "CRITICAL" or "HIGH")
+        {
+            return "rg-premium-chip rg-premium-chip--danger";
+        }
+
+        if (riskBand == "MEDIUM")
+        {
+            return "rg-premium-chip rg-premium-chip--warning";
+        }
+
+        return "rg-premium-chip rg-premium-chip--success";
+    }
+
+    private static string BuildFactorChipClass(string impactDirection)
+    {
+        if (impactDirection == "DECREASES_RISK")
+        {
+            return "rg-premium-chip rg-premium-chip--success";
+        }
+
+        if (impactDirection == "DECREASES_RESILIENCE")
+        {
+            return "rg-premium-chip rg-premium-chip--warning";
+        }
+
+        return "rg-premium-chip rg-premium-chip--danger";
+    }
+
+    private static string BuildStatValueClass(string riskBand)
+    {
+        if (riskBand is "CRITICAL" or "HIGH")
+        {
+            return "rg-premium-stat__value--danger";
+        }
+
+        if (riskBand == "MEDIUM")
+        {
+            return "rg-premium-stat__value--warning";
+        }
+
+        return "rg-premium-stat__value--success";
+    }
+
+    private static string BuildConfidenceValueClass(decimal value)
+    {
+        if (value >= 0.70m)
+        {
+            return "rg-premium-stat__value--success";
+        }
+
+        if (value >= 0.50m)
+        {
+            return "rg-premium-stat__value--warning";
+        }
+
+        return "rg-premium-stat__value--danger";
+    }
+
+    private sealed record DriverRollup(string Label, decimal TotalContribution, int Appearances);
 }

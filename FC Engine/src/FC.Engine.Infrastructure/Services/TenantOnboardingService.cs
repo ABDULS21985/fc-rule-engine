@@ -224,9 +224,12 @@ public class TenantOnboardingService : ITenantOnboardingService
         // Set SESSION_CONTEXT to the newly created tenant so that Row-Level Security
         // block predicates allow subsequent inserts into tenant-scoped tables
         // (tenant_licence_types, institutions, institution_users, etc.).
-        await _db.Database.ExecuteSqlRawAsync(
-            "EXEC sp_set_session_context @key=N'TenantId', @value={0};",
-            new object[] { tenant.TenantId }, ct);
+        if (_db.Database.IsRelational())
+        {
+            await _db.Database.ExecuteSqlRawAsync(
+                "EXEC sp_set_session_context @key=N'TenantId', @value={0};",
+                new object[] { tenant.TenantId }, ct);
+        }
 
         // ── Step 3: Assign Licence Types ──
         foreach (var lt in licenceTypes)

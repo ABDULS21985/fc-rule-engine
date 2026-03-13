@@ -97,10 +97,10 @@ public sealed class CaaSApiKeyService : ICaaSApiKeyService
             """,
             new { Hash = keyHash });
 
-        if (row is null)                                            return null;
-        if (!row.IsActive || !row.PartnerIsActive)                  return null;
-        if (row.RevokedAt is not null)                              return null;
-        if (row.ExpiresAt is not null && row.ExpiresAt < DateTimeOffset.UtcNow) return null;
+        if (row is null) return null;
+        if (!row.IsActive || !row.PartnerIsActive) return null;
+        if (row.RevokedAt is not null) return null;
+        if (row.ExpiresAt is not null && row.ExpiresAt < DateTime.UtcNow) return null;
 
         // Update last used — fire-and-forget so it never blocks the request path
         _ = conn.ExecuteAsync(
@@ -158,7 +158,7 @@ public sealed class CaaSApiKeyService : ICaaSApiKeyService
         return rows.Select(r => new CaaSApiKeyInfo(
             r.Id, r.KeyPrefix, r.DisplayName,
             Enum.Parse<CaaSEnvironment>(r.Environment, ignoreCase: true),
-            r.IsActive, r.ExpiresAt, r.LastUsedAt, r.CreatedAt)).ToList();
+            r.IsActive, AsUtc(r.ExpiresAt), AsUtc(r.LastUsedAt), AsUtc(r.CreatedAt))).ToList();
     }
 
     private static string ComputeKeyHash(string rawKey)
@@ -169,14 +169,38 @@ public sealed class CaaSApiKeyService : ICaaSApiKeyService
     }
 
     // ── Private row types ─────────────────────────────────────────────────────
-    private sealed record ApiKeyValidationRow(
-        long KeyId, int PartnerId, string Environment, bool IsActive,
-        DateTimeOffset? ExpiresAt, DateTimeOffset? RevokedAt,
-        int InstitutionId, string PartnerCode, string Tier,
-        bool PartnerIsActive, string? AllowedModuleCodes);
+    private static DateTimeOffset? AsUtc(DateTime? value)
+        => value.HasValue
+            ? new DateTimeOffset(DateTime.SpecifyKind(value.Value, DateTimeKind.Utc))
+            : null;
 
-    private sealed record CaaSApiKeyRow(
-        long Id, string KeyPrefix, string DisplayName, string Environment,
-        bool IsActive, DateTimeOffset? ExpiresAt, DateTimeOffset? LastUsedAt,
-        DateTimeOffset CreatedAt);
+    private static DateTimeOffset AsUtc(DateTime value)
+        => new(DateTime.SpecifyKind(value, DateTimeKind.Utc));
+
+    private sealed class ApiKeyValidationRow
+    {
+        public long KeyId { get; set; }
+        public int PartnerId { get; set; }
+        public string Environment { get; set; } = string.Empty;
+        public bool IsActive { get; set; }
+        public DateTime? ExpiresAt { get; set; }
+        public DateTime? RevokedAt { get; set; }
+        public int InstitutionId { get; set; }
+        public string PartnerCode { get; set; } = string.Empty;
+        public string Tier { get; set; } = string.Empty;
+        public bool PartnerIsActive { get; set; }
+        public string? AllowedModuleCodes { get; set; }
+    }
+
+    private sealed class CaaSApiKeyRow
+    {
+        public long Id { get; set; }
+        public string KeyPrefix { get; set; } = string.Empty;
+        public string DisplayName { get; set; } = string.Empty;
+        public string Environment { get; set; } = string.Empty;
+        public bool IsActive { get; set; }
+        public DateTime? ExpiresAt { get; set; }
+        public DateTime? LastUsedAt { get; set; }
+        public DateTime CreatedAt { get; set; }
+    }
 }

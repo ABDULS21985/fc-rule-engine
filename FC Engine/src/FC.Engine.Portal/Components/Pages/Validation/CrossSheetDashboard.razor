@@ -44,7 +44,82 @@ else if (data is null)
 }
 else
 {
-    <div class="xs-page @(_viewMode == ViewMode.Comparator ? "xs-page--wide" : "")">
+    var hardFailCount = data.Rules.Count(r => r.Status == RuleEvalStatus.Fail && r.Severity == ValidationSeverity.Error);
+    var latestEvaluated = data.Rules.Where(r => r.LastEvaluated.HasValue).OrderByDescending(r => r.LastEvaluated).FirstOrDefault()?.LastEvaluated;
+    var leadRule = data.Rules
+        .OrderByDescending(r => r.Status == RuleEvalStatus.Fail)
+        .ThenByDescending(r => r.Severity == ValidationSeverity.Error)
+        .ThenBy(r => r.RuleCode)
+        .FirstOrDefault();
+    var passRate = data.TotalRules == 0 ? 0m : Math.Round(data.PassingCount * 100m / data.TotalRules, 1);
+    var bannerTone = ResolveXsBannerTone(data.FailingCount, hardFailCount, data.NotEvaluatedCount, data.MissingDependencies.Count);
+
+    <div class="portal-page portal-fsd-shell">
+        <section class="portal-fsd-banner portal-fsd-banner--@bannerTone">
+            <div>
+                <span class="portal-fsd-eyebrow">Validation pulse</span>
+                <h2 class="portal-fsd-banner-title">@BuildXsBannerHeadline(data.FailingCount, hardFailCount, data.NotEvaluatedCount, data.MissingDependencies.Count)</h2>
+                <p class="portal-fsd-banner-copy">@BuildXsBannerCopy(passRate, leadRule, latestEvaluated)</p>
+            </div>
+            <div class="portal-fsd-banner-meta">
+                <span class="portal-fsd-meta-label">Current mode</span>
+                <strong class="portal-fsd-meta-value">@(_viewMode == ViewMode.Comparator ? "Comparator" : "Overview")</strong>
+                <span class="portal-fsd-meta-copy">@data.DependencyNodes.Count dependency node@(data.DependencyNodes.Count == 1 ? "" : "s") · @data.DependencyEdges.Count dependency edge@(data.DependencyEdges.Count == 1 ? "" : "s")</span>
+            </div>
+        </section>
+
+        <section class="portal-fsd-hero">
+            <div>
+                <span class="portal-fsd-eyebrow">Consistency narrative</span>
+                <h2 class="portal-fsd-hero-title">Treat cross-sheet breaks as relationship failures, not isolated cell errors.</h2>
+                <p class="portal-fsd-hero-copy">
+                    This workspace brings rule posture, dependency readiness, and historical pass-rate movement together so preparers can
+                    see whether a failure is caused by missing submissions, data mismatch, or stale unresolved rule logic.
+                </p>
+                <div class="portal-fsd-chip-row">
+                    <span class="portal-fsd-chip portal-fsd-chip--@(data.FailingCount > 0 ? "danger" : "success")">@data.FailingCount failing rule@(data.FailingCount == 1 ? "" : "s")</span>
+                    <span class="portal-fsd-chip portal-fsd-chip--@(data.NotEvaluatedCount > 0 ? "warning" : "success")">@data.NotEvaluatedCount not evaluated</span>
+                    <span class="portal-fsd-chip portal-fsd-chip--info">@data.MissingDependencies.Count missing dependenc@(data.MissingDependencies.Count == 1 ? "y" : "ies")</span>
+                </div>
+            </div>
+            <div class="portal-fsd-hero-aside">
+                <div class="portal-fsd-note">
+                    <span class="portal-fsd-note-label">Lead rule</span>
+                    <strong class="portal-fsd-note-value">@(leadRule?.RuleCode ?? "None")</strong>
+                    <span class="portal-fsd-note-copy">@(leadRule is null ? "No active rule is currently materialised." : $"{leadRule.RuleName} is the clearest current operator focus.")</span>
+                </div>
+                <div class="portal-fsd-note">
+                    <span class="portal-fsd-note-label">Latest evaluation</span>
+                    <strong class="portal-fsd-note-value">@(latestEvaluated?.ToString("dd MMM HH:mm") ?? "Pending")</strong>
+                    <span class="portal-fsd-note-copy">Most recent rule evaluation timestamp visible in the current dataset.</span>
+                </div>
+            </div>
+        </section>
+
+        <section class="portal-fsd-stat-grid" aria-label="Cross-sheet validation metrics">
+            <article class="portal-fsd-stat">
+                <span class="portal-fsd-stat-label">Pass rate</span>
+                <strong class="portal-fsd-stat-value">@passRate.ToString("F1")%</strong>
+                <p class="portal-fsd-stat-copy">Passing rules as a share of the total rule estate in the current period.</p>
+            </article>
+            <article class="portal-fsd-stat">
+                <span class="portal-fsd-stat-label">Hard failures</span>
+                <strong class="portal-fsd-stat-value">@hardFailCount</strong>
+                <p class="portal-fsd-stat-copy">Failing rules marked as hard errors instead of soft warning conditions.</p>
+            </article>
+            <article class="portal-fsd-stat">
+                <span class="portal-fsd-stat-label">Submitted templates</span>
+                <strong class="portal-fsd-stat-value">@data.DependencyNodes.Count(n => n.IsSubmitted)</strong>
+                <p class="portal-fsd-stat-copy">Templates already in scope for current-period cross-sheet evaluation.</p>
+            </article>
+            <article class="portal-fsd-stat">
+                <span class="portal-fsd-stat-label">History windows</span>
+                <strong class="portal-fsd-stat-value">@data.Trend.Count</strong>
+                <p class="portal-fsd-stat-copy">Historical periods retained in the cross-sheet pass-rate trend strip.</p>
+            </article>
+        </section>
+
+        <div class="xs-page @(_viewMode == ViewMode.Comparator ? "xs-page--wide" : "")">
 
         <PortalPageHeader Title="Cross-Sheet Validation Status"
                           Subtitle="@($"Consistency rules between return templates for {data.CurrentPeriod}.")"
@@ -1004,6 +1079,7 @@ else
             </div>
         </div>
     }
+</div>
 }
 
 @code {
@@ -1209,4 +1285,31 @@ else
 
     private async Task ExportPdf() =>
         await JS.InvokeVoidAsync("xsComparator.exportPdf");
+
+    private static string ResolveXsBannerTone(int failingCount, int hardFailCount, int notEvaluatedCount, int missingDependencies)
+    {
+        if (hardFailCount > 0 || missingDependencies > 0) return "danger";
+        if (failingCount > 0 || notEvaluatedCount > 0) return "warning";
+        return "success";
+    }
+
+    private static string BuildXsBannerHeadline(int failingCount, int hardFailCount, int notEvaluatedCount, int missingDependencies)
+    {
+        if (hardFailCount > 0)
+            return $"{hardFailCount} hard cross-sheet rule{(hardFailCount == 1 ? "" : "s")} are currently failing.";
+
+        if (missingDependencies > 0)
+            return $"{missingDependencies} dependency gap{(missingDependencies == 1 ? "" : "s")} are preventing full evaluation.";
+
+        if (failingCount > 0 || notEvaluatedCount > 0)
+            return "The rule estate is partially healthy, but unresolved failures and unevaluated rules remain.";
+
+        return "Cross-sheet validation is currently balanced and passing cleanly.";
+    }
+
+    private static string BuildXsBannerCopy(decimal passRate, CrossSheetRuleStatusItem? leadRule, DateTime? latestEvaluated)
+    {
+        var latestLabel = latestEvaluated?.ToString("dd MMM yyyy HH:mm") ?? "an unevaluated window";
+        return $"Current pass rate is {passRate:F1}%. {(leadRule is null ? "No single rule is dominating the queue." : $"{leadRule.RuleCode} is the clearest current focus.")} Latest activity landed at {latestLabel}.";
+    }
 }

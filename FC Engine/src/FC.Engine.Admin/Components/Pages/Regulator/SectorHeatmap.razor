@@ -33,14 +33,21 @@
 <SectionErrorBoundary Title="Couldn't load heatmap data" ExternalError="@_loadException" OnRetry="LoadDataAsync">
     @if (_loading)
     {
-        <div class="rg-risk-summary-row">
+        <div class="rg-premium-flow">
+            <div class="rg-premium-banner"><SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Block" Height="138px" /></div>
+            <div class="rg-premium-hero"><SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Block" Height="210px" /></div>
+            <div class="rg-premium-stat-grid">
                 @for (var i = 0; i < 4; i++)
                 {
-                    <SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Card" />
+                    <div class="rg-premium-stat"><SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Block" Height="140px" /></div>
                 }
             </div>
-            <SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Block" Height="300px" />
-}
+            <div class="rg-premium-content-grid">
+                <div class="rg-premium-main"><div class="rg-premium-panel"><SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Block" Height="420px" /></div></div>
+                <div class="rg-premium-side"><div class="rg-premium-panel"><SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Block" Height="240px" /></div><div class="rg-premium-panel"><SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Block" Height="260px" /></div></div>
+            </div>
+        </div>
+    }
     else if (_cells.Count == 0)
     {
         <EmptyState Context="data"
@@ -51,58 +58,181 @@
     }
     else
     {
-        <div class="rg-risk-summary-row">
-            @foreach (var band in new[] { "Critical", "Red", "Amber", "Green" })
-            {
-                var count = _cells.Count(c =>
-                    string.Equals(c.Band.ToString(), band, StringComparison.OrdinalIgnoreCase));
-                <div class="rg-risk-card rg-risk-card-@band.ToLowerInvariant()">
-                    <span class="rg-risk-card-count">@count</span>
-                    <span class="rg-risk-card-label">@band</span>
-                </div>
-            }
-        </div>
+        var criticalCount = _cells.Count(c => c.Band == RiskBand.Critical);
+        var redCount = _cells.Count(c => c.Band == RiskBand.Red);
+        var averageScore = _cells.Average(c => c.CompositeScore);
+        var leadCritical = _cells.OrderByDescending(c => c.CompositeScore).ThenByDescending(c => c.ActiveEWICount).First();
+        var largestEntity = _cells.OrderByDescending(c => c.TotalAssets).First();
 
-        <div class="rg-heatmap-container">
-            @foreach (var cell in _cells.OrderByDescending(c => c.CompositeScore))
-            {
-                var bandClass = cell.Band switch
+        <div class="rg-premium-flow">
+            <section class="rg-premium-banner @ResolveHeatmapBannerTone(criticalCount, redCount, averageScore)" aria-label="Sector heatmap posture">
+                <div class="rg-premium-banner__grid">
+                    <div>
+                        <div class="rg-premium-banner__eyebrow">Sector risk posture</div>
+                        <h2 class="rg-premium-banner__headline">@BuildHeatmapBannerHeadline(criticalCount, redCount, averageScore)</h2>
+                        <p class="rg-premium-banner__detail">@BuildHeatmapBannerDetail(leadCritical, largestEntity, averageScore)</p>
+                    </div>
+                    <div class="rg-premium-banner__meta">
+                        <div class="rg-premium-banner__meta-label">Current heatmap scope</div>
+                        <div class="rg-premium-banner__meta-value">@BuildHeatmapScopeLabel()</div>
+                        <div class="rg-premium-banner__meta-copy">@_cells.Count entities · period @_periodCode</div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="rg-premium-hero" aria-labelledby="sector-heatmap-hero-title">
+                <div class="rg-premium-hero__grid">
+                    <div>
+                        <div class="rg-premium-hero__eyebrow">Systemic concentration lane</div>
+                        <h1 id="sector-heatmap-hero-title" class="rg-premium-hero__title">See which supervised entities are shaping the sector risk picture at a glance.</h1>
+                        <p class="rg-premium-hero__subtitle">
+                            Bubble size reflects institutional scale while colour reflects composite risk band. This gives supervisors a fast way to see
+                            whether pressure is concentrated in large institutions, a cluster of smaller firms, or both.
+                        </p>
+                        <div class="rg-premium-badge-row">
+                            <span class="rg-premium-chip rg-premium-chip--info">@_regulatorCode sector</span>
+                            <span class="rg-premium-chip @(criticalCount > 0 ? "rg-premium-chip--danger" : redCount > 0 ? "rg-premium-chip--warning" : "rg-premium-chip--success")">@criticalCount critical · @redCount red</span>
+                            <span class="rg-premium-chip @(averageScore > 2.5 ? "rg-premium-chip--danger" : averageScore > 1.5 ? "rg-premium-chip--warning" : "rg-premium-chip--success")">@averageScore.ToString("F2") avg composite score</span>
+                        </div>
+                    </div>
+                    <div class="rg-premium-hero__aside">
+                        <div class="rg-premium-note">
+                            <div class="rg-premium-note__label">Highest composite risk</div>
+                            <div class="rg-premium-note__value">@leadCritical.InstitutionName</div>
+                            <div class="rg-premium-note__copy">@leadCritical.CompositeScore.ToString("F2") composite score with @leadCritical.ActiveEWICount active EWIs.</div>
+                        </div>
+                        <div class="rg-premium-note">
+                            <div class="rg-premium-note__label">Largest footprint</div>
+                            <div class="rg-premium-note__value">@largestEntity.InstitutionName</div>
+                            <div class="rg-premium-note__copy">@largestEntity.TotalAssets.ToString("N0") total assets with a @largestEntity.Band band rating.</div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="rg-premium-stat-grid" aria-label="Sector heatmap summary metrics">
+                @foreach (var band in new[] { "Critical", "Red", "Amber", "Green" })
                 {
-                    RiskBand.Green    => "rg-band-green",
-                    RiskBand.Amber    => "rg-band-amber",
-                    RiskBand.Red      => "rg-band-red",
-                    RiskBand.Critical => "rg-band-critical",
-                    _                 => "rg-band-green"
-                };
-
-                var sizeRem = cell.TotalAssets > 0
-                    ? Math.Max(4, Math.Min(14, 2 + Math.Log10((double)cell.TotalAssets + 1) * 1.5))
-                    : 4.0;
-
-                <div class="rg-heatmap-cell @bandClass @(cell.HasCriticalEWI ? "rg-has-critical" : "")"
-                     style="width:@(sizeRem.ToString("F1"))rem; height:@(sizeRem.ToString("F1"))rem;"
-                     title="@cell.InstitutionName — Score: @cell.CompositeScore.ToString("F2") | EWIs: @cell.ActiveEWICount"
-                     @onclick="() => DrillDown(cell.InstitutionId)">
-                    <span class="rg-cell-abbr">
-                        @(cell.InstitutionName.Length > 8
-                            ? cell.InstitutionName[..8]
-                            : cell.InstitutionName)
-                    </span>
-                    <span class="rg-cell-score">@cell.CompositeScore.ToString("F1")</span>
-                    @if (cell.ActiveEWICount > 0)
+                    var count = _cells.Count(c => string.Equals(c.Band.ToString(), band, StringComparison.OrdinalIgnoreCase));
+                    var valueClass = band switch
                     {
-                        <span class="rg-cell-ewi-badge">@cell.ActiveEWICount</span>
-                    }
-                </div>
-            }
-        </div>
+                        "Critical" or "Red" => "rg-premium-stat__value--danger",
+                        "Amber" => "rg-premium-stat__value--warning",
+                        _ => "rg-premium-stat__value--success"
+                    };
+                    <article class="rg-premium-stat">
+                        <div class="rg-premium-stat__label">@band band</div>
+                        <div class="rg-premium-stat__value @valueClass">@count</div>
+                        <div class="rg-premium-stat__note">Entities currently falling into the @band.ToLowerInvariant() sector risk bucket.</div>
+                    </article>
+                }
+            </section>
 
-        <div class="rg-heatmap-legend">
-            <span class="rg-legend-item"><span class="rg-legend-dot rg-band-green"></span> Green (≤1.5): Stable</span>
-            <span class="rg-legend-item"><span class="rg-legend-dot rg-band-amber"></span> Amber (1.5–2.5): Watch</span>
-            <span class="rg-legend-item"><span class="rg-legend-dot rg-band-red"></span> Red (2.5–3.5): Intervene</span>
-            <span class="rg-legend-item"><span class="rg-legend-dot rg-band-critical"></span> Critical (&gt;3.5): Emergency</span>
-            <span class="rg-legend-item rg-muted">Bubble size = total assets (log scale)</span>
+            <section class="rg-premium-content-grid">
+                <div class="rg-premium-main">
+                    <article class="rg-premium-panel">
+                        <div class="rg-premium-panel__header">
+                            <div>
+                                <div class="rg-premium-panel__eyebrow">Bubble field</div>
+                                <h2 class="rg-premium-panel__title">Sector risk heatmap</h2>
+                                <p class="rg-premium-panel__subtitle">Click a bubble to drill into the institution and see the risk drivers behind its current band.</p>
+                            </div>
+                            <div class="rg-premium-panel__metric">
+                                <span class="rg-premium-panel__metric-label">Visible entities</span>
+                                @_cells.Count
+                            </div>
+                        </div>
+                        <div class="rg-premium-panel__body">
+                            <div class="rg-heatmap-container">
+                                @foreach (var cell in _cells.OrderByDescending(c => c.CompositeScore))
+                                {
+                                    var bandClass = cell.Band switch
+                                    {
+                                        RiskBand.Green    => "rg-band-green",
+                                        RiskBand.Amber    => "rg-band-amber",
+                                        RiskBand.Red      => "rg-band-red",
+                                        RiskBand.Critical => "rg-band-critical",
+                                        _                 => "rg-band-green"
+                                    };
+
+                                    var sizeRem = cell.TotalAssets > 0
+                                        ? Math.Max(4, Math.Min(14, 2 + Math.Log10((double)cell.TotalAssets + 1) * 1.5))
+                                        : 4.0;
+
+                                    <div class="rg-heatmap-cell @bandClass @(cell.HasCriticalEWI ? "rg-has-critical" : "")"
+                                         style="width:@(sizeRem.ToString("F1"))rem; height:@(sizeRem.ToString("F1"))rem;"
+                                         title="@cell.InstitutionName — Score: @cell.CompositeScore.ToString("F2") | EWIs: @cell.ActiveEWICount"
+                                         @onclick="() => DrillDown(cell.InstitutionId)">
+                                        <span class="rg-cell-abbr">
+                                            @(cell.InstitutionName.Length > 8 ? cell.InstitutionName[..8] : cell.InstitutionName)
+                                        </span>
+                                        <span class="rg-cell-score">@cell.CompositeScore.ToString("F1")</span>
+                                        @if (cell.ActiveEWICount > 0)
+                                        {
+                                            <span class="rg-cell-ewi-badge">@cell.ActiveEWICount</span>
+                                        }
+                                    </div>
+                                }
+                            </div>
+                            <div class="rg-heatmap-legend" style="margin-top:1rem;">
+                                <span class="rg-legend-item"><span class="rg-legend-dot rg-band-green"></span> Green (≤1.5): Stable</span>
+                                <span class="rg-legend-item"><span class="rg-legend-dot rg-band-amber"></span> Amber (1.5–2.5): Watch</span>
+                                <span class="rg-legend-item"><span class="rg-legend-dot rg-band-red"></span> Red (2.5–3.5): Intervene</span>
+                                <span class="rg-legend-item"><span class="rg-legend-dot rg-band-critical"></span> Critical (&gt;3.5): Emergency</span>
+                                <span class="rg-legend-item rg-muted">Bubble size = total assets (log scale)</span>
+                            </div>
+                        </div>
+                    </article>
+                </div>
+                <aside class="rg-premium-side">
+                    <article class="rg-premium-panel">
+                        <div class="rg-premium-panel__header">
+                            <div>
+                                <div class="rg-premium-panel__eyebrow">Concentration rail</div>
+                                <h2 class="rg-premium-panel__title">Highest-risk entities</h2>
+                                <p class="rg-premium-panel__subtitle">The entities that currently dominate the upper end of the risk distribution.</p>
+                            </div>
+                        </div>
+                        <div class="rg-premium-panel__body">
+                            <div class="rg-premium-list">
+                                @foreach (var cell in _cells.OrderByDescending(c => c.CompositeScore).ThenByDescending(c => c.ActiveEWICount).Take(5))
+                                {
+                                    <article class="rg-premium-list__item">
+                                        <div class="rg-premium-list__top">
+                                            <div class="rg-premium-list__heading">@cell.InstitutionName</div>
+                                            <div class="rg-premium-list__value">@cell.CompositeScore.ToString("F2")</div>
+                                        </div>
+                                        <div class="rg-premium-list__meta">@cell.InstitutionType · @cell.ActiveEWICount active EWIs</div>
+                                    </article>
+                                }
+                            </div>
+                        </div>
+                    </article>
+                    <article class="rg-premium-panel">
+                        <div class="rg-premium-panel__header">
+                            <div>
+                                <div class="rg-premium-panel__eyebrow">Scale rail</div>
+                                <h2 class="rg-premium-panel__title">Largest institutions in scope</h2>
+                                <p class="rg-premium-panel__subtitle">Helps separate systemic concentration from smaller isolated pockets of weakness.</p>
+                            </div>
+                        </div>
+                        <div class="rg-premium-panel__body">
+                            <div class="rg-premium-list">
+                                @foreach (var cell in _cells.OrderByDescending(c => c.TotalAssets).Take(5))
+                                {
+                                    <article class="rg-premium-list__item">
+                                        <div class="rg-premium-list__top">
+                                            <div class="rg-premium-list__heading">@cell.InstitutionName</div>
+                                            <div class="rg-premium-list__value">@cell.TotalAssets.ToString("N0")</div>
+                                        </div>
+                                        <div class="rg-premium-list__meta">@cell.Band band · composite @cell.CompositeScore.ToString("F2")</div>
+                                    </article>
+                                }
+                            </div>
+                        </div>
+                    </article>
+                </aside>
+            </section>
         </div>
     }
 </SectionErrorBoundary>
@@ -150,5 +280,48 @@
     {
         var now = DateTime.UtcNow.AddMonths(-1);
         return $"{now.Year}-{now.Month:D2}";
+    }
+
+    private static string ResolveHeatmapBannerTone(int criticalCount, int redCount, double averageScore)
+    {
+        if (criticalCount > 0 || averageScore > 2.5d)
+        {
+            return "rg-premium-banner--danger";
+        }
+
+        if (redCount > 0 || averageScore > 1.5d)
+        {
+            return "rg-premium-banner--warning";
+        }
+
+        return "rg-premium-banner--success";
+    }
+
+    private static string BuildHeatmapBannerHeadline(int criticalCount, int redCount, double averageScore)
+    {
+        if (criticalCount > 0)
+        {
+            return "Critical sector-risk pockets are visible and need immediate supervisory attention.";
+        }
+
+        if (redCount > 0 || averageScore > 1.5d)
+        {
+            return "Sector heatmap signals are elevated, with multiple entities moving into the watch and intervene bands.";
+        }
+
+        return "Sector heatmap remains broadly stable across the current supervised population.";
+    }
+
+    private static string BuildHeatmapBannerDetail(HeatmapCell leadCritical, HeatmapCell largestEntity, double averageScore)
+    {
+        return $"{leadCritical.InstitutionName} currently carries the highest composite score at {leadCritical.CompositeScore:F2}. " +
+               $"{largestEntity.InstitutionName} is the largest institution in scope. Average composite score is {averageScore:F2}.";
+    }
+
+    private string BuildHeatmapScopeLabel()
+    {
+        return string.IsNullOrWhiteSpace(_institutionTypeFilter)
+            ? $"{_regulatorCode} · All institution types"
+            : $"{_regulatorCode} · {_institutionTypeFilter}";
     }
 }

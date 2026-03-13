@@ -6,8 +6,10 @@
 <PageTitle>Sanctions & AML</PageTitle>
 
 <PageHeader Title="Sanctions & AML"
-            Subtitle="Screen names and transactions, manage alerts, track watchlist sources, and review false positives."
-            BackUrl="/regulator">
+            Subtitle="Watchlist source health, screening activity, review quality, and transaction controls in one supervisory surface."
+            BackUrl="/regulator"
+            StatusBadge="@ResolveStatusBadge()"
+            StatusVariant="@ResolveStatusVariant()">
     <PrimaryAction>
         <button class="fc-btn fc-btn--primary" @onclick="ReloadAsync" disabled="@_loading">Refresh</button>
     </PrimaryAction>
@@ -17,11 +19,21 @@
     <SectionErrorBoundary Title="Failed to load sanctions data" ExternalError="@_loadException" OnRetry="ReloadAsync">
         @if (_loading)
         {
-            <div class="rg-san-kpi-strip">
-                @for (var i = 0; i < 4; i++)
-                {
-                    <div class="rg-san-kpi"><SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Block" Height="88px" /></div>
-                }
+            <div class="rg-premium-flow">
+                <div class="rg-premium-banner"><SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Block" Height="138px" /></div>
+                <div class="rg-premium-stat-grid">
+                    @for (var i = 0; i < 5; i++)
+                    {
+                        <div class="rg-premium-stat"><SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Block" Height="140px" /></div>
+                    }
+                </div>
+                <div class="rg-premium-content-grid">
+                    <div class="rg-premium-main"><div class="rg-premium-panel"><SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Block" Height="400px" /></div></div>
+                    <div class="rg-premium-side">
+                        <div class="rg-premium-panel"><SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Block" Height="240px" /></div>
+                        <div class="rg-premium-panel"><SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Block" Height="260px" /></div>
+                    </div>
+                </div>
             </div>
         }
         else if (_data is null)
@@ -30,118 +42,125 @@
         }
         else
         {
-            <div class="rg-san-kpi-strip">
-                <div class="rg-san-kpi">
-                    <div class="rg-san-kpi-value">@_data.SourceCount</div>
-                    <div class="rg-san-kpi-label">Watchlist Sources</div>
-                </div>
-                <div class="rg-san-kpi">
-                    <div class="rg-san-kpi-value">@_data.EntryCount</div>
-                    <div class="rg-san-kpi-label">Watchlist Entries</div>
-                </div>
-                <div class="rg-san-kpi">
-                    <div class="rg-san-kpi-value">@_data.FalsePositiveCount</div>
-                    <div class="rg-san-kpi-label">False Positives</div>
-                </div>
-                <div class="rg-san-kpi">
-                    <div class="rg-san-kpi-value">@_data.ReviewAuditCount</div>
-                    <div class="rg-san-kpi-label">Review Decisions</div>
-                </div>
-            </div>
+            <div class="rg-premium-flow">
+                <section class="rg-premium-banner @ResolveBannerTone()" aria-label="Screening posture">
+                    <div class="rg-premium-banner__grid">
+                        <div>
+                            <div class="rg-premium-banner__eyebrow">Screening posture</div>
+                            <h2 class="rg-premium-banner__headline">@BuildBannerHeadline()</h2>
+                            <p class="rg-premium-banner__detail">@BuildBannerDetail()</p>
+                        </div>
+                        <div class="rg-premium-banner__meta">
+                            <div class="rg-premium-banner__meta-label">Latest screening run</div>
+                            <div class="rg-premium-banner__meta-value">@BuildLatestRunLabel()</div>
+                            <div class="rg-premium-banner__meta-copy">@BuildLatestRunCopy()</div>
+                        </div>
+                    </div>
+                </section>
 
-            <div class="rg-hub-grid">
-                <a class="rg-hub-card" href="/regulator/sanctions/screening" style="--stagger-i:0;">
-                    <div class="rg-hub-card-icon rg-hub-icon--blue">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="24" height="24" aria-hidden="true">
-                            <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
-                        </svg>
-                    </div>
-                    <h3 class="rg-hub-card-title">Screening</h3>
-                    <p class="rg-hub-card-desc">Screen individual names or batch lists against watchlists</p>
-                </a>
-                <a class="rg-hub-card" href="/regulator/sanctions/alerts" style="--stagger-i:1;">
-                    <div class="rg-hub-card-icon rg-hub-icon--red">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="24" height="24" aria-hidden="true">
-                            <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
-                            <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
-                        </svg>
-                    </div>
-                    <h3 class="rg-hub-card-title">Alert Management</h3>
-                    <p class="rg-hub-card-desc">Review active alerts, escalations, and resolved matches</p>
-                </a>
-                <a class="rg-hub-card" href="/regulator/sanctions/watchlists" style="--stagger-i:2;">
-                    <div class="rg-hub-card-icon rg-hub-icon--green">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="24" height="24" aria-hidden="true">
-                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                            <polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/>
-                        </svg>
-                    </div>
-                    <h3 class="rg-hub-card-title">Watchlist Management</h3>
-                    <p class="rg-hub-card-desc">View sources, entry counts, refresh cadence, and status</p>
-                </a>
-                <a class="rg-hub-card" href="/regulator/sanctions/false-positives" style="--stagger-i:3;">
-                    <div class="rg-hub-card-icon rg-hub-icon--amber">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="24" height="24" aria-hidden="true">
-                            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
-                            <polyline points="9 12 12 15 16 10"/>
-                        </svg>
-                    </div>
-                    <h3 class="rg-hub-card-title">False Positive Library</h3>
-                    <p class="rg-hub-card-desc">Reviewed false positive matches with decision audit trail</p>
-                </a>
-            </div>
-
-            @if (_data.LatestRun is not null)
-            {
-                <div class="fc-card fc-card--mb" style="margin-top:var(--space-4);">
-                    <div class="fc-card__header"><h2 class="fc-card__title">Latest Screening Run</h2></div>
-                    <div class="fc-card__body">
-                        <div class="rg-san-kpi-strip rg-san-kpi-strip--compact">
-                            <div class="rg-san-kpi">
-                                <div class="rg-san-kpi-value">@_data.LatestRun.TotalSubjects</div>
-                                <div class="rg-san-kpi-label">Subjects Screened</div>
+                <section class="rg-premium-hero" aria-labelledby="sanctions-hero-title">
+                    <div class="rg-premium-hero__grid">
+                        <div>
+                            <div class="rg-premium-hero__eyebrow">Sanctions command lane</div>
+                            <h1 id="sanctions-hero-title" class="rg-premium-hero__title">Move from raw matches to defensible review decisions.</h1>
+                            <p class="rg-premium-hero__subtitle">
+                                The screening estate now exposes source freshness, review quality, linked return-pack attention,
+                                and the latest transaction control outcome so supervisors can see the operating picture quickly.
+                            </p>
+                            <div class="rg-premium-badge-row">
+                                <span class="rg-premium-chip rg-premium-chip--info">@_data.SourceCount watchlist sources</span>
+                                <span class="rg-premium-chip @BuildMatchChipClass()">@BuildMatchChipLabel()</span>
+                                <span class="rg-premium-chip @BuildAttentionChipClass()">@_data.ReturnPackAttentionCount return-pack items</span>
                             </div>
-                            <div class="rg-san-kpi">
-                                <div class="rg-san-kpi-value @(_data.LatestRun.MatchCount > 0 ? "rg-san-kpi-value--red" : "rg-san-kpi-value--green")">@_data.LatestRun.MatchCount</div>
-                                <div class="rg-san-kpi-label">Matches Found</div>
+                        </div>
+                        <div class="rg-premium-hero__aside">
+                            <div class="rg-premium-note">
+                                <div class="rg-premium-note__label">False positives</div>
+                                <div class="rg-premium-note__value">@_data.FalsePositiveCount</div>
+                                <div class="rg-premium-note__copy">Reviewed matches that were cleared and retained in the decision memory for future screening quality.</div>
                             </div>
-                            <div class="rg-san-kpi">
-                                <div class="rg-san-kpi-value">@_data.LatestRun.ThresholdPercent.ToString("F0")%</div>
-                                <div class="rg-san-kpi-label">Threshold</div>
-                            </div>
-                            <div class="rg-san-kpi">
-                                <div class="rg-san-kpi-value">@_data.LatestRun.ScreenedAt.ToString("dd MMM HH:mm")</div>
-                                <div class="rg-san-kpi-label">Screened At</div>
+                            <div class="rg-premium-note">
+                                <div class="rg-premium-note__label">Last update</div>
+                                <div class="rg-premium-note__value">@_data.LastUpdatedAt.ToString("dd MMM")</div>
+                                <div class="rg-premium-note__copy">Watchlist catalog last refreshed at @_data.LastUpdatedAt.ToString("dd MMM yyyy HH:mm") UTC.</div>
                             </div>
                         </div>
                     </div>
-                </div>
-            }
+                </section>
 
-            @if (_data.LatestTransaction is not null)
-            {
-                <div class="fc-card">
-                    <div class="fc-card__header"><h2 class="fc-card__title">Latest Transaction Check</h2></div>
-                    <div class="fc-card__body">
-                        <div class="rg-san-kpi-strip rg-san-kpi-strip--compact">
-                            <div class="rg-san-kpi">
-                                <div class="rg-san-kpi-value">@_data.LatestTransaction.TransactionReference</div>
-                                <div class="rg-san-kpi-label">Reference</div>
-                            </div>
-                            <div class="rg-san-kpi">
-                                <div class="rg-san-kpi-value">@_data.LatestTransaction.Amount.ToString("N2") @_data.LatestTransaction.Currency</div>
-                                <div class="rg-san-kpi-label">Amount</div>
-                            </div>
-                            <div class="rg-san-kpi">
-                                <div class="rg-san-kpi-value">
-                                    <span class="fc-badge @ControlBadge(_data.LatestTransaction.ControlDecision)">@_data.LatestTransaction.ControlDecision</span>
+                <section class="rg-premium-stat-grid" aria-label="Sanctions metrics">
+                    <article class="rg-premium-stat"><div class="rg-premium-stat__label">Watchlist sources</div><div class="rg-premium-stat__value rg-premium-stat__value--info">@_data.SourceCount</div><div class="rg-premium-stat__note">Distinct catalog sources currently feeding the screening estate.</div></article>
+                    <article class="rg-premium-stat"><div class="rg-premium-stat__label">Watchlist entries</div><div class="rg-premium-stat__value">@_data.EntryCount</div><div class="rg-premium-stat__note">Total subjects and entities across the active watchlist catalog.</div></article>
+                    <article class="rg-premium-stat"><div class="rg-premium-stat__label">False positives</div><div class="rg-premium-stat__value @BuildFalsePositiveValueClass()">@_data.FalsePositiveCount</div><div class="rg-premium-stat__note">Cleared matches held for review consistency and model tuning.</div></article>
+                    <article class="rg-premium-stat"><div class="rg-premium-stat__label">Review decisions</div><div class="rg-premium-stat__value rg-premium-stat__value--warning">@_data.ReviewAuditCount</div><div class="rg-premium-stat__note">Audit-trailed control decisions logged across recent screening activity.</div></article>
+                    <article class="rg-premium-stat"><div class="rg-premium-stat__label">Return-pack attention</div><div class="rg-premium-stat__value @BuildAttentionValueClass()">@_data.ReturnPackAttentionCount</div><div class="rg-premium-stat__note">Return pack sections currently needing supervisory follow-up because of screening signals.</div></article>
+                </section>
+
+                <section class="rg-premium-content-grid">
+                    <div class="rg-premium-main">
+                        <section class="rg-premium-panel">
+                            <div class="rg-premium-panel__header">
+                                <div>
+                                    <div class="rg-premium-panel__eyebrow">Execution lanes</div>
+                                    <h2 class="rg-premium-panel__title">Sanctions workstreams</h2>
+                                    <p class="rg-premium-panel__subtitle">Go straight to the part of the screening estate that needs action.</p>
                                 </div>
-                                <div class="rg-san-kpi-label">Decision</div>
                             </div>
-                        </div>
+                            <div class="rg-premium-panel__body">
+                                <div class="rg-premium-action-grid">
+                                    @foreach (var card in ActionCards)
+                                    {
+                                        <a class="rg-premium-link-card" href="@card.Href">
+                                            <div class="rg-premium-link-card__icon" style="@card.IconStyle">@((MarkupString)card.IconSvg)</div>
+                                            <h3 class="rg-premium-link-card__title">@card.Title</h3>
+                                            <p class="rg-premium-link-card__desc">@card.Description</p>
+                                            <div class="rg-premium-link-card__footer"><span>@card.Footer</span><span class="rg-premium-link-card__arrow" aria-hidden="true">-&gt;</span></div>
+                                        </a>
+                                    }
+                                </div>
+                            </div>
+                        </section>
                     </div>
-                </div>
-            }
+
+                    <aside class="rg-premium-side">
+                        <section class="rg-premium-panel">
+                            <div class="rg-premium-panel__header"><div><div class="rg-premium-panel__eyebrow">Latest run</div><h2 class="rg-premium-panel__title">Screening run snapshot</h2><p class="rg-premium-panel__subtitle">Operational detail from the most recent screening session.</p></div></div>
+                            <div class="rg-premium-panel__body">
+                                @if (_data.LatestRun is null)
+                                {
+                                    <div class="rg-premium-empty">No stored screening run is available yet.</div>
+                                }
+                                else
+                                {
+                                    <div class="rg-premium-list">
+                                        <article class="rg-premium-list__item"><div class="rg-premium-list__top"><div class="rg-premium-list__heading">Subjects screened</div><div class="rg-premium-list__value">@_data.LatestRun.TotalSubjects</div></div></article>
+                                        <article class="rg-premium-list__item"><div class="rg-premium-list__top"><div class="rg-premium-list__heading">Matches found</div><div class="rg-premium-list__value">@_data.LatestRun.MatchCount</div></div></article>
+                                        <article class="rg-premium-list__item"><div class="rg-premium-list__top"><div class="rg-premium-list__heading">Threshold</div><div class="rg-premium-list__value">@_data.LatestRun.ThresholdPercent.ToString("F0")%</div></div></article>
+                                    </div>
+                                }
+                            </div>
+                        </section>
+
+                        <section class="rg-premium-panel">
+                            <div class="rg-premium-panel__header"><div><div class="rg-premium-panel__eyebrow">Transaction control</div><h2 class="rg-premium-panel__title">Latest transaction check</h2><p class="rg-premium-panel__subtitle">Most recent transaction-level screening decision in the control estate.</p></div></div>
+                            <div class="rg-premium-panel__body">
+                                @if (_data.LatestTransaction is null)
+                                {
+                                    <div class="rg-premium-empty">No transaction screening result is available yet.</div>
+                                }
+                                else
+                                {
+                                    <div class="rg-premium-list">
+                                        <article class="rg-premium-list__item"><div class="rg-premium-list__top"><div class="rg-premium-list__heading">Reference</div><div class="rg-premium-list__value">@_data.LatestTransaction.TransactionReference</div></div></article>
+                                        <article class="rg-premium-list__item"><div class="rg-premium-list__top"><div class="rg-premium-list__heading">Amount</div><div class="rg-premium-list__value">@_data.LatestTransaction.Amount.ToString("N2") @_data.LatestTransaction.Currency</div></div></article>
+                                        <article class="rg-premium-list__item"><div class="rg-premium-list__top"><div class="rg-premium-list__heading">Decision</div><div class="rg-premium-list__value"><span class="fc-badge @ControlBadge(_data.LatestTransaction.ControlDecision)">@_data.LatestTransaction.ControlDecision</span></div></div></article>
+                                    </div>
+                                }
+                            </div>
+                        </section>
+                    </aside>
+                </section>
+            </div>
         }
     </SectionErrorBoundary>
 </div>
@@ -151,19 +170,98 @@
     private Exception? _loadException;
     private FC.Engine.Admin.Services.Sanctions.ScreeningDashboardData? _data;
 
+    private static readonly ActionCard[] ActionCards =
+    [
+        new("Screening", "/regulator/sanctions/screening", "Run single-name and batch screening against the active watchlist estate.", "Best for active checks", "background:linear-gradient(135deg,#2563EB,#0EA5E9);", "<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" width=\"24\" height=\"24\" aria-hidden=\"true\"><circle cx=\"11\" cy=\"11\" r=\"8\"/><line x1=\"21\" y1=\"21\" x2=\"16.65\" y2=\"16.65\"/></svg>"),
+        new("Alert Management", "/regulator/sanctions/alerts", "Review active alerts, escalations, and resolved control cases.", "Best for investigation flow", "background:linear-gradient(135deg,#D32F2F,#7C3AED);", "<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" width=\"24\" height=\"24\" aria-hidden=\"true\"><path d=\"M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z\"/><line x1=\"12\" y1=\"9\" x2=\"12\" y2=\"13\"/><line x1=\"12\" y1=\"17\" x2=\"12.01\" y2=\"17\"/></svg>"),
+        new("Watchlist Management", "/regulator/sanctions/watchlists", "Inspect source status, refresh cadence, and catalog depth.", "Best for source assurance", "background:linear-gradient(135deg,#006B3F,#0F766E);", "<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" width=\"24\" height=\"24\" aria-hidden=\"true\"><path d=\"M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z\"/><polyline points=\"14 2 14 8 20 8\"/><line x1=\"16\" y1=\"13\" x2=\"8\" y2=\"13\"/><line x1=\"16\" y1=\"17\" x2=\"8\" y2=\"17\"/></svg>"),
+        new("False Positive Library", "/regulator/sanctions/false-positives", "Revisit reviewed clearances and maintain decision memory quality.", "Best for review quality", "background:linear-gradient(135deg,#C8A415,#E07C24);", "<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" width=\"24\" height=\"24\" aria-hidden=\"true\"><path d=\"M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z\"/><polyline points=\"9 12 12 15 16 10\"/></svg>")
+    ];
+
     protected override async Task OnInitializedAsync() => await ReloadAsync();
 
     private async Task ReloadAsync()
     {
         _loading = true;
         _loadException = null;
-        try
-        {
-            _data = await ScreeningEngine.GetDashboardAsync();
-        }
+        try { _data = await ScreeningEngine.GetDashboardAsync(); }
         catch (Exception ex) { _loadException = ex; }
         finally { _loading = false; }
     }
+
+    private string ResolveStatusBadge() => _loading
+        ? "Refreshing"
+        : _data is null
+            ? "Awaiting data"
+            : (_data.LatestRun?.MatchCount ?? 0) > 0
+                ? $"{_data.LatestRun?.MatchCount} matches"
+                : "Screening steady";
+
+    private string ResolveStatusVariant() => _data is null
+        ? "neutral"
+        : (_data.LatestRun?.MatchCount ?? 0) > 0 || _data.ReturnPackAttentionCount > 0
+            ? "warning"
+            : "success";
+
+    private string ResolveBannerTone() => _data is null
+        ? "rg-premium-banner--info"
+        : (_data.LatestRun?.MatchCount ?? 0) > 0
+            ? "rg-premium-banner--danger"
+            : _data.ReturnPackAttentionCount > 0 || _data.FalsePositiveCount > 0
+                ? "rg-premium-banner--warning"
+                : "rg-premium-banner--success";
+
+    private string BuildBannerHeadline()
+    {
+        if (_data is null)
+        {
+            return "Refreshing screening posture.";
+        }
+
+        if ((_data.LatestRun?.MatchCount ?? 0) > 0)
+        {
+            return "Recent screening activity produced matches that deserve supervisory attention.";
+        }
+
+        if (_data.ReturnPackAttentionCount > 0)
+        {
+            return "No acute match spike is visible, but screening outputs are still driving return-pack attention.";
+        }
+
+        return "The sanctions screening estate is currently stable and reviewable.";
+    }
+
+    private string BuildBannerDetail() => _data is null
+        ? string.Empty
+        : $"The catalog holds {_data.EntryCount} watchlist entries from {_data.SourceCount} sources, with {_data.FalsePositiveCount} false positives retained and {_data.ReviewAuditCount} review decisions recorded.";
+
+    private string BuildLatestRunLabel() => _data?.LatestRun is null
+        ? "No stored run"
+        : _data.LatestRun.ScreenedAt.ToString("dd MMM HH:mm");
+
+    private string BuildLatestRunCopy() => _data?.LatestRun is null
+        ? "Run a new screening session to generate an operational screening snapshot."
+        : $"{_data.LatestRun.TotalSubjects} subjects screened with {_data.LatestRun.MatchCount} matches at {_data.LatestRun.ThresholdPercent:F0}% threshold.";
+
+    private string BuildMatchChipClass() => _data is null
+        ? "rg-premium-chip--info"
+        : (_data.LatestRun?.MatchCount ?? 0) > 0 ? "rg-premium-chip--danger" : "rg-premium-chip--success";
+
+    private string BuildMatchChipLabel() => _data?.LatestRun is null
+        ? "No recent screening run"
+        : $"{_data.LatestRun.MatchCount} matches in latest run";
+
+    private string BuildAttentionChipClass() => _data is null
+        ? "rg-premium-chip--info"
+        : _data.ReturnPackAttentionCount > 0 ? "rg-premium-chip--warning" : "rg-premium-chip--success";
+
+    private string BuildFalsePositiveValueClass() => _data is null
+        ? string.Empty
+        : _data.FalsePositiveCount > 0 ? "rg-premium-stat__value--warning" : "rg-premium-stat__value--success";
+
+    private string BuildAttentionValueClass() => _data is null
+        ? string.Empty
+        : _data.ReturnPackAttentionCount > 0 ? "rg-premium-stat__value--warning" : "rg-premium-stat__value--success";
 
     private static string ControlBadge(string decision) => decision switch
     {
@@ -172,4 +270,6 @@
         "Clear" => "fc-badge--success",
         _ => "fc-badge--neutral"
     };
+
+    private sealed record ActionCard(string Title, string Href, string Description, string Footer, string IconStyle, string IconSvg);
 }

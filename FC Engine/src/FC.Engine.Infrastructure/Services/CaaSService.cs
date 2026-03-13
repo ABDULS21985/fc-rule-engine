@@ -1,6 +1,7 @@
 using Dapper;
 using FC.Engine.Domain.Abstractions;
 using Microsoft.Extensions.Logging;
+using System.Data;
 
 namespace FC.Engine.Infrastructure.Services;
 
@@ -231,7 +232,7 @@ public sealed class CaaSService : ICaaSService
         Guid requestId,
         CancellationToken ct = default)
     {
-        using var conn = await _db.OpenAsync(ct);
+        using var conn = await OpenConnectionAsync(ct);
 
         var rows = await conn.QueryAsync<FilingDeadlineRow>(
             """
@@ -283,7 +284,7 @@ public sealed class CaaSService : ICaaSService
         Guid requestId,
         CancellationToken ct = default)
     {
-        using var conn = await _db.OpenAsync(ct);
+        using var conn = await OpenConnectionAsync(ct);
 
         var periodFilter = request.PeriodCode ?? GetCurrentPeriodCode();
 
@@ -351,7 +352,7 @@ public sealed class CaaSService : ICaaSService
         Guid requestId,
         CancellationToken ct = default)
     {
-        using var conn = await _db.OpenAsync(ct);
+        using var conn = await OpenConnectionAsync(ct);
 
         var rows = await conn.QueryAsync<RegulatoryChangeRow>(
             """
@@ -455,7 +456,7 @@ public sealed class CaaSService : ICaaSService
             System.Security.Cryptography.RandomNumberGenerator.GetBytes(32))
             .ToLowerInvariant();
 
-        using var conn = await _db.OpenAsync(ct);
+        using var conn = await OpenConnectionAsync(ct);
         await conn.ExecuteAsync(
             """
             INSERT INTO CaaSValidationSessions
@@ -482,7 +483,7 @@ public sealed class CaaSService : ICaaSService
     private async Task<ValidationSessionRow?> GetValidSessionAsync(
         int partnerId, string sessionToken, CancellationToken ct)
     {
-        using var conn = await _db.OpenAsync(ct);
+        using var conn = await OpenConnectionAsync(ct);
         return await conn.QuerySingleOrDefaultAsync<ValidationSessionRow>(
             """
             SELECT Id, PartnerId, SessionToken, ModuleCode, PeriodCode,
@@ -499,7 +500,7 @@ public sealed class CaaSService : ICaaSService
     private async Task MarkSessionConvertedAsync(
         int partnerId, string sessionToken, long returnInstanceId, CancellationToken ct)
     {
-        using var conn = await _db.OpenAsync(ct);
+        using var conn = await OpenConnectionAsync(ct);
         await conn.ExecuteAsync(
             """
             UPDATE CaaSValidationSessions
@@ -513,7 +514,7 @@ public sealed class CaaSService : ICaaSService
         int institutionId, string moduleCode, string periodCode,
         Dictionary<string, object?> fields, int submittedBy, CancellationToken ct)
     {
-        using var conn = await _db.OpenAsync(ct);
+        using var conn = await OpenConnectionAsync(ct);
         return await conn.ExecuteScalarAsync<long>(
             """
             INSERT INTO ReturnInstances
@@ -548,6 +549,20 @@ public sealed class CaaSService : ICaaSService
 
     private static CaaSSubmitResponse SubmitFail(Guid requestId, string error)
         => new(false, null, null, null, null, error, requestId);
+
+    private async Task<IDbConnection> OpenConnectionAsync(CancellationToken ct)
+    {
+        var conn = await _db.OpenAsync(ct)
+            ?? throw new InvalidOperationException("Database connection factory returned null.");
+
+        using var command = conn.CreateCommand();
+        if (command is null)
+        {
+            throw new InvalidOperationException("Database connection does not support command creation.");
+        }
+
+        return conn;
+    }
 
     // ── Private row types ─────────────────────────────────────────────────────
     private sealed record FilingDeadlineRow(
