@@ -49,6 +49,7 @@ builder.Services.AddScoped<FC.Engine.Portal.Services.ApprovalService>();
 builder.Services.AddScoped<FC.Engine.Portal.Services.WorkflowService>();
 builder.Services.AddScoped<FC.Engine.Portal.Services.InstitutionManagementService>();
 builder.Services.AddScoped<FC.Engine.Portal.Services.NotificationService>();
+builder.Services.AddScoped<FC.Engine.Portal.Services.DeadlineExtensionRequestService>();
 builder.Services.AddScoped<FC.Engine.Portal.Services.ModuleWorkspaceService>();
 builder.Services.AddScoped<FC.Engine.Portal.Services.PortalSubmissionLaunchService>();
 builder.Services.AddScoped<FC.Engine.Portal.Services.CrossSheetDashboardService>();

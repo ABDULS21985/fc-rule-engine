@@ -11,4 +11,5 @@ public interface ISubmissionApprovalRepository
     Task<IReadOnlyList<SubmissionApproval>> GetPendingByInstitution(int institutionId, CancellationToken ct = default);
     Task Create(SubmissionApproval approval, CancellationToken ct = default);
     Task Update(SubmissionApproval approval, CancellationToken ct = default);
+    Task Delete(SubmissionApproval approval, CancellationToken ct = default);
 }

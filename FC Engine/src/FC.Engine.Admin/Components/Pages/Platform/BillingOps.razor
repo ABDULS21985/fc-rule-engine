@@ -3,6 +3,7 @@
 @using Microsoft.AspNetCore.Components.Authorization
 @using System.Security.Claims
 @using FC.Engine.Admin.Services
+@using FC.Engine.Admin.Utilities
 @using FC.Engine.Domain.Enums
 @using FC.Engine.Domain.Models
 @using FC.Engine.Infrastructure.Charts
@@ -221,9 +222,7 @@ else if (_data is not null)
     private async Task<string> GetActor()
     {
         var state = AuthState is null ? null : await AuthState;
-        return state?.User.FindFirst(ClaimTypes.NameIdentifier)?.Value
-               ?? state?.User.Identity?.Name
-               ?? "platform-admin";
+        return UserIdentityResolver.ResolveActor(state?.User);
     }
 
     private static TrendData BuildRevenueChart(List<RevenueBreakdownItem> rows, string title)

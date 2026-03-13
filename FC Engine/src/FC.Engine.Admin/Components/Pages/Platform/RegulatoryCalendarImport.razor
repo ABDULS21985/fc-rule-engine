@@ -1,6 +1,8 @@
 @page "/platform/regulatory-calendar"
 @attribute [Authorize(Policy = "PlatformAdmin")]
+@using FC.Engine.Admin.Utilities
 @using FC.Engine.Admin.Services
+@using Microsoft.AspNetCore.Components.Authorization
 @inject RegulatoryCalendarImportService ImportSvc
 @inject ToastService Toast
 @inject IJSRuntime JS
@@ -213,6 +215,8 @@
 }
 
 @code {
+    [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
+
     private List<RegulatoryCalendarRow> _rows      = new();
     private string?                     _fileName;
     private bool                        _dragging;
@@ -260,8 +264,7 @@
         StateHasChanged();
         try
         {
-            // TODO: inject actual user ID from auth context
-            _importResult = await ImportSvc.ImportAsync(_rows, importedByUserId: "platform-admin");
+            _importResult = await ImportSvc.ImportAsync(_rows, importedByUserId: await ResolveCurrentActorAsync());
 
             if (_importResult.HasErrors)
                 Toast.Warning($"Import completed with {_importResult.Errors.Count} error(s). See summary below.");
@@ -291,5 +294,11 @@
         var csv = "ReturnCode,Period,Deadline\nBSL001,2025-03,2025-04-07\nBSL002,2025-03,2025-04-15\n";
         var base64 = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(csv));
         await JS.InvokeVoidAsync("dataTable.downloadFile", "regulatory-calendar-template.csv", "text/csv", base64);
+    }
+
+    private async Task<string> ResolveCurrentActorAsync()
+    {
+        var state = AuthState is null ? null : await AuthState;
+        return UserIdentityResolver.ResolveActor(state?.User);
     }
 }

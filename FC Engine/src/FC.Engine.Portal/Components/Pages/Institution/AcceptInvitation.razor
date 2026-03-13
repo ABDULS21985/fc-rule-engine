@@ -1,0 +1,212 @@
+@page "/institution/invite/{InstitutionId:int}/{InviteId}"
+@layout LoginLayout
+@inject InstitutionManagementService MgmtSvc
+@inject NavigationManager Navigation
+
+<PageTitle>Accept Invitation — RegOS™ Portal</PageTitle>
+
+<div class="portal-login-container">
+    <div class="portal-login-card" style="max-width: 680px;">
+        @if (_loading)
+        {
+            <div style="padding: 2rem; text-align: center; color: var(--cbn-text-muted);">
+                Loading invitation…
+            </div>
+        }
+        else if (!string.IsNullOrWhiteSpace(_loadError))
+        {
+            <div class="portal-empty-state" style="padding: 2.5rem 1rem;">
+                <h2 class="portal-empty-state-title">Invitation unavailable</h2>
+                <p class="portal-empty-state-desc">@_loadError</p>
+                <a href="/login" class="portal-btn portal-btn-primary">Go to sign in</a>
+            </div>
+        }
+        else if (_accepted)
+        {
+            <div class="portal-empty-state" style="padding: 2.5rem 1rem;">
+                <h2 class="portal-empty-state-title">Account ready</h2>
+                <p class="portal-empty-state-desc">
+                    Your account for <strong>@(_profile?.Name ?? "your institution")</strong> is active.
+                    Sign in with username <strong>@_form.Username</strong>.
+                </p>
+                <a href="/login" class="portal-btn portal-btn-primary">Continue to sign in</a>
+            </div>
+        }
+        else
+        {
+            <div class="portal-login-header" style="margin-bottom: 1.5rem;">
+                <h2 class="portal-login-title">Accept Team Invitation</h2>
+                <p class="portal-login-subtitle">
+                    Join <strong>@(_profile?.Name ?? "your institution")</strong> as <strong>@(_invite?.Role ?? "Maker")</strong>.
+                </p>
+            </div>
+
+            <div class="portal-card" style="padding: 1rem; margin-bottom: 1.25rem; background: rgba(0, 107, 63, 0.05); border-color: rgba(0, 107, 63, 0.12);">
+                <div style="display: grid; gap: 0.5rem;">
+                    <div><strong>Email:</strong> @_invite?.Email</div>
+                    <div><strong>Role:</strong> @_invite?.Role</div>
+                    <div><strong>Expires:</strong> @_invite?.ExpiresAt.ToString("dddd, d MMM yyyy 'at' HH:mm 'UTC'")</div>
+                </div>
+            </div>
+
+            <div class="portal-login-form">
+                <div class="portal-form-group">
+                    <label class="portal-form-label" for="invite-display-name">Full name</label>
+                    <input id="invite-display-name" class="portal-form-input" @bind="_form.DisplayName" />
+                </div>
+
+                <div class="portal-form-group">
+                    <label class="portal-form-label" for="invite-username">Username</label>
+                    <input id="invite-username" class="portal-form-input" @bind="_form.Username" />
+                </div>
+
+                <div class="portal-form-group">
+                    <label class="portal-form-label" for="invite-password">Password</label>
+                    <input id="invite-password" type="password" class="portal-form-input" @bind="_form.Password" />
+                </div>
+
+                <div class="portal-form-group">
+                    <label class="portal-form-label" for="invite-confirm-password">Confirm password</label>
+                    <input id="invite-confirm-password" type="password" class="portal-form-input" @bind="_form.ConfirmPassword" />
+                </div>
+
+                @if (!string.IsNullOrWhiteSpace(_submitError))
+                {
+                    <div class="portal-field-error" style="margin-bottom: 1rem;">@_submitError</div>
+                }
+
+                <div style="display: flex; gap: 0.75rem; flex-wrap: wrap;">
+                    <button class="portal-btn portal-btn-primary" @onclick="Accept" disabled="@_submitting">
+                        @if (_submitting)
+                        {
+                            <span class="portal-btn-spinner" aria-hidden="true"></span>
+                        }
+                        Accept Invitation
+                    </button>
+                    <a href="/login" class="portal-btn portal-btn-ghost">Cancel</a>
+                </div>
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter] public int InstitutionId { get; set; }
+    [Parameter] public string InviteId { get; set; } = string.Empty;
+
+    private readonly AcceptInvitationForm _form = new();
+    private PendingInviteModel? _invite;
+    private InstitutionProfileModel? _profile;
+    private bool _loading = true;
+    private bool _submitting;
+    private bool _accepted;
+    private string? _loadError;
+    private string? _submitError;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _loading = true;
+        _loadError = null;
+        _submitError = null;
+
+        try
+        {
+            _invite = await MgmtSvc.GetInvitation(InstitutionId, InviteId);
+            _profile = await MgmtSvc.GetProfile(InstitutionId);
+
+            if (_invite is null)
+            {
+                _loadError = "We could not find that invitation. It may have expired, been revoked, or already been used.";
+                return;
+            }
+
+            if (_invite.ExpiresAt <= DateTime.UtcNow)
+            {
+                _loadError = "This invitation has expired. Ask your institution administrator to resend it.";
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(_form.Username))
+            {
+                _form.Username = BuildSuggestedUsername(_invite.Email);
+            }
+        }
+        catch (Exception ex)
+        {
+            _loadError = ex.Message;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task Accept()
+    {
+        _submitError = null;
+
+        if (_invite is null)
+        {
+            _submitError = "Invitation could not be loaded.";
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(_form.DisplayName) || string.IsNullOrWhiteSpace(_form.Username))
+        {
+            _submitError = "Full name and username are required.";
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(_form.Password) || _form.Password.Length < 8)
+        {
+            _submitError = "Password must be at least 8 characters.";
+            return;
+        }
+
+        if (!string.Equals(_form.Password, _form.ConfirmPassword, StringComparison.Ordinal))
+        {
+            _submitError = "Passwords do not match.";
+            return;
+        }
+
+        _submitting = true;
+        try
+        {
+            var result = await MgmtSvc.AcceptInvitation(
+                InstitutionId,
+                InviteId,
+                _form.DisplayName,
+                _form.Username,
+                _form.Password);
+
+            if (!result.Success)
+            {
+                _submitError = result.Error ?? "Invitation acceptance failed.";
+                return;
+            }
+
+            _accepted = true;
+        }
+        finally
+        {
+            _submitting = false;
+        }
+    }
+
+    private static string BuildSuggestedUsername(string email)
+    {
+        var prefix = email.Split('@')[0]
+            .Trim()
+            .ToLowerInvariant();
+
+        return string.IsNullOrWhiteSpace(prefix) ? "newuser" : prefix;
+    }
+
+    private sealed class AcceptInvitationForm
+    {
+        public string DisplayName { get; set; } = string.Empty;
+        public string Username { get; set; } = string.Empty;
+        public string Password { get; set; } = string.Empty;
+        public string ConfirmPassword { get; set; } = string.Empty;
+    }
+}

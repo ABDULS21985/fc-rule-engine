@@ -162,6 +162,7 @@
     private bool _loading = true;
     private bool _generatingAction;
     private Exception? _loadException;
+    private int _currentUserId;
     private string _regulatorCode = string.Empty;
     private string _institutionName = string.Empty;
     private string _riskBand = "GREEN";
@@ -175,6 +176,7 @@
     {
         var session = await RegulatorSession.GetRequiredAsync();
         _regulatorCode = session.RegulatorCode;
+        _currentUserId = session.UserId;
 
         if (string.IsNullOrWhiteSpace(Period))
         {
@@ -296,7 +298,7 @@
     {
         try
         {
-            await ActionEngine.IssueActionAsync(actionId, issuedByUserId: 0);
+            await ActionEngine.IssueActionAsync(actionId, issuedByUserId: _currentUserId);
             Toast.Success("Action issued.");
             await LoadAsync();
         }
@@ -310,7 +312,7 @@
     {
         try
         {
-            await ActionEngine.EscalateActionAsync(actionId, 0, "Manual escalation from portal");
+            await ActionEngine.EscalateActionAsync(actionId, _currentUserId, "Manual escalation from regulator workspace");
             Toast.Success("Action escalated.");
             await LoadAsync();
         }

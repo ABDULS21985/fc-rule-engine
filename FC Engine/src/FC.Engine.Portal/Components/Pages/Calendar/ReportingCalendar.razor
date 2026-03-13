@@ -3,6 +3,7 @@
 @inject NavigationManager Navigation
 @inject IJSRuntime JS
 @inject PortalSubmissionLaunchService SubmissionLaunchService
+@inject DeadlineExtensionRequestService ExtensionRequestService
 @using Microsoft.AspNetCore.Components.Forms
 
 <PageTitle>Reporting Calendar — RegOS™ Portal</PageTitle>
@@ -829,6 +830,7 @@
     private DateTime _extensionDate;
     private List<IBrowserFile> _extensionFiles = new();
     private bool _dropActive;
+    private string _currentUserDisplayName = "Institution user";
 
     // ── Reminder Modal ───────────────────────────────────────────
     private bool _reminderModalOpen;
@@ -942,6 +944,9 @@
             var state = await AuthState!;
             var instIdStr = state.User.FindFirst("InstitutionId")?.Value;
             int.TryParse(instIdStr, out var institutionId);
+            _currentUserDisplayName = state.User.FindFirst("DisplayName")?.Value
+                ?? state.User.Identity?.Name
+                ?? "Institution user";
 
             var rangeStart = new DateTime(currentDate.Year, currentDate.Month, 1).AddMonths(-1);
             var rangeEnd = new DateTime(currentDate.Year, currentDate.Month, 1).AddMonths(3).AddDays(-1);
@@ -1105,9 +1110,54 @@
 
     private async Task SubmitExtensionRequest()
     {
-        // Production: POST to extension request API
-        CloseExtensionModal();
-        await JS.InvokeVoidAsync("portalAnnounce", "Extension request submitted successfully.");
+        if (_extensionEntry is null)
+        {
+            return;
+        }
+
+        var state = await AuthState!;
+        int.TryParse(state.User.FindFirst("InstitutionId")?.Value, out var institutionId);
+        int.TryParse(state.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value, out var currentUserId);
+
+        try
+        {
+            var attachments = new List<DeadlineExtensionAttachmentUpload>();
+            foreach (var file in _extensionFiles)
+            {
+                await using var stream = file.OpenReadStream(5 * 1024 * 1024);
+                await using var memory = new MemoryStream();
+                await stream.CopyToAsync(memory);
+                attachments.Add(new DeadlineExtensionAttachmentUpload
+                {
+                    FileName = file.Name,
+                    ContentType = string.IsNullOrWhiteSpace(file.ContentType) ? "application/octet-stream" : file.ContentType,
+                    Content = memory.ToArray()
+                });
+            }
+
+            await ExtensionRequestService.SubmitRequest(
+                institutionId,
+                new DeadlineExtensionRequestInput
+                {
+                    RequestedByUserId = currentUserId > 0 ? currentUserId : null,
+                    RequestedByDisplayName = _currentUserDisplayName,
+                    ReturnCode = _extensionEntry.ReturnCode,
+                    TemplateName = _extensionEntry.TemplateName,
+                    ModuleCode = _extensionEntry.ModuleCode,
+                    PeriodLabel = _extensionEntry.PeriodLabel,
+                    DueDate = _extensionEntry.DueDate,
+                    RequestedUntil = _extensionDate,
+                    Reason = _extensionReason,
+                    Attachments = attachments
+                });
+
+            CloseExtensionModal();
+            await JS.InvokeVoidAsync("portalAnnounce", "Extension request submitted successfully.");
+        }
+        catch (Exception ex)
+        {
+            await JS.InvokeVoidAsync("portalAnnounce", $"Extension request failed: {ex.Message}");
+        }
     }
 
     private static string FormatFileSize(long bytes)

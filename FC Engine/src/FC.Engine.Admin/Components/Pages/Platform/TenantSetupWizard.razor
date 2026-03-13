@@ -1,8 +1,15 @@
 @page "/platform/tenant-setup"
 @layout FC.Engine.Admin.Components.Layout.MainLayout
+@attribute [Authorize(Policy = "PlatformAdmin")]
 @using FC.Engine.Admin.Components.Shared
+@using FC.Engine.Admin.Services
+@using FC.Engine.Infrastructure.Metadata
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.EntityFrameworkCore
 @inject NavigationManager Navigation
 @inject ToastService Toast
+@inject TenantManagementService TenantService
+@inject IDbContextFactory<MetadataDbContext> DbFactory
 
 <PageTitle>New Tenant Setup | RegOS Platform</PageTitle>
 
@@ -15,88 +22,140 @@
 </PageHeader>
 
 <div class="fc-wizard">
-
-    @* ── Stepper ─────────────────────────────────────── *@
     <div class="fc-wizard__stepper-wrap">
         <ProgressStepper Steps="_steps" @bind-CurrentStep="_currentStep" Clickable="true" />
     </div>
 
-    @* ── Step content ─────────────────────────────────── *@
     <div class="fc-wizard__content">
+        @if (!string.IsNullOrWhiteSpace(_catalogueError))
+        {
+            <div class="fc-alert fc-alert--inline fc-alert--error">@_catalogueError</div>
+        }
 
-        @* Step 1 — Organisation *@
         @if (_currentStep == 1)
         {
             <h2 class="fc-wizard__step-heading">Organisation details</h2>
-            <p class="fc-wizard__step-desc">Tell us about the organisation you're onboarding.</p>
+            <p class="fc-wizard__step-desc">Capture the tenant identity, slug, and licence profile before provisioning starts.</p>
 
             <div class="fc-form-grid fc-form-grid--2col fc-mt-6">
                 <div class="fc-field">
                     <label class="fc-label" for="wz-name">Organisation name <span class="fc-label-required">*</span></label>
-                    <input id="wz-name" class="fc-input" type="text" placeholder="e.g. Acme Bank Ltd"
+                    <input id="wz-name"
+                           class="fc-input"
+                           type="text"
+                           placeholder="e.g. Acme Bank Ltd"
                            @bind="_form.TenantName" />
                 </div>
                 <div class="fc-field">
                     <label class="fc-label" for="wz-slug">URL slug <span class="fc-label-required">*</span></label>
-                    <input id="wz-slug" class="fc-input" type="text" placeholder="e.g. acme-bank"
+                    <input id="wz-slug"
+                           class="fc-input"
+                           type="text"
+                           placeholder="e.g. acme-bank"
                            @bind="_form.Slug" />
-                    <span class="fc-field-hint">Lowercase letters, numbers and hyphens only.</span>
+                    <span class="fc-field-hint">Lowercase letters, numbers, and hyphens only.</span>
                 </div>
                 <div class="fc-field">
-                    <label class="fc-label" for="wz-industry">Industry</label>
-                    <select id="wz-industry" class="fc-input" @bind="_form.Industry">
-                        <option value="">Select industry…</option>
-                        <option value="banking">Banking</option>
-                        <option value="insurance">Insurance</option>
-                        <option value="asset_management">Asset Management</option>
-                        <option value="fintech">FinTech</option>
-                        <option value="other">Other</option>
+                    <label class="fc-label" for="wz-licence">Licence category <span class="fc-label-required">*</span></label>
+                    <select id="wz-licence"
+                            class="fc-input"
+                            value="@_form.LicenceCode"
+                            @onchange="OnLicenceChanged">
+                        <option value="">Select licence category...</option>
+                        @foreach (var licence in _licenceOptions)
+                        {
+                            <option value="@licence.Code">@licence.Name (@licence.Regulator)</option>
+                        }
                     </select>
+                    <span class="fc-field-hint">Eligible reporting modules and the starter plan size are derived from this licence class.</span>
                 </div>
                 <div class="fc-field">
                     <label class="fc-label" for="wz-contact">Primary contact email <span class="fc-label-required">*</span></label>
-                    <input id="wz-contact" class="fc-input" type="email" placeholder="admin@example.com"
+                    <input id="wz-contact"
+                           class="fc-input"
+                           type="email"
+                           placeholder="admin@example.com"
                            @bind="_form.ContactEmail" />
                 </div>
             </div>
         }
 
-        @* Step 2 — Modules *@
         @if (_currentStep == 2)
         {
             <h2 class="fc-wizard__step-heading">Module selection</h2>
-            <p class="fc-wizard__step-desc">Choose which modules this tenant will have access to.</p>
+            <p class="fc-wizard__step-desc">Select the regulatory reporting packs this tenant should activate on day one. Required packs stay locked in.</p>
 
-            <div class="fc-wizard__module-grid fc-mt-6">
-                @foreach (var m in _availableModules)
-                {
-                    <label class="fc-wizard__module-card @(_form.SelectedModules.Contains(m.Key) ? "fc-wizard__module-card--selected" : "")">
-                        <input type="checkbox" class="sr-only"
-                               checked="@_form.SelectedModules.Contains(m.Key)"
-                               @onchange="() => ToggleModule(m.Key)" />
-                        <div class="fc-wizard__module-icon" aria-hidden="true">@m.Icon</div>
-                        <div>
-                            <div class="fc-wizard__module-name">@m.Name</div>
-                            <div class="fc-wizard__module-desc">@m.Description</div>
+            @if (_catalogLoading)
+            {
+                <div class="fc-card fc-mt-6" aria-busy="true" aria-label="Loading eligible modules">
+                    <div class="fc-card__body">
+                        <div class="fc-skel fc-skel-text" style="--skel-w:36%;--skel-h:18px;--skel-mb:12px;"></div>
+                        <div class="fc-wizard__module-grid">
+                            @for (var i = 0; i < 4; i++)
+                            {
+                                <div class="fc-card">
+                                    <div class="fc-card__body">
+                                        <div class="fc-skel fc-skel-block" style="--skel-h:112px;"></div>
+                                    </div>
+                                </div>
+                            }
                         </div>
-                        @if (_form.SelectedModules.Contains(m.Key))
-                        {
-                            <svg class="fc-wizard__module-check" viewBox="0 0 16 16" fill="none"
-                                 stroke="currentColor" stroke-width="2.5" stroke-linecap="round"
-                                 stroke-linejoin="round" width="16" height="16" aria-hidden="true">
-                                <polyline points="2,8 6,13 14,3"/>
-                            </svg>
-                        }
-                    </label>
-                }
-            </div>
+                    </div>
+                </div>
+            }
+            else if (!VisibleModules.Any())
+            {
+                <div class="fc-empty fc-mt-6">
+                    <div class="fc-empty-icon">[]</div>
+                    <h3 class="fc-empty-title">No eligible modules available</h3>
+                    <p class="fc-empty-text">Choose a licence category first. The module catalogue is filtered to what that licence can legally activate.</p>
+                </div>
+            }
+            else
+            {
+                <div class="fc-mt-4 fc-text-muted">
+                    Plan forecast: <strong>@DerivedPlanCode</strong> for @EffectiveSelectedModules.Count active module(s).
+                </div>
+
+                <div class="fc-wizard__module-grid fc-mt-6">
+                    @foreach (var module in VisibleModules)
+                    {
+                        <label class="fc-wizard__module-card @(IsModuleSelected(module) ? "fc-wizard__module-card--selected" : string.Empty)">
+                            <input type="checkbox"
+                                   class="sr-only"
+                                   checked="@IsModuleSelected(module)"
+                                   disabled="@IsRequiredModule(module)"
+                                   @onchange="() => ToggleModule(module.Key)" />
+                            <div class="fc-wizard__module-icon" aria-hidden="true">@module.Badge</div>
+                            <div>
+                                <div class="fc-wizard__module-name">
+                                    @module.Name
+                                    @if (IsRequiredModule(module))
+                                    {
+                                        <span class="fc-badge fc-badge--neutral">Required</span>
+                                    }
+                                </div>
+                                <div class="fc-wizard__module-desc">@module.Description</div>
+                                <div class="fc-field-hint">@module.RegulatorCode</div>
+                            </div>
+                            @if (IsModuleSelected(module))
+                            {
+                                <svg class="fc-wizard__module-check" viewBox="0 0 16 16" fill="none"
+                                     stroke="currentColor" stroke-width="2.5" stroke-linecap="round"
+                                     stroke-linejoin="round" width="16" height="16" aria-hidden="true">
+                                    <polyline points="2,8 6,13 14,3" />
+                                </svg>
+                            }
+                        </label>
+                    }
+                </div>
+            }
         }
 
-        @* Step 3 — Users *@
         @if (_currentStep == 3)
         {
             <h2 class="fc-wizard__step-heading">Initial admin user</h2>
-            <p class="fc-wizard__step-desc">Create the first administrator for this tenant. They can invite others later.</p>
+            <p class="fc-wizard__step-desc">Create the first administrator for the new tenant. The account is provisioned immediately and must rotate its password on first sign-in.</p>
 
             <div class="fc-form-grid fc-form-grid--2col fc-mt-6">
                 <div class="fc-field">
@@ -113,49 +172,55 @@
                 </div>
                 <div class="fc-field">
                     <label class="fc-label" for="wz-pwd">Temporary password <span class="fc-label-required">*</span></label>
-                    <input id="wz-pwd" class="fc-input" type="password" @bind="_form.TempPassword"
-                           placeholder="Min 12 characters" />
-                    <span class="fc-field-hint">User will be prompted to change on first login.</span>
+                    <input id="wz-pwd"
+                           class="fc-input"
+                           type="password"
+                           placeholder="Minimum 12 characters"
+                           @bind="_form.TempPassword" />
+                    <span class="fc-field-hint">Use a strong bootstrap password. The platform will enforce a change on first login.</span>
                 </div>
             </div>
         }
 
-        @* Step 4 — Branding *@
         @if (_currentStep == 4)
         {
             <h2 class="fc-wizard__step-heading">Branding</h2>
-            <p class="fc-wizard__step-desc">Customise how this tenant's portal looks.</p>
+            <p class="fc-wizard__step-desc">Apply the tenant's public-facing identity so the portal is provisioned with the right look from day one.</p>
 
             <div class="fc-form-grid fc-form-grid--2col fc-mt-6">
                 <div class="fc-field">
                     <label class="fc-label" for="wz-company">Display name</label>
-                    <input id="wz-company" class="fc-input" type="text"
+                    <input id="wz-company"
+                           class="fc-input"
+                           type="text"
                            placeholder="Shown in the portal header"
                            @bind="_form.BrandName" />
                 </div>
                 <div class="fc-field">
                     <label class="fc-label" for="wz-logo">Logo URL</label>
-                    <input id="wz-logo" class="fc-input" type="url"
-                           placeholder="https://…"
+                    <input id="wz-logo"
+                           class="fc-input"
+                           type="url"
+                           placeholder="https://..."
                            @bind="_form.LogoUrl" />
                 </div>
                 <div class="fc-field">
                     <label class="fc-label" for="wz-color">Accent colour</label>
                     <div class="fc-color-picker-row">
-                        <input id="wz-color" type="color"
-                               @bind="_form.AccentColor" />
-                        <input class="fc-input fc-flex-1" type="text" placeholder="#006B3F"
+                        <input id="wz-color" type="color" @bind="_form.AccentColor" />
+                        <input class="fc-input fc-flex-1"
+                               type="text"
+                               placeholder="#006B3F"
                                @bind="_form.AccentColor" />
                     </div>
                 </div>
             </div>
         }
 
-        @* Step 5 — Review *@
         @if (_currentStep == 5)
         {
-            <h2 class="fc-wizard__step-heading">Review &amp; launch</h2>
-            <p class="fc-wizard__step-desc">Confirm the details before creating the tenant.</p>
+            <h2 class="fc-wizard__step-heading">Review and launch</h2>
+            <p class="fc-wizard__step-desc">Confirm the tenant blueprint before the platform provisions tenancy, subscription, branding, and initial return periods.</p>
 
             <div class="fc-wizard__review fc-mt-6">
                 <div class="fc-wizard__review-section">
@@ -163,17 +228,17 @@
                     <div class="fc-wizard__review-value">@_form.TenantName <span class="fc-badge">@_form.Slug</span></div>
                 </div>
                 <div class="fc-wizard__review-section">
-                    <div class="fc-wizard__review-label">Industry</div>
-                    <div class="fc-wizard__review-value">@(_form.Industry is { Length: > 0 } i ? i : "—")</div>
+                    <div class="fc-wizard__review-label">Licence category</div>
+                    <div class="fc-wizard__review-value">@SelectedLicenceName</div>
                 </div>
                 <div class="fc-wizard__review-section">
                     <div class="fc-wizard__review-label">Modules</div>
                     <div class="fc-wizard__review-value fc-wizard-modules-row">
-                        @if (_form.SelectedModules.Any())
+                        @if (EffectiveSelectedModules.Any())
                         {
-                            @foreach (var key in _form.SelectedModules)
+                            @foreach (var moduleCode in EffectiveSelectedModules)
                             {
-                                <span class="fc-badge fc-badge--success">@(_availableModules.FirstOrDefault(m => m.Key == key)?.Name ?? key)</span>
+                                <span class="fc-badge fc-badge--success">@(_availableModules.FirstOrDefault(x => x.Key == moduleCode)?.Name ?? moduleCode)</span>
                             }
                         }
                         else
@@ -183,10 +248,14 @@
                     </div>
                 </div>
                 <div class="fc-wizard__review-section">
-                    <div class="fc-wizard__review-label">Admin user</div>
-                    <div class="fc-wizard__review-value">@_form.AdminFirstName @_form.AdminLastName — @_form.AdminEmail</div>
+                    <div class="fc-wizard__review-label">Provisioning plan</div>
+                    <div class="fc-wizard__review-value">@DerivedPlanCode</div>
                 </div>
-                @if (!string.IsNullOrEmpty(_form.BrandName))
+                <div class="fc-wizard__review-section">
+                    <div class="fc-wizard__review-label">Admin user</div>
+                    <div class="fc-wizard__review-value">@_form.AdminFirstName @_form.AdminLastName - @_form.AdminEmail</div>
+                </div>
+                @if (!string.IsNullOrWhiteSpace(_form.BrandName))
                 {
                     <div class="fc-wizard__review-section">
                         <div class="fc-wizard__review-label">Brand name</div>
@@ -195,15 +264,13 @@
                 }
             </div>
         }
-
     </div>
 
-    @* ── Navigation buttons ───────────────────────────── *@
     <div class="fc-wizard__nav">
         <button class="fc-btn fc-btn--ghost" @onclick="PreviousStep" disabled="@(_currentStep == 1)">
             <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"
                  stroke-linecap="round" stroke-linejoin="round" width="14" height="14" aria-hidden="true">
-                <polyline points="10,3 5,8 10,13"/>
+                <polyline points="10,3 5,8 10,13" />
             </svg>
             Back
         </button>
@@ -216,7 +283,7 @@
                 Next
                 <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"
                      stroke-linecap="round" stroke-linejoin="round" width="14" height="14" aria-hidden="true">
-                    <polyline points="6,3 11,8 6,13"/>
+                    <polyline points="6,3 11,8 6,13" />
                 </svg>
             </button>
         }
@@ -226,109 +293,280 @@
                 @if (_saving)
                 {
                     <span class="fc-btn__spinner" aria-hidden="true"></span>
-                    <span>Creating…</span>
+                    <span>Creating...</span>
                 }
                 else
                 {
                     <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"
                          stroke-linecap="round" stroke-linejoin="round" width="14" height="14" aria-hidden="true">
-                        <polyline points="1,8 6,13 15,3"/>
+                        <polyline points="1,8 6,13 15,3" />
                     </svg>
                     <span>Create Tenant</span>
                 }
             </button>
         }
     </div>
-
 </div>
 
 @code {
-    // ── Step model ────────────────────────────────────────
-    private List<ProgressStepper.StepItem> _steps =
+    private readonly List<ProgressStepper.StepItem> _steps =
     [
-        new("Organisation",  "Name & contact"),
-        new("Modules",       "Feature access"),
-        new("Users",         "Admin account"),
-        new("Branding",      "Logo & colours"),
-        new("Review",        "Confirm & create"),
+        new("Organisation", "Name and contact"),
+        new("Modules", "Feature access"),
+        new("Users", "Admin account"),
+        new("Branding", "Logo and colours"),
+        new("Review", "Confirm and create")
     ];
 
-    private int  _currentStep = 1;
-    private bool _saving      = false;
+    private int _currentStep = 1;
+    private bool _saving;
+    private bool _catalogLoading = true;
+    private string? _catalogueError;
 
-    // ── Form model ────────────────────────────────────────
     private sealed class WizardForm
     {
-        public string TenantName    { get; set; } = "";
-        public string Slug          { get; set; } = "";
-        public string Industry      { get; set; } = "";
-        public string ContactEmail  { get; set; } = "";
+        public string TenantName { get; set; } = string.Empty;
+        public string Slug { get; set; } = string.Empty;
+        public string LicenceCode { get; set; } = string.Empty;
+        public string ContactEmail { get; set; } = string.Empty;
         public HashSet<string> SelectedModules { get; set; } = [];
-        public string AdminFirstName { get; set; } = "";
-        public string AdminLastName  { get; set; } = "";
-        public string AdminEmail     { get; set; } = "";
-        public string TempPassword   { get; set; } = "";
-        public string BrandName  { get; set; } = "";
-        public string LogoUrl    { get; set; } = "";
+        public string AdminFirstName { get; set; } = string.Empty;
+        public string AdminLastName { get; set; } = string.Empty;
+        public string AdminEmail { get; set; } = string.Empty;
+        public string TempPassword { get; set; } = string.Empty;
+        public string BrandName { get; set; } = string.Empty;
+        public string LogoUrl { get; set; } = string.Empty;
         public string AccentColor { get; set; } = "#006B3F";
     }
 
+    private sealed record LicenceOption(string Code, string Name, string Regulator);
+
+    private sealed record ModuleOption(
+        string Key,
+        string Name,
+        string Description,
+        string Badge,
+        string RegulatorCode,
+        HashSet<string> EligibleLicenceCodes,
+        HashSet<string> RequiredLicenceCodes);
+
     private readonly WizardForm _form = new();
+    private List<LicenceOption> _licenceOptions = [];
+    private List<ModuleOption> _availableModules = [];
 
-    // ── Module catalogue ──────────────────────────────────
-    private sealed record ModuleOption(string Key, string Name, string Description, string Icon);
+    private IReadOnlyList<ModuleOption> VisibleModules => string.IsNullOrWhiteSpace(_form.LicenceCode)
+        ? Array.Empty<ModuleOption>()
+        : _availableModules
+            .Where(x => x.EligibleLicenceCodes.Contains(_form.LicenceCode))
+            .ToList();
 
-    private readonly List<ModuleOption> _availableModules =
-    [
-        new("data_pipeline",    "Data Pipeline",    "Automated data collection & validation",  "⚡"),
-        new("analytics",        "Analytics",        "Charts, trends & reporting dashboards",    "📊"),
-        new("submissions",      "Submissions",      "Form submissions & workflow management",   "📥"),
-        new("templates",        "Templates",        "Regulatory form template management",      "📄"),
-        new("audit",            "Audit Log",        "Full action history & compliance trail",   "🔍"),
-        new("billing",          "Billing",          "Invoices, plans & subscription management","💳"),
-    ];
+    private IReadOnlyList<string> EffectiveSelectedModules => VisibleModules
+        .Where(IsModuleSelected)
+        .Select(x => x.Key)
+        .Distinct(StringComparer.OrdinalIgnoreCase)
+        .ToList();
 
-    // ── Navigation ────────────────────────────────────────
+    private string SelectedLicenceName => _licenceOptions.FirstOrDefault(x => x.Code == _form.LicenceCode)?.Name ?? "-";
+
+    private string DerivedPlanCode => GetPlanCode(EffectiveSelectedModules.Count);
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadCatalogueAsync();
+    }
+
+    private async Task LoadCatalogueAsync()
+    {
+        _catalogLoading = true;
+        _catalogueError = null;
+
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+
+            _licenceOptions = await db.LicenceTypes
+                .AsNoTracking()
+                .Where(x => x.IsActive)
+                .OrderBy(x => x.DisplayOrder)
+                .Select(x => new LicenceOption(x.Code, x.Name, x.Regulator))
+                .ToListAsync();
+
+            var modules = await db.Modules
+                .AsNoTracking()
+                .Where(x => x.IsActive)
+                .OrderBy(x => x.DisplayOrder)
+                .Select(x => new
+                {
+                    x.ModuleCode,
+                    x.ModuleName,
+                    x.Description,
+                    x.RegulatorCode
+                })
+                .ToListAsync();
+
+            var matrixRows = await (
+                from matrix in db.LicenceModuleMatrix.AsNoTracking()
+                join licence in db.LicenceTypes.AsNoTracking() on matrix.LicenceTypeId equals licence.Id
+                join module in db.Modules.AsNoTracking() on matrix.ModuleId equals module.Id
+                where licence.IsActive && module.IsActive
+                select new
+                {
+                    module.ModuleCode,
+                    LicenceCode = licence.Code,
+                    matrix.IsRequired
+                })
+                .ToListAsync();
+
+            _availableModules = modules
+                .Select(module =>
+                {
+                    var eligibility = matrixRows
+                        .Where(x => x.ModuleCode == module.ModuleCode)
+                        .ToList();
+
+                    return new ModuleOption(
+                        module.ModuleCode,
+                        module.ModuleName,
+                        module.Description ?? "Regulatory reporting module",
+                        ResolveModuleBadge(module.RegulatorCode, module.ModuleCode),
+                        module.RegulatorCode,
+                        eligibility.Select(x => x.LicenceCode).ToHashSet(StringComparer.OrdinalIgnoreCase),
+                        eligibility.Where(x => x.IsRequired).Select(x => x.LicenceCode).ToHashSet(StringComparer.OrdinalIgnoreCase));
+                })
+                .ToList();
+
+            SyncSelectedModules();
+        }
+        catch (Exception ex)
+        {
+            _catalogueError = $"Couldn't load tenant provisioning catalogue: {ex.Message}";
+        }
+        finally
+        {
+            _catalogLoading = false;
+        }
+    }
+
+    private Task OnLicenceChanged(ChangeEventArgs args)
+    {
+        _form.LicenceCode = args.Value?.ToString()?.Trim().ToUpperInvariant() ?? string.Empty;
+        SyncSelectedModules();
+        return Task.CompletedTask;
+    }
+
     private void NextStep()
     {
         if (_currentStep < _steps.Count && CanAdvance())
+        {
+            if (_currentStep == 1)
+            {
+                SyncSelectedModules();
+            }
+
             _currentStep++;
+        }
     }
 
     private void PreviousStep()
     {
-        if (_currentStep > 1) _currentStep--;
+        if (_currentStep > 1)
+        {
+            _currentStep--;
+        }
     }
 
     private void Cancel() => Navigation.NavigateTo("/platform/tenants");
 
     private void ToggleModule(string key)
     {
+        var module = VisibleModules.FirstOrDefault(x => x.Key == key);
+        if (module is null || IsRequiredModule(module))
+        {
+            return;
+        }
+
         if (!_form.SelectedModules.Remove(key))
+        {
             _form.SelectedModules.Add(key);
+        }
     }
+
+    private void SyncSelectedModules()
+    {
+        var visibleKeys = VisibleModules
+            .Select(x => x.Key)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        _form.SelectedModules.RemoveWhere(code => !visibleKeys.Contains(code));
+
+        foreach (var module in VisibleModules.Where(IsRequiredModule))
+        {
+            _form.SelectedModules.Add(module.Key);
+        }
+    }
+
+    private bool IsRequiredModule(ModuleOption module)
+        => !string.IsNullOrWhiteSpace(_form.LicenceCode)
+           && module.RequiredLicenceCodes.Contains(_form.LicenceCode);
+
+    private bool IsModuleSelected(ModuleOption module)
+        => IsRequiredModule(module) || _form.SelectedModules.Contains(module.Key);
 
     private bool CanAdvance() => _currentStep switch
     {
-        1 => !string.IsNullOrWhiteSpace(_form.TenantName) &&
-             !string.IsNullOrWhiteSpace(_form.Slug) &&
-             !string.IsNullOrWhiteSpace(_form.ContactEmail),
-        3 => !string.IsNullOrWhiteSpace(_form.AdminFirstName) &&
-             !string.IsNullOrWhiteSpace(_form.AdminEmail) &&
-             !string.IsNullOrWhiteSpace(_form.TempPassword),
+        1 => !_catalogLoading
+             && string.IsNullOrWhiteSpace(_catalogueError)
+             && !string.IsNullOrWhiteSpace(_form.TenantName)
+             && !string.IsNullOrWhiteSpace(_form.Slug)
+             && IsValidSlug(_form.Slug)
+             && !string.IsNullOrWhiteSpace(_form.ContactEmail)
+             && !string.IsNullOrWhiteSpace(_form.LicenceCode),
+        2 => EffectiveSelectedModules.Count > 0,
+        3 => !string.IsNullOrWhiteSpace(_form.AdminFirstName)
+             && !string.IsNullOrWhiteSpace(_form.AdminLastName)
+             && !string.IsNullOrWhiteSpace(_form.AdminEmail)
+             && !string.IsNullOrWhiteSpace(_form.TempPassword)
+             && _form.TempPassword.Length >= 12,
         _ => true
     };
 
-    // ── Submit ────────────────────────────────────────────
     private async Task CreateTenant()
     {
         _saving = true;
+
         try
         {
-            // TODO: wire to ITenantProvisioningService or API endpoint
-            await Task.Delay(1200); // simulate async call
-            Toast.Success($"\u201c{_form.TenantName}\u201d has been created successfully.");
-            Navigation.NavigateTo("/platform/tenants");
+            var result = await TenantService.ProvisionTenantAsync(new PlatformTenantProvisionRequest
+            {
+                TenantName = _form.TenantName.Trim(),
+                TenantSlug = _form.Slug.Trim(),
+                ContactEmail = _form.ContactEmail.Trim(),
+                LicenceCode = _form.LicenceCode,
+                ModuleCodes = EffectiveSelectedModules.ToList(),
+                AdminFullName = $"{_form.AdminFirstName} {_form.AdminLastName}".Trim(),
+                AdminEmail = _form.AdminEmail.Trim(),
+                TempPassword = _form.TempPassword,
+                BrandName = string.IsNullOrWhiteSpace(_form.BrandName) ? null : _form.BrandName.Trim(),
+                LogoUrl = string.IsNullOrWhiteSpace(_form.LogoUrl) ? null : _form.LogoUrl.Trim(),
+                AccentColor = _form.AccentColor
+            });
+
+            if (!result.Success)
+            {
+                Toast.Error(result.Errors.Count > 0
+                    ? string.Join(" ", result.Errors)
+                    : "Tenant provisioning failed.");
+                return;
+            }
+
+            Toast.Success($"\"{_form.TenantName}\" has been created on the {result.PlanCode} plan.");
+
+            if (result.Warnings.Count > 0)
+            {
+                Toast.Warning(string.Join(" ", result.Warnings), "Provisioning completed with warnings");
+            }
+
+            Navigation.NavigateTo($"/platform/tenants/{result.TenantId}");
         }
         catch (Exception ex)
         {
@@ -338,5 +576,38 @@
         {
             _saving = false;
         }
+    }
+
+    private static string GetPlanCode(int moduleCount) => moduleCount switch
+    {
+        <= 1 => "STARTER",
+        <= 5 => "PROFESSIONAL",
+        _ => "ENTERPRISE"
+    };
+
+    private static bool IsValidSlug(string slug)
+        => slug.All(ch => char.IsLower(ch) || char.IsDigit(ch) || ch == '-');
+
+    private static string ResolveModuleBadge(string regulatorCode, string moduleCode)
+    {
+        if (moduleCode.Contains("AML", StringComparison.OrdinalIgnoreCase))
+        {
+            return "AML";
+        }
+
+        if (moduleCode.Contains("NDIC", StringComparison.OrdinalIgnoreCase))
+        {
+            return "NDIC";
+        }
+
+        return regulatorCode.ToUpperInvariant() switch
+        {
+            "CBN" => "CBN",
+            "SEC" => "SEC",
+            "NAICOM" => "NAICOM",
+            "PENCOM" => "PENCOM",
+            "NFIU" => "NFIU",
+            _ => "MOD"
+        };
     }
 }

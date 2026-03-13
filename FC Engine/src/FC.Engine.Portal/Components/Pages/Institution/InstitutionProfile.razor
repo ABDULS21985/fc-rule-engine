@@ -582,6 +582,8 @@
     private string _cropAspect = "1:1";
     private int _cropZoom = 100;
     private bool _savingLogo;
+    private byte[]? _selectedLogoBytes;
+    private string? _selectedLogoContentType;
 
     // Contact persons inline edit
     private int? _editingContactId;
@@ -658,8 +660,22 @@
 
     // ── Logo ──────────────────────────────────────────────────────────────────
 
-    private void OpenLogoModal() { _showLogoModal = true; _cropImageSrc = null; _cropZoom = 100; }
-    private void CloseLogoModal() { _showLogoModal = false; _cropImageSrc = null; }
+    private void OpenLogoModal()
+    {
+        _showLogoModal = true;
+        _cropImageSrc = null;
+        _cropZoom = 100;
+        _selectedLogoBytes = null;
+        _selectedLogoContentType = null;
+    }
+
+    private void CloseLogoModal()
+    {
+        _showLogoModal = false;
+        _cropImageSrc = null;
+        _selectedLogoBytes = null;
+        _selectedLogoContentType = null;
+    }
 
     private void OnLogoKeyDown(KeyboardEventArgs e)
     {
@@ -673,6 +689,8 @@
         using var ms = new System.IO.MemoryStream();
         await file.OpenReadStream(2 * 1024 * 1024).CopyToAsync(ms);
         var bytes = ms.ToArray();
+        _selectedLogoBytes = bytes;
+        _selectedLogoContentType = file.ContentType;
         var b64 = Convert.ToBase64String(bytes);
         _cropImageSrc = $"data:{file.ContentType};base64,{b64}";
         await JS.InvokeVoidAsync("portalLogoCropper.load", "portal-crop-container", _cropImageSrc);
@@ -691,12 +709,11 @@
 
     private async Task SaveLogo()
     {
-        if (profile is null || _cropImageSrc is null) return;
+        if (profile is null || _selectedLogoBytes is null || string.IsNullOrWhiteSpace(_selectedLogoContentType)) return;
         _savingLogo = true;
         try
         {
-            await MgmtSvc.UploadLogo(profile.Id, Array.Empty<byte>(), "image/png");
-            profile.LogoUrl = _cropImageSrc;
+            profile.LogoUrl = await MgmtSvc.UploadLogo(profile.Id, _selectedLogoBytes, _selectedLogoContentType);
             _showLogoModal = false;
             ComputeCompleteness();
         }

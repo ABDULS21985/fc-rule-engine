@@ -2,6 +2,7 @@
 @using Microsoft.AspNetCore.Authorization
 @using Microsoft.AspNetCore.Components.Authorization
 @attribute [Authorize]
+@using FC.Engine.Admin.Utilities
 @using FC.Engine.Domain.Abstractions
 @using FC.Engine.Domain.Enums
 @using FC.Engine.Domain.Metadata
@@ -681,6 +682,7 @@
 
 @code {
     [Parameter] public string ReturnCode { get; set; } = "";
+    [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
 
     private bool _loading = true;
     private TemplateDetailDto? _detail;
@@ -705,11 +707,13 @@
     private AddFieldRequest _newField = new();
     private FieldDataType _newFieldDataType = FieldDataType.Money;
     private string _newFieldRequired = "false";
+    private string _currentUser = string.Empty;
 
-    private string CurrentUser => "system"; // TODO: get from auth state
+    private string CurrentUser => _currentUser;
 
     protected override async Task OnInitializedAsync()
     {
+        _currentUser = await ResolveCurrentUserAsync();
         await LoadTemplate();
     }
 
@@ -839,6 +843,12 @@
     private void SetError(string msg)
     {
         _errorMessage = msg;
+    }
+
+    private async Task<string> ResolveCurrentUserAsync()
+    {
+        var state = AuthState is null ? null : await AuthState;
+        return UserIdentityResolver.ResolveActor(state?.User);
     }
 
     private static string CategoryBadge(string cat) => cat.ToLowerInvariant() switch

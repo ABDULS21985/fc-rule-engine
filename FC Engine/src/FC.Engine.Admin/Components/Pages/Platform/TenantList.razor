@@ -495,9 +495,7 @@
     private async Task<string> GetActor()
     {
         var state = AuthState is null ? null : await AuthState;
-        return state?.User.FindFirst(ClaimTypes.NameIdentifier)?.Value
-               ?? state?.User.Identity?.Name
-               ?? "platform-admin";
+        return UserIdentityResolver.ResolveActor(state?.User);
     }
 
     private static void AddQuery(List<string> list, string key, string? value)

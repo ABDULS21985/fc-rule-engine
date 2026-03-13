@@ -1,6 +1,8 @@
 @page "/modules/{ModuleCode}"
 @attribute [Authorize(Roles = "PlatformAdmin")]
 @using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Authorization
+@using FC.Engine.Admin.Utilities
 @using FC.Engine.Domain.Abstractions
 @using FC.Engine.Domain.Enums
 @using FC.Engine.Domain.Metadata
@@ -146,6 +148,7 @@
 
 @code {
     [Parameter] public string ModuleCode { get; set; } = string.Empty;
+    [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
 
     private bool _loading = true;
     private bool _publishing;
@@ -235,7 +238,7 @@
         _publishing = true;
         try
         {
-            var result = await ModuleImportService.PublishModule(ModuleCode, "platform-admin");
+            var result = await ModuleImportService.PublishModule(ModuleCode, await ResolveCurrentActorAsync());
             if (result.Success)
             {
                 Toast.Success($"Module {ModuleCode} published. Tables created: {result.TablesCreated}.", "Publish Complete");
@@ -254,6 +257,12 @@
         {
             _publishing = false;
         }
+    }
+
+    private async Task<string> ResolveCurrentActorAsync()
+    {
+        var state = AuthState is null ? null : await AuthState;
+        return UserIdentityResolver.ResolveActor(state?.User);
     }
 
     private static string GetVersionBadge(string status) => status switch

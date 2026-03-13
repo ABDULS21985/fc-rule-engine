@@ -608,6 +608,14 @@
                     {
                         <div class="portal-alert portal-alert-error" role="alert">@approvalError</div>
                     }
+                    @if (!string.IsNullOrEmpty(_adminActionError))
+                    {
+                        <div class="portal-alert portal-alert-error" role="alert">@_adminActionError</div>
+                    }
+                    @if (!string.IsNullOrEmpty(_adminActionSuccess))
+                    {
+                        <div class="portal-alert portal-alert-success" role="status">@_adminActionSuccess</div>
+                    }
 
                     @if (_isAdminRole)
                     {
@@ -620,6 +628,23 @@
                                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></svg>
                                 Unlock for Edit
                             </button>
+                            @if (_showOverridePanel)
+                            {
+                                <div class="portal-action-comment-form">
+                                    <label class="portal-form-label" for="override-status-select" style="font-size:0.8rem;">New status</label>
+                                    <select id="override-status-select" class="portal-form-select" @bind="_overrideStatus">
+                                        <option value="@nameof(SubmissionStatus.Draft)">Draft</option>
+                                        <option value="@nameof(SubmissionStatus.Accepted)">Accepted</option>
+                                        <option value="@nameof(SubmissionStatus.AcceptedWithWarnings)">Accepted With Warnings</option>
+                                        <option value="@nameof(SubmissionStatus.Rejected)">Rejected</option>
+                                        <option value="@nameof(SubmissionStatus.Historical)">Historical</option>
+                                    </select>
+                                    <div style="display:flex; gap:0.5rem; margin-top:0.5rem;">
+                                        <button class="portal-btn portal-btn-primary portal-btn-sm portal-btn-full" @onclick="ApplyOverrideStatus">Apply Override</button>
+                                        <button class="portal-btn portal-btn-ghost portal-btn-sm portal-btn-full" @onclick="() => _showOverridePanel = false">Cancel</button>
+                                    </div>
+                                </div>
+                            }
                         </div>
                     }
 
@@ -799,6 +824,10 @@
     private bool _showCommentForm;
     private bool _examinerExpanded = true;
     private string _presUserName = "";
+    private bool _showOverridePanel;
+    private string _overrideStatus = nameof(SubmissionStatus.Draft);
+    private string? _adminActionError;
+    private string? _adminActionSuccess;
 
     private record StepInfo(string Label, string State, string? PerformerName, string? PerformerInitials, DateTime? StepTime);
 
@@ -969,9 +998,102 @@
     }
 
     private void ToggleCommentForm() => _showCommentForm = !_showCommentForm;
-    private Task WithdrawSubmission() => Task.CompletedTask;
-    private Task OverrideStatus() => Task.CompletedTask;
-    private Task UnlockForEdit() => Task.CompletedTask;
+    private async Task WithdrawSubmission()
+    {
+        if (submission is null)
+        {
+            return;
+        }
+
+        _adminActionError = null;
+        _adminActionSuccess = null;
+
+        if (submission.Status != SubmissionStatus.PendingApproval)
+        {
+            _adminActionError = "Only submissions awaiting checker review can be withdrawn from this screen.";
+            return;
+        }
+
+        var approvalRecord = await ApprovalRepo.GetBySubmission(submission.Id);
+        if (approvalRecord is not null)
+        {
+            await ApprovalRepo.Delete(approvalRecord);
+        }
+
+        submission.Status = SubmissionStatus.Historical;
+        await SubmissionRepo.Update(submission);
+        _adminActionSuccess = "Submission withdrawn and archived as historical.";
+        await LoadSubmission();
+    }
+
+    private Task OverrideStatus()
+    {
+        _adminActionError = null;
+        _adminActionSuccess = null;
+        _overrideStatus = submission?.Status.ToString() ?? nameof(SubmissionStatus.Draft);
+        _showOverridePanel = !_showOverridePanel;
+        return Task.CompletedTask;
+    }
+
+    private async Task ApplyOverrideStatus()
+    {
+        if (submission is null)
+        {
+            return;
+        }
+
+        _adminActionError = null;
+        _adminActionSuccess = null;
+
+        if (!Enum.TryParse<SubmissionStatus>(_overrideStatus, out var targetStatus) || !IsOverrideStatusAllowed(targetStatus))
+        {
+            _adminActionError = "Select a supported override status.";
+            return;
+        }
+
+        var approvalRecord = await ApprovalRepo.GetBySubmission(submission.Id);
+        if (approvalRecord is not null && targetStatus != SubmissionStatus.PendingApproval)
+        {
+            await ApprovalRepo.Delete(approvalRecord);
+        }
+
+        submission.Status = targetStatus;
+        await SubmissionRepo.Update(submission);
+        _showOverridePanel = false;
+        _adminActionSuccess = $"Submission status overridden to {GetStatusLabel(targetStatus.ToString())}.";
+        await LoadSubmission();
+    }
+
+    private async Task UnlockForEdit()
+    {
+        if (submission is null)
+        {
+            return;
+        }
+
+        _adminActionError = null;
+        _adminActionSuccess = null;
+
+        if (submission.Status is SubmissionStatus.SubmittedToRegulator
+            or SubmissionStatus.RegulatorAcknowledged
+            or SubmissionStatus.RegulatorAccepted
+            or SubmissionStatus.RegulatorQueriesRaised)
+        {
+            _adminActionError = "Regulator-submitted returns cannot be unlocked from the portal.";
+            return;
+        }
+
+        var approvalRecord = await ApprovalRepo.GetBySubmission(submission.Id);
+        if (approvalRecord is not null)
+        {
+            await ApprovalRepo.Delete(approvalRecord);
+        }
+
+        submission.Status = SubmissionStatus.Draft;
+        await SubmissionRepo.Update(submission);
+        _adminActionSuccess = "Submission unlocked and returned to draft.";
+        await LoadSubmission();
+    }
 
     private void ToggleDownloadMenu() => _downloadMenuOpen = !_downloadMenuOpen;
 
@@ -1149,6 +1271,13 @@
         "Historical"           => "Historical (Read-Only)",
         _                      => status,
     };
+
+    private static bool IsOverrideStatusAllowed(SubmissionStatus status) => status is
+        SubmissionStatus.Draft or
+        SubmissionStatus.Accepted or
+        SubmissionStatus.AcceptedWithWarnings or
+        SubmissionStatus.Rejected or
+        SubmissionStatus.Historical;
 
     private static string FormatDuration(int? ms)
     {

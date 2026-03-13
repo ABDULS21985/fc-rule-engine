@@ -212,6 +212,9 @@
                             </span>
                             <div class="portal-tmh-pending-actions">
                                 <button class="portal-btn portal-btn-ghost portal-btn-xs"
+                                        title="Copy invitation link"
+                                        @onclick="() => CopyInviteLink(inv)">Copy link</button>
+                                <button class="portal-btn portal-btn-ghost portal-btn-xs"
                                         title="Resend invitation"
                                         disabled="@(_resendingId == inv.Id)"
                                         @onclick="() => ResendInvite(inv)">
@@ -546,7 +549,11 @@
                             <div class="portal-tmh-activity">
                                 <div class="portal-tmh-activity-list portal-tmh-activity-list--open">
                                     @{ var acts = GetMemberActivity(member.Id); }
-                                    @if (!acts.Any())
+                                    @if (_loadingActivityMembers.Contains(member.Id))
+                                    {
+                                        <div style="padding:var(--space-3) 0;text-align:center;font-size:.75rem;color:var(--cbn-text-muted);">Loading recent activity…</div>
+                                    }
+                                    else if (!acts.Any())
                                     {
                                         <div style="padding:var(--space-3) 0;text-align:center;font-size:.75rem;color:var(--cbn-text-muted);">No recent activity.</div>
                                     }
@@ -732,6 +739,8 @@
     private bool _showMatrix;
     private bool _showCsv;
     private HashSet<int> _expandedActivity = new();
+    private readonly Dictionary<int, List<ActivityItem>> _activityByMember = new();
+    private readonly HashSet<int> _loadingActivityMembers = new();
 
     // Role editing (inline on card)
     private int? editingRoleUserId;
@@ -943,24 +952,44 @@
     }
 
     // ── Activity log ───────────────────────────────────────────────────────
-    private void ToggleActivity(int memberId)
+    private async Task ToggleActivity(int memberId)
     {
         if (!_expandedActivity.Add(memberId))
+        {
             _expandedActivity.Remove(memberId);
+            return;
+        }
+
+        if (_activityByMember.ContainsKey(memberId))
+        {
+            return;
+        }
+
+        _loadingActivityMembers.Add(memberId);
+        StateHasChanged();
+
+        try
+        {
+            var activity = await MgmtSvc.GetMemberActivity(institutionId, memberId);
+            _activityByMember[memberId] = activity
+                .Select(x => new ActivityItem(x.Type, x.Description, GetLastLoginRelative(x.OccurredAt)))
+                .ToList();
+        }
+        catch
+        {
+            _activityByMember[memberId] = new List<ActivityItem>();
+        }
+        finally
+        {
+            _loadingActivityMembers.Remove(memberId);
+            StateHasChanged();
+        }
     }
 
     private List<ActivityItem> GetMemberActivity(int memberId)
-    {
-        // Stub — replace with real service call
-        return new List<ActivityItem>
-        {
-            new("submit",  "Submitted Q4 2025 Capital Return",  "2 hours ago"),
-            new("login",   "Logged in",                         "3 hours ago"),
-            new("approve", "Approved Liquidity Return",         "Yesterday"),
-            new("submit",  "Submitted Q3 2025 Capital Return",  "12 Jan 2026"),
-            new("login",   "Logged in",                         "11 Jan 2026"),
-        };
-    }
+        => _activityByMember.TryGetValue(memberId, out var activity)
+            ? activity
+            : new List<ActivityItem>();
 
     // ── Invite drawer ──────────────────────────────────────────────────────
     private void OpenInviteDrawer()
@@ -1071,6 +1100,25 @@
         }
         catch { Toast.Error("Failed to revoke invitation."); }
         StateHasChanged();
+    }
+
+    private async Task CopyInviteLink(PendingInviteModel inv)
+    {
+        if (string.IsNullOrWhiteSpace(inv.InvitationUrl))
+        {
+            Toast.Error("Invitation link is not available.");
+            return;
+        }
+
+        try
+        {
+            await JS.InvokeVoidAsync("portalCopyToClipboard", inv.InvitationUrl);
+            Toast.Success("Invitation link copied.");
+        }
+        catch
+        {
+            Toast.Error("Failed to copy invitation link.");
+        }
     }
 
     // ── CSV import ─────────────────────────────────────────────────────────

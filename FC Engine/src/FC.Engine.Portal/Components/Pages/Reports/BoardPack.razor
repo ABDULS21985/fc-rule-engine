@@ -2,9 +2,13 @@
 @attribute [Authorize(Policy = "InstitutionAdmin")]
 @using System.Security.Claims
 @using System.Text.Json
+@using FC.Engine.Domain.Abstractions
+@using FC.Engine.Domain.Enums
+@using FC.Engine.Domain.Notifications
 @inject FC.Engine.Portal.Services.ReportBuilderService ReportSvc
 @inject FC.Engine.Portal.Services.InstitutionManagementService InstitutionSvc
 @inject FC.Engine.Portal.Services.ToastService Toast
+@inject INotificationOrchestrator NotificationOrchestrator
 @inject IJSRuntime JS
 @implements IAsyncDisposable
 
@@ -729,15 +733,33 @@
 
         try
         {
-            // Simulate sending (real impl would call notification service)
-            await Task.Delay(1200);
+            await NotificationOrchestrator.Notify(new NotificationRequest
+            {
+                TenantId = _tenantId,
+                EventType = NotificationEvents.ScheduledReportReady,
+                Title = $"Board pack ready: {_coverTitle}",
+                Message = $"A board pack covering {_coverDateFrom:dd MMM yyyy} to {_coverDateTo:dd MMM yyyy} is ready for review.",
+                Priority = NotificationPriority.Normal,
+                ActionUrl = "/reports/board-pack",
+                RecipientUserIds = _selectedMemberIds.ToList(),
+                Data = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["ReportTitle"] = _coverTitle,
+                    ["PreparedBy"] = _coverPreparedBy,
+                    ["ApprovedBy"] = _coverApprovedBy,
+                    ["Confidentiality"] = _coverConfidentiality,
+                    ["InstitutionId"] = _institutionId.ToString(),
+                    ["GeneratedAtUtc"] = DateTime.UtcNow.ToString("O")
+                }
+            });
+
             Toast.Success($"Board pack sent to {_selectedMemberIds.Count} member{(_selectedMemberIds.Count != 1 ? "s" : "")}.");
             _showEmailPanel = false;
             _selectedMemberIds.Clear();
         }
-        catch
+        catch (Exception ex)
         {
-            Toast.Error("Failed to send board pack.");
+            Toast.Error("Failed to send board pack: " + ex.Message);
         }
         finally
         {

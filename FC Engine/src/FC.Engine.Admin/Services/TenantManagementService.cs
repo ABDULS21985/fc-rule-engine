@@ -1,8 +1,11 @@
+using System.Security.Claims;
 using FC.Engine.Domain.Abstractions;
 using FC.Engine.Domain.Entities;
 using FC.Engine.Domain.Enums;
+using FC.Engine.Domain.ValueObjects;
 using FC.Engine.Infrastructure.Metadata;
 using FC.Engine.Infrastructure.Services;
+using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 
 namespace FC.Engine.Admin.Services;
@@ -12,24 +15,33 @@ public class TenantManagementService
     private readonly IDbContextFactory<MetadataDbContext> _dbFactory;
     private readonly ITenantOnboardingService _onboardingService;
     private readonly IEntitlementService _entitlementService;
+    private readonly ISubscriptionService _subscriptionService;
     private readonly SubscriptionModuleEntitlementBootstrapService _subscriptionModuleEntitlementBootstrapService;
     private readonly IAuditLogger _auditLogger;
     private readonly ITenantContext _tenantContext;
+    private readonly ITenantBrandingService _tenantBrandingService;
+    private readonly IHttpContextAccessor _httpContextAccessor;
 
     public TenantManagementService(
         IDbContextFactory<MetadataDbContext> dbFactory,
         ITenantOnboardingService onboardingService,
         IEntitlementService entitlementService,
+        ISubscriptionService subscriptionService,
         SubscriptionModuleEntitlementBootstrapService subscriptionModuleEntitlementBootstrapService,
         IAuditLogger auditLogger,
-        ITenantContext tenantContext)
+        ITenantContext tenantContext,
+        ITenantBrandingService tenantBrandingService,
+        IHttpContextAccessor httpContextAccessor)
     {
         _dbFactory = dbFactory;
         _onboardingService = onboardingService;
         _entitlementService = entitlementService;
+        _subscriptionService = subscriptionService;
         _subscriptionModuleEntitlementBootstrapService = subscriptionModuleEntitlementBootstrapService;
         _auditLogger = auditLogger;
         _tenantContext = tenantContext;
+        _tenantBrandingService = tenantBrandingService;
+        _httpContextAccessor = httpContextAccessor;
     }
 
     public async Task<List<Tenant>> GetAllTenantsAsync(CancellationToken ct = default)
@@ -62,6 +74,94 @@ public class TenantManagementService
     public async Task<TenantOnboardingResult> OnboardTenantAsync(TenantOnboardingRequest request, CancellationToken ct = default)
     {
         return await _onboardingService.OnboardTenant(request, ct);
+    }
+
+    public async Task<PlatformTenantProvisionResult> ProvisionTenantAsync(
+        PlatformTenantProvisionRequest request,
+        CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        var licenceCode = request.LicenceCode.Trim().ToUpperInvariant();
+        var moduleCodes = request.ModuleCodes
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Select(x => x.Trim().ToUpperInvariant())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        var planCode = await DeterminePlanCodeAsync(licenceCode, moduleCodes, ct);
+        var onboardingRequest = new TenantOnboardingRequest
+        {
+            TenantName = request.TenantName.Trim(),
+            TenantSlug = string.IsNullOrWhiteSpace(request.TenantSlug)
+                ? null
+                : request.TenantSlug.Trim(),
+            TenantType = TenantType.Institution,
+            ContactEmail = request.ContactEmail.Trim(),
+            LicenceTypeCodes = [licenceCode],
+            SubscriptionPlanCode = planCode,
+            AdminEmail = request.AdminEmail.Trim(),
+            AdminFullName = request.AdminFullName.Trim(),
+            InstitutionCode = BuildInstitutionCode(request.TenantName),
+            InstitutionName = request.TenantName.Trim(),
+            InstitutionType = licenceCode,
+            JurisdictionCode = "NG"
+        };
+
+        var onboarding = await _onboardingService.OnboardTenant(onboardingRequest, ct);
+        var result = new PlatformTenantProvisionResult
+        {
+            Success = onboarding.Success,
+            TenantId = onboarding.TenantId,
+            TenantSlug = onboarding.TenantSlug,
+            InstitutionId = onboarding.InstitutionId,
+            PlanCode = planCode,
+            ActivatedModules = onboarding.ActivatedModules.ToList(),
+            Errors = onboarding.Errors.ToList()
+        };
+
+        if (!onboarding.Success)
+        {
+            return result;
+        }
+
+        await ApplyAdminPasswordAsync(onboarding.TenantId, request.AdminEmail, request.TempPassword, ct);
+        await ApplyBrandingAsync(onboarding.TenantId, request, ct);
+
+        foreach (var moduleCode in moduleCodes.Except(result.ActivatedModules, StringComparer.OrdinalIgnoreCase))
+        {
+            try
+            {
+                await _subscriptionService.ActivateModule(onboarding.TenantId, moduleCode, ct);
+                result.ActivatedModules.Add(moduleCode);
+            }
+            catch (Exception ex)
+            {
+                result.Warnings.Add($"{moduleCode}: {ex.Message}");
+            }
+        }
+
+        await EnsurePeriodsForActivatedModules(onboarding.TenantId, ct);
+
+        var actor = ResolvePlatformActor();
+        await _auditLogger.Log(
+            "Tenant",
+            0,
+            "TenantProvisioned",
+            null,
+            new
+            {
+                onboarding.TenantId,
+                onboarding.InstitutionId,
+                request.LicenceCode,
+                PlanCode = planCode,
+                ActivatedModules = result.ActivatedModules,
+                Warnings = result.Warnings
+            },
+            actor,
+            ct);
+
+        return result;
     }
 
     public async Task ActivateTenantAsync(Guid tenantId, CancellationToken ct = default)
@@ -475,8 +575,210 @@ public class TenantManagementService
                 ImpersonatedTenantId = _tenantContext.ImpersonatingTenantId,
                 TenantId = tenantId
             },
-            "platform-admin",
+            ResolvePlatformActor(),
             ct);
+    }
+
+    private async Task<string> DeterminePlanCodeAsync(string licenceCode, IReadOnlyCollection<string> selectedModuleCodes, CancellationToken ct)
+    {
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+
+        var requiredModuleCodes = await (
+            from matrix in db.LicenceModuleMatrix.AsNoTracking()
+            join licence in db.LicenceTypes.AsNoTracking() on matrix.LicenceTypeId equals licence.Id
+            join module in db.Modules.AsNoTracking() on matrix.ModuleId equals module.Id
+            where licence.Code == licenceCode && matrix.IsRequired && module.IsActive
+            select module.ModuleCode)
+            .ToListAsync(ct);
+
+        var totalModuleCount = requiredModuleCodes
+            .Concat(selectedModuleCodes)
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Count();
+
+        return totalModuleCount switch
+        {
+            <= 1 => "STARTER",
+            <= 5 => "PROFESSIONAL",
+            _ => "ENTERPRISE"
+        };
+    }
+
+    private async Task ApplyAdminPasswordAsync(Guid tenantId, string adminEmail, string password, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(password))
+        {
+            return;
+        }
+
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+        var adminUser = await db.InstitutionUsers
+            .FirstOrDefaultAsync(
+                x => x.TenantId == tenantId
+                  && x.Email == adminEmail
+                  && x.Role == InstitutionRole.Admin,
+                ct);
+
+        if (adminUser is null)
+        {
+            throw new InvalidOperationException("The initial tenant administrator could not be located after provisioning.");
+        }
+
+        adminUser.PasswordHash = FC.Engine.Application.Services.InstitutionAuthService.HashPassword(password);
+        adminUser.MustChangePassword = true;
+        adminUser.FailedLoginAttempts = 0;
+        adminUser.LockedUntil = null;
+
+        await db.SaveChangesAsync(ct);
+    }
+
+    private async Task ApplyBrandingAsync(Guid tenantId, PlatformTenantProvisionRequest request, CancellationToken ct)
+    {
+        var config = await _tenantBrandingService.GetBrandingConfig(tenantId, ct);
+        config.CompanyName = string.IsNullOrWhiteSpace(request.BrandName)
+            ? request.TenantName.Trim()
+            : request.BrandName.Trim();
+
+        if (!string.IsNullOrWhiteSpace(request.AccentColor))
+        {
+            config.PrimaryColor = request.AccentColor.Trim();
+            config.AccentColor = request.AccentColor.Trim();
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.LogoUrl))
+        {
+            config.LogoUrl = request.LogoUrl.Trim();
+            config.LogoSmallUrl = request.LogoUrl.Trim();
+        }
+
+        await _tenantBrandingService.UpdateBrandingConfig(tenantId, config, ct);
+    }
+
+    private async Task EnsurePeriodsForActivatedModules(Guid tenantId, CancellationToken ct)
+    {
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+        var activeModuleIds = await db.SubscriptionModules
+            .AsNoTracking()
+            .Where(x => x.Subscription != null
+                        && x.Subscription.TenantId == tenantId
+                        && x.IsActive)
+            .Select(x => x.ModuleId)
+            .Distinct()
+            .ToListAsync(ct);
+
+        if (activeModuleIds.Count == 0)
+        {
+            return;
+        }
+
+        var existingModuleIds = await db.ReturnPeriods
+            .AsNoTracking()
+            .Where(x => x.TenantId == tenantId && x.ModuleId.HasValue)
+            .Select(x => x.ModuleId!.Value)
+            .Distinct()
+            .ToListAsync(ct);
+
+        var missingModuleIds = activeModuleIds
+            .Except(existingModuleIds)
+            .ToList();
+
+        if (missingModuleIds.Count == 0)
+        {
+            return;
+        }
+
+        var modules = await db.Modules
+            .AsNoTracking()
+            .Where(x => missingModuleIds.Contains(x.Id))
+            .OrderBy(x => x.DisplayOrder)
+            .ToListAsync(ct);
+
+        var today = DateTime.UtcNow.Date;
+        foreach (var module in modules)
+        {
+            for (var offset = 0; offset < 12; offset++)
+            {
+                var periodStart = new DateTime(today.Year, today.Month, 1).AddMonths(offset);
+                var frequency = NormalizeFrequency(module.DefaultFrequency);
+                var deadline = ComputeDeadline(periodStart, frequency, module.DeadlineOffsetDays);
+
+                db.ReturnPeriods.Add(new ReturnPeriod
+                {
+                    TenantId = tenantId,
+                    ModuleId = module.Id,
+                    Year = periodStart.Year,
+                    Month = periodStart.Month,
+                    Quarter = frequency == "Quarterly" ? ((periodStart.Month - 1) / 3) + 1 : null,
+                    Frequency = frequency,
+                    ReportingDate = new DateTime(periodStart.Year, periodStart.Month, DateTime.DaysInMonth(periodStart.Year, periodStart.Month)),
+                    DeadlineDate = deadline,
+                    IsOpen = true,
+                    Status = "Open",
+                    NotificationLevel = 0,
+                    CreatedAt = DateTime.UtcNow
+                });
+            }
+        }
+
+        await db.SaveChangesAsync(ct);
+    }
+
+    private string ResolvePlatformActor()
+    {
+        return FC.Engine.Admin.Utilities.UserIdentityResolver.TryResolveActor(_httpContextAccessor.HttpContext?.User, out var actor)
+            ? actor
+            : "system-service";
+    }
+
+    private static string BuildInstitutionCode(string tenantName)
+    {
+        var baseCode = new string(tenantName
+            .Where(char.IsLetterOrDigit)
+            .Take(8)
+            .ToArray())
+            .ToUpperInvariant();
+
+        if (string.IsNullOrWhiteSpace(baseCode))
+        {
+            baseCode = "TENANT";
+        }
+
+        return baseCode.Length >= 6
+            ? baseCode
+            : $"{baseCode}{Random.Shared.Next(100, 999)}";
+    }
+
+    private static string NormalizeFrequency(string? frequency)
+    {
+        return frequency?.Trim().ToUpperInvariant() switch
+        {
+            "QUARTERLY" => "Quarterly",
+            "SEMIANNUAL" or "SEMI-ANNUAL" => "SemiAnnual",
+            "ANNUAL" or "YEARLY" => "Annual",
+            _ => "Monthly"
+        };
+    }
+
+    private static DateTime ComputeDeadline(DateTime periodStart, string frequency, int? deadlineOffsetDays)
+    {
+        var periodEnd = frequency switch
+        {
+            "Quarterly" => periodStart.AddMonths(3).AddDays(-1),
+            "SemiAnnual" => periodStart.AddMonths(6).AddDays(-1),
+            "Annual" => periodStart.AddYears(1).AddDays(-1),
+            _ => periodStart.AddMonths(1).AddDays(-1)
+        };
+
+        var offset = deadlineOffsetDays ?? frequency switch
+        {
+            "Quarterly" => 45,
+            "SemiAnnual" => 60,
+            "Annual" => 90,
+            _ => 30
+        };
+
+        return periodEnd.AddDays(offset);
     }
 }
 
@@ -516,6 +818,33 @@ public class TenantLicenceImpactModuleRow
     public decimal PriceMonthly { get; set; }
     public decimal PriceAnnual { get; set; }
     public string Reason { get; set; } = string.Empty;
+}
+
+public class PlatformTenantProvisionRequest
+{
+    public string TenantName { get; set; } = string.Empty;
+    public string? TenantSlug { get; set; }
+    public string ContactEmail { get; set; } = string.Empty;
+    public string LicenceCode { get; set; } = string.Empty;
+    public List<string> ModuleCodes { get; set; } = new();
+    public string AdminFullName { get; set; } = string.Empty;
+    public string AdminEmail { get; set; } = string.Empty;
+    public string TempPassword { get; set; } = string.Empty;
+    public string? BrandName { get; set; }
+    public string? LogoUrl { get; set; }
+    public string? AccentColor { get; set; }
+}
+
+public class PlatformTenantProvisionResult
+{
+    public bool Success { get; set; }
+    public Guid TenantId { get; set; }
+    public string TenantSlug { get; set; } = string.Empty;
+    public int InstitutionId { get; set; }
+    public string PlanCode { get; set; } = string.Empty;
+    public List<string> ActivatedModules { get; set; } = new();
+    public List<string> Warnings { get; set; } = new();
+    public List<string> Errors { get; set; } = new();
 }
 
 public class TenantModuleReconciliationBatchResult

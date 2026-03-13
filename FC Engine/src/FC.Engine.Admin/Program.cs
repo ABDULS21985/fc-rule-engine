@@ -460,9 +460,11 @@ app.MapGet("/platform/impersonate", async (
             Expires = DateTimeOffset.UtcNow.AddHours(2)
         });
 
-        var performedBy = context.User.FindFirstValue(ClaimTypes.NameIdentifier)
-                          ?? context.User.Identity?.Name
-                          ?? "platform-admin";
+        if (!FC.Engine.Admin.Utilities.UserIdentityResolver.TryResolveActor(context.User, out var performedBy))
+        {
+            context.Response.StatusCode = 401;
+            return;
+        }
 
         await auditLogger.Log(
             "Tenant",
@@ -494,9 +496,11 @@ app.MapGet("/platform/stop-impersonation", async (
 
     if (context.Request.Cookies.TryGetValue("ImpersonateTenantId", out var existingTenantId))
     {
-        var performedBy = context.User.FindFirstValue(ClaimTypes.NameIdentifier)
-                          ?? context.User.Identity?.Name
-                          ?? "platform-admin";
+        if (!FC.Engine.Admin.Utilities.UserIdentityResolver.TryResolveActor(context.User, out var performedBy))
+        {
+            context.Response.StatusCode = 401;
+            return;
+        }
 
         await auditLogger.Log(
             "Tenant",

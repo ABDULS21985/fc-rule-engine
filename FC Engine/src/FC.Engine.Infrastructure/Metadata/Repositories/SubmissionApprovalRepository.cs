@@ -45,4 +45,10 @@ public class SubmissionApprovalRepository : ISubmissionApprovalRepository
         _db.SubmissionApprovals.Update(approval);
         await _db.SaveChangesAsync(ct);
     }
+
+    public async Task Delete(SubmissionApproval approval, CancellationToken ct = default)
+    {
+        _db.SubmissionApprovals.Remove(approval);
+        await _db.SaveChangesAsync(ct);
+    }
 }

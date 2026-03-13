@@ -2,6 +2,8 @@
 @attribute [Authorize(Policy = "InstitutionUser")]
 @using FC.Engine.Infrastructure.DragDrop
 @inject ISubmissionRepository SubmissionRepo
+@inject ISubmissionApprovalRepository ApprovalRepo
+@inject IExportEngine ExportEngine
 @inject ITemplateMetadataCache TemplateCache
 @inject PortalSubmissionLaunchService SubmissionLaunchService
 @inject NavigationManager Navigation
@@ -621,6 +623,9 @@
     private List<SubmissionListItem> filteredSubmissions = new();
     private List<string> availableReturnCodes = new();
     private DotNetObjectReference<SubmissionList>? _dotNetRef;
+    private int institutionId;
+    private int? currentUserId;
+    private Guid tenantId;
 
     private string searchQuery = "";
     private string filterStatus = "";
@@ -708,6 +713,18 @@
     {
         _dotNetRef = DotNetObjectReference.Create(this);
         _primarySubmitHref = (await SubmissionLaunchService.ResolvePrimarySubmitAsync()).Href;
+        var state = await AuthState!;
+        int.TryParse(state.User.FindFirst("InstitutionId")?.Value, out institutionId);
+        if (int.TryParse(state.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value, out var userId))
+        {
+            currentUserId = userId;
+        }
+
+        var tenantIdValue = state.User.FindFirst("TenantId")?.Value;
+        if (Guid.TryParse(tenantIdValue, out var parsedTenantId))
+        {
+            tenantId = parsedTenantId;
+        }
 
         // Restore all filter state from URL params (makes every filtered view bookmarkable)
         bool hasUrlParams = !string.IsNullOrEmpty(Q) || !string.IsNullOrEmpty(StatusParam)
@@ -727,7 +744,6 @@
         else
         {
             // Smart defaults: pre-apply role-based filters on first visit (no URL params)
-            var state = await AuthState!;
             var role = state.User.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value;
             if (role == "Checker")
             {
@@ -835,10 +851,6 @@
 
         try
         {
-            var state = await AuthState!;
-            var instIdStr = state.User.FindFirst("InstitutionId")?.Value;
-            int.TryParse(instIdStr, out var institutionId);
-
             var rawSubmissions = await SubmissionRepo.GetByInstitution(institutionId);
 
             var allTemplates = await TemplateCache.GetAllPublishedTemplates();
@@ -1061,22 +1073,118 @@
         }
     }
 
-    private void BulkExportCsv()
+    private async Task BulkExportCsv()
     {
-        // TODO: wire to export service
+        var selected = submissions.Where(s => _selectedIds.Contains(s.Id)).ToList();
+        if (!selected.Any())
+        {
+            return;
+        }
+
+        var lines = new List<string>
+        {
+            "SubmissionId,ReturnCode,TemplateName,ModuleCode,PeriodLabel,SubmittedAtUtc,Status,ErrorCount,WarningCount,ProcessingDurationMs,DeadlineDate"
+        };
+
+        lines.AddRange(selected.Select(s => string.Join(",",
+            Csv(s.Id.ToString()),
+            Csv(s.ReturnCode),
+            Csv(s.TemplateName),
+            Csv(s.ModuleCode ?? string.Empty),
+            Csv(s.PeriodLabel),
+            Csv(s.SubmittedAt.ToUniversalTime().ToString("O")),
+            Csv(s.Status),
+            Csv(s.ErrorCount.ToString()),
+            Csv(s.WarningCount.ToString()),
+            Csv(s.ProcessingDurationMs?.ToString() ?? string.Empty),
+            Csv(s.DeadlineDate?.ToString("yyyy-MM-dd") ?? string.Empty))));
+
+        await JS.InvokeVoidAsync(
+            "portalDownloadFile",
+            string.Join("\n", lines),
+            $"submission-export-{DateTime.UtcNow:yyyyMMddHHmmss}.csv",
+            "text/csv;charset=utf-8");
     }
 
-    private void BulkDownloadReceipts()
+    private async Task BulkDownloadReceipts()
     {
-        // TODO: wire to receipt download service
+        if (!currentUserId.HasValue || tenantId == Guid.Empty)
+        {
+            await JS.InvokeVoidAsync("portalAnnounce", "Unable to queue receipt downloads for this session.");
+            return;
+        }
+
+        var selectedIds = _selectedIds.ToList();
+        var queued = 0;
+        foreach (var submissionId in selectedIds)
+        {
+            try
+            {
+                await ExportEngine.QueueExport(tenantId, submissionId, FC.Engine.Domain.Enums.ExportFormat.PDF, currentUserId.Value);
+                queued++;
+            }
+            catch
+            {
+                // Keep processing the remaining selections.
+            }
+        }
+
+        await JS.InvokeVoidAsync(
+            "portalAnnounce",
+            queued == 0
+                ? "No receipt exports could be queued."
+                : $"{queued} receipt export{(queued == 1 ? "" : "s")} queued. Check your notifications when ready.");
     }
 
     private async Task ConfirmWithdraw()
     {
         _showWithdrawConfirm = false;
-        // TODO: wire to withdrawal service
+        var selectedIds = _selectedIds.ToList();
+        var withdrawn = 0;
+
+        foreach (var submissionId in selectedIds)
+        {
+            var submission = await SubmissionRepo.GetById(submissionId);
+            if (submission is null || submission.InstitutionId != institutionId)
+            {
+                continue;
+            }
+
+            if (submission.Status is SubmissionStatus.Accepted
+                or SubmissionStatus.AcceptedWithWarnings
+                or SubmissionStatus.Historical
+                or SubmissionStatus.RegulatorAccepted
+                or SubmissionStatus.RegulatorAcknowledged
+                or SubmissionStatus.SubmittedToRegulator
+                or SubmissionStatus.RegulatorQueriesRaised)
+            {
+                continue;
+            }
+
+            var approval = await ApprovalRepo.GetBySubmission(submission.Id);
+            if (approval is not null)
+            {
+                await ApprovalRepo.Delete(approval);
+            }
+
+            submission.Status = SubmissionStatus.Historical;
+            await SubmissionRepo.Update(submission);
+            withdrawn++;
+        }
+
         DeselectAll();
-        await Task.CompletedTask;
+        await LoadSubmissions();
+        await JS.InvokeVoidAsync(
+            "portalAnnounce",
+            withdrawn == 0
+                ? "No eligible submissions were withdrawn."
+                : $"{withdrawn} submission{(withdrawn == 1 ? "" : "s")} withdrawn.");
+    }
+
+    private static string Csv(string value)
+    {
+        var escaped = value.Replace("\"", "\"\"");
+        return $"\"{escaped}\"";
     }
 
     /// <summary>

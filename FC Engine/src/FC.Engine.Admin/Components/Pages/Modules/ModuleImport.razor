@@ -2,6 +2,8 @@
 @attribute [Authorize(Roles = "PlatformAdmin")]
 @using System.Text
 @using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Authorization
+@using FC.Engine.Admin.Utilities
 @using FC.Engine.Domain.Abstractions
 @using FC.Engine.Admin.Services
 @using Microsoft.AspNetCore.Components.Forms
@@ -157,6 +159,8 @@
 </div>
 
 @code {
+    [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
+
     private string _jsonDefinition = string.Empty;
     private string? _moduleCode;
     private bool _busy;
@@ -214,7 +218,7 @@
         _busy = true;
         try
         {
-            _importResult = await ModuleImportService.ImportModule(_jsonDefinition, "platform-admin");
+            _importResult = await ModuleImportService.ImportModule(_jsonDefinition, await ResolveCurrentActorAsync());
             if (_importResult.Success)
             {
                 _moduleCode = _importResult.ModuleCode;
@@ -242,7 +246,7 @@
         _busy = true;
         try
         {
-            _publishResult = await ModuleImportService.PublishModule(_moduleCode, "platform-admin");
+            _publishResult = await ModuleImportService.PublishModule(_moduleCode, await ResolveCurrentActorAsync());
             if (_publishResult.Success)
             {
                 Toast.Success($"Module {_moduleCode} published successfully.", "Publish Complete");
@@ -263,6 +267,12 @@
     }
 
     private void BackToList() => Navigation.NavigateTo("/modules");
+
+    private async Task<string> ResolveCurrentActorAsync()
+    {
+        var state = AuthState is null ? null : await AuthState;
+        return UserIdentityResolver.ResolveActor(state?.User);
+    }
 
     private static string? TryReadModuleCode(string json)
     {

@@ -116,9 +116,6 @@ public class ScenarioEngine : IScenarioEngine
         scenario.Status = ScenarioStatus.Running;
         var sw = Stopwatch.StartNew();
 
-        // Simulate processing delay
-        await Task.Delay(800);
-
         var impactKey = ResolveImpactKey(scenario);
         var metrics = ComputeMetrics(impactKey, scenario);
         var breaches = DetectBreaches(metrics);
@@ -178,8 +175,6 @@ public class ScenarioEngine : IScenarioEngine
 
     public async Task<MacroPrudentialResult> RunMacroPrudential(Guid tenantId, ScenarioDefinition scenario)
     {
-        await Task.Delay(1200); // Simulate processing
-
         var impactKey = ResolveImpactKey(scenario);
         var institutions = GenerateMockInstitutions();
         var impacts = new List<InstitutionImpact>();
