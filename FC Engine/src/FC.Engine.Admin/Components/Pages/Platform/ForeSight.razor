@@ -1,0 +1,280 @@
+@page "/platform/foresight"
+@attribute [Authorize(Policy = "PlatformAdmin")]
+@using FC.Engine.Admin.Services
+@using FC.Engine.Domain.Abstractions
+@using FC.Engine.Domain.Models
+@inject IForeSightService ForeSightService
+@inject ToastService Toast
+
+<PageTitle>ForeSight Platform Overview</PageTitle>
+
+<PageHeader Title="ForeSight Platform Overview"
+            Subtitle="Cross-tenant predictive intelligence for supervisory prioritisation and churn-risk management.">
+    <SecondaryActions>
+        <button class="fc-btn fc-btn--outline fc-btn--sm" @onclick="ReloadAsync" disabled="@_loading">
+            Refresh
+        </button>
+    </SecondaryActions>
+</PageHeader>
+
+<div class="fc-page">
+    @if (_loading)
+    {
+        <div class="fc-grid fc-grid-3 fc-mb-4">
+            @for (var index = 0; index < 3; index++)
+            {
+                <div class="fc-card">
+                    <div class="fc-card__body">
+                        <div class="fc-skel fc-skel-text" style="--skel-w:100px;--skel-mb:0.75rem"></div>
+                        <div class="fc-skel fc-skel-text" style="--skel-w:80px;--skel-h:2rem"></div>
+                    </div>
+                </div>
+            }
+        </div>
+        <div class="fc-card">
+            <div class="fc-card__body">
+                <div class="fc-skel fc-skel-block" style="--skel-w:100%;--skel-h:360px"></div>
+            </div>
+        </div>
+    }
+    else if (!string.IsNullOrWhiteSpace(_error))
+    {
+        <SectionErrorBoundary Title="Failed to load ForeSight platform data"
+                              ExternalError="@_loadException"
+                              OnRetry="ReloadAsync" />
+    }
+    else
+    {
+        <div class="fc-grid fc-grid-3 fc-mb-4">
+            <div class="fc-card">
+                <div class="fc-card__body">
+                    <div class="fc-stat-label">Regulatory Priorities</div>
+                    <div class="fc-stat-value">@_regulatoryRanking.Count</div>
+                    <div class="fc-kpi-delta">@_regulatoryRanking.Count(x => x.RiskBand is "HIGH" or "CRITICAL") high-priority entity forecasts</div>
+                </div>
+            </div>
+            <div class="fc-card">
+                <div class="fc-card__body">
+                    <div class="fc-stat-label">Churn Watchlist</div>
+                    <div class="fc-stat-value">@_churnRisks.Count</div>
+                    <div class="fc-kpi-delta">@_churnRisks.Count(x => x.RiskBand is "HIGH" or "CRITICAL") tenants with elevated retention risk</div>
+                </div>
+            </div>
+            <div class="fc-card">
+                <div class="fc-card__body">
+                    <div class="fc-stat-label">Regulator Filter</div>
+                    <div class="fc-stat-value">@_selectedRegulator</div>
+                    <div class="fc-kpi-delta">Licence scope: @(string.IsNullOrWhiteSpace(_selectedLicence) ? "All" : _selectedLicence)</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="fc-card fc-mb-4">
+            <div class="fc-card__body">
+                <div class="fc-grid" style="grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem;">
+                    <label class="fc-field">
+                        <span class="fc-field__label">Regulator</span>
+                        <select class="fc-input" @bind="_selectedRegulator" @bind:after="OnRegulatorChangedAsync">
+                            @foreach (var regulator in RegulatorOptions)
+                            {
+                                <option value="@regulator">@regulator</option>
+                            }
+                        </select>
+                    </label>
+                    <label class="fc-field">
+                        <span class="fc-field__label">Licence type</span>
+                        <select class="fc-input" @bind="_selectedLicence" @bind:after="ReloadAsync">
+                            <option value="">All licence types</option>
+                            @foreach (var licence in CurrentLicenceOptions)
+                            {
+                                <option value="@licence">@licence</option>
+                            }
+                        </select>
+                    </label>
+                </div>
+            </div>
+        </div>
+
+        <div class="fc-grid fc-grid-2 fc-mb-4">
+            <div class="fc-card">
+                <div class="fc-card__header">
+                    <div class="d-flex align-items-center gap-2">
+                        <h2 class="fc-card__title mb-0">Regulatory Action Ranking</h2>
+                        <span class="fc-badge fc-badge--danger">@_regulatoryRanking.Count(x => x.RiskBand is "HIGH" or "CRITICAL") priority</span>
+                    </div>
+                    <a class="fc-btn fc-btn--outline fc-btn--sm"
+                       href="@($"/platform/foresight/regulatory-ranking?regulator={Uri.EscapeDataString(_selectedRegulator)}{(string.IsNullOrWhiteSpace(_selectedLicence) ? string.Empty : $"&licence={Uri.EscapeDataString(_selectedLicence)}")}")">
+                        View all
+                    </a>
+                </div>
+                <div class="fc-card__body fc-table-responsive">
+                    <table class="fc-table" aria-label="Regulatory action ranking">
+                        <thead>
+                            <tr>
+                                <th>Institution</th>
+                                <th>Licence</th>
+                                <th>Probability</th>
+                                <th>Confidence</th>
+                                <th>Risk</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @if (_regulatoryRanking.Count == 0)
+                            {
+                                <tr>
+                                    <td colspan="5" class="fc-text-muted">No unsuppressed regulatory-action forecasts are available for this filter.</td>
+                                </tr>
+                            }
+                            else
+                            {
+                                @foreach (var item in _regulatoryRanking.Take(20))
+                                {
+                                    <tr>
+                                        <td>
+                                            <div class="fw-semibold">@item.InstitutionName</div>
+                                            <div class="fc-text-muted">@item.RootCauseNarrative</div>
+                                        </td>
+                                        <td>@item.LicenceType</td>
+                                        <td>@item.InterventionProbability.ToString("P0")</td>
+                                        <td>@item.ConfidenceScore.ToString("P0")</td>
+                                        <td>
+                                            <span class="fc-badge @(item.RiskBand is "HIGH" or "CRITICAL" ? "fc-badge--danger" : item.RiskBand == "MEDIUM" ? "fc-badge--warning" : "fc-badge--success")">
+                                                @item.RiskBand
+                                            </span>
+                                        </td>
+                                    </tr>
+                                }
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="fc-card">
+                <div class="fc-card__header">
+                    <div class="d-flex align-items-center gap-2">
+                        <h2 class="fc-card__title mb-0">Tenant Churn Risk</h2>
+                        <span class="fc-badge fc-badge--warning">@_churnRisks.Count(x => x.RiskBand is "HIGH" or "CRITICAL") elevated</span>
+                    </div>
+                    <a class="fc-btn fc-btn--outline fc-btn--sm" href="/platform/foresight/churn-risk">View all</a>
+                </div>
+                <div class="fc-card__body fc-table-responsive">
+                    <table class="fc-table" aria-label="Tenant churn risk ranking">
+                        <thead>
+                            <tr>
+                                <th>Tenant</th>
+                                <th>Licence</th>
+                                <th>Probability</th>
+                                <th>Confidence</th>
+                                <th>Risk</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @if (_churnRisks.Count == 0)
+                            {
+                                <tr>
+                                    <td colspan="5" class="fc-text-muted">No unsuppressed churn-risk forecasts are available.</td>
+                                </tr>
+                            }
+                            else
+                            {
+                                @foreach (var item in _churnRisks.Take(20))
+                                {
+                                    <tr>
+                                        <td>
+                                            <div class="fw-semibold">@item.TenantName</div>
+                                            <div class="fc-text-muted">@item.RootCauseNarrative</div>
+                                        </td>
+                                        <td>@item.LicenceType</td>
+                                        <td>@item.ChurnProbability.ToString("P0")</td>
+                                        <td>@item.ConfidenceScore.ToString("P0")</td>
+                                        <td>
+                                            <span class="fc-badge @(item.RiskBand is "HIGH" or "CRITICAL" ? "fc-badge--danger" : item.RiskBand == "MEDIUM" ? "fc-badge--warning" : "fc-badge--success")">
+                                                @item.RiskBand
+                                            </span>
+                                        </td>
+                                    </tr>
+                                }
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div class="fc-card">
+            <div class="fc-card__header">
+                <h2 class="fc-card__title">Explainability and Advisory Guardrails</h2>
+            </div>
+            <div class="fc-card__body">
+                <p class="mb-2">ForeSight predictions are advisory only. They surface cross-tenant signals for prioritisation, but they do not trigger automatic enforcement, rejection, or examiner escalation.</p>
+                <p class="mb-0 fc-text-muted">Predictions are suppressed when confidence falls below the configured threshold or when historical data is insufficient.</p>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private static readonly string[] RegulatorOptions = ["CBN", "NDIC", "NAICOM", "SEC"];
+
+    private static readonly Dictionary<string, IReadOnlyList<string>> LicenceOptions = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["CBN"] = ["DMB", "MFB", "PMB"],
+        ["NDIC"] = ["DMB", "MFB"],
+        ["NAICOM"] = ["GENERAL_INSURER", "LIFE_INSURER"],
+        ["SEC"] = ["BROKER_DEALER"]
+    };
+
+    private List<RegulatoryActionForecast> _regulatoryRanking = new();
+    private List<ChurnRiskAssessment> _churnRisks = new();
+    private string _selectedRegulator = "CBN";
+    private string _selectedLicence = string.Empty;
+    private string? _error;
+    private Exception? _loadException;
+    private bool _loading = true;
+
+    private IReadOnlyList<string> CurrentLicenceOptions =>
+        LicenceOptions.TryGetValue(_selectedRegulator, out var options)
+            ? options
+            : Array.Empty<string>();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await ReloadAsync();
+    }
+
+    private async Task OnRegulatorChangedAsync()
+    {
+        if (!CurrentLicenceOptions.Contains(_selectedLicence, StringComparer.OrdinalIgnoreCase))
+        {
+            _selectedLicence = string.Empty;
+        }
+
+        await ReloadAsync();
+    }
+
+    private async Task ReloadAsync()
+    {
+        _loading = true;
+        _error = null;
+        _loadException = null;
+
+        try
+        {
+            _regulatoryRanking = (await ForeSightService.GetRegulatoryRiskRankingAsync(
+                _selectedRegulator,
+                string.IsNullOrWhiteSpace(_selectedLicence) ? null : _selectedLicence)).ToList();
+            _churnRisks = (await ForeSightService.GetChurnRiskDashboardAsync()).ToList();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+            _loadException = ex;
+            Toast.Error($"Unable to load ForeSight platform data: {ex.Message}");
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+}

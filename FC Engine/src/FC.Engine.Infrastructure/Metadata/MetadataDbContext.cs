@@ -204,6 +204,15 @@ public class MetadataDbContext : DbContext
     public DbSet<ComplianceIqQuickQuestion> ComplianceIqQuickQuestions => Set<ComplianceIqQuickQuestion>();
     public DbSet<ComplianceIqFeedback> ComplianceIqFeedback => Set<ComplianceIqFeedback>();
 
+    // Predictive compliance intelligence (AI-04)
+    public DbSet<ForeSightConfig> ForeSightConfigs => Set<ForeSightConfig>();
+    public DbSet<ForeSightModelVersion> ForeSightModelVersions => Set<ForeSightModelVersion>();
+    public DbSet<ForeSightFeatureDefinition> ForeSightFeatureDefinitions => Set<ForeSightFeatureDefinition>();
+    public DbSet<ForeSightRegulatoryThreshold> ForeSightRegulatoryThresholds => Set<ForeSightRegulatoryThreshold>();
+    public DbSet<ForeSightPrediction> ForeSightPredictions => Set<ForeSightPrediction>();
+    public DbSet<ForeSightPredictionFeatureRecord> ForeSightPredictionFeatures => Set<ForeSightPredictionFeatureRecord>();
+    public DbSet<ForeSightAlert> ForeSightAlerts => Set<ForeSightAlert>();
+
     // Cross-Border Harmonisation (RG-41)
     public DbSet<RegulatoryJurisdiction> RegulatoryJurisdictions => Set<RegulatoryJurisdiction>();
     public DbSet<FinancialGroup> FinancialGroups => Set<FinancialGroup>();

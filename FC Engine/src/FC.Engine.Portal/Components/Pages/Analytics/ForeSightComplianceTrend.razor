@@ -1,0 +1,162 @@
+@page "/analytics/foresight/compliance-trend"
+@attribute [Authorize]
+@using FC.Engine.Domain.Abstractions
+@using FC.Engine.Domain.Models
+@inject IForeSightService ForeSightService
+
+<PageTitle>ForeSight Compliance Trend</PageTitle>
+
+<div class="container-fluid px-4">
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
+        <div>
+            <div class="small text-muted mb-1"><a href="/analytics/foresight" class="link-secondary">ForeSight</a> / Compliance Trend</div>
+            <h1 class="h3 mb-1">Compliance Trend Detail</h1>
+            <p class="text-muted mb-0">Projected compliance-health movement, explainability drivers, and advisory recommendations.</p>
+        </div>
+        <a class="btn btn-sm btn-outline-primary" href="/analytics/foresight">Back to overview</a>
+    </div>
+
+    @if (_loading)
+    {
+        <div class="text-center py-5" role="status" aria-live="polite">
+            <div class="spinner-border text-primary"></div>
+            <p class="text-muted mt-3 mb-0">Loading compliance-trend detail...</p>
+        </div>
+    }
+    else if (!string.IsNullOrWhiteSpace(_error))
+    {
+        <div class="alert alert-danger">@_error</div>
+    }
+    else if (_forecast is null)
+    {
+        <div class="alert alert-secondary mb-0">No unsuppressed compliance-trend forecast is currently available for this institution.</div>
+    }
+    else
+    {
+        <div class="row g-3 mb-4">
+            <div class="col-md-3">
+                <div class="card border-0 shadow-sm h-100">
+                    <div class="card-body">
+                        <div class="small text-muted">Current score</div>
+                        <div class="display-6">@_forecast.CurrentScore.ToString("F1")</div>
+                        <div class="small text-muted">@_forecast.CurrentRating</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card border-0 shadow-sm h-100">
+                    <div class="card-body">
+                        <div class="small text-muted">Projected score</div>
+                        <div class="display-6">@_forecast.ProjectedScore.ToString("F1")</div>
+                        <div class="small text-muted">@_forecast.ProjectedRating</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card border-0 shadow-sm h-100">
+                    <div class="card-body">
+                        <div class="small text-muted">Score change</div>
+                        <div class="display-6 @(_forecast.ScoreChange < 0 ? "text-danger" : "text-success")">
+                            @(_forecast.ScoreChange >= 0 ? "+" : "")@_forecast.ScoreChange.ToString("F1")
+                        </div>
+                        <div class="small text-muted">@_forecast.DecliningPillar</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card border-0 shadow-sm h-100">
+                    <div class="card-body">
+                        <div class="small text-muted">Model confidence</div>
+                        <div class="display-6">@_forecast.ConfidenceScore.ToString("P0")</div>
+                        <div class="small text-muted">@_forecast.ConfidenceLower.ToString("F1") to @_forecast.ConfidenceUpper.ToString("F1")</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center gap-3">
+                <h2 class="h6 mb-0">Explainability</h2>
+                <span class="badge @(_forecast.RiskBand is "HIGH" or "CRITICAL" ? "bg-danger" : _forecast.RiskBand == "MEDIUM" ? "bg-warning text-dark" : "bg-success")">@_forecast.RiskBand</span>
+            </div>
+            <div class="card-body">
+                <p class="mb-2">@_forecast.Explanation</p>
+                <p class="text-muted mb-3">@_forecast.RootCauseNarrative</p>
+
+                @if (!string.IsNullOrWhiteSpace(_forecast.Recommendation))
+                {
+                    <div class="alert alert-light border">
+                        <strong>Recommendation:</strong> @_forecast.Recommendation
+                    </div>
+                }
+
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle mb-0" aria-label="Compliance trend drivers">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Driver</th>
+                                <th>Raw value</th>
+                                <th>Weight</th>
+                                <th>Contribution</th>
+                                <th>Impact</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var factor in _forecast.TopFactors.OrderByDescending(x => x.ContributionScore))
+                            {
+                                <tr>
+                                    <td>@factor.FeatureLabel</td>
+                                    <td>@factor.RawValue.ToString("F2")</td>
+                                    <td>@factor.Weight.ToString("F2")</td>
+                                    <td>@factor.ContributionScore.ToString("F3")</td>
+                                    <td>@FormatImpact(factor.ImpactDirection)</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthenticationStateTask { get; set; } = default!;
+
+    private ComplianceScoreForecast? _forecast;
+    private bool _loading = true;
+    private string? _error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _loading = true;
+        _error = null;
+
+        try
+        {
+            var auth = await AuthenticationStateTask;
+            var tenantValue = auth.User.FindFirst("tenant_id")?.Value
+                ?? auth.User.FindFirst("TenantId")?.Value
+                ?? throw new InvalidOperationException("Tenant context is missing from the current session.");
+
+            var tenantId = Guid.Parse(tenantValue);
+            var dashboard = await ForeSightService.GetTenantDashboardAsync(tenantId);
+            _forecast = dashboard.ComplianceForecast;
+        }
+        catch (Exception ex)
+        {
+            _error = $"Unable to load compliance-trend detail: {ex.Message}";
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private static string FormatImpact(string impactDirection) => impactDirection switch
+    {
+        "DECREASES_RISK" => "Reduces risk",
+        "DECREASES_RESILIENCE" => "Reduces resilience",
+        _ => "Increases risk"
+    };
+}

@@ -1,0 +1,395 @@
+@page "/analytics/foresight"
+@attribute [Authorize]
+@using FC.Engine.Domain.Abstractions
+@using FC.Engine.Domain.Models
+@inject IForeSightService ForeSightService
+@inject IJSRuntime JS
+
+<PageTitle>ForeSight</PageTitle>
+
+<div class="container-fluid px-4">
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
+        <div>
+            <h1 class="h3 mb-1">ForeSight Predictive Dashboard</h1>
+            <p class="text-muted mb-0">Advisory-only forecasts for filing risk, capital pressure, and compliance-health deterioration.</p>
+        </div>
+        <div class="d-flex gap-2">
+            <button class="btn btn-outline-primary btn-sm" @onclick="RefreshAsync" disabled="@_busy">
+                <span class="me-1" aria-hidden="true">↻</span> Refresh
+            </button>
+            <button class="btn btn-primary btn-sm" @onclick="DownloadPdfAsync" disabled="@(_busy || _dashboard is null)">
+                Export PDF
+            </button>
+        </div>
+    </div>
+
+    @if (_isLoading)
+    {
+        <div class="text-center py-5" role="status" aria-live="polite">
+            <div class="spinner-border text-primary"></div>
+            <p class="text-muted mt-3 mb-0">Computing predictive compliance signals...</p>
+        </div>
+    }
+    else if (!string.IsNullOrWhiteSpace(_error))
+    {
+        <div class="alert alert-danger">@_error</div>
+    }
+    else if (_dashboard is not null)
+    {
+        var compliance = _dashboard.ComplianceForecast;
+        var filingHigh = _dashboard.FilingRisks.Count(x => x.RiskBand is "HIGH" or "CRITICAL");
+        var capitalHigh = _dashboard.CapitalForecasts.Count(x => x.RiskBand is "HIGH" or "CRITICAL");
+
+        @if (_dashboard.Alerts.Count > 0)
+        {
+            <div class="mb-4">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <h2 class="h5 mb-0">Active Advisory Alerts</h2>
+                    <span class="badge bg-warning text-dark">@_dashboard.Alerts.Count alert(s)</span>
+                </div>
+                <div class="row g-3">
+                    @foreach (var alert in _dashboard.Alerts.Take(4))
+                    {
+                        <div class="col-lg-6">
+                            <div class="card border-0 shadow-sm h-100 @alert.SeverityCssClass">
+                                <div class="card-body">
+                                    <div class="d-flex justify-content-between align-items-start gap-3">
+                                        <div>
+                                            <div class="small text-uppercase text-muted">@alert.AlertType.Replace("_", " ")</div>
+                                            <h3 class="h6 mb-2">@alert.Title</h3>
+                                            <p class="small text-muted mb-2">@alert.Body</p>
+                                            @if (!string.IsNullOrWhiteSpace(alert.Recommendation))
+                                            {
+                                                <p class="small mb-0"><strong>Recommendation:</strong> @alert.Recommendation</p>
+                                            }
+                                        </div>
+                                        <button class="btn btn-sm btn-outline-secondary"
+                                                @onclick="() => DismissAlertAsync(alert.Id)"
+                                                aria-label="Dismiss alert">
+                                            Dismiss
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+
+        <div class="row g-3 mb-4">
+            <div class="col-md-4">
+                <div class="card border-0 shadow-sm h-100">
+                    <div class="card-body">
+                        <div class="text-muted small">High Filing Risks</div>
+                        <div class="display-6 mb-1">@filingHigh</div>
+                        <div class="small text-muted">@_dashboard.FilingRisks.Count filing forecast(s) in scope</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card border-0 shadow-sm h-100">
+                    <div class="card-body">
+                        <div class="text-muted small">Capital Warning Signals</div>
+                        <div class="display-6 mb-1">@capitalHigh</div>
+                        <div class="small text-muted">@_dashboard.CapitalForecasts.Count prudential metric forecast(s)</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card border-0 shadow-sm h-100">
+                    <div class="card-body">
+                        <div class="text-muted small">Compliance Forecast</div>
+                        @if (compliance is null)
+                        {
+                            <div class="h4 mb-1">Unavailable</div>
+                            <div class="small text-muted">Insufficient scoring history for an unsuppressed forecast.</div>
+                        }
+                        else
+                        {
+                            <div class="display-6 mb-1">@compliance.ProjectedScore.ToString("F1")</div>
+                            <div class="small text-muted">
+                                @compliance.CurrentRating → @compliance.ProjectedRating
+                                <span class="ms-2 badge @(compliance.RiskBand is "HIGH" or "CRITICAL" ? "bg-danger" : compliance.RiskBand == "MEDIUM" ? "bg-warning text-dark" : "bg-success")">
+                                    @compliance.RiskBand
+                                </span>
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        @if (compliance is not null)
+        {
+                <div class="card border-0 shadow-sm mb-4">
+                    <div class="card-header bg-white">
+                        <div class="d-flex justify-content-between align-items-center gap-3">
+                            <h2 class="h6 mb-0">Compliance Health Trend Forecast</h2>
+                            <a class="btn btn-sm btn-outline-secondary" href="/analytics/foresight/compliance-trend">View detail</a>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                    <div class="row g-3">
+                        <div class="col-lg-4">
+                            <div class="small text-muted">Projected score</div>
+                            <div class="h3 mb-1">@compliance.ProjectedScore.ToString("F1")</div>
+                            <div class="small text-muted">
+                                Confidence interval: @compliance.ConfidenceLower.ToString("F1") to @compliance.ConfidenceUpper.ToString("F1")
+                            </div>
+                        </div>
+                        <div class="col-lg-4">
+                            <div class="small text-muted">Expected change</div>
+                            <div class="h3 mb-1 @(compliance.ScoreChange < 0 ? "text-danger" : "text-success")">
+                                @(compliance.ScoreChange >= 0 ? "+" : "")@compliance.ScoreChange.ToString("F1")
+                            </div>
+                            <div class="small text-muted">Primary pillar: @compliance.DecliningPillar</div>
+                        </div>
+                        <div class="col-lg-4">
+                            <div class="small text-muted">Model confidence</div>
+                            <div class="h3 mb-1">@compliance.ConfidenceScore.ToString("P0")</div>
+                            <div class="small text-muted">Advisory narrative is suppressed below configured confidence.</div>
+                        </div>
+                    </div>
+                    <hr />
+                    <p class="mb-2">@compliance.Explanation</p>
+                    <p class="text-muted mb-2">@compliance.RootCauseNarrative</p>
+                    @if (!string.IsNullOrWhiteSpace(compliance.Recommendation))
+                    {
+                        <div class="alert alert-light border mb-0">
+                            <strong>Recommended action:</strong> @compliance.Recommendation
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+
+        <div class="row g-4">
+            <div class="col-xl-7">
+                <div class="card border-0 shadow-sm h-100">
+                    <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                        <h2 class="h6 mb-0">Filing Risk Forecasts</h2>
+                        <div class="d-flex align-items-center gap-2">
+                            <span class="badge bg-danger">@filingHigh high-risk</span>
+                            <a class="btn btn-sm btn-outline-secondary" href="/analytics/foresight/filing-risks">View all</a>
+                        </div>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0" aria-label="Filing risk forecasts">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Module</th>
+                                    <th>Period</th>
+                                    <th>Due date</th>
+                                    <th>P(Late)</th>
+                                    <th>Confidence</th>
+                                    <th>Risk</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @if (_dashboard.FilingRisks.Count == 0)
+                                {
+                                    <tr>
+                                        <td colspan="6" class="text-center text-muted py-4">No unsuppressed filing forecasts are currently available.</td>
+                                    </tr>
+                                }
+                                else
+                                {
+                                    @foreach (var item in _dashboard.FilingRisks.OrderByDescending(x => x.ProbabilityLate).Take(10))
+                                    {
+                                        <tr>
+                                            <td>
+                                                <div class="fw-semibold">
+                                                    <a class="link-offset-2 link-underline link-underline-opacity-0"
+                                                       href="@($"/analytics/foresight/filing-risks?module={Uri.EscapeDataString(item.ModuleCode)}")">
+                                                        @item.ModuleName
+                                                    </a>
+                                                </div>
+                                                <div class="small text-muted">@item.RootCauseNarrative</div>
+                                            </td>
+                                            <td>@item.PeriodCode</td>
+                                            <td>@item.DueDate.ToString("dd MMM yyyy")</td>
+                                            <td>@item.ProbabilityLate.ToString("P0")</td>
+                                            <td>@item.ConfidenceScore.ToString("P0")</td>
+                                            <td><span class="badge @(item.RiskBand is "HIGH" or "CRITICAL" ? "bg-danger" : item.RiskBand == "MEDIUM" ? "bg-warning text-dark" : "bg-success")">@item.RiskBand</span></td>
+                                        </tr>
+                                    }
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-xl-5">
+                <div class="card border-0 shadow-sm h-100">
+                    <div class="card-header bg-white">
+                        <div class="d-flex justify-content-between align-items-center gap-3">
+                            <h2 class="h6 mb-0">Capital Forecasts</h2>
+                            <a class="btn btn-sm btn-outline-secondary" href="/analytics/foresight/capital-forecast">View all</a>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        @if (_dashboard.CapitalForecasts.Count == 0)
+                        {
+                            <div class="text-muted">No unsuppressed capital forecasts are available for the current institution.</div>
+                        }
+                        else
+                        {
+                            @foreach (var item in _dashboard.CapitalForecasts.OrderByDescending(x => x.RiskBand).ThenByDescending(x => x.ProjectedValue))
+                            {
+                                <div class="border rounded p-3 mb-3">
+                                    <div class="d-flex justify-content-between align-items-start gap-3">
+                                        <div>
+                                            <div class="fw-semibold">
+                                                <a class="link-offset-2 link-underline link-underline-opacity-0"
+                                                   href="@($"/analytics/foresight/capital-forecast?metric={Uri.EscapeDataString(item.MetricCode)}")">
+                                                    @item.MetricLabel
+                                                </a>
+                                            </div>
+                                            <div class="small text-muted">@item.HorizonLabel</div>
+                                        </div>
+                                        <span class="badge @(item.RiskBand is "HIGH" or "CRITICAL" ? "bg-danger" : item.RiskBand == "MEDIUM" ? "bg-warning text-dark" : "bg-success")">@item.RiskBand</span>
+                                    </div>
+                                    <div class="row g-2 mt-1">
+                                        <div class="col-4">
+                                            <div class="small text-muted">Current</div>
+                                            <div class="fw-semibold">@item.CurrentValue.ToString("F2")</div>
+                                        </div>
+                                        <div class="col-4">
+                                            <div class="small text-muted">Projected</div>
+                                            <div class="fw-semibold">@item.ProjectedValue.ToString("F2")</div>
+                                        </div>
+                                        <div class="col-4">
+                                            <div class="small text-muted">Threshold</div>
+                                            <div class="fw-semibold">@item.ThresholdValue.ToString("F2")</div>
+                                        </div>
+                                    </div>
+                                    <div class="small text-muted mt-2">
+                                        Confidence interval: @item.ConfidenceLower.ToString("F2") to @item.ConfidenceUpper.ToString("F2")
+                                    </div>
+                                    <p class="small mb-1 mt-2">@item.Explanation</p>
+                                    @if (!string.IsNullOrWhiteSpace(item.Recommendation))
+                                    {
+                                        <div class="small"><strong>Recommendation:</strong> @item.Recommendation</div>
+                                    }
+                                </div>
+                            }
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="alert alert-secondary mt-4 mb-0">
+            ForeSight outputs are advisory only. They do not trigger automatic enforcement, rejection, or escalation actions.
+        </div>
+    }
+</div>
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthenticationStateTask { get; set; } = default!;
+
+    private ForeSightDashboardData? _dashboard;
+    private Guid _tenantId;
+    private bool _isLoading = true;
+    private bool _busy;
+    private string? _error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _isLoading = true;
+        _error = null;
+
+        try
+        {
+            var auth = await AuthenticationStateTask;
+            var tenantValue = auth.User.FindFirst("tenant_id")?.Value
+                ?? auth.User.FindFirst("TenantId")?.Value
+                ?? throw new InvalidOperationException("Tenant context is missing from the current session.");
+
+            _tenantId = Guid.Parse(tenantValue);
+            _dashboard = await ForeSightService.GetTenantDashboardAsync(_tenantId);
+        }
+        catch (Exception ex)
+        {
+            _error = $"Unable to load ForeSight predictions: {ex.Message}";
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private async Task RefreshAsync()
+    {
+        if (_tenantId == Guid.Empty)
+        {
+            return;
+        }
+
+        _busy = true;
+        _error = null;
+
+        try
+        {
+            await ForeSightService.RunAllPredictionsAsync(_tenantId, "PORTAL_USER");
+            _dashboard = await ForeSightService.GetTenantDashboardAsync(_tenantId);
+        }
+        catch (Exception ex)
+        {
+            _error = $"Unable to refresh ForeSight predictions: {ex.Message}";
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task DownloadPdfAsync()
+    {
+        if (_tenantId == Guid.Empty)
+        {
+            return;
+        }
+
+        _busy = true;
+        _error = null;
+
+        try
+        {
+            var bytes = await ForeSightService.ExportFilingRiskReportAsync(_tenantId);
+            var fileName = $"foresight-filing-risk-{DateTime.UtcNow:yyyyMMddHHmmss}.pdf";
+            await JS.InvokeVoidAsync("portalDownloadBase64File", Convert.ToBase64String(bytes), fileName, "application/pdf");
+        }
+        catch (Exception ex)
+        {
+            _error = $"Unable to export the filing-risk report: {ex.Message}";
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task DismissAlertAsync(int alertId)
+    {
+        try
+        {
+            await ForeSightService.DismissAlertAsync(alertId, "PORTAL_USER");
+            if (_dashboard is not null)
+            {
+                _dashboard.Alerts.RemoveAll(x => x.Id == alertId);
+            }
+        }
+        catch (Exception ex)
+        {
+            _error = $"Unable to dismiss alert: {ex.Message}";
+        }
+    }
+}

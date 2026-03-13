@@ -1,0 +1,217 @@
+@page "/platform/foresight/regulatory-ranking"
+@attribute [Authorize(Policy = "PlatformAdmin")]
+@using Microsoft.AspNetCore.Components
+@using FC.Engine.Admin.Services
+@using FC.Engine.Domain.Abstractions
+@using FC.Engine.Domain.Models
+@inject IForeSightService ForeSightService
+@inject ToastService Toast
+
+<PageTitle>ForeSight Regulatory Ranking</PageTitle>
+
+<PageHeader Title="Regulatory Action Ranking"
+            Subtitle="Cross-tenant supervisory-priority forecasts with regulator and licence filters.">
+    <SecondaryActions>
+        <a class="fc-btn fc-btn--outline fc-btn--sm" href="/platform/foresight">Back to overview</a>
+    </SecondaryActions>
+</PageHeader>
+
+<div class="fc-page">
+    @if (_loading)
+    {
+        <div class="fc-card">
+            <div class="fc-card__body">
+                <div class="fc-skel fc-skel-block" style="--skel-w:100%;--skel-h:320px"></div>
+            </div>
+        </div>
+    }
+    else if (!string.IsNullOrWhiteSpace(_error))
+    {
+        <SectionErrorBoundary Title="Failed to load regulatory ranking"
+                              ExternalError="@_loadException"
+                              OnRetry="LoadAsync" />
+    }
+    else
+    {
+        <div class="fc-card fc-mb-4">
+            <div class="fc-card__body">
+                <div class="fc-grid" style="grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem;">
+                    <label class="fc-field">
+                        <span class="fc-field__label">Regulator</span>
+                        <select class="fc-input" @bind="_selectedRegulator" @bind:after="OnRegulatorChangedAsync">
+                            @foreach (var regulator in RegulatorOptions)
+                            {
+                                <option value="@regulator">@regulator</option>
+                            }
+                        </select>
+                    </label>
+                    <label class="fc-field">
+                        <span class="fc-field__label">Licence type</span>
+                        <select class="fc-input" @bind="_selectedLicence" @bind:after="LoadAsync">
+                            <option value="">All licence types</option>
+                            @foreach (var licence in CurrentLicenceOptions)
+                            {
+                                <option value="@licence">@licence</option>
+                            }
+                        </select>
+                    </label>
+                </div>
+            </div>
+        </div>
+
+        <div class="fc-grid fc-grid-3 fc-mb-4">
+            <div class="fc-card">
+                <div class="fc-card__body">
+                    <div class="fc-stat-label">Entities ranked</div>
+                    <div class="fc-stat-value">@_items.Count</div>
+                </div>
+            </div>
+            <div class="fc-card">
+                <div class="fc-card__body">
+                    <div class="fc-stat-label">High or critical</div>
+                    <div class="fc-stat-value">@_items.Count(x => x.RiskBand is "HIGH" or "CRITICAL")</div>
+                </div>
+            </div>
+            <div class="fc-card">
+                <div class="fc-card__body">
+                    <div class="fc-stat-label">Average confidence</div>
+                    <div class="fc-stat-value">@(_items.Count == 0 ? "0%" : _items.Average(x => x.ConfidenceScore).ToString("P0"))</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="fc-card">
+            <div class="fc-card__body fc-table-responsive">
+                <table class="fc-table" aria-label="Regulatory action ranking detail">
+                    <thead>
+                        <tr>
+                            <th>Institution</th>
+                            <th>Licence</th>
+                            <th>Probability</th>
+                            <th>Confidence</th>
+                            <th>Risk</th>
+                            <th>Recommendation</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (_items.Count == 0)
+                        {
+                            <tr>
+                                <td colspan="6" class="fc-text-muted">No unsuppressed regulatory-action forecasts are available for this filter.</td>
+                            </tr>
+                        }
+                        else
+                        {
+                            @foreach (var item in _items)
+                            {
+                                <tr>
+                                    <td>
+                                        <div class="fw-semibold">@item.InstitutionName</div>
+                                        <div class="fc-text-muted">@item.RootCauseNarrative</div>
+                                        @if (item.TopFactors.Count > 0)
+                                        {
+                                            <div class="d-flex flex-wrap gap-1 mt-2">
+                                                @foreach (var factor in item.TopFactors)
+                                                {
+                                                    <span class="fc-badge">@factor.FeatureLabel (@factor.ContributionScore.ToString("F2"))</span>
+                                                }
+                                            </div>
+                                        }
+                                    </td>
+                                    <td>@item.LicenceType</td>
+                                    <td>@item.InterventionProbability.ToString("P0")</td>
+                                    <td>
+                                        <div>@item.ConfidenceScore.ToString("P0")</div>
+                                        <div class="fc-text-muted">@item.ConfidenceLower.ToString("P0") to @item.ConfidenceUpper.ToString("P0")</div>
+                                    </td>
+                                    <td>
+                                        <span class="fc-badge @(item.RiskBand is "HIGH" or "CRITICAL" ? "fc-badge--danger" : item.RiskBand == "MEDIUM" ? "fc-badge--warning" : "fc-badge--success")">
+                                            @item.RiskBand
+                                        </span>
+                                    </td>
+                                    <td>@item.Recommendation</td>
+                                </tr>
+                            }
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private static readonly string[] RegulatorOptions = ["CBN", "NDIC", "NAICOM", "SEC"];
+
+    private static readonly Dictionary<string, IReadOnlyList<string>> LicenceOptions = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["CBN"] = ["DMB", "MFB", "PMB"],
+        ["NDIC"] = ["DMB", "MFB"],
+        ["NAICOM"] = ["GENERAL_INSURER", "LIFE_INSURER"],
+        ["SEC"] = ["BROKER_DEALER"]
+    };
+
+    [SupplyParameterFromQuery(Name = "regulator")] public string? QueryRegulator { get; set; }
+    [SupplyParameterFromQuery(Name = "licence")] public string? QueryLicence { get; set; }
+
+    private List<RegulatoryActionForecast> _items = new();
+    private string _selectedRegulator = "CBN";
+    private string _selectedLicence = string.Empty;
+    private string? _error;
+    private Exception? _loadException;
+    private bool _loading = true;
+
+    private IReadOnlyList<string> CurrentLicenceOptions =>
+        LicenceOptions.TryGetValue(_selectedRegulator, out var options)
+            ? options
+            : Array.Empty<string>();
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (!string.IsNullOrWhiteSpace(QueryRegulator)
+            && RegulatorOptions.Contains(QueryRegulator, StringComparer.OrdinalIgnoreCase))
+        {
+            _selectedRegulator = QueryRegulator.ToUpperInvariant();
+        }
+
+        _selectedLicence = CurrentLicenceOptions.Contains(QueryLicence ?? string.Empty, StringComparer.OrdinalIgnoreCase)
+            ? QueryLicence ?? string.Empty
+            : string.Empty;
+
+        await LoadAsync();
+    }
+
+    private async Task OnRegulatorChangedAsync()
+    {
+        if (!CurrentLicenceOptions.Contains(_selectedLicence, StringComparer.OrdinalIgnoreCase))
+        {
+            _selectedLicence = string.Empty;
+        }
+
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _error = null;
+        _loadException = null;
+
+        try
+        {
+            _items = (await ForeSightService.GetRegulatoryRiskRankingAsync(
+                _selectedRegulator,
+                string.IsNullOrWhiteSpace(_selectedLicence) ? null : _selectedLicence)).ToList();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+            _loadException = ex;
+            Toast.Error($"Unable to load regulatory ranking: {ex.Message}");
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+}

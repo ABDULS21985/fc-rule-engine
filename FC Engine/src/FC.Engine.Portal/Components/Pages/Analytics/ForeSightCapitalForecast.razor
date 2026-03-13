@@ -1,0 +1,191 @@
+@page "/analytics/foresight/capital-forecast"
+@attribute [Authorize]
+@using FC.Engine.Domain.Abstractions
+@using FC.Engine.Domain.Models
+@inject IForeSightService ForeSightService
+
+<PageTitle>ForeSight Capital Forecast</PageTitle>
+
+<div class="container-fluid px-4">
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
+        <div>
+            <div class="small text-muted mb-1"><a href="/analytics/foresight" class="link-secondary">ForeSight</a> / Capital Forecast</div>
+            <h1 class="h3 mb-1">Capital Forecast Detail</h1>
+            <p class="text-muted mb-0">Prudential forecast detail for capital and liquidity pressure, with regulatory thresholds and model drivers.</p>
+        </div>
+        <div class="d-flex gap-2">
+            @if (!string.IsNullOrWhiteSpace(Metric))
+            {
+                <a class="btn btn-sm btn-outline-secondary" href="/analytics/foresight/capital-forecast">Clear filter</a>
+            }
+            <a class="btn btn-sm btn-outline-primary" href="/analytics/foresight">Back to overview</a>
+        </div>
+    </div>
+
+    @if (_loading)
+    {
+        <div class="text-center py-5" role="status" aria-live="polite">
+            <div class="spinner-border text-primary"></div>
+            <p class="text-muted mt-3 mb-0">Loading capital-forecast detail...</p>
+        </div>
+    }
+    else if (!string.IsNullOrWhiteSpace(_error))
+    {
+        <div class="alert alert-danger">@_error</div>
+    }
+    else
+    {
+        <div class="row g-3 mb-4">
+            <div class="col-md-4">
+                <div class="card border-0 shadow-sm h-100">
+                    <div class="card-body">
+                        <div class="small text-muted">Forecasts in scope</div>
+                        <div class="display-6">@_items.Count</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card border-0 shadow-sm h-100">
+                    <div class="card-body">
+                        <div class="small text-muted">Projected breach or warning</div>
+                        <div class="display-6">@_items.Count(x => x.RiskBand is "HIGH" or "CRITICAL")</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card border-0 shadow-sm h-100">
+                    <div class="card-body">
+                        <div class="small text-muted">Average confidence</div>
+                        <div class="display-6">@(_items.Count == 0 ? "0%" : _items.Average(x => x.ConfidenceScore).ToString("P0"))</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        @if (_items.Count == 0)
+        {
+            <div class="alert alert-secondary mb-0">No unsuppressed capital forecasts are currently available for this institution.</div>
+        }
+        else
+        {
+            @foreach (var item in _items.OrderByDescending(x => x.RiskBand).ThenByDescending(x => x.ProjectedValue))
+            {
+                <div class="card border-0 shadow-sm mb-4">
+                    <div class="card-header bg-white d-flex justify-content-between align-items-center gap-3">
+                        <div>
+                            <h2 class="h6 mb-0">@item.MetricLabel</h2>
+                            <div class="small text-muted">@item.HorizonLabel</div>
+                        </div>
+                        <span class="badge @(item.RiskBand is "HIGH" or "CRITICAL" ? "bg-danger" : item.RiskBand == "MEDIUM" ? "bg-warning text-dark" : "bg-success")">@item.RiskBand</span>
+                    </div>
+                    <div class="card-body">
+                        <div class="row g-3 mb-3">
+                            <div class="col-md-3">
+                                <div class="small text-muted">Current value</div>
+                                <div class="h4 mb-0">@item.CurrentValue.ToString("F2")</div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="small text-muted">Projected value</div>
+                                <div class="h4 mb-0">@item.ProjectedValue.ToString("F2")</div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="small text-muted">Threshold</div>
+                                <div class="h4 mb-0">@item.ThresholdValue.ToString("F2")</div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="small text-muted">Confidence score</div>
+                                <div class="h4 mb-0">@item.ConfidenceScore.ToString("P0")</div>
+                            </div>
+                        </div>
+
+                        <div class="small text-muted mb-3">Confidence interval: @item.ConfidenceLower.ToString("F2") to @item.ConfidenceUpper.ToString("F2")</div>
+                        <p class="mb-2">@item.Explanation</p>
+                        <p class="text-muted mb-3">@item.RootCauseNarrative</p>
+
+                        @if (!string.IsNullOrWhiteSpace(item.Recommendation))
+                        {
+                            <div class="alert alert-light border">
+                                <strong>Recommendation:</strong> @item.Recommendation
+                            </div>
+                        }
+
+                        <div class="table-responsive">
+                            <table class="table table-sm align-middle mb-0" aria-label="@($"{item.MetricLabel} forecast drivers")">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Driver</th>
+                                        <th>Raw value</th>
+                                        <th>Weight</th>
+                                        <th>Contribution</th>
+                                        <th>Impact</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var factor in item.TopFactors.OrderByDescending(x => x.ContributionScore))
+                                    {
+                                        <tr>
+                                            <td>@factor.FeatureLabel</td>
+                                            <td>@factor.RawValue.ToString("F2")</td>
+                                            <td>@factor.Weight.ToString("F2")</td>
+                                            <td>@factor.ContributionScore.ToString("F3")</td>
+                                            <td>@FormatImpact(factor.ImpactDirection)</td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            }
+        }
+    }
+</div>
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthenticationStateTask { get; set; } = default!;
+    [SupplyParameterFromQuery(Name = "metric")] public string? Metric { get; set; }
+
+    private List<CapitalForecastSummary> _items = new();
+    private bool _loading = true;
+    private string? _error;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _error = null;
+
+        try
+        {
+            var auth = await AuthenticationStateTask;
+            var tenantValue = auth.User.FindFirst("tenant_id")?.Value
+                ?? auth.User.FindFirst("TenantId")?.Value
+                ?? throw new InvalidOperationException("Tenant context is missing from the current session.");
+
+            var tenantId = Guid.Parse(tenantValue);
+            var dashboard = await ForeSightService.GetTenantDashboardAsync(tenantId);
+            _items = dashboard.CapitalForecasts
+                .Where(x => string.IsNullOrWhiteSpace(Metric) || x.MetricCode.Equals(Metric, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+        }
+        catch (Exception ex)
+        {
+            _error = $"Unable to load capital-forecast detail: {ex.Message}";
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private static string FormatImpact(string impactDirection) => impactDirection switch
+    {
+        "DECREASES_RISK" => "Reduces risk",
+        "DECREASES_RESILIENCE" => "Reduces resilience",
+        _ => "Increases risk"
+    };
+}

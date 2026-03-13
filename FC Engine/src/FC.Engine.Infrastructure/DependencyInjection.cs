@@ -285,6 +285,9 @@ public static class DependencyInjection
         services.AddScoped<IComplianceHealthService, ComplianceHealthService>();
         services.AddHostedService<ChsComputationJob>();
 
+        // ── Predictive Compliance Intelligence (AI-04) ──
+        services.AddForeSightEngine();
+
         // ── Report Builder (RG-18) ──
         services.AddScoped<ISavedReportRepository, SavedReportRepository>();
         services.AddScoped<IReportQueryEngine, ReportQueryEngine>();

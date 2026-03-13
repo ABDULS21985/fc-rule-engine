@@ -1,0 +1,148 @@
+@page "/platform/foresight/churn-risk"
+@attribute [Authorize(Policy = "PlatformAdmin")]
+@using FC.Engine.Admin.Services
+@using FC.Engine.Domain.Abstractions
+@using FC.Engine.Domain.Models
+@inject IForeSightService ForeSightService
+@inject ToastService Toast
+
+<PageTitle>ForeSight Churn Risk</PageTitle>
+
+<PageHeader Title="Tenant Churn Risk"
+            Subtitle="Platform-wide retention-risk detail with explainability drivers and advisory recommendations.">
+    <SecondaryActions>
+        <a class="fc-btn fc-btn--outline fc-btn--sm" href="/platform/foresight">Back to overview</a>
+    </SecondaryActions>
+</PageHeader>
+
+<div class="fc-page">
+    @if (_loading)
+    {
+        <div class="fc-card">
+            <div class="fc-card__body">
+                <div class="fc-skel fc-skel-block" style="--skel-w:100%;--skel-h:320px"></div>
+            </div>
+        </div>
+    }
+    else if (!string.IsNullOrWhiteSpace(_error))
+    {
+        <SectionErrorBoundary Title="Failed to load churn-risk detail"
+                              ExternalError="@_loadException"
+                              OnRetry="LoadAsync" />
+    }
+    else
+    {
+        <div class="fc-grid fc-grid-3 fc-mb-4">
+            <div class="fc-card">
+                <div class="fc-card__body">
+                    <div class="fc-stat-label">Tenants ranked</div>
+                    <div class="fc-stat-value">@_items.Count</div>
+                </div>
+            </div>
+            <div class="fc-card">
+                <div class="fc-card__body">
+                    <div class="fc-stat-label">High or critical</div>
+                    <div class="fc-stat-value">@_items.Count(x => x.RiskBand is "HIGH" or "CRITICAL")</div>
+                </div>
+            </div>
+            <div class="fc-card">
+                <div class="fc-card__body">
+                    <div class="fc-stat-label">Average confidence</div>
+                    <div class="fc-stat-value">@(_items.Count == 0 ? "0%" : _items.Average(x => x.ConfidenceScore).ToString("P0"))</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="fc-card">
+            <div class="fc-card__body fc-table-responsive">
+                <table class="fc-table" aria-label="Churn risk detail">
+                    <thead>
+                        <tr>
+                            <th>Tenant</th>
+                            <th>Licence</th>
+                            <th>Probability</th>
+                            <th>Confidence</th>
+                            <th>Risk</th>
+                            <th>Recommendation</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (_items.Count == 0)
+                        {
+                            <tr>
+                                <td colspan="6" class="fc-text-muted">No unsuppressed churn-risk forecasts are available.</td>
+                            </tr>
+                        }
+                        else
+                        {
+                            @foreach (var item in _items)
+                            {
+                                <tr>
+                                    <td>
+                                        <div class="fw-semibold">@item.TenantName</div>
+                                        <div class="fc-text-muted">@item.RootCauseNarrative</div>
+                                        @if (item.TopFactors.Count > 0)
+                                        {
+                                            <div class="d-flex flex-wrap gap-1 mt-2">
+                                                @foreach (var factor in item.TopFactors)
+                                                {
+                                                    <span class="fc-badge">@factor.FeatureLabel (@factor.ContributionScore.ToString("F2"))</span>
+                                                }
+                                            </div>
+                                        }
+                                    </td>
+                                    <td>@item.LicenceType</td>
+                                    <td>@item.ChurnProbability.ToString("P0")</td>
+                                    <td>
+                                        <div>@item.ConfidenceScore.ToString("P0")</div>
+                                        <div class="fc-text-muted">@item.ConfidenceLower.ToString("P0") to @item.ConfidenceUpper.ToString("P0")</div>
+                                    </td>
+                                    <td>
+                                        <span class="fc-badge @(item.RiskBand is "HIGH" or "CRITICAL" ? "fc-badge--danger" : item.RiskBand == "MEDIUM" ? "fc-badge--warning" : "fc-badge--success")">
+                                            @item.RiskBand
+                                        </span>
+                                    </td>
+                                    <td>@item.Recommendation</td>
+                                </tr>
+                            }
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private List<ChurnRiskAssessment> _items = new();
+    private string? _error;
+    private Exception? _loadException;
+    private bool _loading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _error = null;
+        _loadException = null;
+
+        try
+        {
+            _items = (await ForeSightService.GetChurnRiskDashboardAsync()).ToList();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+            _loadException = ex;
+            Toast.Error($"Unable to load churn-risk detail: {ex.Message}");
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+}
