@@ -1,4 +1,5 @@
 @page "/regulator/stress-test"
+@page "/regulator/stress-test/{RunGuid:guid}"
 @attribute [Authorize(Policy = "RegulatorOnly")]
 @inject IStressTestOrchestrator Orchestrator
 @inject IStressTestReportGenerator ReportGenerator
@@ -440,6 +441,8 @@
 </SectionErrorBoundary>
 
 @code {
+    [Parameter] public Guid? RunGuid { get; set; }
+
     // ── Session context ───────────────────────────────────────────────
     private string RegulatorCode { get; set; } = string.Empty;
     private string CurrentPeriodCode { get; set; } = "2026-Q1";
@@ -479,12 +482,15 @@
     }
 
     // ── Lifecycle ─────────────────────────────────────────────────────
-    protected override async Task OnInitializedAsync() => await ReloadAsync();
+    protected override async Task OnParametersSetAsync() => await ReloadAsync();
 
     private async Task ReloadAsync()
     {
         _loading = true;
         _loadException = null;
+        _lastSummary = null;
+        _lastRunId = 0;
+        _lastScenarioCode = string.Empty;
         StateHasChanged();
 
         try
@@ -505,6 +511,11 @@
                 """)).ToList();
 
             await LoadRecentRunsAsync(conn);
+
+            if (RunGuid.HasValue)
+            {
+                await LoadRequestedRunAsync(RunGuid.Value);
+            }
         }
         catch (Exception ex)
         {
@@ -572,9 +583,7 @@
             _lastScenarioCode = summary.ScenarioCode;
 
             Toast.Success("Stress test completed successfully.", title: summary.ScenarioName);
-
-            using var conn = await Db.OpenAsync();
-            await LoadRecentRunsAsync(conn);
+            Nav.NavigateTo($"/regulator/stress-test/{summary.RunGuid}", replace: true);
         }
         catch (Exception ex)
         {
@@ -605,6 +614,35 @@
 
     private void ViewResults(Guid runGuid) =>
         Nav.NavigateTo($"/regulator/stress-test/{runGuid}");
+
+    private async Task LoadRequestedRunAsync(Guid runGuid)
+    {
+        var summary = await Orchestrator.GetRunSummaryAsync(runGuid);
+        if (summary is null)
+        {
+            throw new InvalidOperationException($"Stress test run '{runGuid}' was not found.");
+        }
+
+        _lastSummary = summary;
+        _lastRunId = summary.RunId;
+        _lastScenarioCode = summary.ScenarioCode;
+        _periodCode = summary.PeriodCode;
+        _timeHorizon = summary.TimeHorizon;
+        _activeTab = "configure";
+
+        var selectedScenario = _scenarios.FirstOrDefault(s =>
+            string.Equals(s.ScenarioCode, summary.ScenarioCode, StringComparison.OrdinalIgnoreCase));
+
+        if (selectedScenario is not null)
+        {
+            _selectedScenarioId = selectedScenario.Id;
+            _selectedScenarioCode = selectedScenario.ScenarioCode;
+        }
+        else
+        {
+            _selectedScenarioCode = summary.ScenarioCode;
+        }
+    }
 
     private async Task<int> GetEntityCountAsync()
     {
