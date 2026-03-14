@@ -1,3 +1,4 @@
+using System.Data;
 using System.Diagnostics;
 using FC.Engine.Domain.Abstractions;
 using FC.Engine.Domain.Entities;
@@ -6,7 +7,9 @@ using FC.Engine.Domain.Models;
 using FC.Engine.Domain.Notifications;
 using FC.Engine.Infrastructure.Metadata;
 using FC.Engine.Infrastructure.Reports;
+using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.Logging;
 
 namespace FC.Engine.Infrastructure.Services;
@@ -186,6 +189,14 @@ public sealed class AnomalyDetectionService : IAnomalyDetectionService
         Guid tenantId,
         CancellationToken ct = default)
     {
+        if (!await TableExistsAsync("meta", "anomaly_reports", ct))
+        {
+            _logger.LogInformation(
+                "Skipping latest anomaly report lookup for tenant {TenantId} because meta.anomaly_reports is not available.",
+                tenantId);
+            return null;
+        }
+
         var report = await _db.AnomalyReports
             .AsNoTracking()
             .Where(x => x.TenantId == tenantId && x.SubmissionId == submissionId)
@@ -202,15 +213,30 @@ public sealed class AnomalyDetectionService : IAnomalyDetectionService
         Guid tenantId,
         CancellationToken ct = default)
     {
+        if (!await TableExistsAsync("meta", "anomaly_reports", ct))
+        {
+            _logger.LogInformation(
+                "Skipping anomaly report lookup for report {ReportId} because meta.anomaly_reports is not available.",
+                reportId);
+            return null;
+        }
+
+        var hasAnomalyFindings = await TableExistsAsync("meta", "anomaly_findings", ct);
         var report = await _db.AnomalyReports
             .AsNoTracking()
-            .Include(x => x.Findings)
             .FirstOrDefaultAsync(x => x.Id == reportId && x.TenantId == tenantId, ct);
 
         if (report is null)
         {
             return null;
         }
+
+        report.Findings = hasAnomalyFindings
+            ? await _db.AnomalyFindings
+                .AsNoTracking()
+                .Where(x => x.AnomalyReportId == report.Id)
+                .ToListAsync(ct)
+            : [];
 
         report.Findings = report.Findings
             .OrderByDescending(x => AnomalySupport.SeverityRank(x.Severity))
@@ -227,6 +253,14 @@ public sealed class AnomalyDetectionService : IAnomalyDetectionService
         string? periodCode = null,
         CancellationToken ct = default)
     {
+        if (!await TableExistsAsync("meta", "anomaly_reports", ct))
+        {
+            _logger.LogInformation(
+                "Skipping anomaly report lookup for tenant {TenantId} because meta.anomaly_reports is not available.",
+                tenantId);
+            return [];
+        }
+
         var query = _db.AnomalyReports
             .AsNoTracking()
             .Where(x => x.TenantId == tenantId);
@@ -260,6 +294,14 @@ public sealed class AnomalyDetectionService : IAnomalyDetectionService
         string? periodCode = null,
         CancellationToken ct = default)
     {
+        if (!await TableExistsAsync("meta", "anomaly_reports", ct))
+        {
+            _logger.LogInformation(
+                "Skipping sector anomaly summary for regulator {RegulatorCode} because meta.anomaly_reports is not available.",
+                regulatorCode);
+            return [];
+        }
+
         var normalizedRegulatorCode = regulatorCode.Trim().ToUpperInvariant();
         var query = _db.AnomalyReports
             .AsNoTracking()
@@ -300,12 +342,17 @@ public sealed class AnomalyDetectionService : IAnomalyDetectionService
                 x => x.LicenceType != null ? x.LicenceType.Code : string.Empty,
                 ct);
 
-        var unackByReport = await _db.AnomalyFindings
-            .AsNoTracking()
-            .Where(x => !x.IsAcknowledged && latestByTenant.Select(y => y.Id).Contains(x.AnomalyReportId))
-            .GroupBy(x => x.AnomalyReportId)
-            .Select(x => new { ReportId = x.Key, Count = x.Count() })
-            .ToDictionaryAsync(x => x.ReportId, x => x.Count, ct);
+        Dictionary<int, int> unackByReport = [];
+        if (latestByTenant.Count > 0 && await TableExistsAsync("meta", "anomaly_findings", ct))
+        {
+            var reportIds = latestByTenant.Select(x => x.Id).ToList();
+            unackByReport = await _db.AnomalyFindings
+                .AsNoTracking()
+                .Where(x => !x.IsAcknowledged && reportIds.Contains(x.AnomalyReportId))
+                .GroupBy(x => x.AnomalyReportId)
+                .Select(x => new { ReportId = x.Key, Count = x.Count() })
+                .ToDictionaryAsync(x => x.ReportId, x => x.Count, ct);
+        }
 
         return latestByTenant
             .Select(x => new AnomalySectorSummary
@@ -409,6 +456,54 @@ public sealed class AnomalyDetectionService : IAnomalyDetectionService
             .Where(x => x.EffectiveTo == null)
             .ToListAsync(ct);
         return AnomalySupport.BuildConfigMap(configs);
+    }
+
+    private async Task<bool> TableExistsAsync(string schema, string table, CancellationToken ct)
+    {
+        if (!_db.Database.IsRelational())
+        {
+            return true;
+        }
+
+        var connection = _db.Database.GetDbConnection();
+        if (connection is not SqlConnection sqlConnection)
+        {
+            return true;
+        }
+
+        if (sqlConnection.State != ConnectionState.Open)
+        {
+            await sqlConnection.OpenAsync(ct);
+        }
+
+        await using var command = sqlConnection.CreateCommand();
+        var currentTransaction = _db.Database.CurrentTransaction?.GetDbTransaction();
+        if (currentTransaction is SqlTransaction sqlTransaction)
+        {
+            command.Transaction = sqlTransaction;
+        }
+
+        command.CommandText = """
+            SELECT CASE WHEN EXISTS (
+                SELECT 1
+                FROM sys.tables t
+                INNER JOIN sys.schemas s ON s.schema_id = t.schema_id
+                WHERE s.name = @schemaName
+                  AND t.name = @tableName
+            ) THEN 1 ELSE 0 END;
+            """;
+        command.Parameters.Add(new SqlParameter("@schemaName", SqlDbType.NVarChar, 128) { Value = schema });
+        command.Parameters.Add(new SqlParameter("@tableName", SqlDbType.NVarChar, 128) { Value = table });
+
+        var scalar = await command.ExecuteScalarAsync(ct);
+        return scalar switch
+        {
+            bool boolValue => boolValue,
+            int intValue => intValue == 1,
+            long longValue => longValue == 1L,
+            decimal decimalValue => decimalValue == 1m,
+            _ => false
+        };
     }
 
     private static IEnumerable<AnomalyFinding> ScoreFieldLevelFindings(

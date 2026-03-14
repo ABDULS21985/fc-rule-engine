@@ -3,6 +3,7 @@ using FC.Engine.Domain.Entities;
 using FC.Engine.Domain.Enums;
 using FC.Engine.Domain.Models;
 using FC.Engine.Infrastructure.Metadata;
+using System.Data;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
@@ -16,6 +17,7 @@ public class ComplianceHealthService : IComplianceHealthService
     private readonly IMemoryCache _cache;
     private readonly ILogger<ComplianceHealthService> _logger;
     private static readonly TimeSpan CacheTtl = TimeSpan.FromMinutes(5);
+    private bool? _hasAnomalyReportsTable;
 
     private const decimal FilingWeight = 0.25m;
     private const decimal DataQualityWeight = 0.25m;
@@ -352,21 +354,14 @@ public class ComplianceHealthService : IComplianceHealthService
             .Select(r => new { r.Id })
             .ToListAsync(ct);
 
-        List<decimal> anomalyScores;
-        try
+        List<decimal> anomalyScores = [];
+        if (await HasAnomalyReportsTableAsync(ct))
         {
             anomalyScores = await _db.AnomalyReports
                 .AsNoTracking()
                 .Where(r => r.TenantId == tenantId && r.AnalysedAt >= lookback)
                 .Select(r => r.OverallQualityScore)
                 .ToListAsync(ct);
-        }
-        catch (SqlException ex) when (ex.Number == 208)
-        {
-            _logger.LogInformation(
-                ex,
-                "Skipping anomaly-based compliance health scoring because meta.anomaly_reports is not available in the current database.");
-            anomalyScores = [];
         }
 
         if (reports.Count == 0)
@@ -416,6 +411,60 @@ public class ComplianceHealthService : IComplianceHealthService
 
         var anomalyScore = decimal.Round(anomalyScores.Average(), 1);
         return Clamp((validationScore * 0.6m) + (anomalyScore * 0.4m));
+    }
+
+    private async Task<bool> HasAnomalyReportsTableAsync(CancellationToken ct)
+    {
+        if (_hasAnomalyReportsTable.HasValue)
+        {
+            return _hasAnomalyReportsTable.Value;
+        }
+
+        var connection = (SqlConnection)_db.Database.GetDbConnection();
+        var wasOpen = connection.State == ConnectionState.Open;
+        if (!wasOpen)
+        {
+            await connection.OpenAsync(ct);
+        }
+
+        try
+        {
+            await using var command = connection.CreateCommand();
+            command.CommandText = """
+                SELECT CASE WHEN EXISTS (
+                    SELECT 1
+                    FROM sys.tables t
+                    INNER JOIN sys.schemas s ON s.schema_id = t.schema_id
+                    WHERE s.name = N'meta'
+                      AND t.name = N'anomaly_reports'
+                ) THEN 1 ELSE 0 END;
+                """;
+
+            var scalar = await command.ExecuteScalarAsync(ct);
+            _hasAnomalyReportsTable = scalar switch
+            {
+                bool boolValue => boolValue,
+                int intValue => intValue == 1,
+                long longValue => longValue == 1L,
+                decimal decimalValue => decimalValue == 1m,
+                _ => false
+            };
+
+            if (_hasAnomalyReportsTable == false)
+            {
+                _logger.LogInformation(
+                    "Skipping anomaly-based compliance health scoring because meta.anomaly_reports is not available in the current database.");
+            }
+
+            return _hasAnomalyReportsTable.Value;
+        }
+        finally
+        {
+            if (!wasOpen)
+            {
+                await connection.CloseAsync();
+            }
+        }
     }
 
     // ── Pillar 3: Regulatory Capital (20%) ──

@@ -63,7 +63,7 @@ public sealed class HeatmapQueryService : IHeatmapQueryService
     {
         using var conn = await _db.CreateConnectionAsync(null, ct);
 
-        var rows = await conn.QueryAsync<EWITriggerRow>(
+        var rows = await conn.QueryAsync<EwiTriggerHistoryRow>(
             """
             SELECT TOP (@Periods)
                    t.Id         AS TriggerId,
@@ -85,7 +85,19 @@ public sealed class HeatmapQueryService : IHeatmapQueryService
             """,
             new { InstId = institutionId, Regulator = regulatorCode, Periods = periods });
 
-        return rows.ToList();
+        return rows.Select(row => new EWITriggerRow(
+                row.TriggerId,
+                row.EWICode,
+                row.EWIName,
+                row.CAMELSComponent,
+                row.Severity,
+                row.TriggerValue,
+                row.ThresholdValue,
+                row.TrendDataJson,
+                row.IsActive,
+                row.TriggeredAt,
+                row.ClearedAt))
+            .ToList();
     }
 
     public async Task<double[][]> GetCorrelationMatrixAsync(
@@ -161,6 +173,19 @@ public sealed class HeatmapQueryService : IHeatmapQueryService
         int InstitutionId, string InstitutionName, string InstitutionType,
         decimal CompositeScore, string RiskBand, decimal TotalAssets,
         int ActiveEWICount, bool HasCriticalEWI);
+
+    private sealed record EwiTriggerHistoryRow(
+        long TriggerId,
+        string EWICode,
+        string EWIName,
+        string CAMELSComponent,
+        string Severity,
+        decimal? TriggerValue,
+        decimal? ThresholdValue,
+        string? TrendDataJson,
+        bool IsActive,
+        DateTimeOffset TriggeredAt,
+        DateTimeOffset? ClearedAt);
 
     private sealed record CorrelationRow(
         int InstitutionId, string PeriodCode, decimal CAR);
