@@ -4,6 +4,7 @@ using FC.Engine.Infrastructure.Metadata;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace FC.Engine.Infrastructure.Migrations
 {
     [DbContext(typeof(MetadataDbContext))]
-    partial class MetadataDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260314115733_AddRegulatorIqExtensions")]
+    partial class AddRegulatorIqExtensions
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder

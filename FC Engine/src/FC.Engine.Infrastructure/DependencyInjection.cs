@@ -265,7 +265,13 @@ public static class DependencyInjection
         services.AddScoped<ISectorAnalyticsService, SectorAnalyticsService>();
         services.AddScoped<IAnomalyModelTrainingService, AnomalyModelTrainingService>();
         services.AddScoped<IAnomalyDetectionService, AnomalyDetectionService>();
+        services.AddHttpClient<ILlmService, AnthropicLlmService>();
         services.AddScoped<IComplianceIqService, ComplianceIqService>();
+        services.AddScoped<IRegulatorDataService, RegulatorDataService>();
+        services.AddScoped<IRegulatorIntelligenceService, RegulatorIntelligenceService>();
+        services.AddScoped<IRegulatorIntentClassifier, RegulatorIntentClassifier>();
+        services.AddScoped<IRegulatorResponseGenerator, RegulatorResponseGenerator>();
+        services.AddScoped<IRegulatorIqService, RegulatorIqService>();
         services.AddScoped<IEntityBenchmarkingService, EntityBenchmarkingService>();
         services.AddScoped<IEarlyWarningService, EarlyWarningService>();
         services.AddScoped<ISystemicRiskService, SystemicRiskService>();

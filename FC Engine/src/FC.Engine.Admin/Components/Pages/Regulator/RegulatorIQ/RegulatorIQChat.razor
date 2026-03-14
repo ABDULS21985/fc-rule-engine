@@ -1,0 +1,1036 @@
+@page "/regulator/regulatoriq"
+@using System.Globalization
+@using System.Text.Json
+@attribute [Authorize(Policy = "RegulatorOnly")]
+
+@inject RegulatorSessionService RegulatorSession
+@inject IRegulatorIqService RegulatorIqService
+@inject IRegulatorIntelligenceService RegulatorIntelligence
+@inject IRegulatorDataService RegulatorData
+@inject ISystemicRiskService SystemicRiskService
+@inject IJSRuntime JS
+
+<PageHeader Title="RegulatorIQ"
+            Subtitle="Cross-tenant regulator intelligence chat for entity drill-downs, sector surveillance, and systemic supervision."
+            StatusBadge="@(_session?.RegulatorCode ?? "Regulator")"
+            StatusVariant="info"
+            CountBadge="@_messages.Count"
+            PrimaryAction="@HeaderActions" />
+
+<SectionErrorBoundary>
+    @if (_initializing)
+    {
+        <div class="row g-4">
+            <div class="col-12 col-xl-8">
+                <SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Card" />
+                <div class="mt-3">
+                    <SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.TableRows" RowCount="6" />
+                </div>
+            </div>
+            <div class="col-12 col-xl-4">
+                <SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Card" />
+            </div>
+        </div>
+    }
+    else if (_loadException is not null)
+    {
+        <EmptyState Context="data"
+                    Heading="RegulatorIQ could not initialise"
+                    Description="@_loadException.Message"
+                    PrimaryActionLabel="Retry"
+                    OnPrimaryAction="ReloadAsync" />
+    }
+    else
+    {
+        <div id="regiq-print-root" class="regiq-chat-shell">
+            <div class="row g-4 align-items-start">
+                <div class="col-12 col-xl-8">
+                    <section class="regiq-chat">
+                        <header class="regiq-chat__hero">
+                            <div class="regiq-chat__hero-copy">
+                                <div class="regiq-chat__badges">
+                                    <span class="badge text-bg-dark">@(_session?.TenantName ?? "Regulator Session")</span>
+                                    <span class="badge text-bg-light border">Cross-tenant intelligence</span>
+                                    <span class="badge text-bg-info">Live grounded responses</span>
+                                </div>
+                                <h2>Regulator intelligence workspace</h2>
+                                <p>
+                                    Ask about a single institution, compare peers, scan sector trends, or move into a focused examination session without leaving the regulator console.
+                                </p>
+                            </div>
+
+                            <div class="regiq-chat__hero-actions">
+                                <button type="button"
+                                        class="btn @(HasActiveExamination ? "btn-success" : "btn-outline-success")"
+                                        @onclick="ToggleExaminationPickerAsync">
+                                    <i class="bi @(HasActiveExamination ? "bi-binoculars-fill" : "bi-binoculars") me-2" aria-hidden="true"></i>
+                                    @(HasActiveExamination ? "Switch Examination" : "Start Examination Session")
+                                </button>
+                                @if (HasActiveExamination)
+                                {
+                                    <button type="button" class="btn btn-outline-secondary" @onclick="EndExaminationSession">
+                                        <i class="bi bi-x-circle me-2" aria-hidden="true"></i>
+                                        End Examination
+                                    </button>
+                                }
+                            </div>
+                        </header>
+
+                        @if (HasActiveExamination)
+                        {
+                            <div class="alert alert-success regiq-chat__banner" role="status">
+                                <div>
+                                    <strong>Examining:</strong> @_currentExaminationEntityName
+                                    <span class="text-secondary ms-2">Subsequent queries default to this entity until you end the session or explicitly name another institution.</span>
+                                </div>
+                                <button type="button" class="btn btn-sm btn-light" @onclick="EndExaminationSession">Clear</button>
+                            </div>
+                        }
+
+                        <section class="regiq-chat__command-bar" aria-label="Quick access commands">
+                            <div class="regiq-chat__command-pills">
+                                <button type="button" class="btn btn-sm btn-outline-dark" @onclick="OpenLookupAsync">
+                                    <i class="bi bi-search me-1" aria-hidden="true"></i>
+                                    Entity Lookup
+                                </button>
+                                <button type="button" class="btn btn-sm btn-outline-dark" @onclick="RunTrySectorHealthAsync">
+                                    <i class="bi bi-bar-chart-line me-1" aria-hidden="true"></i>
+                                    Sector Health
+                                </button>
+                                <button type="button" class="btn btn-sm btn-outline-dark" @onclick="RunShowSystemicRiskAsync">
+                                    <i class="bi bi-activity me-1" aria-hidden="true"></i>
+                                    Systemic Risk
+                                </button>
+                                <button type="button" class="btn btn-sm btn-outline-dark" @onclick="HandleMyExaminationsAsync">
+                                    <i class="bi bi-briefcase me-1" aria-hidden="true"></i>
+                                    My Examinations
+                                </button>
+                            </div>
+
+                            @if (_entityLookupOpen)
+                            {
+                                <div class="regiq-chat__lookup">
+                                    <div class="input-group">
+                                        <span class="input-group-text bg-white">
+                                            <i class="bi bi-buildings" aria-hidden="true"></i>
+                                        </span>
+                                        <input class="form-control"
+                                               placeholder="@(_lookupMode == LookupMode.Examination ? "Select institution for examination mode" : "Search institution name or alias")"
+                                               value="@_entityLookupTerm"
+                                               @oninput="HandleLookupInputAsync"
+                                               aria-label="Entity lookup" />
+                                        <button type="button" class="btn btn-outline-secondary" @onclick="CloseLookup">
+                                            Close
+                                        </button>
+                                    </div>
+
+                                    @if (_entityLookupLoading)
+                                    {
+                                        <div class="mt-2">
+                                            <SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.TableRows" RowCount="3" />
+                                        </div>
+                                    }
+                                    else if (_entityLookupResults.Count > 0)
+                                    {
+                                        <div class="regiq-chat__lookup-results" role="listbox" aria-label="Entity lookup results">
+                                            @foreach (var result in _entityLookupResults)
+                                            {
+                                                <button type="button"
+                                                        class="regiq-chat__lookup-result"
+                                                        @onclick="() => SelectLookupResultAsync(result)">
+                                                    <div>
+                                                        <strong>@result.Name</strong>
+                                                        <div class="text-secondary">@result.LicenceCategory</div>
+                                                    </div>
+                                                    <i class="bi bi-arrow-up-right" aria-hidden="true"></i>
+                                                </button>
+                                            }
+                                        </div>
+                                    }
+                                    else if (!string.IsNullOrWhiteSpace(_entityLookupTerm))
+                                    {
+                                        <div class="regiq-chat__lookup-empty">No matching institution aliases were found.</div>
+                                    }
+                                </div>
+                            }
+                        </section>
+
+                        <div class="regiq-chat__thread" aria-live="polite">
+                            @if (_messages.Count == 0 && !_isSubmitting)
+                            {
+                                <EmptyState Context="data"
+                                            Heading="Start a regulator conversation"
+                                            Description="RegulatorIQ can work entity-first, sector-first, or systemically across the regulator scope."
+                                            PrimaryActionLabel="Try sector health"
+                                            OnPrimaryAction="RunTrySectorHealthAsync"
+                                            SecondaryActionLabel="Try entity profile"
+                                            OnSecondaryAction="RunTryEntityProfileAsync" />
+                            }
+                            else
+                            {
+                                @foreach (var message in _messages)
+                                {
+                                    <article class="regiq-message @(message.IsUser ? "regiq-message--user" : "regiq-message--assistant") @ResolveClassificationClass(message.Response?.ClassificationLevel)"
+                                             @key="message.Id">
+                                        <div class="regiq-message__meta">
+                                            <div class="regiq-message__meta-left">
+                                                <span class="regiq-message__author">@(message.IsUser ? "You" : "RegulatorIQ")</span>
+                                                @if (!message.IsUser && message.Response is not null)
+                                                {
+                                                    <span class="badge @ResolveClassificationBadge(message.Response.ClassificationLevel)">@message.Response.ClassificationLevel</span>
+                                                    <span class="badge text-bg-light border">@message.Response.AnswerFormat</span>
+                                                }
+                                            </div>
+                                            <time class="text-secondary">@message.Timestamp.ToString("dd MMM yyyy HH:mm", CultureInfo.InvariantCulture)</time>
+                                        </div>
+
+                                        <div class="regiq-message__content">
+                                            <p class="mb-0">@message.Text</p>
+
+                                            @if (!message.IsUser && message.Response is not null)
+                                            {
+                                                var response = message.Response;
+
+                                                @switch (response.AnswerFormat.ToLowerInvariant())
+                                                {
+                                                    case "profile":
+                                                        if (response.StructuredData is RegulatorProfileData profileData)
+                                                        {
+                                                            <EntityProfileCard Profile="profileData.Profile" OnDeepDive="HandleDeepDiveAsync" />
+                                                        }
+                                                        else if (response.StructuredData is ExaminationBriefing briefing)
+                                                        {
+                                                            <div class="regiq-briefing">
+                                                                <EntityProfileCard Profile="briefing.Profile" OnDeepDive="HandleDeepDiveAsync" />
+                                                                <div class="regiq-briefing__grid">
+                                                                    <section class="regiq-briefing__card">
+                                                                        <h5>Suggested Focus Areas</h5>
+                                                                        <ul class="regiq-briefing__list">
+                                                                            @foreach (var focusArea in briefing.FocusAreas.Take(5))
+                                                                            {
+                                                                                <li>
+                                                                                    <span class="badge @ResolvePriorityBadge(focusArea.Priority)">@focusArea.Priority</span>
+                                                                                    <div>
+                                                                                        <strong>@focusArea.Area</strong>
+                                                                                        <div class="text-secondary">@focusArea.Reason</div>
+                                                                                    </div>
+                                                                                </li>
+                                                                            }
+                                                                        </ul>
+                                                                    </section>
+
+                                                                    <section class="regiq-briefing__card">
+                                                                        <h5>Peer Context</h5>
+                                                                        <div class="regiq-briefing__stats">
+                                                                            <div><span>Avg CAR</span><strong>@FormatPercent(briefing.PeerContext.AverageCarRatio)</strong></div>
+                                                                            <div><span>Avg NPL</span><strong>@FormatPercent(briefing.PeerContext.AverageNplRatio)</strong></div>
+                                                                            <div><span>High-risk entities</span><strong>@briefing.PeerContext.HighRiskEntityCount</strong></div>
+                                                                            <div><span>Overdue filings</span><strong>@briefing.PeerContext.OverdueFilingCount</strong></div>
+                                                                        </div>
+                                                                    </section>
+                                                                </div>
+                                                            </div>
+                                                        }
+                                                        else
+                                                        {
+                                                            <div class="regiq-message__fallback">The profile payload was returned in an unsupported shape.</div>
+                                                        }
+                                                        break;
+
+                                                    case "comparison":
+                                                        if (response.StructuredData is RegulatorComparisonData comparisonData)
+                                                        {
+                                                            <ComparisonMatrix Comparison="comparisonData" />
+                                                        }
+                                                        else
+                                                        {
+                                                            <div class="regiq-message__fallback">The comparison payload was returned in an unsupported shape.</div>
+                                                        }
+                                                        break;
+
+                                                    case "ranking":
+                                                        if (response.StructuredData is RegulatorRankingData rankingData)
+                                                        {
+                                                            <RankingTable Ranking="rankingData" OnEntitySelected="HandleDeepDiveAsync" />
+                                                        }
+                                                        else
+                                                        {
+                                                            <div class="regiq-message__fallback">The ranking payload was returned in an unsupported shape.</div>
+                                                        }
+                                                        break;
+
+                                                    case "chart_data":
+                                                        <RegulatorChartPayload Payload="response.StructuredData" />
+                                                        break;
+
+                                                    case "table":
+                                                        if (response.StructuredData is RegulatorTableData tableData)
+                                                        {
+                                                            <div class="table-responsive">
+                                                                <table class="table table-hover align-middle regiq-table">
+                                                                    <thead>
+                                                                        <tr>
+                                                                            @foreach (var column in tableData.Columns)
+                                                                            {
+                                                                                <th scope="col">
+                                                                                    <button type="button"
+                                                                                            class="btn btn-link p-0 regiq-table__sort"
+                                                                                            @onclick="() => SortTable(message, column)">
+                                                                                        @HumanizeColumn(column)
+                                                                                        @if (string.Equals(message.SortColumn, column, StringComparison.OrdinalIgnoreCase))
+                                                                                        {
+                                                                                            <i class="bi @(message.SortAscending ? "bi-sort-down" : "bi-sort-up") ms-1" aria-hidden="true"></i>
+                                                                                        }
+                                                                                    </button>
+                                                                                </th>
+                                                                            }
+                                                                        </tr>
+                                                                    </thead>
+                                                                    <tbody>
+                                                                        @foreach (var row in GetSortedRows(message, tableData))
+                                                                        {
+                                                                            <tr>
+                                                                                @foreach (var column in tableData.Columns)
+                                                                                {
+                                                                                    row.TryGetValue(column, out var cellValue);
+                                                                                    <td>
+                                                                                        <span class="@ResolveTableCellTone(column, cellValue)">
+                                                                                            @FormatTableValue(cellValue)
+                                                                                        </span>
+                                                                                    </td>
+                                                                                }
+                                                                            </tr>
+                                                                        }
+                                                                    </tbody>
+                                                                </table>
+                                                            </div>
+                                                        }
+                                                        else
+                                                        {
+                                                            <RegulatorStructuredPayload Payload="response.StructuredData" />
+                                                        }
+                                                        break;
+
+                                                    default:
+                                                        <RegulatorStructuredPayload Payload="response.StructuredData" />
+                                                        break;
+                                                }
+
+                                                @if (response.Flags.Count > 0)
+                                                {
+                                                    <div class="regiq-message__flags">
+                                                        @foreach (var flag in response.Flags.Take(6))
+                                                        {
+                                                            <div class="regiq-flag @ResolveFlagCard(flag.FlagType)">
+                                                                <span class="badge @ResolveFlagBadge(flag.FlagType)">@flag.FlagType.Replace('_', ' ')</span>
+                                                                <div>
+                                                                    <strong>@flag.Source</strong>
+                                                                    <div>@flag.Message</div>
+                                                                </div>
+                                                            </div>
+                                                        }
+                                                    </div>
+                                                }
+
+                                                @if (response.Citations.Count > 0)
+                                                {
+                                                    <div class="regiq-message__citations">
+                                                        <div class="regiq-message__section-label">Citations</div>
+                                                        <div class="regiq-message__citation-list">
+                                                            @foreach (var citation in response.Citations.Take(5))
+                                                            {
+                                                                <span class="badge text-bg-light border">@BuildCitationLabel(citation)</span>
+                                                            }
+                                                        </div>
+                                                    </div>
+                                                }
+
+                                                @if (response.DataSourcesUsed.Count > 0)
+                                                {
+                                                    <div class="regiq-message__sources">
+                                                        @foreach (var source in response.DataSourcesUsed.Distinct(StringComparer.OrdinalIgnoreCase))
+                                                        {
+                                                            <span class="badge text-bg-dark">@source</span>
+                                                        }
+                                                    </div>
+                                                }
+
+                                                @if (response.FollowUpSuggestions.Count > 0)
+                                                {
+                                                    <div class="regiq-message__followups">
+                                                        @foreach (var suggestion in response.FollowUpSuggestions.Take(4))
+                                                        {
+                                                            <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="() => SubmitQueryAsync(suggestion)">
+                                                                @suggestion
+                                                            </button>
+                                                        }
+                                                    </div>
+                                                }
+                                            }
+
+                                            @if (message.DisambiguationOptions.Count > 0)
+                                            {
+                                                <div class="regiq-message__followups">
+                                                    @foreach (var option in message.DisambiguationOptions)
+                                                    {
+                                                        <button type="button"
+                                                                class="btn btn-sm btn-outline-primary"
+                                                                @onclick="() => SubmitQueryAsync(option)">
+                                                            @option
+                                                        </button>
+                                                    }
+                                                </div>
+                                            }
+                                        </div>
+                                    </article>
+                                }
+                            }
+
+                            @if (_isSubmitting)
+                            {
+                                <div class="regiq-message regiq-message--assistant regiq-message--loading">
+                                    <div class="regiq-message__meta">
+                                        <span class="regiq-message__author">RegulatorIQ</span>
+                                        <span class="badge text-bg-light border">Generating</span>
+                                    </div>
+                                    <div class="regiq-message__content">
+                                        <SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.TextLarge" Width="60%" />
+                                        <div class="mt-2">
+                                            <SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.TableRows" RowCount="3" />
+                                        </div>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+
+                        <footer class="regiq-chat__composer">
+                            <label class="form-label fw-semibold" for="regiq-chat-input">Ask RegulatorIQ</label>
+                            <textarea id="regiq-chat-input"
+                                      class="form-control regiq-chat__input"
+                                      rows="3"
+                                      placeholder="Try 'Compare GTBank vs Zenith on CAR and NPL' or 'Show me the systemic risk dashboard'."
+                                      @bind="_query"
+                                      @bind:event="oninput"
+                                      @onkeydown="HandleInputKeyDown"
+                                      aria-label="Regulator intelligence query"></textarea>
+                            <div class="regiq-chat__composer-actions">
+                                <small class="text-secondary">Sensitive results remain inside the regulator session and are visually marked when classification rises.</small>
+                                <button type="button" class="btn btn-dark" @onclick="() => SubmitQueryAsync(_query)" disabled="@_isSubmitting">
+                                    <i class="bi bi-send me-2" aria-hidden="true"></i>
+                                    Send query
+                                </button>
+                            </div>
+                        </footer>
+                    </section>
+                </div>
+
+                <div class="col-12 col-xl-4">
+                    <IntelligencePanel CurrentScope="@_currentScope"
+                                       EntityProfile="@_currentEntityProfile"
+                                       SectorSummary="@_sectorSummary"
+                                       SystemicDashboard="@_systemicDashboard"
+                                       OnDeepDive="HandleDeepDiveAsync"
+                                       OnQuickQuery="SubmitQueryAsync" />
+                </div>
+            </div>
+        </div>
+    }
+</SectionErrorBoundary>
+
+@code {
+    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+
+    private readonly List<ConversationMessage> _messages = new();
+    private readonly List<RecentEntityContext> _recentEntities = new();
+    private readonly List<(string Query, string Intent)> _recentTurns = new();
+
+    private RegulatorSessionContext? _session;
+    private SectorIntelligenceSummary? _sectorSummary;
+    private EntityIntelligenceProfile? _currentEntityProfile;
+    private SystemicRiskDashboard? _systemicDashboard;
+    private Exception? _loadException;
+    private Guid? _conversationId;
+
+    private string _query = string.Empty;
+    private string _currentScope = "SECTOR";
+    private bool _initializing = true;
+    private bool _isSubmitting;
+
+    private bool _entityLookupOpen;
+    private bool _entityLookupLoading;
+    private string _entityLookupTerm = string.Empty;
+    private LookupMode _lookupMode = LookupMode.Lookup;
+    private List<LookupEntityResult> _entityLookupResults = new();
+
+    private Guid? _currentExaminationEntityId;
+    private string? _currentExaminationEntityName;
+
+    private bool HasActiveExamination => _currentExaminationEntityId.HasValue && !string.IsNullOrWhiteSpace(_currentExaminationEntityName);
+
+    private RenderFragment HeaderActions => builder =>
+    {
+        var sequence = 0;
+        builder.OpenElement(sequence++, "div");
+        builder.AddAttribute(sequence++, "class", "d-flex gap-2 flex-wrap");
+        builder.OpenElement(sequence++, "button");
+        builder.AddAttribute(sequence++, "type", "button");
+        builder.AddAttribute(sequence++, "class", "btn btn-outline-dark");
+        builder.AddAttribute(sequence++, "onclick", EventCallback.Factory.Create(this, ExportConversationAsync));
+        builder.AddMarkupContent(sequence++, "<i class=\"bi bi-file-earmark-pdf me-2\" aria-hidden=\"true\"></i>");
+        builder.AddContent(sequence++, "Print / Save PDF");
+        builder.CloseElement();
+        builder.CloseElement();
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadInitialStateAsync();
+    }
+
+    private async Task LoadInitialStateAsync()
+    {
+        _initializing = true;
+        _loadException = null;
+
+        try
+        {
+            _session = await RegulatorSession.GetRequiredAsync();
+            _sectorSummary = await RegulatorIntelligence.GetSectorSummaryAsync(_session.RegulatorCode);
+        }
+        catch (Exception ex)
+        {
+            _loadException = ex;
+        }
+        finally
+        {
+            _initializing = false;
+        }
+    }
+
+    private async Task ReloadAsync()
+    {
+        _messages.Clear();
+        _recentEntities.Clear();
+        _recentTurns.Clear();
+        _currentScope = "SECTOR";
+        _currentEntityProfile = null;
+        _systemicDashboard = null;
+        _currentExaminationEntityId = null;
+        _currentExaminationEntityName = null;
+        _conversationId = null;
+        _query = string.Empty;
+        await LoadInitialStateAsync();
+    }
+
+    private Task RunTrySectorHealthAsync() => SubmitQueryAsync("Show sector health summary");
+    private Task RunTryEntityProfileAsync() => SubmitQueryAsync("Give me a full profile of Access Bank");
+    private Task RunShowSystemicRiskAsync() => SubmitQueryAsync("Show me the systemic risk dashboard");
+
+    private async Task SubmitQueryAsync(string? query)
+    {
+        if (_session is null || string.IsNullOrWhiteSpace(query) || _isSubmitting)
+        {
+            return;
+        }
+
+        var trimmedQuery = query.Trim();
+        _query = string.Empty;
+        CloseLookup();
+
+        var userMessage = new ConversationMessage
+        {
+            IsUser = true,
+            Text = trimmedQuery,
+            Timestamp = DateTime.Now
+        };
+        _messages.Add(userMessage);
+
+        _isSubmitting = true;
+        StateHasChanged();
+
+        try
+        {
+            var turn = await RegulatorIqService.QueryAsync(new RegulatorIqQueryRequest
+            {
+                Query = trimmedQuery,
+                ConversationId = _conversationId,
+                ExaminationTargetTenantId = _currentExaminationEntityId,
+                Scope = _currentScope,
+                RegulatorTenantId = _session.TenantId,
+                RegulatorCode = _session.RegulatorCode,
+                RegulatorId = _session.UserId.ToString(CultureInfo.InvariantCulture),
+                UserRole = HasActiveExamination ? "Examiner" : "Regulator"
+            });
+
+            _conversationId = turn.ConversationId;
+            var response = turn.Response;
+            _messages.Add(new ConversationMessage
+            {
+                Text = response.AnswerText,
+                Timestamp = DateTime.Now,
+                Response = response,
+                DisambiguationOptions = turn.NeedsDisambiguation ? turn.DisambiguationOptions.ToList() : new List<string>()
+            });
+
+            var intent = new RegulatorIntentResult
+            {
+                IntentCode = turn.IntentCode,
+                ResolvedEntityIds = response.EntitiesAccessed.ToList()
+            };
+
+            UpdateConversationContext(trimmedQuery, intent, response);
+            await RefreshPanelAsync(intent, response);
+        }
+        catch (Exception ex)
+        {
+            _messages.Add(new ConversationMessage
+            {
+                Text = $"RegulatorIQ could not complete that request: {ex.Message}",
+                Timestamp = DateTime.Now
+            });
+        }
+        finally
+        {
+            _isSubmitting = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task RefreshPanelAsync(RegulatorIntentResult intent, RegulatorIqResponse response)
+    {
+        if (_session is null)
+        {
+            return;
+        }
+
+        var scope = DetermineScope(intent.IntentCode);
+        _currentScope = scope;
+
+        if (response.StructuredData is RegulatorProfileData profileData)
+        {
+            _currentEntityProfile = profileData.Profile;
+            return;
+        }
+
+        if (response.StructuredData is ExaminationBriefing briefing)
+        {
+            _currentEntityProfile = briefing.Profile;
+            _sectorSummary = briefing.PeerContext;
+            return;
+        }
+
+        if (response.StructuredData is SystemicRiskDashboard dashboard)
+        {
+            _systemicDashboard = dashboard;
+            return;
+        }
+
+        if (scope == "SYSTEMIC")
+        {
+            _systemicDashboard ??= await SystemicRiskService.GetDashboard(_session.RegulatorCode);
+            return;
+        }
+
+        if (scope == "ENTITY")
+        {
+            var tenantId = response.EntitiesAccessed.FirstOrDefault();
+            if (tenantId == Guid.Empty)
+            {
+                tenantId = intent.ResolvedEntityIds.FirstOrDefault();
+            }
+
+            if (tenantId == Guid.Empty && _currentExaminationEntityId.HasValue)
+            {
+                tenantId = _currentExaminationEntityId.Value;
+            }
+
+            if (tenantId != Guid.Empty)
+            {
+                _currentEntityProfile = await RegulatorIntelligence.GetEntityProfileAsync(tenantId, _session.RegulatorCode);
+            }
+
+            return;
+        }
+
+        _sectorSummary = await RegulatorIntelligence.GetSectorSummaryAsync(_session.RegulatorCode, intent.LicenceCategory, intent.PeriodCode);
+    }
+
+    private void UpdateConversationContext(string query, RegulatorIntentResult intent, RegulatorIqResponse response)
+    {
+        _recentTurns.Insert(0, (query, intent.IntentCode));
+        if (_recentTurns.Count > 10)
+        {
+            _recentTurns.RemoveRange(10, _recentTurns.Count - 10);
+        }
+
+        for (var i = 0; i < intent.ResolvedEntityIds.Count; i++)
+        {
+            var tenantId = intent.ResolvedEntityIds[i];
+            var name = i < intent.ResolvedEntityNames.Count ? intent.ResolvedEntityNames[i] : tenantId.ToString();
+            UpsertRecentEntity(tenantId, name);
+        }
+
+        if (_currentExaminationEntityId.HasValue && !string.IsNullOrWhiteSpace(_currentExaminationEntityName))
+        {
+            UpsertRecentEntity(_currentExaminationEntityId.Value, _currentExaminationEntityName!);
+        }
+
+        if (response.EntitiesAccessed.Count > 0 && intent.ResolvedEntityIds.Count == 0)
+        {
+            foreach (var tenantId in response.EntitiesAccessed)
+            {
+                var existing = _recentEntities.FirstOrDefault(x => x.TenantId == tenantId);
+                if (existing is not null)
+                {
+                    UpsertRecentEntity(existing.TenantId, existing.Name);
+                }
+            }
+        }
+    }
+
+    private void UpsertRecentEntity(Guid tenantId, string name)
+    {
+        _recentEntities.RemoveAll(x => x.TenantId == tenantId);
+        _recentEntities.Insert(0, new RecentEntityContext(tenantId, name));
+        if (_recentEntities.Count > 5)
+        {
+            _recentEntities.RemoveRange(5, _recentEntities.Count - 5);
+        }
+    }
+
+    private async Task HandleInputKeyDown(KeyboardEventArgs args)
+    {
+        if (args.Key == "Enter" && !args.ShiftKey)
+        {
+            await SubmitQueryAsync(_query);
+        }
+    }
+
+    private async Task HandleDeepDiveAsync(string entityName)
+    {
+        await SubmitQueryAsync($"Give me a full profile of {entityName}");
+    }
+
+    private async Task HandleMyExaminationsAsync()
+    {
+        if (HasActiveExamination && !string.IsNullOrWhiteSpace(_currentExaminationEntityName))
+        {
+            await SubmitQueryAsync($"Generate an examination briefing for {_currentExaminationEntityName}");
+            return;
+        }
+
+        _lookupMode = LookupMode.Examination;
+        _entityLookupOpen = true;
+        _entityLookupTerm = string.Empty;
+        _entityLookupResults.Clear();
+    }
+
+    private Task OpenLookupAsync()
+    {
+        _lookupMode = LookupMode.Lookup;
+        _entityLookupOpen = true;
+        _entityLookupResults.Clear();
+        return Task.CompletedTask;
+    }
+
+    private Task ToggleExaminationPickerAsync()
+    {
+        _lookupMode = LookupMode.Examination;
+        _entityLookupOpen = true;
+        _entityLookupResults.Clear();
+        return Task.CompletedTask;
+    }
+
+    private async Task EndExaminationSession()
+    {
+        if (_conversationId.HasValue)
+        {
+            await RegulatorIqService.EndExaminationSessionAsync(_conversationId.Value);
+        }
+
+        _currentExaminationEntityId = null;
+        _currentExaminationEntityName = null;
+        if (_messages.Count == 0)
+        {
+            _currentScope = "SECTOR";
+        }
+    }
+
+    private async Task HandleLookupInputAsync(ChangeEventArgs args)
+    {
+        _entityLookupTerm = args.Value?.ToString() ?? string.Empty;
+        await SearchLookupAsync();
+    }
+
+    private async Task SearchLookupAsync()
+    {
+        _entityLookupResults.Clear();
+        if (string.IsNullOrWhiteSpace(_entityLookupTerm) || _entityLookupTerm.Trim().Length < 2)
+        {
+            return;
+        }
+
+        _entityLookupLoading = true;
+        try
+        {
+            var results = await RegulatorData.SearchEntities(_entityLookupTerm.Trim());
+            _entityLookupResults = results
+                .Select(x => new LookupEntityResult(x.TenantId, x.Name, x.LicenceCategory))
+                .ToList();
+        }
+        finally
+        {
+            _entityLookupLoading = false;
+        }
+    }
+
+    private async Task SelectLookupResultAsync(LookupEntityResult result)
+    {
+        if (_lookupMode == LookupMode.Examination)
+        {
+            _conversationId = await RegulatorIqService.StartExaminationSessionAsync(
+                _session?.UserId.ToString(CultureInfo.InvariantCulture) ?? "0",
+                result.TenantId);
+            _currentExaminationEntityId = result.TenantId;
+            _currentExaminationEntityName = result.Name;
+            _currentScope = "ENTITY";
+            _messages.Clear();
+            _recentEntities.Clear();
+            _recentTurns.Clear();
+            if (_session is not null)
+            {
+                _currentEntityProfile = await RegulatorIntelligence.GetEntityProfileAsync(result.TenantId, _session.RegulatorCode);
+            }
+            _messages.Add(new ConversationMessage
+            {
+                Text = $"Examination session started for {result.Name}. Subsequent queries default to this institution until you end the session.",
+                Timestamp = DateTime.Now
+            });
+            CloseLookup();
+            return;
+        }
+
+        CloseLookup();
+        await SubmitQueryAsync($"Give me a full profile of {result.Name}");
+    }
+
+    private void CloseLookup()
+    {
+        _entityLookupOpen = false;
+        _entityLookupLoading = false;
+        _entityLookupTerm = string.Empty;
+        _entityLookupResults.Clear();
+        _lookupMode = LookupMode.Lookup;
+    }
+
+    private async Task ExportConversationAsync()
+    {
+        if (_conversationId.HasValue)
+        {
+            await JS.InvokeVoidAsync("open", $"/regulator/regulatoriq/conversations/{_conversationId.Value:D}/export", "_blank");
+            return;
+        }
+
+        await JS.InvokeVoidAsync("fcScenarios.exportComparison", "regiq-print-root");
+    }
+
+    private void SortTable(ConversationMessage message, string column)
+    {
+        if (string.Equals(message.SortColumn, column, StringComparison.OrdinalIgnoreCase))
+        {
+            message.SortAscending = !message.SortAscending;
+            return;
+        }
+
+        message.SortColumn = column;
+        message.SortAscending = true;
+    }
+
+    private IEnumerable<Dictionary<string, object?>> GetSortedRows(ConversationMessage message, RegulatorTableData table)
+    {
+        if (string.IsNullOrWhiteSpace(message.SortColumn))
+        {
+            return table.Rows;
+        }
+
+        var ordered = message.SortAscending
+            ? table.Rows.OrderBy(row => GetComparableValue(row.TryGetValue(message.SortColumn, out var value) ? value : null))
+            : table.Rows.OrderByDescending(row => GetComparableValue(row.TryGetValue(message.SortColumn, out var value) ? value : null));
+
+        return ordered.ToList();
+    }
+
+    private static IComparable GetComparableValue(object? value)
+    {
+        return value switch
+        {
+            null => string.Empty,
+            DateTime dateTime => dateTime,
+            DateOnly dateOnly => dateOnly.ToDateTime(TimeOnly.MinValue),
+            decimal decimalValue => decimalValue,
+            double doubleValue => doubleValue,
+            int intValue => intValue,
+            long longValue => longValue,
+            float floatValue => floatValue,
+            bool boolValue => boolValue ? 1 : 0,
+            JsonElement element when element.ValueKind == JsonValueKind.Number && element.TryGetDecimal(out var decimalNumber) => decimalNumber,
+            JsonElement element when element.ValueKind == JsonValueKind.String && DateTime.TryParse(element.GetString(), CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var parsedDate) => parsedDate,
+            JsonElement element => element.ToString() ?? string.Empty,
+            _ => value.ToString() ?? string.Empty
+        };
+    }
+
+    private static string DetermineScope(string intentCode)
+    {
+        return intentCode.ToUpperInvariant() switch
+        {
+            "ENTITY_PROFILE" or "ENTITY_COMPARE" or "CHS_ENTITY" or "EXAMINATION_BRIEF" or "CURRENT_VALUE" or "TREND" or "COMPARISON_PEER" or "COMPARISON_PERIOD" or "COMPLIANCE_STATUS" or "ANOMALY_STATUS" => "ENTITY",
+            "SYSTEMIC_DASHBOARD" or "CONTAGION_QUERY" or "STRESS_SCENARIOS" or "SUPERVISORY_ACTIONS" => "SYSTEMIC",
+            _ => "SECTOR"
+        };
+    }
+
+    private static string ResolveClassificationBadge(string? level)
+    {
+        return level?.ToUpperInvariant() switch
+        {
+            "CONFIDENTIAL" => "text-bg-danger",
+            "RESTRICTED" => "text-bg-warning",
+            _ => "text-bg-secondary"
+        };
+    }
+
+    private static string ResolveClassificationClass(string? level)
+    {
+        return level?.ToUpperInvariant() switch
+        {
+            "CONFIDENTIAL" => "regiq-message--confidential",
+            "RESTRICTED" => "regiq-message--restricted",
+            _ => string.Empty
+        };
+    }
+
+    private static string ResolveFlagBadge(string flagType)
+    {
+        return flagType.ToUpperInvariant() switch
+        {
+            "ACTION_REQUIRED" => "text-bg-danger",
+            "WARNING" => "text-bg-warning",
+            "POSITIVE" => "text-bg-success",
+            _ => "text-bg-info"
+        };
+    }
+
+    private static string ResolveFlagCard(string flagType)
+    {
+        return flagType.ToUpperInvariant() switch
+        {
+            "ACTION_REQUIRED" => "regiq-flag--danger",
+            "WARNING" => "regiq-flag--warning",
+            "POSITIVE" => "regiq-flag--success",
+            _ => "regiq-flag--info"
+        };
+    }
+
+    private static string ResolvePriorityBadge(string? priority)
+    {
+        return priority?.ToUpperInvariant() switch
+        {
+            "HIGH" => "text-bg-danger",
+            "MEDIUM" => "text-bg-warning",
+            _ => "text-bg-success"
+        };
+    }
+
+    private static string BuildCitationLabel(DataCitation citation)
+    {
+        var parts = new List<string> { citation.SourceModule };
+        if (!string.IsNullOrWhiteSpace(citation.SourceField))
+        {
+            parts.Add(citation.SourceField);
+        }
+
+        if (!string.IsNullOrWhiteSpace(citation.InstitutionName))
+        {
+            parts.Add(citation.InstitutionName);
+        }
+
+        return string.Join(" · ", parts);
+    }
+
+    private static string FormatTableValue(object? value)
+    {
+        return value switch
+        {
+            null => "N/A",
+            DateTime dateTime => dateTime.ToString("dd MMM yyyy", CultureInfo.InvariantCulture),
+            DateOnly dateOnly => dateOnly.ToString("dd MMM yyyy", CultureInfo.InvariantCulture),
+            decimal decimalValue => decimalValue.ToString("N2", CultureInfo.InvariantCulture),
+            double doubleValue => doubleValue.ToString("N2", CultureInfo.InvariantCulture),
+            float floatValue => floatValue.ToString("N2", CultureInfo.InvariantCulture),
+            JsonElement element when element.ValueKind == JsonValueKind.String => element.GetString() ?? "N/A",
+            JsonElement element when element.ValueKind == JsonValueKind.Number && element.TryGetDecimal(out var decimalValue) => decimalValue.ToString("N2", CultureInfo.InvariantCulture),
+            JsonElement element when element.ValueKind == JsonValueKind.True => "True",
+            JsonElement element when element.ValueKind == JsonValueKind.False => "False",
+            JsonElement element => element.ToString() ?? "N/A",
+            _ => value.ToString() ?? "N/A"
+        };
+    }
+
+    private static string HumanizeColumn(string column)
+    {
+        return CultureInfo.InvariantCulture.TextInfo.ToTitleCase(column.Replace("_", " ").Trim());
+    }
+
+    private static string ResolveTableCellTone(string column, object? value)
+    {
+        var normalized = column.Replace("_", string.Empty, StringComparison.OrdinalIgnoreCase).ToLowerInvariant();
+        decimal? numeric = value switch
+        {
+            decimal decimalValue => decimalValue,
+            double doubleValue => (decimal)doubleValue,
+            float floatValue => (decimal)floatValue,
+            int intValue => intValue,
+            long longValue => longValue,
+            JsonElement element when element.ValueKind == JsonValueKind.Number && element.TryGetDecimal(out var decimalValue) => decimalValue,
+            _ => null
+        };
+
+        if (!numeric.HasValue)
+        {
+            return string.Empty;
+        }
+
+        return normalized switch
+        {
+            "value" or "currentvalue" or "peermedian" when numeric.Value < 0m => "text-danger fw-semibold",
+            "errorcount" when numeric.Value > 10m => "text-danger fw-semibold",
+            "overduedays" when numeric.Value > 0m => "text-danger fw-semibold",
+            "severityscore" when numeric.Value > 0m => "text-warning fw-semibold",
+            _ => string.Empty
+        };
+    }
+
+    private static string FormatPercent(decimal? value) => value.HasValue ? $"{value.Value:N1}%" : "N/A";
+
+    private sealed class ConversationMessage
+    {
+        public Guid Id { get; } = Guid.NewGuid();
+        public bool IsUser { get; init; }
+        public string Text { get; init; } = string.Empty;
+        public DateTime Timestamp { get; init; }
+        public RegulatorIqResponse? Response { get; init; }
+        public List<string> DisambiguationOptions { get; init; } = new();
+        public string? SortColumn { get; set; }
+        public bool SortAscending { get; set; } = true;
+    }
+
+    private sealed record LookupEntityResult(Guid TenantId, string Name, string LicenceCategory);
+    private sealed record RecentEntityContext(Guid TenantId, string Name);
+
+    private enum LookupMode
+    {
+        Lookup,
+        Examination
+    }
+}

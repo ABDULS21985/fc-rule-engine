@@ -4,6 +4,7 @@ using FC.Engine.Infrastructure.Metadata;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace FC.Engine.Infrastructure.Migrations
 {
     [DbContext(typeof(MetadataDbContext))]
-    partial class MetadataDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260314090510_AddComplianceIqSchema")]
+    partial class AddComplianceIqSchema
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1811,36 +1814,6 @@ namespace FC.Engine.Infrastructure.Migrations
                             CreatedBy = "SYSTEM",
                             Description = "Fallback NPL multiplier for scenario analysis when a user says doubled without a numeric multiplier.",
                             EffectiveFrom = new DateTime(2026, 3, 12, 0, 0, 0, 0, DateTimeKind.Utc)
-                        },
-                        new
-                        {
-                            Id = 10,
-                            ConfigKey = "rate.regulator_queries_per_minute",
-                            ConfigValue = "30",
-                            CreatedAt = new DateTime(2026, 3, 12, 0, 0, 0, 0, DateTimeKind.Utc),
-                            CreatedBy = "SYSTEM",
-                            Description = "Maximum RegulatorIQ queries per regulator per minute.",
-                            EffectiveFrom = new DateTime(2026, 3, 12, 0, 0, 0, 0, DateTimeKind.Utc)
-                        },
-                        new
-                        {
-                            Id = 11,
-                            ConfigKey = "rate.regulator_queries_per_hour",
-                            ConfigValue = "300",
-                            CreatedAt = new DateTime(2026, 3, 12, 0, 0, 0, 0, DateTimeKind.Utc),
-                            CreatedBy = "SYSTEM",
-                            Description = "Maximum RegulatorIQ queries per regulator per hour.",
-                            EffectiveFrom = new DateTime(2026, 3, 12, 0, 0, 0, 0, DateTimeKind.Utc)
-                        },
-                        new
-                        {
-                            Id = 12,
-                            ConfigKey = "rate.regulator_queries_per_day",
-                            ConfigValue = "1500",
-                            CreatedAt = new DateTime(2026, 3, 12, 0, 0, 0, 0, DateTimeKind.Utc),
-                            CreatedBy = "SYSTEM",
-                            Description = "Maximum RegulatorIQ queries per regulator per day.",
-                            EffectiveFrom = new DateTime(2026, 3, 12, 0, 0, 0, 0, DateTimeKind.Utc)
                         });
                 });
 
@@ -1850,13 +1823,7 @@ namespace FC.Engine.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uniqueidentifier");
 
-                    b.Property<Guid?>("ExaminationTargetTenantId")
-                        .HasColumnType("uniqueidentifier");
-
                     b.Property<bool>("IsActive")
-                        .HasColumnType("bit");
-
-                    b.Property<bool>("IsExaminationSession")
                         .HasColumnType("bit");
 
                     b.Property<bool>("IsRegulatorContext")
@@ -1864,10 +1831,6 @@ namespace FC.Engine.Infrastructure.Migrations
 
                     b.Property<DateTime>("LastActivityAt")
                         .HasColumnType("datetime2(3)");
-
-                    b.Property<string>("Scope")
-                        .HasMaxLength(20)
-                        .HasColumnType("nvarchar(20)");
 
                     b.Property<DateTime>("StartedAt")
                         .HasColumnType("datetime2(3)");
@@ -1894,9 +1857,6 @@ namespace FC.Engine.Infrastructure.Migrations
                         .HasColumnType("nvarchar(60)");
 
                     b.HasKey("Id");
-
-                    b.HasIndex("ExaminationTargetTenantId")
-                        .HasDatabaseName("IX_complianceiq_conversations_exam_target");
 
                     b.HasIndex("TenantId", "UserId", "LastActivityAt")
                         .HasDatabaseName("IX_complianceiq_conversations_tenant_user");
@@ -3559,13 +3519,6 @@ namespace FC.Engine.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
-                    b.Property<string>("ClassificationLevel")
-                        .IsRequired()
-                        .ValueGeneratedOnAdd()
-                        .HasMaxLength(20)
-                        .HasColumnType("nvarchar(20)")
-                        .HasDefaultValue("RESTRICTED");
-
                     b.Property<string>("ConfidenceLevel")
                         .IsRequired()
                         .HasMaxLength(10)
@@ -3576,15 +3529,6 @@ namespace FC.Engine.Infrastructure.Migrations
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2(3)");
-
-                    b.Property<string>("DataSourcesUsed")
-                        .IsRequired()
-                        .HasMaxLength(500)
-                        .HasColumnType("nvarchar(500)");
-
-                    b.Property<string>("EntitiesAccessedJson")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("ErrorMessage")
                         .HasColumnType("nvarchar(500)");
@@ -3615,10 +3559,6 @@ namespace FC.Engine.Infrastructure.Migrations
                     b.Property<string>("QueryText")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("RegulatorAgency")
-                        .HasMaxLength(20)
-                        .HasColumnType("nvarchar(20)");
 
                     b.Property<string>("ResolvedParametersJson")
                         .IsRequired()
@@ -3666,21 +3606,13 @@ namespace FC.Engine.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("ClassificationLevel", "CreatedAt")
-                        .HasDatabaseName("IX_complianceiq_turns_classification");
-
                     b.HasIndex("ConversationId", "TurnNumber")
                         .HasDatabaseName("IX_complianceiq_turns_conversation");
 
                     b.HasIndex("TenantId", "CreatedAt")
                         .HasDatabaseName("IX_complianceiq_turns_tenant");
 
-                    b.ToTable("complianceiq_turns", "meta", t =>
-                        {
-                            t.HasCheckConstraint("CK_complianceiq_turns_classification", "[ClassificationLevel] IN ('UNCLASSIFIED','RESTRICTED','CONFIDENTIAL')");
-
-                            t.HasCheckConstraint("CK_complianceiq_turns_entities_json", "ISJSON([EntitiesAccessedJson]) = 1");
-                        });
+                    b.ToTable("complianceiq_turns", "meta");
                 });
 
             modelBuilder.Entity("FC.Engine.Domain.Entities.ConsentRecord", b =>
@@ -11391,38 +11323,6 @@ namespace FC.Engine.Infrastructure.Migrations
                         .HasDatabaseName("IX_regiq_config_lookup");
 
                     b.ToTable("regiq_config", "meta");
-
-                    b.HasData(
-                        new
-                        {
-                            Id = 1,
-                            ConfigKey = "rate.queries_per_minute",
-                            ConfigValue = "30",
-                            CreatedAt = new DateTime(2026, 3, 14, 0, 0, 0, 0, DateTimeKind.Utc),
-                            CreatedBy = "SYSTEM",
-                            Description = "Maximum RegulatorIQ queries per regulator per minute.",
-                            EffectiveFrom = new DateTime(2026, 3, 14, 0, 0, 0, 0, DateTimeKind.Utc)
-                        },
-                        new
-                        {
-                            Id = 2,
-                            ConfigKey = "llm.model",
-                            ConfigValue = "claude-3-5-sonnet-latest",
-                            CreatedAt = new DateTime(2026, 3, 14, 0, 0, 0, 0, DateTimeKind.Utc),
-                            CreatedBy = "SYSTEM",
-                            Description = "Default model used by RegulatorIQ for LLM-assisted analysis.",
-                            EffectiveFrom = new DateTime(2026, 3, 14, 0, 0, 0, 0, DateTimeKind.Utc)
-                        },
-                        new
-                        {
-                            Id = 3,
-                            ConfigKey = "llm.temperature",
-                            ConfigValue = "0.1",
-                            CreatedAt = new DateTime(2026, 3, 14, 0, 0, 0, 0, DateTimeKind.Utc),
-                            CreatedBy = "SYSTEM",
-                            Description = "Default RegulatorIQ response temperature.",
-                            EffectiveFrom = new DateTime(2026, 3, 14, 0, 0, 0, 0, DateTimeKind.Utc)
-                        });
                 });
 
             modelBuilder.Entity("FC.Engine.Domain.Entities.RegIqConversation", b =>
@@ -11572,345 +11472,6 @@ namespace FC.Engine.Infrastructure.Migrations
                         {
                             t.HasCheckConstraint("CK_regulatoriq_entity_aliases_alias_type", "[AliasType] IN ('NAME','ABBREVIATION','HOLDING_COMPANY','COMMON')");
                         });
-
-                    b.HasData(
-                        new
-                        {
-                            Id = 1L,
-                            Alias = "Access Bank Plc",
-                            AliasType = "NAME",
-                            CanonicalName = "Access Bank Plc",
-                            CreatedAt = new DateTime(2026, 3, 14, 0, 0, 0, 0, DateTimeKind.Utc),
-                            GeoTag = "NG",
-                            HoldingCompanyName = "Access Holdings Plc",
-                            InstitutionType = "BANK",
-                            IsActive = true,
-                            IsPrimary = true,
-                            LicenceCategory = "DMB",
-                            MatchPriority = 10,
-                            NormalizedAlias = "access bank plc",
-                            RegulatorAgency = "CBN"
-                        },
-                        new
-                        {
-                            Id = 2L,
-                            Alias = "Access Bank",
-                            AliasType = "COMMON",
-                            CanonicalName = "Access Bank Plc",
-                            CreatedAt = new DateTime(2026, 3, 14, 0, 0, 0, 0, DateTimeKind.Utc),
-                            GeoTag = "NG",
-                            HoldingCompanyName = "Access Holdings Plc",
-                            InstitutionType = "BANK",
-                            IsActive = true,
-                            IsPrimary = false,
-                            LicenceCategory = "DMB",
-                            MatchPriority = 20,
-                            NormalizedAlias = "access bank",
-                            RegulatorAgency = "CBN"
-                        },
-                        new
-                        {
-                            Id = 3L,
-                            Alias = "Access",
-                            AliasType = "COMMON",
-                            CanonicalName = "Access Bank Plc",
-                            CreatedAt = new DateTime(2026, 3, 14, 0, 0, 0, 0, DateTimeKind.Utc),
-                            GeoTag = "NG",
-                            HoldingCompanyName = "Access Holdings Plc",
-                            InstitutionType = "BANK",
-                            IsActive = true,
-                            IsPrimary = false,
-                            LicenceCategory = "DMB",
-                            MatchPriority = 30,
-                            NormalizedAlias = "access",
-                            RegulatorAgency = "CBN"
-                        },
-                        new
-                        {
-                            Id = 4L,
-                            Alias = "Zenith Bank Plc",
-                            AliasType = "NAME",
-                            CanonicalName = "Zenith Bank Plc",
-                            CreatedAt = new DateTime(2026, 3, 14, 0, 0, 0, 0, DateTimeKind.Utc),
-                            GeoTag = "NG",
-                            InstitutionType = "BANK",
-                            IsActive = true,
-                            IsPrimary = true,
-                            LicenceCategory = "DMB",
-                            MatchPriority = 10,
-                            NormalizedAlias = "zenith bank plc",
-                            RegulatorAgency = "CBN"
-                        },
-                        new
-                        {
-                            Id = 5L,
-                            Alias = "Zenith Bank",
-                            AliasType = "COMMON",
-                            CanonicalName = "Zenith Bank Plc",
-                            CreatedAt = new DateTime(2026, 3, 14, 0, 0, 0, 0, DateTimeKind.Utc),
-                            GeoTag = "NG",
-                            InstitutionType = "BANK",
-                            IsActive = true,
-                            IsPrimary = false,
-                            LicenceCategory = "DMB",
-                            MatchPriority = 20,
-                            NormalizedAlias = "zenith bank",
-                            RegulatorAgency = "CBN"
-                        },
-                        new
-                        {
-                            Id = 6L,
-                            Alias = "Zenith",
-                            AliasType = "COMMON",
-                            CanonicalName = "Zenith Bank Plc",
-                            CreatedAt = new DateTime(2026, 3, 14, 0, 0, 0, 0, DateTimeKind.Utc),
-                            GeoTag = "NG",
-                            InstitutionType = "BANK",
-                            IsActive = true,
-                            IsPrimary = false,
-                            LicenceCategory = "DMB",
-                            MatchPriority = 30,
-                            NormalizedAlias = "zenith",
-                            RegulatorAgency = "CBN"
-                        },
-                        new
-                        {
-                            Id = 7L,
-                            Alias = "Guaranty Trust Bank Plc",
-                            AliasType = "NAME",
-                            CanonicalName = "Guaranty Trust Bank Plc",
-                            CreatedAt = new DateTime(2026, 3, 14, 0, 0, 0, 0, DateTimeKind.Utc),
-                            GeoTag = "NG",
-                            HoldingCompanyName = "GTCO Plc",
-                            InstitutionType = "BANK",
-                            IsActive = true,
-                            IsPrimary = true,
-                            LicenceCategory = "DMB",
-                            MatchPriority = 10,
-                            NormalizedAlias = "guaranty trust bank plc",
-                            RegulatorAgency = "CBN"
-                        },
-                        new
-                        {
-                            Id = 8L,
-                            Alias = "GTBank",
-                            AliasType = "COMMON",
-                            CanonicalName = "Guaranty Trust Bank Plc",
-                            CreatedAt = new DateTime(2026, 3, 14, 0, 0, 0, 0, DateTimeKind.Utc),
-                            GeoTag = "NG",
-                            HoldingCompanyName = "GTCO Plc",
-                            InstitutionType = "BANK",
-                            IsActive = true,
-                            IsPrimary = false,
-                            LicenceCategory = "DMB",
-                            MatchPriority = 20,
-                            NormalizedAlias = "gtbank",
-                            RegulatorAgency = "CBN"
-                        },
-                        new
-                        {
-                            Id = 9L,
-                            Alias = "GT Bank",
-                            AliasType = "COMMON",
-                            CanonicalName = "Guaranty Trust Bank Plc",
-                            CreatedAt = new DateTime(2026, 3, 14, 0, 0, 0, 0, DateTimeKind.Utc),
-                            GeoTag = "NG",
-                            HoldingCompanyName = "GTCO Plc",
-                            InstitutionType = "BANK",
-                            IsActive = true,
-                            IsPrimary = false,
-                            LicenceCategory = "DMB",
-                            MatchPriority = 30,
-                            NormalizedAlias = "gt bank",
-                            RegulatorAgency = "CBN"
-                        },
-                        new
-                        {
-                            Id = 10L,
-                            Alias = "Guaranty Trust",
-                            AliasType = "COMMON",
-                            CanonicalName = "Guaranty Trust Bank Plc",
-                            CreatedAt = new DateTime(2026, 3, 14, 0, 0, 0, 0, DateTimeKind.Utc),
-                            GeoTag = "NG",
-                            HoldingCompanyName = "GTCO Plc",
-                            InstitutionType = "BANK",
-                            IsActive = true,
-                            IsPrimary = false,
-                            LicenceCategory = "DMB",
-                            MatchPriority = 40,
-                            NormalizedAlias = "guaranty trust",
-                            RegulatorAgency = "CBN"
-                        },
-                        new
-                        {
-                            Id = 11L,
-                            Alias = "GTCO",
-                            AliasType = "HOLDING_COMPANY",
-                            CanonicalName = "Guaranty Trust Bank Plc",
-                            CreatedAt = new DateTime(2026, 3, 14, 0, 0, 0, 0, DateTimeKind.Utc),
-                            GeoTag = "NG",
-                            HoldingCompanyName = "GTCO Plc",
-                            InstitutionType = "BANK",
-                            IsActive = true,
-                            IsPrimary = false,
-                            LicenceCategory = "DMB",
-                            MatchPriority = 50,
-                            NormalizedAlias = "gtco",
-                            RegulatorAgency = "CBN"
-                        },
-                        new
-                        {
-                            Id = 12L,
-                            Alias = "First Bank Nigeria Limited",
-                            AliasType = "NAME",
-                            CanonicalName = "First Bank Nigeria Limited",
-                            CreatedAt = new DateTime(2026, 3, 14, 0, 0, 0, 0, DateTimeKind.Utc),
-                            GeoTag = "NG",
-                            HoldingCompanyName = "FBN Holdings Plc",
-                            InstitutionType = "BANK",
-                            IsActive = true,
-                            IsPrimary = true,
-                            LicenceCategory = "DMB",
-                            MatchPriority = 10,
-                            NormalizedAlias = "first bank nigeria limited",
-                            RegulatorAgency = "CBN"
-                        },
-                        new
-                        {
-                            Id = 13L,
-                            Alias = "First Bank",
-                            AliasType = "COMMON",
-                            CanonicalName = "First Bank Nigeria Limited",
-                            CreatedAt = new DateTime(2026, 3, 14, 0, 0, 0, 0, DateTimeKind.Utc),
-                            GeoTag = "NG",
-                            HoldingCompanyName = "FBN Holdings Plc",
-                            InstitutionType = "BANK",
-                            IsActive = true,
-                            IsPrimary = false,
-                            LicenceCategory = "DMB",
-                            MatchPriority = 20,
-                            NormalizedAlias = "first bank",
-                            RegulatorAgency = "CBN"
-                        },
-                        new
-                        {
-                            Id = 14L,
-                            Alias = "First",
-                            AliasType = "COMMON",
-                            CanonicalName = "First Bank Nigeria Limited",
-                            CreatedAt = new DateTime(2026, 3, 14, 0, 0, 0, 0, DateTimeKind.Utc),
-                            GeoTag = "NG",
-                            HoldingCompanyName = "FBN Holdings Plc",
-                            InstitutionType = "BANK",
-                            IsActive = true,
-                            IsPrimary = false,
-                            LicenceCategory = "DMB",
-                            MatchPriority = 30,
-                            NormalizedAlias = "first",
-                            RegulatorAgency = "CBN"
-                        },
-                        new
-                        {
-                            Id = 15L,
-                            Alias = "FBN",
-                            AliasType = "ABBREVIATION",
-                            CanonicalName = "First Bank Nigeria Limited",
-                            CreatedAt = new DateTime(2026, 3, 14, 0, 0, 0, 0, DateTimeKind.Utc),
-                            GeoTag = "NG",
-                            HoldingCompanyName = "FBN Holdings Plc",
-                            InstitutionType = "BANK",
-                            IsActive = true,
-                            IsPrimary = false,
-                            LicenceCategory = "DMB",
-                            MatchPriority = 40,
-                            NormalizedAlias = "fbn",
-                            RegulatorAgency = "CBN"
-                        },
-                        new
-                        {
-                            Id = 16L,
-                            Alias = "FBNH",
-                            AliasType = "HOLDING_COMPANY",
-                            CanonicalName = "First Bank Nigeria Limited",
-                            CreatedAt = new DateTime(2026, 3, 14, 0, 0, 0, 0, DateTimeKind.Utc),
-                            GeoTag = "NG",
-                            HoldingCompanyName = "FBN Holdings Plc",
-                            InstitutionType = "BANK",
-                            IsActive = true,
-                            IsPrimary = false,
-                            LicenceCategory = "DMB",
-                            MatchPriority = 50,
-                            NormalizedAlias = "fbnh",
-                            RegulatorAgency = "CBN"
-                        },
-                        new
-                        {
-                            Id = 17L,
-                            Alias = "First City Monument Bank Plc",
-                            AliasType = "NAME",
-                            CanonicalName = "First City Monument Bank Plc",
-                            CreatedAt = new DateTime(2026, 3, 14, 0, 0, 0, 0, DateTimeKind.Utc),
-                            GeoTag = "NG",
-                            HoldingCompanyName = "FCMB Group Plc",
-                            InstitutionType = "BANK",
-                            IsActive = true,
-                            IsPrimary = true,
-                            LicenceCategory = "DMB",
-                            MatchPriority = 10,
-                            NormalizedAlias = "first city monument bank plc",
-                            RegulatorAgency = "CBN"
-                        },
-                        new
-                        {
-                            Id = 18L,
-                            Alias = "FCMB",
-                            AliasType = "ABBREVIATION",
-                            CanonicalName = "First City Monument Bank Plc",
-                            CreatedAt = new DateTime(2026, 3, 14, 0, 0, 0, 0, DateTimeKind.Utc),
-                            GeoTag = "NG",
-                            HoldingCompanyName = "FCMB Group Plc",
-                            InstitutionType = "BANK",
-                            IsActive = true,
-                            IsPrimary = false,
-                            LicenceCategory = "DMB",
-                            MatchPriority = 20,
-                            NormalizedAlias = "fcmb",
-                            RegulatorAgency = "CBN"
-                        },
-                        new
-                        {
-                            Id = 19L,
-                            Alias = "First City Monument",
-                            AliasType = "COMMON",
-                            CanonicalName = "First City Monument Bank Plc",
-                            CreatedAt = new DateTime(2026, 3, 14, 0, 0, 0, 0, DateTimeKind.Utc),
-                            GeoTag = "NG",
-                            HoldingCompanyName = "FCMB Group Plc",
-                            InstitutionType = "BANK",
-                            IsActive = true,
-                            IsPrimary = false,
-                            LicenceCategory = "DMB",
-                            MatchPriority = 30,
-                            NormalizedAlias = "first city monument",
-                            RegulatorAgency = "CBN"
-                        },
-                        new
-                        {
-                            Id = 20L,
-                            Alias = "First",
-                            AliasType = "COMMON",
-                            CanonicalName = "First City Monument Bank Plc",
-                            CreatedAt = new DateTime(2026, 3, 14, 0, 0, 0, 0, DateTimeKind.Utc),
-                            GeoTag = "NG",
-                            HoldingCompanyName = "FCMB Group Plc",
-                            InstitutionType = "BANK",
-                            IsActive = true,
-                            IsPrimary = false,
-                            LicenceCategory = "DMB",
-                            MatchPriority = 40,
-                            NormalizedAlias = "first",
-                            RegulatorAgency = "CBN"
-                        });
                 });
 
             modelBuilder.Entity("FC.Engine.Domain.Entities.RegIqIntent", b =>
@@ -11970,50 +11531,6 @@ namespace FC.Engine.Infrastructure.Migrations
                         .HasDatabaseName("UX_regiq_intent_code");
 
                     b.ToTable("regiq_intent", "meta");
-
-                    b.HasData(
-                        new
-                        {
-                            Id = 1,
-                            Category = "REGULATOR",
-                            CreatedAt = new DateTime(2026, 3, 14, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Description = "Build a regulator-facing profile for a supervised institution.",
-                            DisplayName = "Entity Intelligence Profile",
-                            ExampleQuery = "Give me a full profile of Access Bank",
-                            IntentCode = "ENTITY_PROFILE",
-                            IsEnabled = true,
-                            PrimaryDataSource = "MULTI",
-                            RequiresRegulatorContext = true,
-                            SortOrder = 1
-                        },
-                        new
-                        {
-                            Id = 2,
-                            Category = "REGULATOR",
-                            CreatedAt = new DateTime(2026, 3, 14, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Description = "Summarise cross-entity sector intelligence for the current scope.",
-                            DisplayName = "Sector Intelligence Summary",
-                            ExampleQuery = "Show me a sector health summary for commercial banks",
-                            IntentCode = "SECTOR_SUMMARY",
-                            IsEnabled = true,
-                            PrimaryDataSource = "MULTI",
-                            RequiresRegulatorContext = true,
-                            SortOrder = 2
-                        },
-                        new
-                        {
-                            Id = 3,
-                            Category = "REGULATOR",
-                            CreatedAt = new DateTime(2026, 3, 14, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Description = "Rank institutions by their latest Compliance Health Score.",
-                            DisplayName = "Compliance Health Ranking",
-                            ExampleQuery = "Rank DMBs by compliance health score",
-                            IntentCode = "CHS_RANKING",
-                            IsEnabled = true,
-                            PrimaryDataSource = "RG-32",
-                            RequiresRegulatorContext = true,
-                            SortOrder = 3
-                        });
                 });
 
             modelBuilder.Entity("FC.Engine.Domain.Entities.RegIqQueryTemplate", b =>
@@ -12112,29 +11629,6 @@ namespace FC.Engine.Infrastructure.Migrations
                             t.HasCheckConstraint("CK_regiq_query_template_parameter_schema_json", "ISJSON([ParameterSchema]) = 1");
 
                             t.HasCheckConstraint("CK_regiq_query_template_scope", "[Scope] IN ('SECTOR_WIDE','ENTITY_SPECIFIC','COMPARATIVE','SYSTEMIC','HELP')");
-                        });
-
-                    b.HasData(
-                        new
-                        {
-                            Id = 1,
-                            ClassificationLevel = "RESTRICTED",
-                            CreatedAt = new DateTime(2026, 3, 14, 0, 0, 0, 0, DateTimeKind.Utc),
-                            CrossTenantEnabled = true,
-                            DataSourcesJson = "[\"RG-32\"]",
-                            Description = "Rank supervised institutions by their most recent Compliance Health Score.",
-                            DisplayName = "Latest CHS Ranking",
-                            IntentCode = "CHS_RANKING",
-                            IsActive = true,
-                            ParameterSchema = "{\"LicenceCategory\":\"string?\",\"Limit\":\"int\"}",
-                            RequiresEntityContext = false,
-                            ResultFormat = "TABLE",
-                            Scope = "SECTOR_WIDE",
-                            SortOrder = 1,
-                            SqlTemplate = "WITH latest_chs AS (\n    SELECT\n        s.TenantId,\n        s.OverallScore,\n        s.Rating,\n        s.ComputedAt,\n        ROW_NUMBER() OVER (PARTITION BY s.TenantId ORDER BY s.ComputedAt DESC) AS rn\n    FROM chs_score_snapshots s\n)\nSELECT TOP (@Limit)\n    l.TenantId AS tenant_id,\n    i.InstitutionName AS institution_name,\n    COALESCE(licence.Code, i.LicenseType, '') AS licence_category,\n    CAST(l.OverallScore AS decimal(10,2)) AS chs_score,\n    l.Rating AS rating,\n    l.ComputedAt AS computed_at\nFROM latest_chs l\nINNER JOIN institutions i ON i.TenantId = l.TenantId\nOUTER APPLY (\n    SELECT TOP (1) lt.Code\n    FROM tenant_licence_types tlt\n    INNER JOIN licence_types lt ON lt.Id = tlt.LicenceTypeId\n    WHERE tlt.TenantId = l.TenantId\n      AND tlt.IsActive = 1\n    ORDER BY tlt.EffectiveDate DESC, tlt.Id DESC\n) licence\nWHERE l.rn = 1\n  AND (@LicenceCategory IS NULL OR @LicenceCategory = '' OR COALESCE(licence.Code, i.LicenseType, '') = @LicenceCategory)\nORDER BY l.OverallScore DESC, i.InstitutionName ASC;",
-                            TemplateCode = "CHS_RANKING_LATEST",
-                            UpdatedAt = new DateTime(2026, 3, 14, 0, 0, 0, 0, DateTimeKind.Utc),
-                            VisualizationType = "ranking"
                         });
                 });
 

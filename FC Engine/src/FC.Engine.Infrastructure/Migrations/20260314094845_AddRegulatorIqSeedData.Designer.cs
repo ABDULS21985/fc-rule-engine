@@ -4,6 +4,7 @@ using FC.Engine.Infrastructure.Metadata;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace FC.Engine.Infrastructure.Migrations
 {
     [DbContext(typeof(MetadataDbContext))]
-    partial class MetadataDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260314094845_AddRegulatorIqSeedData")]
+    partial class AddRegulatorIqSeedData
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1811,36 +1814,6 @@ namespace FC.Engine.Infrastructure.Migrations
                             CreatedBy = "SYSTEM",
                             Description = "Fallback NPL multiplier for scenario analysis when a user says doubled without a numeric multiplier.",
                             EffectiveFrom = new DateTime(2026, 3, 12, 0, 0, 0, 0, DateTimeKind.Utc)
-                        },
-                        new
-                        {
-                            Id = 10,
-                            ConfigKey = "rate.regulator_queries_per_minute",
-                            ConfigValue = "30",
-                            CreatedAt = new DateTime(2026, 3, 12, 0, 0, 0, 0, DateTimeKind.Utc),
-                            CreatedBy = "SYSTEM",
-                            Description = "Maximum RegulatorIQ queries per regulator per minute.",
-                            EffectiveFrom = new DateTime(2026, 3, 12, 0, 0, 0, 0, DateTimeKind.Utc)
-                        },
-                        new
-                        {
-                            Id = 11,
-                            ConfigKey = "rate.regulator_queries_per_hour",
-                            ConfigValue = "300",
-                            CreatedAt = new DateTime(2026, 3, 12, 0, 0, 0, 0, DateTimeKind.Utc),
-                            CreatedBy = "SYSTEM",
-                            Description = "Maximum RegulatorIQ queries per regulator per hour.",
-                            EffectiveFrom = new DateTime(2026, 3, 12, 0, 0, 0, 0, DateTimeKind.Utc)
-                        },
-                        new
-                        {
-                            Id = 12,
-                            ConfigKey = "rate.regulator_queries_per_day",
-                            ConfigValue = "1500",
-                            CreatedAt = new DateTime(2026, 3, 12, 0, 0, 0, 0, DateTimeKind.Utc),
-                            CreatedBy = "SYSTEM",
-                            Description = "Maximum RegulatorIQ queries per regulator per day.",
-                            EffectiveFrom = new DateTime(2026, 3, 12, 0, 0, 0, 0, DateTimeKind.Utc)
                         });
                 });
 
@@ -1850,13 +1823,7 @@ namespace FC.Engine.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uniqueidentifier");
 
-                    b.Property<Guid?>("ExaminationTargetTenantId")
-                        .HasColumnType("uniqueidentifier");
-
                     b.Property<bool>("IsActive")
-                        .HasColumnType("bit");
-
-                    b.Property<bool>("IsExaminationSession")
                         .HasColumnType("bit");
 
                     b.Property<bool>("IsRegulatorContext")
@@ -1864,10 +1831,6 @@ namespace FC.Engine.Infrastructure.Migrations
 
                     b.Property<DateTime>("LastActivityAt")
                         .HasColumnType("datetime2(3)");
-
-                    b.Property<string>("Scope")
-                        .HasMaxLength(20)
-                        .HasColumnType("nvarchar(20)");
 
                     b.Property<DateTime>("StartedAt")
                         .HasColumnType("datetime2(3)");
@@ -1894,9 +1857,6 @@ namespace FC.Engine.Infrastructure.Migrations
                         .HasColumnType("nvarchar(60)");
 
                     b.HasKey("Id");
-
-                    b.HasIndex("ExaminationTargetTenantId")
-                        .HasDatabaseName("IX_complianceiq_conversations_exam_target");
 
                     b.HasIndex("TenantId", "UserId", "LastActivityAt")
                         .HasDatabaseName("IX_complianceiq_conversations_tenant_user");
@@ -3559,13 +3519,6 @@ namespace FC.Engine.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
-                    b.Property<string>("ClassificationLevel")
-                        .IsRequired()
-                        .ValueGeneratedOnAdd()
-                        .HasMaxLength(20)
-                        .HasColumnType("nvarchar(20)")
-                        .HasDefaultValue("RESTRICTED");
-
                     b.Property<string>("ConfidenceLevel")
                         .IsRequired()
                         .HasMaxLength(10)
@@ -3576,15 +3529,6 @@ namespace FC.Engine.Infrastructure.Migrations
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2(3)");
-
-                    b.Property<string>("DataSourcesUsed")
-                        .IsRequired()
-                        .HasMaxLength(500)
-                        .HasColumnType("nvarchar(500)");
-
-                    b.Property<string>("EntitiesAccessedJson")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("ErrorMessage")
                         .HasColumnType("nvarchar(500)");
@@ -3615,10 +3559,6 @@ namespace FC.Engine.Infrastructure.Migrations
                     b.Property<string>("QueryText")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("RegulatorAgency")
-                        .HasMaxLength(20)
-                        .HasColumnType("nvarchar(20)");
 
                     b.Property<string>("ResolvedParametersJson")
                         .IsRequired()
@@ -3666,21 +3606,13 @@ namespace FC.Engine.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("ClassificationLevel", "CreatedAt")
-                        .HasDatabaseName("IX_complianceiq_turns_classification");
-
                     b.HasIndex("ConversationId", "TurnNumber")
                         .HasDatabaseName("IX_complianceiq_turns_conversation");
 
                     b.HasIndex("TenantId", "CreatedAt")
                         .HasDatabaseName("IX_complianceiq_turns_tenant");
 
-                    b.ToTable("complianceiq_turns", "meta", t =>
-                        {
-                            t.HasCheckConstraint("CK_complianceiq_turns_classification", "[ClassificationLevel] IN ('UNCLASSIFIED','RESTRICTED','CONFIDENTIAL')");
-
-                            t.HasCheckConstraint("CK_complianceiq_turns_entities_json", "ISJSON([EntitiesAccessedJson]) = 1");
-                        });
+                    b.ToTable("complianceiq_turns", "meta");
                 });
 
             modelBuilder.Entity("FC.Engine.Domain.Entities.ConsentRecord", b =>

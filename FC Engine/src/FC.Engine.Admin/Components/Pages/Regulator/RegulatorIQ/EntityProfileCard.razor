@@ -1,0 +1,254 @@
+@using System.Globalization
+
+@if (Profile is null)
+{
+    <div class="regiq-profile-card regiq-profile-card--empty">
+        <div class="regiq-profile-card__empty">
+            <i class="bi bi-building text-secondary" aria-hidden="true"></i>
+            <span>No institution profile is loaded yet.</span>
+        </div>
+    </div>
+}
+else
+{
+    <article class="regiq-profile-card @(Compact ? "regiq-profile-card--compact" : string.Empty)" aria-label="@($"{Profile.InstitutionName} intelligence profile")">
+        <header class="regiq-profile-card__header">
+            <div>
+                <div class="regiq-profile-card__eyebrow">
+                    <span class="badge text-bg-light border">@Profile.LicenceCategory</span>
+                    <span class="badge text-bg-dark">@Profile.RegulatorAgency</span>
+                </div>
+                <h3 class="regiq-profile-card__title">@Profile.InstitutionName</h3>
+                <p class="regiq-profile-card__meta mb-0">
+                    @if (!string.IsNullOrWhiteSpace(Profile.InstitutionType))
+                    {
+                        <span>@Profile.InstitutionType</span>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(Profile.LatestPeriodCode))
+                    {
+                        <span>@Profile.LatestPeriodCode</span>
+                    }
+                    @if (Profile.LatestSubmissionAt.HasValue)
+                    {
+                        <span>Updated @Profile.LatestSubmissionAt.Value.ToLocalTime().ToString("dd MMM yyyy", CultureInfo.InvariantCulture)</span>
+                    }
+                </p>
+            </div>
+
+            <div class="regiq-profile-card__actions">
+                <span class="badge rounded-pill @ResolveFlagBadgeTone(Profile.ActiveAlerts.Count + Profile.EarlyWarningFlags.Count)">
+                    @(Profile.ActiveAlerts.Count + Profile.EarlyWarningFlags.Count) active flags
+                </span>
+                @if (OnDeepDive.HasDelegate)
+                {
+                    <button type="button"
+                            class="btn btn-sm btn-outline-dark"
+                            @onclick="HandleDeepDiveAsync"
+                            aria-label="@($"Deep dive into {Profile.InstitutionName}")">
+                        <i class="bi bi-arrow-up-right-circle me-1" aria-hidden="true"></i>
+                        Deep Dive
+                    </button>
+                }
+            </div>
+        </header>
+
+        <div class="regiq-profile-card__metrics">
+            @foreach (var metric in BuildMetricTiles())
+            {
+                <section class="regiq-profile-card__metric @metric.Tone" aria-label="@metric.Label">
+                    <span class="regiq-profile-card__metric-label">@metric.Label</span>
+                    <strong class="regiq-profile-card__metric-value">@metric.Value</strong>
+                    @if (!string.IsNullOrWhiteSpace(metric.Hint))
+                    {
+                        <small class="regiq-profile-card__metric-hint">@metric.Hint</small>
+                    }
+                </section>
+            }
+        </div>
+
+        @if (!Compact)
+        {
+            <div class="regiq-profile-card__body">
+                @if (Profile.ActiveAlerts.Count > 0 || Profile.EarlyWarningFlags.Count > 0)
+                {
+                    <div class="regiq-profile-card__section">
+                        <div class="regiq-profile-card__section-title">Active Concerns</div>
+                        <ul class="regiq-profile-card__flag-list">
+                            @foreach (var flag in Profile.ActiveAlerts.Take(3))
+                            {
+                                <li>
+                                    <span class="badge @ResolveSeverityBadge(flag.Severity)">@flag.Severity</span>
+                                    <span>@flag.Title</span>
+                                </li>
+                            }
+                            @foreach (var flag in Profile.EarlyWarningFlags.Take(Math.Max(0, 3 - Profile.ActiveAlerts.Count)))
+                            {
+                                <li>
+                                    <span class="badge @ResolveSeverityBadge(flag.Severity.ToString())">@flag.Severity.ToString().ToUpperInvariant()</span>
+                                    <span>@flag.Message</span>
+                                </li>
+                            }
+                        </ul>
+                    </div>
+                }
+
+                @if (Profile.KeyMetrics.Count > 0)
+                {
+                    <div class="regiq-profile-card__section">
+                        <div class="regiq-profile-card__section-title">Key Ratios</div>
+                        <div class="regiq-profile-card__ratio-grid">
+                            @foreach (var snapshot in Profile.KeyMetrics.Take(4))
+                            {
+                                <div class="regiq-profile-card__ratio-item">
+                                    <span>@snapshot.MetricLabel</span>
+                                    <strong>@FormatMetric(snapshot.Value, snapshot.MetricCode)</strong>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                }
+            </div>
+        }
+    </article>
+}
+
+@code {
+    [Parameter] public EntityIntelligenceProfile? Profile { get; set; }
+    [Parameter] public bool Compact { get; set; }
+    [Parameter] public EventCallback<string> OnDeepDive { get; set; }
+
+    private async Task HandleDeepDiveAsync()
+    {
+        if (Profile is not null)
+        {
+            await OnDeepDive.InvokeAsync(Profile.InstitutionName);
+        }
+    }
+
+    private List<MetricTile> BuildMetricTiles()
+    {
+        if (Profile is null)
+        {
+            return new();
+        }
+
+        var car = Profile.KeyMetrics.FirstOrDefault(x => x.MetricCode.Equals("carratio", StringComparison.OrdinalIgnoreCase))?.Value;
+        var npl = Profile.KeyMetrics.FirstOrDefault(x => x.MetricCode.Equals("nplratio", StringComparison.OrdinalIgnoreCase))?.Value;
+        var liquidity = Profile.KeyMetrics.FirstOrDefault(x => x.MetricCode.Equals("liquidityratio", StringComparison.OrdinalIgnoreCase))?.Value;
+        var chs = Profile.ComplianceHealth?.OverallScore;
+        var ewiCount = Profile.EarlyWarningFlags.Count;
+        var overdueCount = Profile.FilingTimeliness?.OverdueFilings ?? 0;
+
+        return new List<MetricTile>
+        {
+            new("CAR", FormatMetric(car, "carratio"), ResolveCarTone(car), "CBN min 15%"),
+            new("NPL Ratio", FormatMetric(npl, "nplratio"), ResolveNplTone(npl), "Warning above 5%"),
+            new("Liquidity", FormatMetric(liquidity, "liquidityratio"), ResolveLiquidityTone(liquidity), "Minimum 30%"),
+            new("CHS Score", chs.HasValue ? chs.Value.ToString("N1", CultureInfo.InvariantCulture) : "N/A", ResolveChsTone(chs), "Adequate at 70+"),
+            new("EWI Flags", ewiCount.ToString(CultureInfo.InvariantCulture), ResolveCountTone(ewiCount, 1, 3), ewiCount == 0 ? "No active flags" : "Current early warnings"),
+            new("Filing Status", overdueCount == 0 ? "Current" : $"{overdueCount} overdue", ResolveCountTone(overdueCount, 1, 2), overdueCount == 0 ? "No overdue returns" : "Outstanding obligations")
+        };
+    }
+
+    private static string FormatMetric(decimal? value, string metricCode)
+    {
+        if (!value.HasValue)
+        {
+            return "N/A";
+        }
+
+        return metricCode.ToLowerInvariant() switch
+        {
+            "carratio" or "nplratio" or "liquidityratio" or "loandepositratio" or "roa" => $"{value.Value:N1}%",
+            "totalassets" => value.Value >= 1_000_000_000_000m
+                ? $"₦{value.Value / 1_000_000_000_000m:N2}T"
+                : value.Value >= 1_000_000_000m
+                    ? $"₦{value.Value / 1_000_000_000m:N1}B"
+                    : $"₦{value.Value:N0}",
+            _ => value.Value.ToString("N2", CultureInfo.InvariantCulture)
+        };
+    }
+
+    private static string ResolveCarTone(decimal? value) => ResolveThresholdTone(value, 15m, 10m, higherIsBetter: true);
+    private static string ResolveLiquidityTone(decimal? value) => ResolveThresholdTone(value, 30m, 20m, higherIsBetter: true);
+    private static string ResolveNplTone(decimal? value) => ResolveThresholdTone(value, 5m, 10m, higherIsBetter: false);
+    private static string ResolveChsTone(decimal? value) => ResolveThresholdTone(value, 70m, 50m, higherIsBetter: true);
+
+    private static string ResolveThresholdTone(decimal? value, decimal greenThreshold, decimal amberThreshold, bool higherIsBetter)
+    {
+        if (!value.HasValue)
+        {
+            return "regiq-profile-card__metric--neutral";
+        }
+
+        if (higherIsBetter)
+        {
+            if (value.Value >= greenThreshold)
+            {
+                return "regiq-profile-card__metric--success";
+            }
+
+            if (value.Value >= amberThreshold)
+            {
+                return "regiq-profile-card__metric--warning";
+            }
+
+            return "regiq-profile-card__metric--danger";
+        }
+
+        if (value.Value <= greenThreshold)
+        {
+            return "regiq-profile-card__metric--success";
+        }
+
+        if (value.Value <= amberThreshold)
+        {
+            return "regiq-profile-card__metric--warning";
+        }
+
+        return "regiq-profile-card__metric--danger";
+    }
+
+    private static string ResolveCountTone(int count, int amberThreshold, int redThreshold)
+    {
+        if (count >= redThreshold)
+        {
+            return "regiq-profile-card__metric--danger";
+        }
+
+        if (count >= amberThreshold)
+        {
+            return "regiq-profile-card__metric--warning";
+        }
+
+        return "regiq-profile-card__metric--success";
+    }
+
+    private static string ResolveFlagBadgeTone(int flagCount)
+    {
+        if (flagCount >= 3)
+        {
+            return "text-bg-danger";
+        }
+
+        if (flagCount > 0)
+        {
+            return "text-bg-warning";
+        }
+
+        return "text-bg-success";
+    }
+
+    private static string ResolveSeverityBadge(string? severity)
+    {
+        return severity?.ToUpperInvariant() switch
+        {
+            "RED" or "CRITICAL" or "HIGH" => "text-bg-danger",
+            "AMBER" or "WARNING" or "MEDIUM" => "text-bg-warning",
+            "GREEN" or "LOW" => "text-bg-success",
+            _ => "text-bg-secondary"
+        };
+    }
+
+    private sealed record MetricTile(string Label, string Value, string Tone, string Hint);
+}

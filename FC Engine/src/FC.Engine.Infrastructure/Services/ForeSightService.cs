@@ -203,25 +203,61 @@ public sealed class ForeSightService : IForeSightService
         var config = await GetConfigMapAsync(ct);
         var generated = new List<GeneratedPrediction>();
 
-        generated.AddRange(await BuildFilingRiskPredictionsAsync(context, config, ct));
-        generated.AddRange(await BuildCapitalForecastPredictionsAsync(context, config, ct));
-
-        var compliance = await BuildCompliancePredictionAsync(context, config, ct);
-        if (compliance is not null)
+        try
         {
-            generated.Add(compliance);
+            generated.AddRange(await BuildFilingRiskPredictionsAsync(context, config, ct));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "ForeSight filing-risk generation failed for tenant {TenantId}.", tenantId);
         }
 
-        var churn = await BuildChurnPredictionAsync(context, config, ct);
-        if (churn is not null)
+        try
         {
-            generated.Add(churn);
+            generated.AddRange(await BuildCapitalForecastPredictionsAsync(context, config, ct));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "ForeSight capital forecast generation failed for tenant {TenantId}.", tenantId);
         }
 
-        var regulatoryAction = await BuildRegulatoryActionPredictionAsync(context, config, ct);
-        if (regulatoryAction is not null)
+        try
         {
-            generated.Add(regulatoryAction);
+            var compliance = await BuildCompliancePredictionAsync(context, config, ct);
+            if (compliance is not null)
+            {
+                generated.Add(compliance);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "ForeSight compliance-trend generation failed for tenant {TenantId}.", tenantId);
+        }
+
+        try
+        {
+            var churn = await BuildChurnPredictionAsync(context, config, ct);
+            if (churn is not null)
+            {
+                generated.Add(churn);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "ForeSight churn generation failed for tenant {TenantId}.", tenantId);
+        }
+
+        try
+        {
+            var regulatoryAction = await BuildRegulatoryActionPredictionAsync(context, config, ct);
+            if (regulatoryAction is not null)
+            {
+                generated.Add(regulatoryAction);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "ForeSight regulatory-action generation failed for tenant {TenantId}.", tenantId);
         }
 
         foreach (var prediction in generated)
@@ -803,27 +839,42 @@ public sealed class ForeSightService : IForeSightService
         var since = DateTime.UtcNow.AddDays(-lookbackDays);
         var weights = await GetFeatureWeightsAsync(ForeSightModelCodes.ChurnRisk, ct);
 
-        var recentLogins = await _db.LoginAttempts.AsNoTracking()
-            .Where(x => x.TenantId == context.TenantId && x.Succeeded && x.AttemptedAt >= DateTime.UtcNow.AddDays(-30))
-            .CountAsync(ct);
-        var priorLogins = await _db.LoginAttempts.AsNoTracking()
-            .Where(x => x.TenantId == context.TenantId
-                        && x.Succeeded
-                        && x.AttemptedAt >= DateTime.UtcNow.AddDays(-60)
-                        && x.AttemptedAt < DateTime.UtcNow.AddDays(-30))
-            .CountAsync(ct);
+        var hasLoginAttempts = await TableExistsAsync("meta", "login_attempts", ct);
+        var hasUsageRecords = await TableExistsAsync("dbo", "usage_records", ct);
+        var hasComplianceIqTurns = await TableExistsAsync("meta", "complianceiq_turns", ct);
+        var hasSupportTickets = await TableExistsAsync("dbo", "partner_support_tickets", ct);
+        var hasInvoices = await TableExistsAsync("dbo", "invoices", ct);
+        var hasFilingSlaRecords = await TableExistsAsync("dbo", "filing_sla_records", ct);
+
+        var recentLogins = hasLoginAttempts
+            ? await _db.LoginAttempts.AsNoTracking()
+                .Where(x => x.TenantId == context.TenantId && x.Succeeded && x.AttemptedAt >= DateTime.UtcNow.AddDays(-30))
+                .CountAsync(ct)
+            : 0;
+        var priorLogins = hasLoginAttempts
+            ? await _db.LoginAttempts.AsNoTracking()
+                .Where(x => x.TenantId == context.TenantId
+                            && x.Succeeded
+                            && x.AttemptedAt >= DateTime.UtcNow.AddDays(-60)
+                            && x.AttemptedAt < DateTime.UtcNow.AddDays(-30))
+                .CountAsync(ct)
+            : 0;
         var loginTrend = priorLogins == 0 ? 0m : (decimal)(recentLogins - priorLogins) / priorLogins;
 
-        var usageRecent = await _db.UsageRecords.AsNoTracking()
-            .Where(x => x.TenantId == context.TenantId && x.RecordDate >= DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-30)))
-            .OrderBy(x => x.RecordDate)
-            .ToListAsync(ct);
-        var usagePrior = await _db.UsageRecords.AsNoTracking()
-            .Where(x => x.TenantId == context.TenantId
-                        && x.RecordDate >= DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-60))
-                        && x.RecordDate < DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-30)))
-            .OrderBy(x => x.RecordDate)
-            .ToListAsync(ct);
+        var usageRecent = hasUsageRecords
+            ? await _db.UsageRecords.AsNoTracking()
+                .Where(x => x.TenantId == context.TenantId && x.RecordDate >= DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-30)))
+                .OrderBy(x => x.RecordDate)
+                .ToListAsync(ct)
+            : new List<UsageRecord>();
+        var usagePrior = hasUsageRecords
+            ? await _db.UsageRecords.AsNoTracking()
+                .Where(x => x.TenantId == context.TenantId
+                            && x.RecordDate >= DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-60))
+                            && x.RecordDate < DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-30)))
+                .OrderBy(x => x.RecordDate)
+                .ToListAsync(ct)
+            : new List<UsageRecord>();
 
         var recentUsageValue = usageRecent.Count == 0
             ? 0m
@@ -833,30 +884,38 @@ public sealed class ForeSightService : IForeSightService
             : usagePrior.Average(x => (decimal)(x.ActiveUsers + x.ActiveEntities + x.ActiveModules + x.ReturnsSubmitted));
         var usageDrop = priorUsageValue <= 0m ? 0m : ForeSightSupport.Clamp((priorUsageValue - recentUsageValue) / priorUsageValue);
 
-        var complianceIqTurns = await _db.ComplianceIqTurns.AsNoTracking()
-            .Where(x => x.TenantId == context.TenantId && x.CreatedAt >= DateTime.UtcNow.AddDays(-30))
-            .CountAsync(ct);
+        var complianceIqTurns = hasComplianceIqTurns
+            ? await _db.ComplianceIqTurns.AsNoTracking()
+                .Where(x => x.TenantId == context.TenantId && x.CreatedAt >= DateTime.UtcNow.AddDays(-30))
+                .CountAsync(ct)
+            : 0;
 
-        var openTickets = await _db.PartnerSupportTickets.AsNoTracking()
-            .Where(x => x.TenantId == context.TenantId
-                        && x.CreatedAt >= since
-                        && x.Status != PartnerSupportTicketStatus.Resolved)
-            .CountAsync(ct);
+        var openTickets = hasSupportTickets
+            ? await _db.PartnerSupportTickets.AsNoTracking()
+                .Where(x => x.TenantId == context.TenantId
+                            && x.CreatedAt >= since
+                            && x.Status != PartnerSupportTicketStatus.Resolved)
+                .CountAsync(ct)
+            : 0;
 
-        var overdueInvoices = await _db.Invoices.AsNoTracking()
-            .Where(x => x.TenantId == context.TenantId
-                        && x.DueDate.HasValue
-                        && x.DueDate.Value < DateOnly.FromDateTime(DateTime.UtcNow)
-                        && x.Status != InvoiceStatus.Paid
-                        && x.Status != InvoiceStatus.Voided)
-            .ToListAsync(ct);
+        var overdueInvoices = hasInvoices
+            ? await _db.Invoices.AsNoTracking()
+                .Where(x => x.TenantId == context.TenantId
+                            && x.DueDate.HasValue
+                            && x.DueDate.Value < DateOnly.FromDateTime(DateTime.UtcNow)
+                            && x.Status != InvoiceStatus.Paid
+                            && x.Status != InvoiceStatus.Voided)
+                .ToListAsync(ct)
+            : new List<Invoice>();
         var paymentDelay = overdueInvoices.Count == 0
             ? 0m
             : overdueInvoices.Average(x => (decimal)(DateOnly.FromDateTime(DateTime.UtcNow).DayNumber - x.DueDate!.Value.DayNumber));
 
-        var recentFilings = await _db.FilingSlaRecords.AsNoTracking()
-            .Where(x => x.TenantId == context.TenantId && x.PeriodEndDate >= since)
-            .ToListAsync(ct);
+        var recentFilings = hasFilingSlaRecords
+            ? await _db.FilingSlaRecords.AsNoTracking()
+                .Where(x => x.TenantId == context.TenantId && x.PeriodEndDate >= since)
+                .ToListAsync(ct)
+            : new List<FilingSlaRecord>();
         var filingTimeliness = recentFilings.Count == 0
             ? 1m
             : (decimal)recentFilings.Count(x => x.OnTime != false) / recentFilings.Count;
@@ -926,53 +985,68 @@ public sealed class ForeSightService : IForeSightService
 
         var highThreshold = ForeSightSupport.ParseDecimal(config.GetValueOrDefault("regaction.high_threshold"), 0.60m);
         var weights = await GetFeatureWeightsAsync(ForeSightModelCodes.RegulatoryAction, ct);
+        var hasEwiTriggers = await TableExistsAsync("meta", "ewi_triggers", ct);
+        var hasAnomalyReports = await TableExistsAsync("meta", "anomaly_reports", ct);
+        var hasFilingSlaRecords = await TableExistsAsync("dbo", "filing_sla_records", ct);
+        var hasPrudentialMetrics = await TableExistsAsync("meta", "prudential_metrics", ct);
+        var hasCamelsRatings = await TableExistsAsync("meta", "camels_ratings", ct);
 
-        var criticalEwiCount = await conn.ExecuteScalarAsync<int>(
-            """
-            SELECT COUNT(*)
-            FROM   meta.ewi_triggers
-            WHERE  InstitutionId = @InstitutionId
-              AND  IsActive = 1
-              AND  Severity = 'CRITICAL'
-            """,
-            new { context.InstitutionId });
-        var highEwiCount = await conn.ExecuteScalarAsync<int>(
-            """
-            SELECT COUNT(*)
-            FROM   meta.ewi_triggers
-            WHERE  InstitutionId = @InstitutionId
-              AND  IsActive = 1
-              AND  Severity = 'HIGH'
-            """,
-            new { context.InstitutionId });
+        var criticalEwiCount = hasEwiTriggers
+            ? await conn.ExecuteScalarAsync<int>(
+                """
+                SELECT COUNT(*)
+                FROM   meta.ewi_triggers
+                WHERE  InstitutionId = @InstitutionId
+                  AND  IsActive = 1
+                  AND  Severity = 'CRITICAL'
+                """,
+                new { context.InstitutionId })
+            : 0;
+        var highEwiCount = hasEwiTriggers
+            ? await conn.ExecuteScalarAsync<int>(
+                """
+                SELECT COUNT(*)
+                FROM   meta.ewi_triggers
+                WHERE  InstitutionId = @InstitutionId
+                  AND  IsActive = 1
+                  AND  Severity = 'HIGH'
+                """,
+                new { context.InstitutionId })
+            : 0;
 
         var latestChs = await _db.ChsScoreSnapshots.AsNoTracking()
             .Where(x => x.TenantId == context.TenantId)
             .OrderByDescending(x => x.ComputedAt)
             .FirstOrDefaultAsync(ct);
 
-        var latestAnomaly = await _db.AnomalyReports.AsNoTracking()
-            .Where(x => x.TenantId == context.TenantId)
-            .OrderByDescending(x => x.AnalysedAt)
-            .FirstOrDefaultAsync(ct);
+        var latestAnomaly = hasAnomalyReports
+            ? await _db.AnomalyReports.AsNoTracking()
+                .Where(x => x.TenantId == context.TenantId)
+                .OrderByDescending(x => x.AnalysedAt)
+                .FirstOrDefaultAsync(ct)
+            : null;
 
-        var recentFilingRecords = await _db.FilingSlaRecords.AsNoTracking()
-            .Where(x => x.TenantId == context.TenantId)
-            .OrderByDescending(x => x.PeriodEndDate)
-            .Take(8)
-            .ToListAsync(ct);
+        var recentFilingRecords = hasFilingSlaRecords
+            ? await _db.FilingSlaRecords.AsNoTracking()
+                .Where(x => x.TenantId == context.TenantId)
+                .OrderByDescending(x => x.PeriodEndDate)
+                .Take(8)
+                .ToListAsync(ct)
+            : new List<FilingSlaRecord>();
         var delinquency = recentFilingRecords.Count == 0
             ? 0m
             : (decimal)recentFilingRecords.Count(x => x.OnTime == false) / recentFilingRecords.Count;
 
-        var latestPrudential = await conn.QueryFirstOrDefaultAsync<PrudentialMetricRow>(
-            """
-            SELECT TOP 1 PeriodCode, AsOfDate, CAR, NPLRatio, LCR, ProvisioningCoverage
-            FROM   meta.prudential_metrics
-            WHERE  InstitutionId = @InstitutionId
-            ORDER BY AsOfDate DESC
-            """,
-            new { context.InstitutionId });
+        var latestPrudential = hasPrudentialMetrics
+            ? await conn.QueryFirstOrDefaultAsync<PrudentialMetricRow>(
+                """
+                SELECT TOP 1 PeriodCode, AsOfDate, CAR, NPLRatio, LCR, ProvisioningCoverage
+                FROM   meta.prudential_metrics
+                WHERE  InstitutionId = @InstitutionId
+                ORDER BY AsOfDate DESC
+                """,
+                new { context.InstitutionId })
+            : null;
 
         decimal capitalProximity = 0.50m;
         if (latestPrudential is not null)
@@ -984,14 +1058,16 @@ public sealed class ForeSightService : IForeSightService
             }
         }
 
-        var latestCamels = await conn.QueryFirstOrDefaultAsync<CamelsRow>(
-            """
-            SELECT TOP 1 CompositeScore, RiskBand
-            FROM   meta.camels_ratings
-            WHERE  InstitutionId = @InstitutionId
-            ORDER BY ComputedAt DESC
-            """,
-            new { context.InstitutionId });
+        var latestCamels = hasCamelsRatings
+            ? await conn.QueryFirstOrDefaultAsync<CamelsRow>(
+                """
+                SELECT TOP 1 CompositeScore, RiskBand
+                FROM   meta.camels_ratings
+                WHERE  InstitutionId = @InstitutionId
+                ORDER BY ComputedAt DESC
+                """,
+                new { context.InstitutionId })
+            : null;
 
         var camelsPressure = latestCamels?.RiskBand switch
         {
@@ -1239,6 +1315,32 @@ public sealed class ForeSightService : IForeSightService
         });
 
         return result ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+    }
+
+    private async Task<bool> TableExistsAsync(string schema, string table, CancellationToken ct)
+    {
+        var key = $"foresight:table:{schema}.{table}";
+        var exists = await _cache.GetOrCreateAsync(key, async entry =>
+        {
+            entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(10);
+            using var conn = await _connectionFactory.CreateConnectionAsync(null, ct);
+            return await conn.ExecuteScalarAsync<bool>(
+                """
+                SELECT CASE
+                           WHEN EXISTS (
+                               SELECT 1
+                               FROM   INFORMATION_SCHEMA.TABLES
+                               WHERE  TABLE_SCHEMA = @SchemaName
+                                  AND TABLE_NAME = @TableName
+                           )
+                           THEN CAST(1 AS bit)
+                           ELSE CAST(0 AS bit)
+                       END
+                """,
+                new { SchemaName = schema, TableName = table });
+        });
+
+        return exists;
     }
 
     private async Task<Dictionary<string, decimal>> GetFeatureWeightsAsync(string modelCode, CancellationToken ct)

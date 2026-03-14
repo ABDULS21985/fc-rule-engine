@@ -1,0 +1,210 @@
+@using System.Globalization
+
+<aside class="regiq-panel" aria-label="Contextual intelligence panel">
+    <div class="regiq-panel__header">
+        <div>
+            <span class="regiq-panel__eyebrow">Context Panel</span>
+            <h3 class="mb-1">Current supervisory picture</h3>
+            <p class="mb-0 text-secondary">@ResolveSubtitle()</p>
+        </div>
+        <span class="badge @ResolveScopeBadge(CurrentScope)">@ResolveScopeLabel(CurrentScope)</span>
+    </div>
+
+    @if (EntityProfile is not null && CurrentScope.Equals("ENTITY", StringComparison.OrdinalIgnoreCase))
+    {
+        <EntityProfileCard Profile="EntityProfile" Compact="true" OnDeepDive="OnDeepDive" />
+    }
+    else if (SystemicDashboard is not null && CurrentScope.Equals("SYSTEMIC", StringComparison.OrdinalIgnoreCase))
+    {
+        <section class="regiq-panel__card regiq-panel__card--systemic">
+            <div class="regiq-panel__gauge">
+                <div class="regiq-panel__gauge-ring @ResolveGaugeTone(SystemicDashboard.Summary.SystemicRiskIndex)">
+                    <strong>@SystemicDashboard.Summary.SystemicRiskIndex.ToString("N1", CultureInfo.InvariantCulture)</strong>
+                    <span>Systemic Index</span>
+                </div>
+                <div class="regiq-panel__gauge-meta">
+                    <div>
+                        <span>Red-rated entities</span>
+                        <strong>@SystemicDashboard.Summary.RedCount</strong>
+                    </div>
+                    <div>
+                        <span>Active flags</span>
+                        <strong>@SystemicDashboard.Summary.TotalActiveFlags</strong>
+                    </div>
+                </div>
+            </div>
+
+            @if (SystemicDashboard.SystemicIndicators.Count > 0)
+            {
+                <ul class="regiq-panel__list">
+                    @foreach (var indicator in SystemicDashboard.SystemicIndicators.Take(4))
+                    {
+                        <li>
+                            <span class="badge @ResolveRiskBadge(indicator.Severity.ToString())">@indicator.Severity.ToString().ToUpperInvariant()</span>
+                            <div>
+                                <strong>@indicator.Title</strong>
+                                <div class="text-secondary">@indicator.CurrentValue.ToString("N1", CultureInfo.InvariantCulture) vs threshold @indicator.Threshold.ToString("N1", CultureInfo.InvariantCulture)</div>
+                            </div>
+                        </li>
+                    }
+                </ul>
+            }
+
+            <button type="button" class="btn btn-sm btn-outline-dark" @onclick="OpenSystemicDashboardAsync">
+                <i class="bi bi-activity me-1" aria-hidden="true"></i>
+                Open systemic dashboard
+            </button>
+        </section>
+    }
+    else if (SectorSummary is not null)
+    {
+        <section class="regiq-panel__card">
+            <div class="regiq-panel__stats">
+                <div class="regiq-panel__stat">
+                    <span>Entities</span>
+                    <strong>@SectorSummary.EntityCount</strong>
+                </div>
+                <div class="regiq-panel__stat">
+                    <span>Avg CAR</span>
+                    <strong>@FormatPercent(SectorSummary.AverageCarRatio)</strong>
+                </div>
+                <div class="regiq-panel__stat">
+                    <span>Avg NPL</span>
+                    <strong>@FormatPercent(SectorSummary.AverageNplRatio)</strong>
+                </div>
+                <div class="regiq-panel__stat">
+                    <span>Avg CHS</span>
+                    <strong>@FormatScore(SectorSummary.AverageComplianceHealthScore)</strong>
+                </div>
+            </div>
+
+            <div class="regiq-panel__summary">
+                <div class="regiq-panel__summary-row">
+                    <span>Overdue filings</span>
+                    <strong>@SectorSummary.OverdueFilingCount</strong>
+                </div>
+                <div class="regiq-panel__summary-row">
+                    <span>High-risk entities</span>
+                    <strong>@SectorSummary.HighRiskEntityCount</strong>
+                </div>
+                <div class="regiq-panel__summary-row">
+                    <span>Licence filter</span>
+                    <strong>@(string.IsNullOrWhiteSpace(SectorSummary.LicenceCategory) ? "All supervised entities" : SectorSummary.LicenceCategory)</strong>
+                </div>
+            </div>
+
+            @if (SectorSummary.WatchList.Count > 0)
+            {
+                <div class="regiq-panel__section">
+                    <div class="regiq-panel__section-title">Watch List</div>
+                    <ul class="regiq-panel__list">
+                        @foreach (var item in SectorSummary.WatchList.Take(4))
+                        {
+                            <li>
+                                <button type="button"
+                                        class="btn btn-link p-0 text-start"
+                                        @onclick="() => OnDeepDive.InvokeAsync(item.InstitutionName)"
+                                        aria-label="@($"Open full profile for {item.InstitutionName}")">
+                                    @item.InstitutionName
+                                </button>
+                                <span class="badge @ResolveTrendBadge(item.Trend.ToString())">@item.Trend.ToString().ToUpperInvariant()</span>
+                            </li>
+                        }
+                    </ul>
+                </div>
+            }
+
+            <button type="button" class="btn btn-sm btn-outline-dark" @onclick="OpenSectorOverviewAsync">
+                <i class="bi bi-bar-chart me-1" aria-hidden="true"></i>
+                Open sector overview
+            </button>
+        </section>
+    }
+    else
+    {
+        <div class="regiq-panel__empty">
+            <i class="bi bi-compass" aria-hidden="true"></i>
+            <span>Start a query to populate the right-hand intelligence panel.</span>
+        </div>
+    }
+</aside>
+
+@code {
+    [Parameter] public string CurrentScope { get; set; } = "SECTOR";
+    [Parameter] public EntityIntelligenceProfile? EntityProfile { get; set; }
+    [Parameter] public SectorIntelligenceSummary? SectorSummary { get; set; }
+    [Parameter] public SystemicRiskDashboard? SystemicDashboard { get; set; }
+    [Parameter] public EventCallback<string> OnDeepDive { get; set; }
+    [Parameter] public EventCallback<string> OnQuickQuery { get; set; }
+
+    private Task OpenSystemicDashboardAsync() => OnQuickQuery.InvokeAsync("Show me the systemic risk dashboard");
+    private Task OpenSectorOverviewAsync() => OnQuickQuery.InvokeAsync("Show sector health summary");
+
+    private string ResolveSubtitle()
+    {
+        return CurrentScope.ToUpperInvariant() switch
+        {
+            "ENTITY" when EntityProfile is not null => $"Pinned on {EntityProfile.InstitutionName}",
+            "SYSTEMIC" when SystemicDashboard is not null => "System-wide risk posture from the current regulator dashboard",
+            _ => "Sector-wide snapshot for the current regulator scope"
+        };
+    }
+
+    private static string ResolveScopeLabel(string? scope)
+    {
+        return scope?.ToUpperInvariant() switch
+        {
+            "ENTITY" => "Entity scope",
+            "SYSTEMIC" => "Systemic scope",
+            _ => "Sector scope"
+        };
+    }
+
+    private static string ResolveScopeBadge(string? scope)
+    {
+        return scope?.ToUpperInvariant() switch
+        {
+            "ENTITY" => "text-bg-primary",
+            "SYSTEMIC" => "text-bg-danger",
+            _ => "text-bg-success"
+        };
+    }
+
+    private static string FormatPercent(decimal? value) => value.HasValue ? $"{value.Value:N1}%" : "N/A";
+    private static string FormatScore(decimal? value) => value.HasValue ? value.Value.ToString("N1", CultureInfo.InvariantCulture) : "N/A";
+
+    private static string ResolveGaugeTone(decimal score)
+    {
+        if (score >= 70m)
+        {
+            return "regiq-panel__gauge-ring--danger";
+        }
+
+        if (score >= 40m)
+        {
+            return "regiq-panel__gauge-ring--warning";
+        }
+
+        return "regiq-panel__gauge-ring--success";
+    }
+
+    private static string ResolveRiskBadge(string? severity)
+    {
+        return severity?.ToUpperInvariant() switch
+        {
+            "RED" or "CRITICAL" or "HIGH" => "text-bg-danger",
+            "AMBER" or "WARNING" or "MEDIUM" => "text-bg-warning",
+            _ => "text-bg-success"
+        };
+    }
+
+    private static string ResolveTrendBadge(string? trend)
+    {
+        return trend?.ToUpperInvariant() switch
+        {
+            "DECLINING" => "text-bg-danger",
+            "STABLE" => "text-bg-warning",
+            _ => "text-bg-success"
+        };
+    }
+}

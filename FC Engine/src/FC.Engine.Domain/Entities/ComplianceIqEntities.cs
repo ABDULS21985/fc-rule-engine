@@ -62,6 +62,9 @@ public class ComplianceIqConversation
     public string UserId { get; set; } = string.Empty;
     public string UserRole { get; set; } = string.Empty;
     public bool IsRegulatorContext { get; set; }
+    public Guid? ExaminationTargetTenantId { get; set; }
+    public bool IsExaminationSession { get; set; }
+    public string? Scope { get; set; }
     public string Title { get; set; } = "ComplianceIQ conversation";
     public DateTime StartedAt { get; set; } = DateTime.UtcNow;
     public DateTime LastActivityAt { get; set; } = DateTime.UtcNow;
@@ -94,6 +97,10 @@ public class ComplianceIqTurn
     public string ConfidenceLevel { get; set; } = "HIGH";
     public string CitationsJson { get; set; } = "[]";
     public string FollowUpSuggestionsJson { get; set; } = "[]";
+    public string EntitiesAccessedJson { get; set; } = "[]";
+    public string DataSourcesUsed { get; set; } = string.Empty;
+    public string ClassificationLevel { get; set; } = "RESTRICTED";
+    public string? RegulatorAgency { get; set; }
     public int TotalTimeMs { get; set; }
     public string? ErrorMessage { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;

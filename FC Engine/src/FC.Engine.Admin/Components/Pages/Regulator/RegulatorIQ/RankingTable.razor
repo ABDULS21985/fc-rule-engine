@@ -1,0 +1,112 @@
+@using System.Globalization
+
+@if (Ranking is null || Ranking.Items.Count == 0)
+{
+    <div class="regiq-ranking regiq-ranking--empty">
+        <i class="bi bi-list-ol" aria-hidden="true"></i>
+        <span>No ranking data is available for this query.</span>
+    </div>
+}
+else
+{
+    <div class="regiq-ranking">
+        <div class="regiq-ranking__header">
+            <div>
+                <h4 class="mb-1">@Ranking.MetricLabel</h4>
+                <p class="mb-0 text-secondary">Ordered ranking across supervised entities</p>
+            </div>
+            <span class="badge text-bg-dark">@Ranking.MetricCode.ToUpperInvariant()</span>
+        </div>
+
+        <div class="table-responsive">
+            <table class="table table-hover align-middle regiq-ranking__table">
+                <thead>
+                    <tr>
+                        <th scope="col">Rank</th>
+                        <th scope="col">Institution</th>
+                        <th scope="col">Licence</th>
+                        <th scope="col">Metric</th>
+                        <th scope="col">Band</th>
+                        <th scope="col">Source</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var item in Ranking.Items)
+                    {
+                        <tr>
+                            <td>
+                                <span class="regiq-ranking__rank">#@item.Rank</span>
+                            </td>
+                            <td>
+                                @if (OnEntitySelected.HasDelegate)
+                                {
+                                    <button type="button"
+                                            class="btn btn-link p-0 text-start regiq-ranking__entity"
+                                            @onclick="() => OnEntitySelected.InvokeAsync(item.InstitutionName)"
+                                            aria-label="@($"Tell me more about {item.InstitutionName}")">
+                                        @item.InstitutionName
+                                    </button>
+                                }
+                                else
+                                {
+                                    <span class="fw-semibold">@item.InstitutionName</span>
+                                }
+                            </td>
+                            <td>@item.LicenceCategory</td>
+                            <td class="fw-semibold">@FormatMetric(item.Value, Ranking.MetricCode)</td>
+                            <td>
+                                <span class="badge @ResolveRiskBadge(item.RiskBand)">@item.RiskBand</span>
+                            </td>
+                            <td>
+                                <span class="badge text-bg-light border">@item.Source</span>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public RegulatorRankingData? Ranking { get; set; }
+    [Parameter] public EventCallback<string> OnEntitySelected { get; set; }
+
+    private static string FormatMetric(decimal? value, string metricCode)
+    {
+        if (!value.HasValue)
+        {
+            return "N/A";
+        }
+
+        return metricCode.ToLowerInvariant() switch
+        {
+            "totalassets" => value.Value >= 1_000_000_000_000m
+                ? $"₦{value.Value / 1_000_000_000_000m:N2}T"
+                : value.Value >= 1_000_000_000m
+                    ? $"₦{value.Value / 1_000_000_000m:N1}B"
+                    : $"₦{value.Value:N0}",
+            _ => $"{value.Value:N1}{ResolveSuffix(metricCode)}"
+        };
+    }
+
+    private static string ResolveSuffix(string metricCode)
+    {
+        return metricCode.ToLowerInvariant() switch
+        {
+            "carratio" or "nplratio" or "liquidityratio" or "loandepositratio" or "roa" or "chs" or "qualityscore" or "filingtimeliness" or "interventionprobability" => "%",
+            _ => string.Empty
+        };
+    }
+
+    private static string ResolveRiskBadge(string? riskBand)
+    {
+        return riskBand?.ToUpperInvariant() switch
+        {
+            "HIGH" or "RED" or "CRITICAL" => "text-bg-danger",
+            "MEDIUM" or "AMBER" or "WARNING" => "text-bg-warning",
+            "LOW" or "GREEN" => "text-bg-success",
+            _ => "text-bg-secondary"
+        };
+    }
+}

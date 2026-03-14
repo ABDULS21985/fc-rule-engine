@@ -1,0 +1,205 @@
+@using System.Globalization
+@using Microsoft.AspNetCore.Components.Rendering
+
+@if (Payload is RegulatorChartData chart)
+{
+    <div class="regiq-chart-block">
+        <ChartCanvas Spec="@BuildChartSpec(chart)"
+                     Height="300"
+                     AriaLabel="Regulator intelligence chart"
+                     FallbackTable="@(BuildFallbackTable(chart))" />
+    </div>
+}
+else if (Payload is SystemicRiskDashboard dashboard)
+{
+    var systemicChart = BuildSystemicChart(dashboard);
+
+    <div class="regiq-chart-block">
+        <div class="regiq-chart-block__hero">
+            <div>
+                <h5>Systemic risk snapshot</h5>
+                <p class="text-secondary mb-0">
+                    Systemic risk index @dashboard.Summary.SystemicRiskIndex.ToString("N1", CultureInfo.InvariantCulture)
+                    with @dashboard.Summary.RedCount red-rated institution(s).
+                </p>
+            </div>
+        </div>
+
+        <ChartCanvas Spec="@BuildChartSpec(systemicChart)"
+                     Height="300"
+                     AriaLabel="Systemic risk dashboard chart"
+                     FallbackTable="@(BuildFallbackTable(systemicChart))" />
+
+        <div class="regiq-chart-block__stats">
+            <div><span>Green</span><strong>@dashboard.Summary.GreenCount</strong></div>
+            <div><span>Amber</span><strong>@dashboard.Summary.AmberCount</strong></div>
+            <div><span>Red</span><strong>@dashboard.Summary.RedCount</strong></div>
+            <div><span>Flags</span><strong>@dashboard.Summary.TotalActiveFlags</strong></div>
+        </div>
+    </div>
+}
+else if (Payload is StressTestReport report)
+{
+    var stressChart = BuildStressChart(report);
+
+    <div class="regiq-chart-block">
+        <div class="regiq-chart-block__hero">
+            <div>
+                <h5>@report.ScenarioName</h5>
+                <p class="text-secondary mb-0">
+                    @report.EntityResults.Count entity result(s), resilience rating @report.ResilienceRating.
+                </p>
+            </div>
+            <span class="badge text-bg-dark">@report.ScenarioType</span>
+        </div>
+
+        <ChartCanvas Spec="@BuildChartSpec(stressChart)"
+                     Height="300"
+                     AriaLabel="Stress test pre and post metrics"
+                     FallbackTable="@(BuildFallbackTable(stressChart))" />
+
+        <div class="regiq-chart-block__stats">
+            <div><span>CAR breaches</span><strong>@report.Aggregation.CarBreachCount</strong></div>
+            <div><span>LCR breaches</span><strong>@report.Aggregation.LcrBreachCount</strong></div>
+            <div><span>NPL breaches</span><strong>@report.Aggregation.NplBreachCount</strong></div>
+            <div><span>Solvency breaches</span><strong>@report.Aggregation.SolvencyBreachCount</strong></div>
+        </div>
+    </div>
+}
+else
+{
+    <RegulatorStructuredPayload Payload="Payload" />
+}
+
+@code {
+    [Parameter] public object? Payload { get; set; }
+
+    private object BuildChartSpec(RegulatorChartData chart)
+    {
+        var palette = new[] { "primary", "warning", "danger", "info", "#7c3aed", "#0f766e" };
+        return new
+        {
+            type = chart.ChartType is "bar" or "doughnut" ? chart.ChartType : "line",
+            labels = chart.Labels,
+            yFormat = "percent",
+            datasets = chart.Series.Select((series, index) => new
+            {
+                label = series.Name,
+                data = series.Values.Select(x => x ?? 0m).ToList(),
+                color = palette[index % palette.Length]
+            }).ToList()
+        };
+    }
+
+    private RenderFragment BuildFallbackTable(RegulatorChartData chart)
+    {
+        return builder =>
+        {
+            var sequence = 0;
+            builder.OpenElement(sequence++, "table");
+            builder.AddAttribute(sequence++, "class", "table table-sm");
+
+            builder.OpenElement(sequence++, "caption");
+            builder.AddAttribute(sequence++, "class", "visually-hidden");
+            builder.AddContent(sequence++, "Accessible chart data table");
+            builder.CloseElement();
+
+            builder.OpenElement(sequence++, "thead");
+            builder.OpenElement(sequence++, "tr");
+            builder.OpenElement(sequence++, "th");
+            builder.AddAttribute(sequence++, "scope", "col");
+            builder.AddContent(sequence++, "Label");
+            builder.CloseElement();
+
+            foreach (var series in chart.Series)
+            {
+                builder.OpenElement(sequence++, "th");
+                builder.AddAttribute(sequence++, "scope", "col");
+                builder.AddContent(sequence++, series.Name);
+                builder.CloseElement();
+            }
+
+            builder.CloseElement();
+            builder.CloseElement();
+
+            builder.OpenElement(sequence++, "tbody");
+            for (var i = 0; i < chart.Labels.Count; i++)
+            {
+                builder.OpenElement(sequence++, "tr");
+                builder.OpenElement(sequence++, "th");
+                builder.AddAttribute(sequence++, "scope", "row");
+                builder.AddContent(sequence++, chart.Labels[i]);
+                builder.CloseElement();
+
+                foreach (var series in chart.Series)
+                {
+                    builder.OpenElement(sequence++, "td");
+                    var value = i < series.Values.Count && series.Values[i].HasValue
+                        ? series.Values[i]!.Value.ToString("N2", CultureInfo.InvariantCulture)
+                        : "N/A";
+                    builder.AddContent(sequence++, value);
+                    builder.CloseElement();
+                }
+
+                builder.CloseElement();
+            }
+
+            builder.CloseElement();
+            builder.CloseElement();
+        };
+    }
+
+    private static RegulatorChartData BuildSystemicChart(SystemicRiskDashboard dashboard)
+    {
+        var scores = dashboard.Scores
+            .OrderByDescending(x => x.Composite)
+            .Take(6)
+            .ToList();
+
+        return new RegulatorChartData
+        {
+            ChartType = "bar",
+            Labels = scores.Select(x => x.InstitutionName).ToList(),
+            Series = new List<RegulatorChartSeries>
+            {
+                new()
+                {
+                    Name = "Composite CAMELS",
+                    Values = scores.Select(x => (decimal?)x.Composite).ToList()
+                }
+            }
+        };
+    }
+
+    private static RegulatorChartData BuildStressChart(StressTestReport report)
+    {
+        return new RegulatorChartData
+        {
+            ChartType = "bar",
+            Labels = new List<string> { "Average CAR", "Average NPL", "Average LCR" },
+            Series = new List<RegulatorChartSeries>
+            {
+                new()
+                {
+                    Name = "Pre-stress",
+                    Values = new List<decimal?>
+                    {
+                        report.Aggregation.PreStressAverageCar,
+                        report.Aggregation.PreStressAverageNpl,
+                        report.Aggregation.PreStressAverageLcr
+                    }
+                },
+                new()
+                {
+                    Name = "Post-stress",
+                    Values = new List<decimal?>
+                    {
+                        report.Aggregation.PostStressAverageCar,
+                        report.Aggregation.PostStressAverageNpl,
+                        report.Aggregation.PostStressAverageLcr
+                    }
+                }
+            }
+        };
+    }
+}

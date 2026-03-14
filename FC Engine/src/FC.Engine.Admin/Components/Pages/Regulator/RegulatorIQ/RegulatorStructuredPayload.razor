@@ -1,0 +1,179 @@
+@using System.Globalization
+@using System.Text.Json
+
+@if (_sections.Count == 0)
+{
+    <div class="regiq-structured">
+        <div class="regiq-message__fallback">No structured payload was available for rendering.</div>
+    </div>
+}
+else
+{
+    <div class="regiq-structured">
+        @foreach (var payloadSection in _sections)
+        {
+            <section class="regiq-structured__section">
+                <h5>@payloadSection.Title</h5>
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle">
+                        <thead>
+                            <tr>
+                                @foreach (var column in payloadSection.Columns)
+                                {
+                                    <th scope="col">@HumanizeColumn(column)</th>
+                                }
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var row in payloadSection.Rows)
+                            {
+                                <tr>
+                                    @foreach (var column in payloadSection.Columns)
+                                    {
+                                        row.TryGetValue(column, out var value);
+                                        <td>@value</td>
+                                    }
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+        }
+    </div>
+}
+
+@code {
+    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+    private List<StructuredSection> _sections = new();
+
+    [Parameter] public object? Payload { get; set; }
+
+    protected override void OnParametersSet()
+    {
+        _sections = DescribePayload(Payload);
+    }
+
+    private static List<StructuredSection> DescribePayload(object? payload)
+    {
+        if (payload is null)
+        {
+            return new();
+        }
+
+        try
+        {
+            var element = JsonSerializer.SerializeToElement(payload, JsonOptions);
+            var sections = new List<StructuredSection>();
+
+            if (element.ValueKind == JsonValueKind.Object)
+            {
+                var overview = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                foreach (var property in element.EnumerateObject())
+                {
+                    switch (property.Value.ValueKind)
+                    {
+                        case JsonValueKind.Array:
+                            sections.Add(BuildArraySection(property.Name, property.Value));
+                            break;
+
+                        case JsonValueKind.Object:
+                            sections.Add(BuildObjectSection(property.Name, property.Value));
+                            break;
+
+                        default:
+                            overview[property.Name] = JsonValueToString(property.Value);
+                            break;
+                    }
+                }
+
+                if (overview.Count > 0)
+                {
+                    sections.Insert(0, new StructuredSection(
+                        "Overview",
+                        new List<string> { "field", "value" },
+                        overview.Select(x => new Dictionary<string, string>
+                        {
+                            ["field"] = HumanizeColumn(x.Key),
+                            ["value"] = x.Value
+                        }).ToList()));
+                }
+            }
+
+            return sections;
+        }
+        catch
+        {
+            return new();
+        }
+    }
+
+    private static StructuredSection BuildArraySection(string title, JsonElement array)
+    {
+        var items = array.EnumerateArray().ToList();
+        if (items.Count == 0)
+        {
+            return new StructuredSection(HumanizeColumn(title), new List<string> { "value" }, new());
+        }
+
+        if (items[0].ValueKind != JsonValueKind.Object)
+        {
+            return new StructuredSection(
+                HumanizeColumn(title),
+                new List<string> { "value" },
+                items.Select(x => new Dictionary<string, string> { ["value"] = JsonValueToString(x) }).ToList());
+        }
+
+        var columns = items
+            .SelectMany(x => x.EnumerateObject().Select(p => p.Name))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        var rows = items.Select(item =>
+        {
+            var row = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var column in columns)
+            {
+                row[column] = item.TryGetProperty(column, out var property) ? JsonValueToString(property) : string.Empty;
+            }
+
+            return row;
+        }).ToList();
+
+        return new StructuredSection(HumanizeColumn(title), columns, rows);
+    }
+
+    private static StructuredSection BuildObjectSection(string title, JsonElement element)
+    {
+        var rows = element.EnumerateObject()
+            .Select(property => new Dictionary<string, string>
+            {
+                ["field"] = HumanizeColumn(property.Name),
+                ["value"] = JsonValueToString(property.Value)
+            })
+            .ToList();
+
+        return new StructuredSection(HumanizeColumn(title), new List<string> { "field", "value" }, rows);
+    }
+
+    private static string JsonValueToString(JsonElement element)
+    {
+        return element.ValueKind switch
+        {
+            JsonValueKind.String => element.GetString() ?? string.Empty,
+            JsonValueKind.Number when element.TryGetDecimal(out var decimalValue) => decimalValue.ToString("N2", CultureInfo.InvariantCulture),
+            JsonValueKind.True => "True",
+            JsonValueKind.False => "False",
+            JsonValueKind.Array => $"{element.GetArrayLength()} item(s)",
+            JsonValueKind.Object => "Object",
+            _ => element.ToString() ?? string.Empty
+        };
+    }
+
+    private static string HumanizeColumn(string column)
+    {
+        return CultureInfo.InvariantCulture.TextInfo.ToTitleCase(column.Replace("_", " ").Trim());
+    }
+
+    private sealed record StructuredSection(string Title, List<string> Columns, List<Dictionary<string, string>> Rows);
+}

@@ -1897,6 +1897,58 @@ app.MapGet("/regulator/complianceiq/conversations/{conversationId:guid}/export",
     return Results.File(pdf, "application/pdf", fileName);
 }).RequireAuthorization("RegulatorOnly");
 
+app.MapGet("/regulator/regulatoriq/conversations/{conversationId:guid}/export", async (
+    Guid conversationId,
+    HttpContext context,
+    ITenantContext tenantContext,
+    ITenantAccessContextResolver tenantAccessContextResolver,
+    IRegulatorIqService regulatorIqService) =>
+{
+    if (!tenantContext.CurrentTenantId.HasValue)
+    {
+        return Results.Unauthorized();
+    }
+
+    var accessContext = await tenantAccessContextResolver.TryResolveAsync(
+        tenantContext.CurrentTenantId.Value,
+        context.User,
+        context.RequestAborted);
+    if (accessContext?.TenantType != TenantType.Regulator)
+    {
+        return Results.Forbid();
+    }
+
+    var pdf = await regulatorIqService.ExportConversationPdfAsync(conversationId, context.RequestAborted);
+    var fileName = $"regulatoriq-conversation-{conversationId:D}.pdf";
+    return Results.File(pdf, "application/pdf", fileName);
+}).RequireAuthorization("RegulatorOnly");
+
+app.MapGet("/regulator/regulatoriq/entities/{targetTenantId:guid}/briefing/export", async (
+    Guid targetTenantId,
+    HttpContext context,
+    ITenantContext tenantContext,
+    ITenantAccessContextResolver tenantAccessContextResolver,
+    IRegulatorIqService regulatorIqService) =>
+{
+    if (!tenantContext.CurrentTenantId.HasValue)
+    {
+        return Results.Unauthorized();
+    }
+
+    var accessContext = await tenantAccessContextResolver.TryResolveAsync(
+        tenantContext.CurrentTenantId.Value,
+        context.User,
+        context.RequestAborted);
+    if (accessContext?.TenantType != TenantType.Regulator || string.IsNullOrWhiteSpace(accessContext.RegulatorCode))
+    {
+        return Results.Forbid();
+    }
+
+    var pdf = await regulatorIqService.GenerateExaminationBriefingPdfAsync(targetTenantId, accessContext.RegulatorCode, context.RequestAborted);
+    var fileName = $"regulatoriq-examination-briefing-{targetTenantId:D}.pdf";
+    return Results.File(pdf, "application/pdf", fileName);
+}).RequireAuthorization("RegulatorOnly");
+
 static async Task AuditIntelligenceExportAsync(
     HttpContext context,
     IAuditLogger auditLogger,

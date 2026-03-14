@@ -1,0 +1,147 @@
+@using System.Globalization
+
+@if (Comparison is null || Comparison.EntityNames.Count == 0 || Comparison.Rows.Count == 0)
+{
+    <div class="regiq-compare regiq-compare--empty">
+        <i class="bi bi-columns-gap" aria-hidden="true"></i>
+        <span>No comparison data is available for this response.</span>
+    </div>
+}
+else
+{
+    <div class="regiq-compare">
+        <div class="regiq-compare__meta">
+            <div>
+                <h4 class="mb-1">Entity Comparison Matrix</h4>
+                <p class="mb-0 text-secondary">
+                    @Comparison.EntityNames.Count institution(s)
+                    @if (!string.IsNullOrWhiteSpace(Comparison.PeriodCode))
+                    {
+                        <span> · @Comparison.PeriodCode</span>
+                    }
+                </p>
+            </div>
+            <div class="regiq-compare__badges">
+                @foreach (var entity in Comparison.EntityNames)
+                {
+                    <span class="badge text-bg-light border">@entity</span>
+                }
+            </div>
+        </div>
+
+        <div class="table-responsive">
+            <table class="table table-sm align-middle regiq-compare__table">
+                <thead>
+                    <tr>
+                        <th scope="col">Metric</th>
+                        @foreach (var entity in Comparison.EntityNames)
+                        {
+                            <th scope="col">@entity</th>
+                        }
+                        <th scope="col">Source</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var row in Comparison.Rows)
+                    {
+                        <tr>
+                            <th scope="row">
+                                <div class="fw-semibold">@row.MetricLabel</div>
+                                <small class="text-secondary">@row.MetricCode.ToUpperInvariant()</small>
+                            </th>
+                            @foreach (var entity in Comparison.EntityNames)
+                            {
+                                var value = row.Values.TryGetValue(entity, out var resolvedValue) ? resolvedValue : null;
+                                <td>
+                                    <span class="regiq-compare__pill @ResolveMetricTone(row.MetricCode, value)">
+                                        @FormatValue(row.MetricCode, value)
+                                    </span>
+                                </td>
+                            }
+                            <td>
+                                <div class="regiq-compare__source-list">
+                                    @foreach (var source in row.SourceModules.Distinct(StringComparer.OrdinalIgnoreCase))
+                                    {
+                                        <span class="badge text-bg-dark">@source</span>
+                                    }
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public RegulatorComparisonData? Comparison { get; set; }
+
+    private static string FormatValue(string metricCode, decimal? value)
+    {
+        if (!value.HasValue)
+        {
+            return "N/A";
+        }
+
+        return metricCode.ToLowerInvariant() switch
+        {
+            "carratio" or "nplratio" or "liquidityratio" or "loandepositratio" or "roa" or "chs" or "qualityscore" or "filingtimeliness" or "interventionprobability"
+                => $"{value.Value:N1}%",
+            "totalassets" => value.Value >= 1_000_000_000_000m
+                ? $"₦{value.Value / 1_000_000_000_000m:N2}T"
+                : value.Value >= 1_000_000_000m
+                    ? $"₦{value.Value / 1_000_000_000m:N1}B"
+                    : $"₦{value.Value:N0}",
+            _ => value.Value.ToString("N2", CultureInfo.InvariantCulture)
+        };
+    }
+
+    private static string ResolveMetricTone(string metricCode, decimal? value)
+    {
+        if (!value.HasValue)
+        {
+            return "regiq-compare__pill--neutral";
+        }
+
+        return metricCode.ToLowerInvariant() switch
+        {
+            "carratio" => ResolveHigherIsBetter(value.Value, 15m, 10m),
+            "liquidityratio" => ResolveHigherIsBetter(value.Value, 30m, 20m),
+            "chs" => ResolveHigherIsBetter(value.Value, 70m, 50m),
+            "nplratio" => ResolveLowerIsBetter(value.Value, 5m, 10m),
+            "interventionprobability" => ResolveLowerIsBetter(value.Value, 30m, 60m),
+            _ => "regiq-compare__pill--neutral"
+        };
+    }
+
+    private static string ResolveHigherIsBetter(decimal value, decimal greenThreshold, decimal amberThreshold)
+    {
+        if (value >= greenThreshold)
+        {
+            return "regiq-compare__pill--success";
+        }
+
+        if (value >= amberThreshold)
+        {
+            return "regiq-compare__pill--warning";
+        }
+
+        return "regiq-compare__pill--danger";
+    }
+
+    private static string ResolveLowerIsBetter(decimal value, decimal greenThreshold, decimal amberThreshold)
+    {
+        if (value <= greenThreshold)
+        {
+            return "regiq-compare__pill--success";
+        }
+
+        if (value <= amberThreshold)
+        {
+            return "regiq-compare__pill--warning";
+        }
+
+        return "regiq-compare__pill--danger";
+    }
+}

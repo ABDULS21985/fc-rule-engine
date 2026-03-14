@@ -76,7 +76,7 @@ public class EntitlementAndOnboardingTests : IAsyncLifetime
 
         await using var db = CreateDbContext();
         using var cache = new MemoryCache(new MemoryCacheOptions());
-        var sut = new EntitlementService(db, cache, NullLogger<EntitlementService>.Instance);
+        var sut = new EntitlementService(CreateDbContextFactory(), cache, NullLogger<EntitlementService>.Instance);
 
         var entitlement = await sut.ResolveEntitlements(tenantId);
 
@@ -95,7 +95,7 @@ public class EntitlementAndOnboardingTests : IAsyncLifetime
 
         await using var db = CreateDbContext();
         using var cache = new MemoryCache(new MemoryCacheOptions());
-        var sut = new EntitlementService(db, cache, NullLogger<EntitlementService>.Instance);
+        var sut = new EntitlementService(CreateDbContextFactory(), cache, NullLogger<EntitlementService>.Instance);
 
         var entitlement = await sut.ResolveEntitlements(tenantId);
 
@@ -114,7 +114,7 @@ public class EntitlementAndOnboardingTests : IAsyncLifetime
 
         await using var db = CreateDbContext();
         using var cache = new MemoryCache(new MemoryCacheOptions());
-        var sut = new EntitlementService(db, cache, NullLogger<EntitlementService>.Instance);
+        var sut = new EntitlementService(CreateDbContextFactory(), cache, NullLogger<EntitlementService>.Instance);
 
         var entitlement = await sut.ResolveEntitlements(tenantId);
 
@@ -131,7 +131,7 @@ public class EntitlementAndOnboardingTests : IAsyncLifetime
 
         await using var db = CreateDbContext();
         using var cache = new MemoryCache(new MemoryCacheOptions());
-        var sut = new EntitlementService(db, cache, NullLogger<EntitlementService>.Instance);
+        var sut = new EntitlementService(CreateDbContextFactory(), cache, NullLogger<EntitlementService>.Instance);
 
         var before = await sut.ResolveEntitlements(tenantId);
         before.ActiveModules.Select(m => m.ModuleCode).Should().Contain("BDC_CBN");
@@ -150,7 +150,7 @@ public class EntitlementAndOnboardingTests : IAsyncLifetime
     {
         await using var db = CreateDbContext();
         using var cache = new MemoryCache(new MemoryCacheOptions());
-        var entitlementService = new EntitlementService(db, cache, NullLogger<EntitlementService>.Instance);
+        var entitlementService = new EntitlementService(CreateDbContextFactory(), cache, NullLogger<EntitlementService>.Instance);
         var subscriptionService = new SubscriptionService(db, entitlementService, NullLogger<SubscriptionService>.Instance);
         var sut = new TenantOnboardingService(
             db,
@@ -203,7 +203,7 @@ public class EntitlementAndOnboardingTests : IAsyncLifetime
     {
         await using var db = CreateDbContext();
         using var cache = new MemoryCache(new MemoryCacheOptions());
-        var entitlementService = new EntitlementService(db, cache, NullLogger<EntitlementService>.Instance);
+        var entitlementService = new EntitlementService(CreateDbContextFactory(), cache, NullLogger<EntitlementService>.Instance);
         var subscriptionService = new SubscriptionService(db, entitlementService, NullLogger<SubscriptionService>.Instance);
         var sut = new TenantOnboardingService(
             db,
@@ -264,6 +264,9 @@ public class EntitlementAndOnboardingTests : IAsyncLifetime
         return new MetadataDbContext(options);
     }
 
+    private IDbContextFactory<MetadataDbContext> CreateDbContextFactory() =>
+        new InlineMetadataDbContextFactory(_connectionString);
+
     private async Task<Guid> CreateTenantAsync(string slugPrefix)
     {
         await using var db = CreateDbContext();
@@ -310,7 +313,7 @@ public class EntitlementAndOnboardingTests : IAsyncLifetime
     {
         await using var db = CreateDbContext();
         using var cache = new MemoryCache(new MemoryCacheOptions());
-        var entitlementService = new EntitlementService(db, cache, NullLogger<EntitlementService>.Instance);
+        var entitlementService = new EntitlementService(CreateDbContextFactory(), cache, NullLogger<EntitlementService>.Instance);
         var subscriptionService = new SubscriptionService(db, entitlementService, NullLogger<SubscriptionService>.Instance);
 
         // GROUP guarantees pricing availability for all seeded modules in RG-03.
@@ -339,9 +342,28 @@ public class EntitlementAndOnboardingTests : IAsyncLifetime
     {
         await using var db = CreateDbContext();
         using var cache = new MemoryCache(new MemoryCacheOptions());
-        var entitlementService = new EntitlementService(db, cache, NullLogger<EntitlementService>.Instance);
+        var entitlementService = new EntitlementService(CreateDbContextFactory(), cache, NullLogger<EntitlementService>.Instance);
         var subscriptionService = new SubscriptionService(db, entitlementService, NullLogger<SubscriptionService>.Instance);
         await subscriptionService.ActivateModule(tenantId, moduleCode);
         await entitlementService.InvalidateCache(tenantId);
+    }
+
+    private sealed class InlineMetadataDbContextFactory : IDbContextFactory<MetadataDbContext>
+    {
+        private readonly string _connectionString;
+
+        public InlineMetadataDbContextFactory(string connectionString) => _connectionString = connectionString;
+
+        public MetadataDbContext CreateDbContext()
+        {
+            var options = new DbContextOptionsBuilder<MetadataDbContext>()
+                .UseSqlServer(_connectionString)
+                .Options;
+
+            return new MetadataDbContext(options);
+        }
+
+        public Task<MetadataDbContext> CreateDbContextAsync(CancellationToken cancellationToken = default) =>
+            Task.FromResult(CreateDbContext());
     }
 }

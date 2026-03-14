@@ -204,6 +204,15 @@ public class MetadataDbContext : DbContext
     public DbSet<ComplianceIqQuickQuestion> ComplianceIqQuickQuestions => Set<ComplianceIqQuickQuestion>();
     public DbSet<ComplianceIqFeedback> ComplianceIqFeedback => Set<ComplianceIqFeedback>();
 
+    // RegulatorIQ cross-tenant intelligence
+    public DbSet<RegIqConfig> RegIqConfigs => Set<RegIqConfig>();
+    public DbSet<RegIqIntent> RegIqIntents => Set<RegIqIntent>();
+    public DbSet<RegIqQueryTemplate> RegIqQueryTemplates => Set<RegIqQueryTemplate>();
+    public DbSet<RegIqConversation> RegIqConversations => Set<RegIqConversation>();
+    public DbSet<RegIqTurn> RegIqTurns => Set<RegIqTurn>();
+    public DbSet<RegIqEntityAlias> RegIqEntityAliases => Set<RegIqEntityAlias>();
+    public DbSet<RegIqAccessLog> RegIqAccessLogs => Set<RegIqAccessLog>();
+
     // Predictive compliance intelligence (AI-04)
     public DbSet<ForeSightConfig> ForeSightConfigs => Set<ForeSightConfig>();
     public DbSet<ForeSightModelVersion> ForeSightModelVersions => Set<ForeSightModelVersion>();
