@@ -88,6 +88,40 @@ public sealed class RegulatorIntentClassifierIntegrationTests : IClassFixture<Re
     }
 
     [Fact]
+    public async Task ClassifyAsync_SectorHealthSummary_DoesNotTriggerEntityDisambiguation()
+    {
+        var classifier = _fixture.CreateIntentClassifier();
+
+        var result = await classifier.ClassifyAsync(
+            "Show sector health summary",
+            CreateContext());
+
+        result.IntentCode.Should().Be("SECTOR_SUMMARY");
+        result.NeedsDisambiguation.Should().BeFalse();
+        result.DisambiguationOptions.Should().BeNullOrEmpty();
+    }
+
+    [Fact]
+    public async Task ClassifyAsync_ExaminationContext_FilingStatusPrefersPinnedEntity()
+    {
+        var classifier = _fixture.CreateIntentClassifier();
+
+        var result = await classifier.ClassifyAsync(
+            "Show filing status",
+            new RegulatorContext
+            {
+                RegulatorTenantId = Guid.NewGuid(),
+                RegulatorCode = "CBN",
+                RegulatorName = "Central Bank of Nigeria",
+                CurrentExaminationEntityId = _fixture.AccessBankTenantId
+            });
+
+        result.IntentCode.Should().Be("FILING_STATUS");
+        result.NeedsDisambiguation.Should().BeFalse();
+        result.ResolvedEntityIds.Should().BeEmpty();
+    }
+
+    [Fact]
     public async Task ClassifyAsync_ReturnsDisambiguationOptions_ForAmbiguousEntity()
     {
         var classifier = _fixture.CreateIntentClassifier();
@@ -147,6 +181,7 @@ public sealed class RegulatorIntentClassifierIntegrationTests : IClassFixture<Re
     [InlineData("Show cross-border divergence for GTCO group", "CROSS_BORDER")]
     [InlineData("What is the impact of a CRR increase?", "POLICY_IMPACT")]
     [InlineData("Show validation hotspots across banks", "VALIDATION_HOTSPOT")]
+    [InlineData("Show sector health summary", "SECTOR_SUMMARY")]
     [InlineData("What is average CAR across all commercial banks?", "SECTOR_AGGREGATE")]
     [InlineData("Compare GTBank vs Zenith on CAR", "ENTITY_COMPARE")]
     [InlineData("Rank institutions by anomaly pressure", "RISK_RANKING")]

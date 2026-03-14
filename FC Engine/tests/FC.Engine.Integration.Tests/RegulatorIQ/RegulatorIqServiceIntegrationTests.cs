@@ -96,6 +96,30 @@ public sealed class RegulatorIqServiceIntegrationTests : IClassFixture<Regulator
     }
 
     [Fact]
+    public async Task StartExaminationSessionAsync_PlatformAdminWithoutTenantClaim_ResolvesRegulatorTenant()
+    {
+        var service = _fixture.CreateOrchestrator(
+            currentTenantId: null,
+            regulatorCode: "CBN",
+            regulatorId: "platform-admin-001",
+            role: "Regulator",
+            includeTenantClaim: false,
+            includeRegulatorCodeClaim: false,
+            isPlatformAdmin: true);
+
+        var conversationId = await service.StartExaminationSessionAsync("platform-admin-001", _fixture.AccessBankTenantId);
+
+        await using var db = _fixture.CreateDbContext();
+        var conversation = await db.ComplianceIqConversations
+            .AsNoTracking()
+            .SingleAsync(x => x.Id == conversationId);
+
+        conversation.TenantId.Should().Be(_fixture.CbnRegulatorTenantId);
+        conversation.IsExaminationSession.Should().BeTrue();
+        conversation.ExaminationTargetTenantId.Should().Be(_fixture.AccessBankTenantId);
+    }
+
+    [Fact]
     public async Task SubmitFeedbackAsync_WritesComplianceIqFeedback()
     {
         var service = _fixture.CreateOrchestrator();

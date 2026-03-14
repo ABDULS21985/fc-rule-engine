@@ -108,13 +108,26 @@ public sealed partial class RegulatorIntentClassifier : IRegulatorIntentClassifi
                 ct);
         }
 
-        if (entityResolution.NeedsDisambiguation)
+        var effectiveEntityResolution = ShouldPreferCurrentExaminationEntity(
+            result.IntentCode,
+            normalizedQuery,
+            context,
+            entityResolution)
+            ? EntityResolution.Empty
+            : entityResolution;
+
+        if (!ShouldApplyEntityDisambiguation(result.IntentCode))
+        {
+            result.NeedsDisambiguation = false;
+            result.DisambiguationOptions = null;
+        }
+        else if (effectiveEntityResolution.NeedsDisambiguation)
         {
             result.NeedsDisambiguation = true;
-            result.DisambiguationOptions = entityResolution.DisambiguationOptions;
+            result.DisambiguationOptions = effectiveEntityResolution.DisambiguationOptions;
         }
 
-        ApplyResolvedEntities(result, entityResolution);
+        ApplyResolvedEntities(result, effectiveEntityResolution);
         ApplyDefaultParameters(result, regulatorCode, requestedCount, ascending);
 
         return result;
@@ -222,6 +235,21 @@ public sealed partial class RegulatorIntentClassifier : IRegulatorIntentClassifi
         {
             result.IntentCode = "EWI_STATUS";
             result.Confidence = 0.95m;
+            return result;
+        }
+
+        if (ContainsAny(
+                normalizedQuery,
+                "sector health summary",
+                "sector health",
+                "sector summary",
+                "sector overview",
+                "sector snapshot",
+                "overview of the sector",
+                "current sector overview"))
+        {
+            result.IntentCode = "SECTOR_SUMMARY";
+            result.Confidence = 0.97m;
             return result;
         }
 
@@ -1089,6 +1117,66 @@ public sealed partial class RegulatorIntentClassifier : IRegulatorIntentClassifi
         return false;
     }
 
+    private static bool ShouldApplyEntityDisambiguation(string intentCode)
+    {
+        return intentCode.ToUpperInvariant() switch
+        {
+            "ENTITY_PROFILE" or "ENTITY_COMPARE" or "EXAMINATION_BRIEF" or "CURRENT_VALUE" or "TREND"
+                or "COMPARISON_PEER" or "COMPARISON_PERIOD" or "COMPLIANCE_STATUS" or "ANOMALY_STATUS"
+                or "CHS_ENTITY" or "CONTAGION_QUERY" or "SANCTIONS_EXPOSURE" or "FILING_STATUS"
+                or "DEADLINE" or "SEARCH" => true,
+            _ => false
+        };
+    }
+
+    private static bool ShouldPreferCurrentExaminationEntity(
+        string intentCode,
+        string normalizedQuery,
+        RegulatorContext context,
+        EntityResolution entityResolution)
+    {
+        if (!context.CurrentExaminationEntityId.HasValue)
+        {
+            return false;
+        }
+
+        if (ContainsAny(
+                normalizedQuery,
+                "all ",
+                "across",
+                "sector",
+                "systemic",
+                "compare",
+                " versus ",
+                " vs ",
+                "against",
+                "ranking",
+                "rank ",
+                "top ",
+                "bottom ",
+                "peer",
+                "cross border",
+                "policy",
+                "stress",
+                "contagion"))
+        {
+            return false;
+        }
+
+        if (entityResolution.Entities.Any(x => x.Score >= 0.95m))
+        {
+            return false;
+        }
+
+        return intentCode.ToUpperInvariant() switch
+        {
+            "ENTITY_PROFILE" or "EXAMINATION_BRIEF" or "CURRENT_VALUE" or "TREND" or "COMPARISON_PERIOD"
+                or "COMPARISON_PEER" or "COMPLIANCE_STATUS" or "ANOMALY_STATUS" or "CHS_ENTITY"
+                or "SANCTIONS_EXPOSURE" or "FILING_STATUS" => true,
+            _ => false
+        };
+    }
+
     private static string BuildClassificationUserMessage(
         string query,
         string regulatorCode,
@@ -1128,8 +1216,9 @@ public sealed partial class RegulatorIntentClassifier : IRegulatorIntentClassifi
         builder.AppendLine("Understand groups such as all commercial banks, DMB sector, MFB sector, insurers, CMO sector, tier-1 banks.");
         builder.AppendLine("Supported intents:");
         builder.AppendLine("- CURRENT_VALUE, TREND, COMPARISON_PEER, COMPARISON_PERIOD, DEADLINE, REGULATORY_LOOKUP, COMPLIANCE_STATUS, ANOMALY_STATUS, SCENARIO, SEARCH");
-        builder.AppendLine("- SECTOR_AGGREGATE, ENTITY_COMPARE, RISK_RANKING, HELP, ENTITY_PROFILE, SECTOR_TREND, TOP_N_RANKING, FILING_STATUS, FILING_DELINQUENCY, CHS_RANKING, CHS_ENTITY, EWI_STATUS, SYSTEMIC_DASHBOARD, CONTAGION_QUERY, STRESS_SCENARIOS, SANCTIONS_EXPOSURE, EXAMINATION_BRIEF, SUPERVISORY_ACTIONS, CROSS_BORDER, POLICY_IMPACT, VALIDATION_HOTSPOT");
+        builder.AppendLine("- SECTOR_SUMMARY, SECTOR_AGGREGATE, ENTITY_COMPARE, RISK_RANKING, HELP, ENTITY_PROFILE, SECTOR_TREND, TOP_N_RANKING, FILING_STATUS, FILING_DELINQUENCY, CHS_RANKING, CHS_ENTITY, EWI_STATUS, SYSTEMIC_DASHBOARD, CONTAGION_QUERY, STRESS_SCENARIOS, SANCTIONS_EXPOSURE, EXAMINATION_BRIEF, SUPERVISORY_ACTIONS, CROSS_BORDER, POLICY_IMPACT, VALIDATION_HOTSPOT");
         builder.AppendLine("Examples:");
+        builder.AppendLine("- SECTOR_SUMMARY: Show sector health summary. Give me a sector overview. What does the current sector picture look like?");
         builder.AppendLine("- ENTITY_PROFILE: Give me a full profile of Access Bank. Tell me about Wema Bank. How is Zenith Bank doing?");
         builder.AppendLine("- ENTITY_COMPARE: Compare GTBank vs Zenith on CAR and NPL. Compare Access Bank and First Bank. GTBank versus UBA on liquidity.");
         builder.AppendLine("- SECTOR_AGGREGATE: What is average CAR across all commercial banks? Show sector median NPL for DMBs. Aggregate liquidity ratio across insurers.");

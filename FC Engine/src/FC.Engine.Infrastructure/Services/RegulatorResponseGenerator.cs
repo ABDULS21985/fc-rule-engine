@@ -113,6 +113,7 @@ public sealed partial class RegulatorResponseGenerator : IRegulatorResponseGener
                 "REGULATORY_LOOKUP" => await GenerateLookupAsync(originalQuery, classifiedIntent, ct),
                 "ENTITY_PROFILE" => await GenerateEntityProfileAsync(originalQuery, classifiedIntent, context, ct),
                 "ENTITY_COMPARE" => await GenerateEntityCompareAsync(originalQuery, classifiedIntent, context, ct),
+                "SECTOR_SUMMARY" => await GenerateSectorSummaryAsync(classifiedIntent, context, ct),
                 "SECTOR_AGGREGATE" => await GenerateSectorAggregateAsync(originalQuery, classifiedIntent, context, ct),
                 "SECTOR_TREND" => await GenerateSectorTrendAsync(originalQuery, classifiedIntent, context, ct),
                 "TOP_N_RANKING" => await GenerateTopRankingAsync(originalQuery, classifiedIntent, context, ct),
@@ -349,6 +350,60 @@ public sealed partial class RegulatorResponseGenerator : IRegulatorResponseGener
         response.AnswerText = BuildComparisonAnswer(comparison);
         response.AnswerText = await TryFormatWithLlmAsync(originalQuery, classifiedIntent.IntentCode, response.AnswerText, comparison, response, ct);
         return response;
+    }
+
+    private async Task<RegulatorIqResponse> GenerateSectorSummaryAsync(
+        RegulatorIntentResult classifiedIntent,
+        RegulatorContext context,
+        CancellationToken ct)
+    {
+        var sectorSummary = await _regulatorIntelligenceService.GetSectorSummaryAsync(
+            context.RegulatorCode,
+            classifiedIntent.LicenceCategory,
+            classifiedIntent.PeriodCode,
+            ct);
+
+        var rows = new List<Dictionary<string, object?>>
+        {
+            new()
+            {
+                ["period_code"] = sectorSummary.PeriodCode,
+                ["licence_category"] = string.IsNullOrWhiteSpace(sectorSummary.LicenceCategory) ? "ALL" : sectorSummary.LicenceCategory,
+                ["entity_count"] = sectorSummary.EntityCount,
+                ["average_car_ratio"] = sectorSummary.AverageCarRatio,
+                ["average_npl_ratio"] = sectorSummary.AverageNplRatio,
+                ["average_liquidity_ratio"] = sectorSummary.AverageLiquidityRatio,
+                ["average_chs_score"] = sectorSummary.AverageComplianceHealthScore,
+                ["overdue_filing_count"] = sectorSummary.OverdueFilingCount,
+                ["high_risk_entity_count"] = sectorSummary.HighRiskEntityCount
+            }
+        };
+
+        return new RegulatorIqResponse
+        {
+            AnswerText = BuildSectorSummaryAnswer(sectorSummary),
+            AnswerFormat = "table",
+            StructuredData = BuildTable(rows),
+            ClassificationLevel = ResolveClassificationLevel(classifiedIntent.IntentCode),
+            ConfidenceLevel = DetermineConfidence(classifiedIntent.Confidence, sectorSummary.EntityCount),
+            DataSourcesUsed = BuildDataSources("RG-07", sectorSummary.DataSourcesUsed),
+            Citations = new List<DataCitation>
+            {
+                new()
+                {
+                    SourceType = "Sector Summary",
+                    SourceModule = "RG-07",
+                    SourcePeriod = sectorSummary.PeriodCode,
+                    Summary = $"{sectorSummary.EntityCount} institution(s) in scope"
+                }
+            },
+            FollowUpSuggestions = new List<string>
+            {
+                "Show sector NPL trend",
+                "Rank institutions by compliance health score",
+                "Show me the systemic risk dashboard"
+            }
+        };
     }
 
     private async Task<RegulatorIqResponse> GenerateSectorAggregateAsync(
@@ -835,7 +890,15 @@ public sealed partial class RegulatorResponseGenerator : IRegulatorResponseGener
         CancellationToken ct)
     {
         await using var db = await _dbFactory.CreateDbContextAsync(ct);
+        var entityIds = ResolveEntityIds(classifiedIntent, context);
         var statusRows = await LoadFilingStatusRowsAsync(db, context.RegulatorCode, classifiedIntent.LicenceCategory, ct);
+        if (entityIds.Count > 0)
+        {
+            statusRows = statusRows
+                .Where(x => entityIds.Contains(x.TenantId))
+                .ToList();
+        }
+
         if (statusRows.Count == 0)
         {
             return BuildNoDataResponse(classifiedIntent.IntentCode, "I could not find filing calendar records for the requested scope.", ResolveClassificationLevel(classifiedIntent.IntentCode), classifiedIntent.Confidence);
@@ -854,11 +917,14 @@ public sealed partial class RegulatorResponseGenerator : IRegulatorResponseGener
         }).ToList();
 
         var overdueCount = statusRows.Count(x => string.Equals(x.Status, "OVERDUE", StringComparison.OrdinalIgnoreCase));
+        var scopeLabel = entityIds.Count == 1
+            ? statusRows[0].InstitutionName
+            : "the selected institutions";
         return new RegulatorIqResponse
         {
             AnswerText = overdueCount > 0
-                ? $"{overdueCount} filing obligation(s) are currently overdue across the selected institutions."
-                : "There are no currently overdue filing obligations in the selected scope.",
+                ? $"{overdueCount} filing obligation(s) are currently overdue for {scopeLabel}."
+                : $"There are no currently overdue filing obligations for {scopeLabel}.",
             AnswerFormat = "table",
             StructuredData = BuildTable(tableRows),
             ClassificationLevel = "RESTRICTED",
@@ -2476,10 +2542,14 @@ public sealed partial class RegulatorResponseGenerator : IRegulatorResponseGener
             return new List<FilingStatusRow>();
         }
 
-        var institutionLookup = await db.Institutions
+        var institutionLookup = (await db.Institutions
             .AsNoTracking()
             .Where(x => x.IsActive)
-            .ToDictionaryAsync(x => x.TenantId, ct);
+            .ToListAsync(ct))
+            .GroupBy(x => x.TenantId)
+            .ToDictionary(
+                g => g.Key,
+                g => g.OrderByDescending(x => x.Id).First());
 
         var accepted = await db.Submissions
             .AsNoTracking()
@@ -2753,6 +2823,32 @@ public sealed partial class RegulatorResponseGenerator : IRegulatorResponseGener
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .OrderBy(x => x)
             .ToList();
+    }
+
+    private static string BuildSectorSummaryAnswer(SectorIntelligenceSummary sectorSummary)
+    {
+        var scopeLabel = string.IsNullOrWhiteSpace(sectorSummary.LicenceCategory)
+            ? "the current regulator scope"
+            : $"{sectorSummary.LicenceCategory} institutions";
+
+        return $"{sectorSummary.EntityCount} institution(s) are currently in scope for {scopeLabel}. " +
+               $"Average CAR is {FormatPercent(sectorSummary.AverageCarRatio)}, Average NPL is {FormatPercent(sectorSummary.AverageNplRatio)}, " +
+               $"Average liquidity is {FormatPercent(sectorSummary.AverageLiquidityRatio)}, and Average CHS is {FormatScore(sectorSummary.AverageComplianceHealthScore)}. " +
+               $"{sectorSummary.OverdueFilingCount} filing(s) are overdue and {sectorSummary.HighRiskEntityCount} institution(s) are currently flagged as high risk.";
+    }
+
+    private static string FormatPercent(decimal? value)
+    {
+        return value.HasValue
+            ? $"{value.Value:N1}%"
+            : "N/A";
+    }
+
+    private static string FormatScore(decimal? value)
+    {
+        return value.HasValue
+            ? value.Value.ToString("N1", CultureInfo.InvariantCulture)
+            : "N/A";
     }
 
     private static bool MatchesLicenceCategory(string? actual, string? requested)

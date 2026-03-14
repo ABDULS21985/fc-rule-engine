@@ -65,6 +65,7 @@ public sealed class RegulatorIntelligenceService : IRegulatorIntelligenceService
 
         await using var db = await _dbFactory.CreateDbContextAsync(ct);
         var institution = await ResolveInstitutionContextAsync(db, targetTenantId, ct);
+        var hasAnomalyModule = await TableExistsAsync("meta", "anomaly_reports", ct);
 
         var latestSubmission = await LoadLatestAcceptedSubmissionAsync(db, targetTenantId, regulatorCode, ct);
         var filingSummary = await LoadFilingSummaryAsync(db, targetTenantId, regulatorCode, ct);
@@ -74,10 +75,12 @@ public sealed class RegulatorIntelligenceService : IRegulatorIntelligenceService
             async () => await _complianceHealthService.GetCurrentScore(targetTenantId, ct),
             "ComplianceHealth.GetCurrentScore",
             null);
-        var anomalyReports = await TryCallAsync(
-            () => _anomalyDetectionService.GetReportsForTenantAsync(targetTenantId, null, null, ct),
-            "Anomaly.GetReportsForTenantAsync",
-            []);
+        var anomalyReports = hasAnomalyModule
+            ? await TryCallAsync(
+                () => _anomalyDetectionService.GetReportsForTenantAsync(targetTenantId, null, null, ct),
+                "Anomaly.GetReportsForTenantAsync",
+                [])
+            : [];
         var predictions = await TryCallAsync(
             () => _foreSightService.GetPredictionsAsync(targetTenantId, null, ct),
             "ForeSight.GetPredictionsAsync",
@@ -180,6 +183,7 @@ public sealed class RegulatorIntelligenceService : IRegulatorIntelligenceService
         var directory = await LoadRegulatorDirectoryAsync(db, regulatorCode, licenceCategory, ct);
         var institutionIds = directory.Select(x => x.InstitutionId).ToHashSet();
         var tenantIds = directory.Select(x => x.TenantId).ToHashSet();
+        var hasAnomalyModule = await TableExistsAsync("meta", "anomaly_reports", ct);
 
         var carDistribution = await TryCallAsync(
             () => _sectorAnalyticsService.GetCarDistribution(regulatorCode, resolvedPeriodCode, ct),
@@ -205,10 +209,12 @@ public sealed class RegulatorIntelligenceService : IRegulatorIntelligenceService
             () => _heatmapQueryService.GetSectorHeatmapAsync(regulatorCode, resolvedPeriodCode, licenceCategory, ct),
             "Heatmap.GetSectorHeatmapAsync",
             Array.Empty<HeatmapCell>());
-        var anomalySummary = await TryCallAsync(
-            () => _anomalyDetectionService.GetSectorSummaryAsync(regulatorCode, null, resolvedPeriodCode, ct),
-            "Anomaly.GetSectorSummaryAsync",
-            []);
+        var anomalySummary = hasAnomalyModule
+            ? await TryCallAsync(
+                () => _anomalyDetectionService.GetSectorSummaryAsync(regulatorCode, null, resolvedPeriodCode, ct),
+                "Anomaly.GetSectorSummaryAsync",
+                [])
+            : [];
         var regulatoryRanking = await TryCallAsync(
             () => _foreSightService.GetRegulatoryRiskRankingAsync(regulatorCode, licenceCategory, ct),
             "ForeSight.GetRegulatoryRiskRankingAsync",
@@ -979,6 +985,43 @@ ORDER BY MetricValue {direction}, InstitutionName ASC;
             _logger.LogWarning(ex, "Regulator intelligence dependency {Dependency} failed; continuing with fallback.", dependency);
             return fallback;
         }
+    }
+
+    private async Task<bool> TableExistsAsync(string schema, string table, CancellationToken ct)
+    {
+        using var connection = await _connectionFactory.CreateConnectionAsync(null, ct);
+        if (connection is not SqlConnection sqlConnection)
+        {
+            return true;
+        }
+
+        if (sqlConnection.State != ConnectionState.Open)
+        {
+            await sqlConnection.OpenAsync(ct);
+        }
+
+        await using var command = sqlConnection.CreateCommand();
+        command.CommandText = """
+            SELECT CASE WHEN EXISTS (
+                SELECT 1
+                FROM sys.tables t
+                INNER JOIN sys.schemas s ON s.schema_id = t.schema_id
+                WHERE s.name = @schemaName
+                  AND t.name = @tableName
+            ) THEN 1 ELSE 0 END;
+            """;
+        command.Parameters.Add(new SqlParameter("@schemaName", SqlDbType.NVarChar, 128) { Value = schema });
+        command.Parameters.Add(new SqlParameter("@tableName", SqlDbType.NVarChar, 128) { Value = table });
+
+        var scalar = await command.ExecuteScalarAsync(ct);
+        return scalar switch
+        {
+            bool boolValue => boolValue,
+            int intValue => intValue == 1,
+            long longValue => longValue == 1L,
+            decimal decimalValue => decimalValue == 1m,
+            _ => false
+        };
     }
 
     private sealed record InstitutionContext(

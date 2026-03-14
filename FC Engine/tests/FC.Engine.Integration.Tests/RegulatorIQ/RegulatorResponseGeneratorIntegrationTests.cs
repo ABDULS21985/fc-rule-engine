@@ -130,6 +130,35 @@ public sealed class RegulatorResponseGeneratorIntegrationTests : IClassFixture<R
     }
 
     [Fact]
+    public async Task GenerateAsync_SectorSummary_ReturnsCurrentSectorSnapshot()
+    {
+        var service = _fixture.CreateResponseGenerator();
+
+        var response = await service.GenerateAsync(
+            "Show sector health summary",
+            new RegulatorIntentResult
+            {
+                IntentCode = "SECTOR_SUMMARY",
+                Confidence = 0.97m,
+                LicenceCategory = "DMB",
+                PeriodCode = "2026-Q1"
+            },
+            CreateContext());
+
+        response.AnswerFormat.Should().Be("table");
+        response.ClassificationLevel.Should().Be("RESTRICTED");
+        response.DataSourcesUsed.Should().Contain("RG-07");
+        response.AnswerText.Should().Contain("Average CAR");
+        response.AnswerText.Should().Contain("Average NPL");
+
+        var payload = response.StructuredData.Should().BeOfType<RegulatorTableData>().Subject;
+        payload.Rows.Should().ContainSingle();
+        Convert.ToInt32(payload.Rows[0]["entity_count"]).Should().BeGreaterThanOrEqualTo(2);
+        Convert.ToDecimal(payload.Rows[0]["average_car_ratio"]).Should().BeGreaterThan(17m);
+        Convert.ToDecimal(payload.Rows[0]["average_npl_ratio"]).Should().BeGreaterThan(4m);
+    }
+
+    [Fact]
     public async Task GenerateAsync_SystemicDashboard_ReturnsConfidentialDashboard()
     {
         var service = _fixture.CreateResponseGenerator();
@@ -151,6 +180,28 @@ public sealed class RegulatorResponseGeneratorIntegrationTests : IClassFixture<R
         var payload = (SystemicRiskDashboard)response.StructuredData!;
         payload.Summary.TotalEntities.Should().BeGreaterThan(0);
         response.Flags.Should().NotBeEmpty();
+    }
+
+    [Fact]
+    public async Task GenerateAsync_FilingStatus_InExaminationContext_FiltersToPinnedEntity()
+    {
+        var service = _fixture.CreateResponseGenerator();
+
+        var response = await service.GenerateAsync(
+            "Show filing status",
+            new RegulatorIntentResult
+            {
+                IntentCode = "FILING_STATUS",
+                Confidence = 0.95m
+            },
+            CreateContext(_fixture.AccessBankTenantId));
+
+        response.AnswerFormat.Should().Be("table");
+        response.EntitiesAccessed.Should().ContainSingle().Which.Should().Be(_fixture.AccessBankTenantId);
+        response.AnswerText.Should().Contain("Access Bank Plc");
+
+        var payload = response.StructuredData.Should().BeOfType<RegulatorTableData>().Subject;
+        payload.Rows.Should().OnlyContain(row => Equals(row["institution_name"], "Access Bank Plc"));
     }
 
     private RegulatorContext CreateContext(Guid? currentExaminationEntityId = null)

@@ -858,12 +858,30 @@ Existing deterministic focus areas:
         var principal = _httpContextAccessor.HttpContext?.User;
         var regulatorTenantId = request?.RegulatorTenantId
             ?? _tenantContext.CurrentTenantId
-            ?? TryParseGuid(principal?.FindFirst("TenantId")?.Value)
-            ?? throw new InvalidOperationException("Regulator tenant context is unavailable.");
+            ?? TryParseGuid(principal?.FindFirst("TenantId")?.Value);
 
         var regulatorCode = request?.RegulatorCode
-            ?? principal?.FindFirst("RegulatorCode")?.Value
-            ?? throw new InvalidOperationException("Regulator code is unavailable for this request.");
+            ?? principal?.FindFirst("RegulatorCode")?.Value;
+
+        var regulatorTenant = await ResolveRegulatorTenantAsync(
+            db,
+            regulatorTenantId,
+            regulatorCode,
+            IsPlatformAdmin(principal),
+            ct);
+
+        regulatorTenantId = regulatorTenant?.TenantId ?? regulatorTenantId;
+        regulatorCode = NormalizeRegulatorCode(regulatorCode ?? regulatorTenant?.TenantSlug);
+
+        if (!regulatorTenantId.HasValue || regulatorTenant is null)
+        {
+            throw new InvalidOperationException("Regulator tenant context is unavailable.");
+        }
+
+        if (string.IsNullOrWhiteSpace(regulatorCode))
+        {
+            throw new InvalidOperationException("Regulator code is unavailable for this request.");
+        }
 
         var regulatorId = request?.RegulatorId
             ?? explicitRegulatorId
@@ -875,21 +893,76 @@ Existing deterministic focus areas:
             ?? principal?.FindFirst(ClaimTypes.Role)?.Value
             ?? "Regulator";
 
-        var regulatorName = await db.Tenants
-            .AsNoTracking()
-            .Where(x => x.TenantId == regulatorTenantId && x.TenantType == TenantType.Regulator)
-            .Select(x => x.TenantName)
-            .FirstOrDefaultAsync(ct)
-            ?? throw new UnauthorizedAccessException("RegulatorIQ is restricted to regulator tenants.");
-
         return new ResolvedExecutionContext(
-            regulatorTenantId,
+            regulatorTenantId.Value,
             regulatorId,
             userRole,
             regulatorCode,
-            regulatorName,
+            regulatorTenant.TenantName,
             request?.IpAddress ?? _httpContextAccessor.HttpContext?.Connection.RemoteIpAddress?.ToString(),
             request?.SessionId ?? _httpContextAccessor.HttpContext?.TraceIdentifier);
+    }
+
+    private static bool IsPlatformAdmin(ClaimsPrincipal? principal)
+    {
+        return principal?.IsInRole("PlatformAdmin") == true
+            || principal?.HasClaim("IsPlatformAdmin", "true") == true;
+    }
+
+    private static string? NormalizeRegulatorCode(string? regulatorCode)
+    {
+        return string.IsNullOrWhiteSpace(regulatorCode)
+            ? null
+            : regulatorCode.Trim().ToUpperInvariant();
+    }
+
+    private static bool MatchesRegulatorCode(string tenantSlug, string tenantName, string regulatorCode)
+    {
+        return string.Equals(tenantSlug, regulatorCode, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(tenantName, regulatorCode, StringComparison.OrdinalIgnoreCase)
+            || tenantName.Contains(regulatorCode, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private async Task<RegulatorTenantCandidate?> ResolveRegulatorTenantAsync(
+        MetadataDbContext db,
+        Guid? regulatorTenantId,
+        string? regulatorCode,
+        bool allowPlatformFallback,
+        CancellationToken ct)
+    {
+        var activeRegulators = await db.Tenants
+            .AsNoTracking()
+            .Where(x => x.TenantType == TenantType.Regulator && x.Status == TenantStatus.Active)
+            .OrderBy(x => x.CreatedAt)
+            .Select(x => new RegulatorTenantCandidate(x.TenantId, x.TenantName, x.TenantSlug))
+            .ToListAsync(ct);
+
+        if (regulatorTenantId.HasValue)
+        {
+            var byId = activeRegulators.FirstOrDefault(x => x.TenantId == regulatorTenantId.Value);
+            if (byId is not null)
+            {
+                return byId;
+            }
+        }
+
+        var normalizedCode = NormalizeRegulatorCode(regulatorCode);
+        if (!string.IsNullOrWhiteSpace(normalizedCode))
+        {
+            var byCode = activeRegulators.FirstOrDefault(x => MatchesRegulatorCode(x.TenantSlug, x.TenantName, normalizedCode));
+            if (byCode is not null)
+            {
+                return byCode;
+            }
+        }
+
+        if (!allowPlatformFallback)
+        {
+            return null;
+        }
+
+        var defaultCbn = activeRegulators.FirstOrDefault(x => string.Equals(x.TenantSlug, "cbn", StringComparison.OrdinalIgnoreCase));
+        return defaultCbn ?? activeRegulators.FirstOrDefault();
     }
 
     private static Guid? TryParseGuid(string? raw)
@@ -978,6 +1051,11 @@ Existing deterministic focus areas:
         string RegulatorName,
         string? IpAddress,
         string? SessionId);
+
+    private sealed record RegulatorTenantCandidate(
+        Guid TenantId,
+        string TenantName,
+        string TenantSlug);
 
     private sealed class FocusAreaSuggestionSet
     {

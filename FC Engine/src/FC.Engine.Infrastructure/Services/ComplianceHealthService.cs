@@ -3,6 +3,7 @@ using FC.Engine.Domain.Entities;
 using FC.Engine.Domain.Enums;
 using FC.Engine.Domain.Models;
 using FC.Engine.Infrastructure.Metadata;
+using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
@@ -351,11 +352,22 @@ public class ComplianceHealthService : IComplianceHealthService
             .Select(r => new { r.Id })
             .ToListAsync(ct);
 
-        var anomalyScores = await _db.AnomalyReports
-            .AsNoTracking()
-            .Where(r => r.TenantId == tenantId && r.AnalysedAt >= lookback)
-            .Select(r => r.OverallQualityScore)
-            .ToListAsync(ct);
+        List<decimal> anomalyScores;
+        try
+        {
+            anomalyScores = await _db.AnomalyReports
+                .AsNoTracking()
+                .Where(r => r.TenantId == tenantId && r.AnalysedAt >= lookback)
+                .Select(r => r.OverallQualityScore)
+                .ToListAsync(ct);
+        }
+        catch (SqlException ex) when (ex.Number == 208)
+        {
+            _logger.LogInformation(
+                ex,
+                "Skipping anomaly-based compliance health scoring because meta.anomaly_reports is not available in the current database.");
+            anomalyScores = [];
+        }
 
         if (reports.Count == 0)
         {

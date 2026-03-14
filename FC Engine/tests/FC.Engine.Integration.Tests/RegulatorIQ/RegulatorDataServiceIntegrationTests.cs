@@ -264,10 +264,21 @@ public sealed class RegulatorIqFixture : IAsyncLifetime
         string regulatorCode = "CBN",
         string regulatorId = "examiner-001",
         string role = "Examiner",
+        bool includeTenantClaim = true,
+        bool includeRegulatorCodeClaim = true,
+        bool isPlatformAdmin = false,
         ILlmService? llmService = null)
     {
-        var tenantContext = new TestTenantContext(currentTenantId ?? CbnRegulatorTenantId);
-        var httpContext = BuildHttpContext(regulatorCode, regulatorId, role);
+        var tenantContext = new TestTenantContext(
+            currentTenantId ?? (isPlatformAdmin ? null : CbnRegulatorTenantId),
+            isPlatformAdmin);
+        var httpContext = BuildHttpContext(
+            regulatorCode,
+            regulatorId,
+            role,
+            includeTenantClaim,
+            includeRegulatorCodeClaim,
+            isPlatformAdmin);
         var accessor = new HttpContextAccessor { HttpContext = httpContext };
         var factory = new TestMetadataDbContextFactory(_options);
         var effectiveLlm = llmService ?? new NoopLlmService();
@@ -298,30 +309,52 @@ public sealed class RegulatorIqFixture : IAsyncLifetime
         string regulatorId = "examiner-001",
         string role = "Examiner")
     {
-        var tenantContext = new TestTenantContext(currentTenantId ?? CbnRegulatorTenantId);
+        var tenantContext = new TestTenantContext(currentTenantId ?? CbnRegulatorTenantId, false);
         var factory = new TestMetadataDbContextFactory(_options);
-        var httpContext = BuildHttpContext(regulatorCode, regulatorId, role);
+        var httpContext = BuildHttpContext(regulatorCode, regulatorId, role, true, true, false);
         var accessor = new HttpContextAccessor { HttpContext = httpContext };
         return new RegulatorDataService(factory, tenantContext, accessor, NullLogger<RegulatorDataService>.Instance);
     }
 
-    private DefaultHttpContext BuildHttpContext(string regulatorCode, string regulatorId, string role)
+    private DefaultHttpContext BuildHttpContext(
+        string regulatorCode,
+        string regulatorId,
+        string role,
+        bool includeTenantClaim,
+        bool includeRegulatorCodeClaim,
+        bool isPlatformAdmin)
     {
         var httpContext = new DefaultHttpContext
         {
             TraceIdentifier = "regiq-test-session"
         };
 
+        var claims = new List<Claim>
+        {
+            new(ClaimTypes.NameIdentifier, regulatorId),
+            new(ClaimTypes.Role, role)
+        };
+
+        if (includeTenantClaim)
+        {
+            claims.Add(new Claim("TenantId", CbnRegulatorTenantId.ToString("D")));
+        }
+
+        if (includeRegulatorCodeClaim)
+        {
+            claims.Add(new Claim("RegulatorCode", regulatorCode));
+        }
+
+        if (isPlatformAdmin)
+        {
+            claims.Add(new Claim(ClaimTypes.Role, "PlatformAdmin"));
+            claims.Add(new Claim("IsPlatformAdmin", "true"));
+        }
+
         httpContext.Connection.RemoteIpAddress = IPAddress.Parse("127.0.0.1");
         httpContext.User = new ClaimsPrincipal(
             new ClaimsIdentity(
-                new[]
-                {
-                    new Claim(ClaimTypes.NameIdentifier, regulatorId),
-                    new Claim("TenantId", CbnRegulatorTenantId.ToString("D")),
-                    new Claim("RegulatorCode", regulatorCode),
-                    new Claim(ClaimTypes.Role, role)
-                },
+                claims,
                 "RegIqTest"));
 
         return httpContext;
@@ -1187,10 +1220,14 @@ END;
 
     private sealed class TestTenantContext : ITenantContext
     {
-        public TestTenantContext(Guid currentTenantId) => CurrentTenantId = currentTenantId;
+        public TestTenantContext(Guid? currentTenantId, bool isPlatformAdmin)
+        {
+            CurrentTenantId = currentTenantId;
+            IsPlatformAdmin = isPlatformAdmin;
+        }
 
         public Guid? CurrentTenantId { get; }
-        public bool IsPlatformAdmin => false;
+        public bool IsPlatformAdmin { get; }
         public Guid? ImpersonatingTenantId => null;
     }
 
