@@ -31,6 +31,7 @@ public class ExaminationFindingConfiguration : IEntityTypeConfiguration<Examinat
             .HasMaxLength(20)
             .HasConversion<string>()
             .HasDefaultValue(ExaminationRiskRating.Medium)
+            .HasSentinel((ExaminationRiskRating)(-1))
             .IsRequired();
         builder.Property(x => x.ModuleCode).HasMaxLength(60);
         builder.Property(x => x.PeriodLabel).HasMaxLength(60);

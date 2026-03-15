@@ -354,6 +354,7 @@ public class HistoricalMigrationService : IHistoricalMigrationService
         var mappedRecords = GetMappedRecords(staged, template.CurrentVersion.Fields);
 
         var submission = Submission.Create(job.InstitutionId, job.ReturnPeriodId.Value, returnCode, tenantId);
+        submission.MarkSubmitted();
         submission.SetTemplateVersion(template.CurrentVersion.Id);
         submission.Status = SubmissionStatus.Historical;
         submission.SubmittedByUserId = job.ImportedBy;

@@ -1,3 +1,4 @@
+using System.Text.Json;
 using FC.Engine.Domain.Abstractions;
 using FC.Engine.Domain.Metadata;
 using FC.Engine.Domain.Validation;
@@ -57,11 +58,33 @@ public class FormulaRepository : IFormulaRepository
     public async Task<IReadOnlyList<BusinessRule>> GetBusinessRulesForTemplate(
         string returnCode, CancellationToken ct = default)
     {
-        return await _db.BusinessRules
-            .Where(r => r.IsActive &&
-                (r.AppliesToTemplates == "*" ||
-                 r.AppliesToTemplates!.Contains(returnCode)))
+        // AppliesToTemplates stores either "*" (all templates) or a JSON array like ["MFCR 300","BSL 100"].
+        // SQL Server has no native JSON containment operator, so we load all active rules (a small
+        // regulatory-metadata set) and perform exact token matching in memory via JSON deserialization.
+        // This handles all JSON formatting variations (spaces, case) with no false positives.
+        var activeRules = await _db.BusinessRules
+            .Where(r => r.IsActive)
             .ToListAsync(ct);
+
+        return activeRules
+            .Where(r => r.AppliesToTemplates == "*" || MatchesTemplateCode(r.AppliesToTemplates, returnCode))
+            .ToList()
+            .AsReadOnly();
+    }
+
+    private static bool MatchesTemplateCode(string? json, string returnCode)
+    {
+        if (string.IsNullOrEmpty(json)) return false;
+        try
+        {
+            var codes = JsonSerializer.Deserialize<string[]>(json);
+            return codes?.Contains(returnCode, StringComparer.OrdinalIgnoreCase) == true;
+        }
+        catch
+        {
+            // Fallback for malformed JSON: quoted-token boundary check
+            return json.Contains($"\"{returnCode}\"", StringComparison.OrdinalIgnoreCase);
+        }
     }
 
     public async Task AddIntraSheetFormula(IntraSheetFormula formula, CancellationToken ct = default)

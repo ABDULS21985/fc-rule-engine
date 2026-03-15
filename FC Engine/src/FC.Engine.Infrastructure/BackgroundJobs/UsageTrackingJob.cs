@@ -98,7 +98,7 @@ public class UsageTrackingJob : BackgroundService
                     .CountAsync(ct);
 
                 var returnsSubmitted = await db.Submissions
-                    .Where(s => s.TenantId == tenantId && DateOnly.FromDateTime(s.SubmittedAt.Date) == today)
+                    .Where(s => s.TenantId == tenantId && s.SubmittedAt.HasValue && DateOnly.FromDateTime(s.SubmittedAt!.Value.Date) == today)
                     .CountAsync(ct);
 
                 var submissionCount = await db.Submissions

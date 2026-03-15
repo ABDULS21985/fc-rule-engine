@@ -56,6 +56,7 @@ public class ExaminerQueryConfiguration : IEntityTypeConfiguration<ExaminerQuery
             .HasMaxLength(10)
             .HasConversion<string>()
             .HasDefaultValue(ExaminerQueryPriority.Normal)
+            .HasSentinel((ExaminerQueryPriority)(-1))
             .IsRequired();
 
         builder.HasOne(x => x.Submission)

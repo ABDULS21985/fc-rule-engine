@@ -24,11 +24,17 @@ public sealed class SurveillanceCycleBackgroundService : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        if (!_configuration.GetValue("SurveillanceCycle:Enabled", false))
+        {
+            _log.LogInformation("Surveillance cycle background service is disabled by configuration.");
+            return;
+        }
+
         var intervalHours = _configuration.GetValue("SurveillanceCycle:IntervalHours", 6);
         var regulatorCode = _configuration["SurveillanceCycle:RegulatorCode"];
         if (string.IsNullOrWhiteSpace(regulatorCode))
         {
-            _log.LogWarning("Surveillance cycle background service is disabled because SurveillanceCycle:RegulatorCode is not configured.");
+            _log.LogWarning("Surveillance cycle background service is enabled but SurveillanceCycle:RegulatorCode is not configured.");
             return;
         }
 

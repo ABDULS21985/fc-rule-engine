@@ -291,7 +291,7 @@ public class TemplateBrowserService
             {
                 SubmissionId = s.Id,
                 PeriodLabel = FormatPeriodLabel(s),
-                SubmittedAt = s.SubmittedAt,
+                SubmittedAt = s.SubmittedAt ?? default,
                 Status = s.Status.ToString(),
                 ErrorCount = s.ValidationReport?.ErrorCount ?? 0,
                 WarningCount = s.ValidationReport?.WarningCount ?? 0
@@ -367,7 +367,7 @@ public class TemplateBrowserService
             var rp = s.ReturnPeriod;
             return new DateTime(rp.Year, rp.Month, 1).ToString("MMMM yyyy");
         }
-        return s.SubmittedAt.ToString("MMMM yyyy");
+        return (s.SubmittedAt ?? DateTime.UtcNow).ToString("MMMM yyyy");
     }
 }
 

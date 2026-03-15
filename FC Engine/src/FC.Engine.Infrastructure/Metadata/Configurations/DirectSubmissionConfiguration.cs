@@ -18,6 +18,7 @@ public class DirectSubmissionConfiguration : IEntityTypeConfiguration<DirectSubm
             .HasMaxLength(20)
             .HasConversion<string>()
             .HasDefaultValue(SubmissionChannel.DirectApi)
+            .HasSentinel((SubmissionChannel)(-1))
             .IsRequired();
         builder.Property(x => x.Status)
             .HasMaxLength(30)

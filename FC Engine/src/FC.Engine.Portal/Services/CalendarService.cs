@@ -258,7 +258,7 @@ public class CalendarService
             return $"{s.ReturnPeriod.Year}-{s.ReturnPeriod.Month:D2}";
 
         // Fallback: use submission date
-        return s.SubmittedAt.ToString("yyyy-MM");
+        return (s.SubmittedAt ?? s.CreatedAt).ToString("yyyy-MM");
     }
 
     private static string FormatPeriodLabel(DateTime dueDate, ReturnFrequency frequency)

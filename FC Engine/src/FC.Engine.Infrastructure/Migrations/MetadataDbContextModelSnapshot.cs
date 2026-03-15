@@ -14059,8 +14059,8 @@ namespace FC.Engine.Infrastructure.Migrations
                         .HasMaxLength(30)
                         .HasColumnType("nvarchar(30)");
 
-                    b.Property<DateTime>("SubmittedAt")
-                        .HasColumnType("datetime2");
+                    b.Property<DateTime?>("SubmittedAt")
+                        .HasColumnType("datetime2(3)");
 
                     b.Property<int?>("SubmittedByUserId")
                         .HasColumnType("int");
@@ -15524,6 +15524,10 @@ namespace FC.Engine.Infrastructure.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("nvarchar(500)");
 
+                    b.Property<string>("ValidationNote")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
                     b.Property<bool>("IsComputed")
                         .HasColumnType("bit");
 
@@ -15647,6 +15651,11 @@ namespace FC.Engine.Infrastructure.Migrations
                     b.Property<bool>("IsRepeating")
                         .HasColumnType("bit");
 
+                    b.Property<string>("SectionCode")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
                     b.Property<string>("SectionName")
                         .IsRequired()
                         .HasMaxLength(100)
@@ -15660,7 +15669,7 @@ namespace FC.Engine.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("TemplateVersionId", "SectionName")
+                    b.HasIndex("TemplateVersionId", "SectionCode")
                         .IsUnique();
 
                     b.ToTable("template_sections", "meta");

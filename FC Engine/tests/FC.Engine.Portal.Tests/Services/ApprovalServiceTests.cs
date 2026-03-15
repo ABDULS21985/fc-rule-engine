@@ -45,7 +45,7 @@ public class ApprovalServiceTests
                 {
                     Id = 91,
                     SubmissionId = submission.Id,
-                    RequestedAt = submission.SubmittedAt,
+                    RequestedAt = submission.SubmittedAt!.Value,
                     SubmitterNotes = "Ready for checker review",
                     Submission = submission,
                     RequestedBy = new InstitutionUser

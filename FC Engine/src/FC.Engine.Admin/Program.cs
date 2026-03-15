@@ -63,9 +63,10 @@ builder.Services.AddHostedService<FC.Engine.Admin.Services.PlatformIntelligenceR
 builder.Services.AddScoped<FC.Engine.Infrastructure.Charts.ChartJsInterop>();
 builder.Services.AddScoped<IAuthorizationHandler, RegulatorTenantAccessHandler>();
 
-// Scenario simulation engine
-builder.Services.AddSingleton<FC.Engine.Admin.Services.Scenarios.IScenarioEngine,
-                              FC.Engine.Admin.Services.Scenarios.ScenarioEngine>();
+// Scenario simulation engine — persisted (regulator-scoped, survives restart)
+builder.Services.AddScoped<FC.Engine.Admin.Services.Scenarios.IScenarioEngine,
+                           FC.Engine.Admin.Services.Scenarios.PersistedScenarioEngine>();
+// Template catalogue is read-only static data; singleton is fine
 builder.Services.AddSingleton<FC.Engine.Admin.Services.Scenarios.IScenarioTemplateService,
                               FC.Engine.Admin.Services.Scenarios.ScenarioTemplateService>();
 
@@ -125,6 +126,15 @@ builder.Services.AddAuthorization(options =>
 
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddCascadingAuthenticationState();
+
+// Named HTTP client for the self-probe in PlatformAdminService health checks
+builder.Services.AddHttpClient("ApiHealthProbe", (sp, client) =>
+{
+    var config = sp.GetRequiredService<IConfiguration>();
+    var baseUrl = config["HealthCheck:ApiBaseUrl"] ?? "http://localhost";
+    client.BaseAddress = new Uri(baseUrl);
+    client.Timeout = TimeSpan.FromSeconds(5);
+});
 
 // Blazor Server
 builder.Services.AddRazorComponents()
@@ -1984,6 +1994,9 @@ static string ResolveApiPerformedBy(HttpContext context) =>
     context.User.FindFirstValue(ClaimTypes.NameIdentifier)
     ?? context.User.Identity?.Name
     ?? "platform-intelligence-api";
+
+// Lightweight self-probe endpoint used by PlatformAdminService.CheckServiceHealthAsync
+app.MapGet("/api/ping", () => Results.Ok(new { status = "ok", utc = DateTimeOffset.UtcNow }));
 
 app.MapRazorComponents<FC.Engine.Admin.Components.App>()
     .AddInteractiveServerRenderMode();

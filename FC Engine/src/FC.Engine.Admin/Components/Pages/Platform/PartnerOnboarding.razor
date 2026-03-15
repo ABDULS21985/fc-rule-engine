@@ -3,9 +3,10 @@
 @using FC.Engine.Domain.Abstractions
 @using FC.Engine.Domain.Enums
 @using FC.Engine.Admin.Services
-@attribute [Authorize(Roles = "PlatformAdmin")]
+@attribute [Authorize(Policy = "PlatformAdmin")]
 @inject IPartnerManagementService PartnerService
 @inject ToastService Toast
+@inject NavigationManager Navigation
 
 <PageTitle>Partner Onboarding</PageTitle>
 
@@ -153,16 +154,8 @@
                 return;
             }
 
-            Toast.Success($"Partner onboarded successfully. TenantId: {result.TenantId}. Temporary admin password: {result.AdminTemporaryPassword}");
-            _request = new PartnerOnboardingRequest
-            {
-                SubscriptionPlanCode = "ENTERPRISE",
-                PartnerTier = FC.Engine.Domain.Enums.PartnerTier.Silver,
-                BillingModel = PartnerBillingModel.Direct,
-                MaxSubTenants = 10,
-                AgreementVersion = "v1",
-                AgreementSignedAt = DateTime.UtcNow
-            };
+            Toast.Success($"Partner onboarded. Temporary admin password: {result.AdminTemporaryPassword}");
+            Navigation.NavigateTo($"/platform/tenants/{result.TenantId}");
         }
         catch (Exception ex)
         {

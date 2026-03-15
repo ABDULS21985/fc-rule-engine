@@ -197,7 +197,7 @@ public class DashboardService
                 ModuleName = PortalSubmissionLinkBuilder.ResolveModuleName(templateLookup.GetValueOrDefault(s.ReturnCode)?.ModuleCode),
                 WorkspaceHref = PortalSubmissionLinkBuilder.ResolveWorkspaceHref(templateLookup.GetValueOrDefault(s.ReturnCode)?.ModuleCode),
                 Period = FormatPeriod(s),
-                SubmittedDate = s.SubmittedAt,
+                SubmittedDate = s.SubmittedAt ?? default,
                 Status = s.Status,
                 ErrorCount = s.ValidationReport?.ErrorCount ?? 0,
                 WarningCount = s.ValidationReport?.WarningCount ?? 0
@@ -280,7 +280,7 @@ public class DashboardService
                 .Select(i =>
                 {
                     var d = now.AddDays(-6 + i).Date;
-                    return (decimal)sparklineSubs.Count(s => s.SubmittedAt.Date == d && filter(s));
+                    return (decimal)sparklineSubs.Count(s => s.SubmittedAt?.Date == d && filter(s));
                 })
                 .ToList();
         }
@@ -301,7 +301,7 @@ public class DashboardService
         var complianceSparkline = Enumerable.Range(0, 7).Select(i =>
         {
             var d = now.AddDays(-6 + i).Date;
-            var acc = sparklineSubs.Where(s => s.SubmittedAt.Date == d &&
+            var acc = sparklineSubs.Where(s => s.SubmittedAt?.Date == d &&
                 (s.Status == SubmissionStatus.Accepted || s.Status == SubmissionStatus.AcceptedWithWarnings))
                 .Select(s => s.ReturnCode).Distinct().Count();
             return totalTemplates > 0 ? Math.Round(acc * 100m / totalTemplates, 1) : 0m;
@@ -317,7 +317,7 @@ public class DashboardService
         var passRateSparkline = Enumerable.Range(0, 7).Select(i =>
         {
             var d = now.AddDays(-6 + i).Date;
-            var daily = sparklineSubs.Where(s => s.SubmittedAt.Date == d).ToList();
+            var daily = sparklineSubs.Where(s => s.SubmittedAt?.Date == d).ToList();
             return daily.Count > 0
                 ? Math.Round(daily.Count(s => s.Status == SubmissionStatus.Accepted || s.Status == SubmissionStatus.AcceptedWithWarnings) * 100m / daily.Count, 1)
                 : 0m;
@@ -553,8 +553,8 @@ public class DashboardService
     {
         var start = now.AddDays(-89).Date;
         var lookup = submissions
-            .Where(s => s.SubmittedAt.Date >= start)
-            .GroupBy(s => s.SubmittedAt.Date)
+            .Where(s => s.SubmittedAt.HasValue && s.SubmittedAt.Value.Date >= start)
+            .GroupBy(s => s.SubmittedAt!.Value.Date)
             .ToDictionary(g => g.Key, g => g.Count());
 
         var maxCount = lookup.Values.DefaultIfEmpty(0).Max();
@@ -597,7 +597,7 @@ public class DashboardService
                     Icon = icon,
                     Message = message,
                     Actor = "System",
-                    Timestamp = s.SubmittedAt,
+                    Timestamp = s.SubmittedAt ?? default,
                     LinkUrl = $"/submissions/{s.Id}",
                     BadgeClass = badge
                 };
@@ -629,7 +629,7 @@ public class DashboardService
                 {
                     SubmissionId = s.Id,
                     Period = FormatPeriod(s),
-                    SubmittedDate = s.SubmittedAt,
+                    SubmittedDate = s.SubmittedAt ?? default,
                     Status = s.Status,
                     ErrorCount = s.ValidationReport?.ErrorCount ?? 0,
                     WarningCount = s.ValidationReport?.WarningCount ?? 0
@@ -645,7 +645,7 @@ public class DashboardService
             var rp = submission.ReturnPeriod;
             return new DateTime(rp.Year, rp.Month, 1).ToString("MMM yyyy");
         }
-        return submission.SubmittedAt.ToString("MMM yyyy");
+        return (submission.SubmittedAt ?? DateTime.UtcNow).ToString("MMM yyyy");
     }
 
     // ── Compliance Performance Dashboard ────────────────────────

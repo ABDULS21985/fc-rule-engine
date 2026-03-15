@@ -43,6 +43,31 @@ public class SubmissionRepository : ISubmissionRepository
             .Include(s => s.ValidationReport)
                 .ThenInclude(r => r!.Errors)
             .OrderByDescending(s => s.SubmittedAt)
+            .Take(500)
+            .ToListAsync(ct);
+    }
+
+    public async Task<IReadOnlyList<Submission>> GetFiltered(
+        string? search, string? status, int take = 500, CancellationToken ct = default)
+    {
+        var query = _db.Submissions
+            .Include(s => s.Institution)
+            .Include(s => s.ReturnPeriod)
+            .Include(s => s.ValidationReport)
+                .ThenInclude(r => r!.Errors)
+            .AsQueryable();
+
+        if (!string.IsNullOrWhiteSpace(search))
+            query = query.Where(s =>
+                s.ReturnCode.Contains(search) ||
+                (s.Institution != null && s.Institution.InstitutionName.Contains(search)));
+
+        if (!string.IsNullOrWhiteSpace(status) && Enum.TryParse<SubmissionStatus>(status, out var parsed))
+            query = query.Where(s => s.Status == parsed);
+
+        return await query
+            .OrderByDescending(s => s.SubmittedAt)
+            .Take(take)
             .ToListAsync(ct);
     }
 

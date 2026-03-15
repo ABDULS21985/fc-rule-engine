@@ -12,6 +12,14 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
 var builder = Host.CreateApplicationBuilder(args);
+var configurationBasePath = ResolveConfigurationBasePath();
+builder.Configuration
+    .AddJsonFile(Path.Combine(configurationBasePath, "appsettings.json"), optional: true, reloadOnChange: false)
+    .AddJsonFile(
+        Path.Combine(configurationBasePath, $"appsettings.{builder.Environment.EnvironmentName}.json"),
+        optional: true,
+        reloadOnChange: false);
+
 builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddScoped<SeedService>();
 builder.Services.AddScoped<FormulaSeedService>();
@@ -156,6 +164,12 @@ try
             .FirstOrDefault(v => v.Status == FC.Engine.Domain.Enums.TemplateStatus.Published);
         if (publishedVersion == null) continue;
 
+        if (await PhysicalTableExistsAsync(db, tmpl.PhysicalTableName))
+        {
+            tablesSkipped++;
+            continue;
+        }
+
         try
         {
             var ddl = ddlEngine.GenerateCreateTable(tmpl, publishedVersion);
@@ -194,10 +208,12 @@ try
         }
     }
 
-    if (coverage.ModuleCount < 14)
+    var expectedModuleCount = builder.Configuration.GetValue<int?>("Seeding:ExpectedXmlCoverageModuleCount");
+    if (expectedModuleCount.HasValue && coverage.ModuleCount < expectedModuleCount.Value)
     {
         logger.LogWarning(
-            "XML export coverage check: expected at least 14 modules, found {ModuleCount}. Continuing.",
+            "XML export coverage check: expected at least {ExpectedModuleCount} modules, found {ModuleCount}. Continuing.",
+            expectedModuleCount.Value,
             coverage.ModuleCount);
     }
 
@@ -271,4 +287,44 @@ catch (Exception ex)
 {
     logger.LogError(ex, "RegOS™ Migrator failed");
     Environment.ExitCode = 1;
+}
+
+static async Task<bool> PhysicalTableExistsAsync(MetadataDbContext db, string tableName, CancellationToken ct = default)
+{
+    return await db.Database
+        .SqlQueryRaw<int>(
+            """
+            SELECT TOP 1 1 AS [Value]
+            FROM sys.tables t
+            INNER JOIN sys.schemas s ON s.schema_id = t.schema_id
+            WHERE s.name = 'dbo' AND t.name = {0}
+            """,
+            tableName)
+        .AnyAsync(ct);
+}
+
+static string ResolveConfigurationBasePath()
+{
+    var currentDirectory = Directory.GetCurrentDirectory();
+    var appBaseDirectory = AppContext.BaseDirectory;
+
+    var candidates = new[]
+    {
+        currentDirectory,
+        Path.Combine(currentDirectory, "FC Engine", "src", "FC.Engine.Migrator"),
+        Path.Combine(currentDirectory, "src", "FC.Engine.Migrator"),
+        Path.Combine(appBaseDirectory, "..", "..", "..", ".."),
+        Path.Combine(appBaseDirectory, "..", "..", "..", "..", "..", "src", "FC.Engine.Migrator")
+    };
+
+    foreach (var candidate in candidates)
+    {
+        var fullPath = Path.GetFullPath(candidate);
+        if (File.Exists(Path.Combine(fullPath, "appsettings.json")))
+        {
+            return fullPath;
+        }
+    }
+
+    return currentDirectory;
 }

@@ -176,6 +176,8 @@ public class TemplateMetadataCache : ITemplateMetadataCache
         var db = scope.ServiceProvider.GetRequiredService<MetadataDbContext>();
 
         var baseQuery = db.ReturnTemplates
+            .AsNoTracking()
+            .AsSplitQuery()
             .Include(t => t.Module)
             .Include(t => t.Versions.Where(v => v.Status == TemplateStatus.Published))
                 .ThenInclude(v => v.Fields)
@@ -216,6 +218,8 @@ public class TemplateMetadataCache : ITemplateMetadataCache
         var db = scope.ServiceProvider.GetRequiredService<MetadataDbContext>();
 
         var query = db.ReturnTemplates
+            .AsNoTracking()
+            .AsSplitQuery()
             .Include(t => t.Module)
             .Include(t => t.Versions.Where(v => v.Status == TemplateStatus.Published))
                 .ThenInclude(v => v.Fields)

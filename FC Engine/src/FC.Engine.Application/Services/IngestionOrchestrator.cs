@@ -74,8 +74,9 @@ public class IngestionOrchestrator
         var sw = Stopwatch.StartNew();
         var tenantId = _tenantContext?.CurrentTenantId;
 
-        // 1. Create submission record
+        // 1. Create submission record — MarkSubmitted stamps the wall-clock intake time.
         var submission = Submission.Create(institutionId, returnPeriodId, returnCode, tenantId);
+        submission.MarkSubmitted();
         await _submissionRepo.Add(submission, ct);
 
         try

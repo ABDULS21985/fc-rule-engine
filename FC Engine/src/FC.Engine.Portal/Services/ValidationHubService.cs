@@ -79,7 +79,7 @@ public class ValidationHubService
             SubmitHref = PortalSubmissionLinkBuilder.BuildSubmitHref(submission.ReturnCode, moduleCode),
             FixSubmissionHref = PortalSubmissionLinkBuilder.BuildSubmitHref(submission.ReturnCode, moduleCode, submission.ReturnPeriodId),
             SubmittedBy = submittedByName,
-            ValidatedAt = report?.FinalizedAt ?? submission.SubmittedAt,
+            ValidatedAt = report?.FinalizedAt ?? submission.SubmittedAt ?? default,
             Status = submission.Status,
             TotalRulesChecked = totalChecked,
             PassedCount = passedCount,
@@ -234,7 +234,7 @@ public class ValidationHubService
             {
                 SubmissionId   = s.Id,
                 AttemptNumber  = i + 1,
-                AttemptedAt    = s.SubmittedAt,
+                AttemptedAt    = s.SubmittedAt ?? default,
                 ErrorCount     = s.ValidationReport?.ErrorCount ?? 0,
                 WarningCount   = s.ValidationReport?.WarningCount ?? 0,
                 Status         = s.Status.ToString(),

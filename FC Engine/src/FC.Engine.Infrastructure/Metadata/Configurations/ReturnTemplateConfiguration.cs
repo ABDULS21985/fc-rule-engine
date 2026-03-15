@@ -90,8 +90,13 @@ public class TemplateFieldConfiguration : IEntityTypeConfiguration<TemplateField
         builder.Property(f => f.ReferenceTable).HasMaxLength(128);
         builder.Property(f => f.ReferenceColumn).HasMaxLength(128);
         builder.Property(f => f.HelpText).HasMaxLength(500);
+        builder.Property(f => f.ValidationNote).HasMaxLength(500);
         builder.Property(f => f.RegulatoryReference).HasMaxLength(300);
-        builder.Property(f => f.DataClassification).HasMaxLength(30).HasConversion<string>().HasDefaultValue(FC.Engine.Domain.Enums.DataClassification.Internal);
+        builder.Property(f => f.DataClassification)
+            .HasMaxLength(30)
+            .HasConversion<string>()
+            .HasDefaultValue(FC.Engine.Domain.Enums.DataClassification.Internal)
+            .HasSentinel((FC.Engine.Domain.Enums.DataClassification)(-1));
 
         builder.HasIndex(f => new { f.TemplateVersionId, f.FieldName }).IsUnique();
     }
@@ -116,9 +121,11 @@ public class TemplateSectionConfiguration : IEntityTypeConfiguration<TemplateSec
     {
         builder.ToTable("template_sections", "meta");
         builder.HasKey(s => s.Id);
+        builder.Property(s => s.SectionCode).HasMaxLength(100).IsRequired();
         builder.Property(s => s.SectionName).HasMaxLength(100).IsRequired();
         builder.Property(s => s.Description).HasMaxLength(500);
 
-        builder.HasIndex(s => new { s.TemplateVersionId, s.SectionName }).IsUnique();
+        // SectionCode is the semantic key referenced by TemplateField.SectionName for grouping.
+        builder.HasIndex(s => new { s.TemplateVersionId, s.SectionCode }).IsUnique();
     }
 }

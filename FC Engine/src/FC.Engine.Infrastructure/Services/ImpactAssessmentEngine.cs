@@ -240,27 +240,59 @@ public sealed class ImpactAssessmentEngine : IImpactAssessmentEngine
             return null;
 
         var parts = returnLineReference.Split('.');
-        if (parts.Length != 2) return null;
+        if (parts.Length != 2)
+        {
+            _log.LogWarning(
+                "ReturnLineReference '{Reference}' is not in expected 'ReturnCode.LineCode' format. " +
+                "Entity {InstitutionId} will be classified as NOT_APPLICABLE for this parameter.",
+                returnLineReference, institutionId);
+            return null;
+        }
 
         var returnCode = parts[0];
         var lineCode = parts[1];
 
-        // Query ReturnLineValues through ReturnInstances
-        // These are existing tables in the codebase
-        var value = await _db.Database.SqlQueryRaw<decimal?>(
-            """
-            SELECT TOP 1 rl.Value
-            FROM ReturnLineValues rl
-            JOIN ReturnInstances ri ON ri.Id = rl.ReturnInstanceId
-            WHERE ri.InstitutionId = {0}
-              AND ri.ReturnCode = {1}
-              AND ri.Status = 'APPROVED'
-              AND ri.ReportingPeriodEnd <= {2}
-              AND rl.LineCode = {3}
-            ORDER BY ri.ReportingPeriodEnd DESC
-            """,
-            institutionId, returnCode, baselineDate, lineCode)
-            .FirstOrDefaultAsync(ct);
+        // Query ReturnLineValues through ReturnInstances.
+        // If this returns null for a large share of entities, check that the table names
+        // ReturnLineValues/ReturnInstances and column names (ReturnCode, LineCode, Status,
+        // ReportingPeriodEnd, Value) still match the current schema.
+        decimal? value;
+        try
+        {
+            value = await _db.Database.SqlQueryRaw<decimal?>(
+                """
+                SELECT TOP 1 rl.Value
+                FROM ReturnLineValues rl
+                JOIN ReturnInstances ri ON ri.Id = rl.ReturnInstanceId
+                WHERE ri.InstitutionId = {0}
+                  AND ri.ReturnCode = {1}
+                  AND ri.Status = 'APPROVED'
+                  AND ri.ReportingPeriodEnd <= {2}
+                  AND rl.LineCode = {3}
+                ORDER BY ri.ReportingPeriodEnd DESC
+                """,
+                institutionId, returnCode, baselineDate, lineCode)
+                .FirstOrDefaultAsync(ct);
+        }
+        catch (Exception ex)
+        {
+            // A schema change (renamed table/column) will surface here rather than
+            // silently classifying every entity as NOT_APPLICABLE.
+            _log.LogError(ex,
+                "Raw SQL metric fetch failed for Institution={InstitutionId}, Reference='{Reference}'. " +
+                "Verify that ReturnLineValues/ReturnInstances schema matches expected column names.",
+                institutionId, returnLineReference);
+            return null;
+        }
+
+        if (value is null)
+        {
+            _log.LogDebug(
+                "No approved return data found for Institution={InstitutionId}, " +
+                "ReturnCode={ReturnCode}, LineCode={LineCode}, BaselineDate={BaselineDate}. " +
+                "Entity will be classified as NOT_APPLICABLE for this parameter.",
+                institutionId, returnCode, lineCode, baselineDate);
+        }
 
         return value;
     }
@@ -336,8 +368,15 @@ public sealed class ImpactAssessmentEngine : IImpactAssessmentEngine
             r.Id, r.ScenarioId, r.Scenario?.Title ?? "",
             r.EntitiesWouldBreach, r.AggregateCapitalShortfall)).ToList();
 
+        // Cap entity rows loaded for comparison to prevent unbounded queries when
+        // many runs × many entities are compared. The UI shows at most 100 rows;
+        // 500 gives a safe buffer while keeping memory bounded.
+        const int maxComparisonEntities = 500;
+
         var allEntityResults = await _db.EntityImpactResults
             .Where(e => runIds.Contains(e.RunId))
+            .OrderBy(e => e.InstitutionCode)
+            .Take(maxComparisonEntities * runIds.Count)
             .Select(e => new { e.RunId, e.InstitutionId, e.InstitutionCode, e.EntityType, e.ImpactCategory })
             .ToListAsync(ct);
 
@@ -350,7 +389,9 @@ public sealed class ImpactAssessmentEngine : IImpactAssessmentEngine
                 g.ToDictionary(e => e.RunId, e => e.ImpactCategory)))
             .ToList();
 
-        return new ScenarioComparisonResult(columns, groupedByEntity);
+        var isTruncated = groupedByEntity.Count >= maxComparisonEntities;
+
+        return new ScenarioComparisonResult(columns, groupedByEntity, isTruncated);
     }
 
     private static ImpactAssessmentResult MapToResult(ImpactAssessmentRun r) => new(

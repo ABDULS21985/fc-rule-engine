@@ -4,10 +4,11 @@
 @inject IScenarioTemplateService TemplateService
 @inject NavigationManager Nav
 @inject FC.Engine.Infrastructure.Charts.ChartJsInterop Charts
+@inject IJSRuntime JS
 
 <PageHeader Title="Scenario Comparison" Subtitle="Side-by-Side Metric Analysis" BackUrl="/scenarios">
     <SecondaryActions>
-        <button class="fc-btn fc-btn--outline" @onclick="ExportView">
+        <button class="fc-btn fc-btn--outline" @onclick="() => ExportView()">
             <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7,10 12,15 17,10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
             Export
         </button>
@@ -311,8 +312,10 @@ else if (_report != null)
     private static string FormatMetric(decimal value, bool isRatio)
         => isRatio ? $"{value:N1}%" : $"₦{value:N1}";
 
-    private void ExportView()
+    private async Task ExportView()
     {
-        // Trigger print via JS interop
+        // Print the comparison table — browser print dialog renders the visible
+        // fc-sc-compare-wrapper section as a clean paginated report.
+        await JS.InvokeVoidAsync("window.print");
     }
 }

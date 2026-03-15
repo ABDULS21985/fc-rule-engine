@@ -95,7 +95,8 @@ public sealed record EntityImpactSummary(
 
 public sealed record ScenarioComparisonResult(
     IReadOnlyList<ScenarioComparisonColumn> Scenarios,
-    IReadOnlyList<ComparisonRow> EntityRows
+    IReadOnlyList<ComparisonRow> EntityRows,
+    bool IsTruncated = false
 );
 
 public sealed record ScenarioComparisonColumn(

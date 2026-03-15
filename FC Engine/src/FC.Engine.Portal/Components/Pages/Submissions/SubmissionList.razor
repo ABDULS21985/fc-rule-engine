@@ -345,7 +345,7 @@
                                             <span class="portal-kanban-card-v2-avatar @(sub.IsCurrentUser ? "portal-kanban-card-v2-avatar--self" : "")"
                                                   title="@sub.AssigneeInitials" aria-hidden="true">@sub.AssigneeInitials</span>
                                             <span class="portal-kanban-card-v2-time"
-                                                  title="@sub.SubmittedAt.ToString("d MMM yyyy HH:mm")">@RelativeTime(sub.SubmittedAt)</span>
+                                                  title="@(sub.SubmittedAt?.ToString("d MMM yyyy HH:mm") ?? "—")">@RelativeTime(sub.SubmittedAt)</span>
                                         </div>
                                     </div>
                                     <!-- Quick actions (slide-up on hover) -->
@@ -423,8 +423,8 @@
                                 <td class="portal-td-truncate">@sub.TemplateName</td>
                                 <td>@sub.PeriodLabel</td>
                                 <td>
-                                    <span class="portal-td-date">@sub.SubmittedAt.ToString("d MMM yyyy")</span>
-                                    <span class="portal-td-time">@sub.SubmittedAt.ToString("HH:mm")</span>
+                                    <span class="portal-td-date">@(sub.SubmittedAt?.ToString("d MMM yyyy") ?? "—")</span>
+                                    <span class="portal-td-time">@(sub.SubmittedAt?.ToString("HH:mm") ?? "")</span>
                                 </td>
                                 <td>
                                     <span class="portal-badge @GetStatusBadgeClass(sub.Status)">
@@ -481,7 +481,7 @@
                     <div class="portal-submission-card-mobile-meta">
                         <span>@sub.PeriodLabel</span>
                         <span>·</span>
-                        <span>@sub.SubmittedAt.ToString("d MMM yyyy")</span>
+                        <span>@(sub.SubmittedAt?.ToString("d MMM yyyy") ?? "—")</span>
                         @if (sub.ErrorCount > 0)
                         {
                             <span>·</span>
@@ -878,14 +878,15 @@
         _ = JS.InvokeVoidAsync("portalDisposeEscHandler");
     }
 
-    private static string RelativeTime(DateTime dt)
+    private static string RelativeTime(DateTime? dt)
     {
-        var diff = DateTime.UtcNow - dt.ToUniversalTime();
+        if (dt is null) return "—";
+        var diff = DateTime.UtcNow - dt.Value.ToUniversalTime();
         if (diff.TotalMinutes < 2) return "just now";
         if (diff.TotalMinutes < 60) return $"{(int)diff.TotalMinutes}m ago";
         if (diff.TotalHours < 24) return $"{(int)diff.TotalHours}h ago";
         if (diff.TotalDays < 7) return $"{(int)diff.TotalDays}d ago";
-        return dt.ToString("d MMM");
+        return dt!.Value.ToString("d MMM");
     }
 
     private static string GetCardAccentClass(string status) => status switch
@@ -1110,7 +1111,7 @@
             Csv(s.TemplateName),
             Csv(s.ModuleCode ?? string.Empty),
             Csv(s.PeriodLabel),
-            Csv(s.SubmittedAt.ToUniversalTime().ToString("O")),
+            Csv(s.SubmittedAt?.ToUniversalTime().ToString("O") ?? ""),
             Csv(s.Status),
             Csv(s.ErrorCount.ToString()),
             Csv(s.WarningCount.ToString()),

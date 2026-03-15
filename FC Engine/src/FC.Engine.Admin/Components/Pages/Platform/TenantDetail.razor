@@ -161,6 +161,20 @@
                     <div class="fc-kv"><span>Address</span><strong>@(_data.Address ?? "-")</strong></div>
                 </div>
             </div>
+
+            <div class="fc-card">
+                <div class="fc-card__header"><h2 class="fc-card__title">Billing Summary</h2></div>
+                <div class="fc-card__body">
+                    <div class="fc-kv"><span>Plan</span><strong>@_data.Billing.PlanName (@_data.Billing.PlanCode)</strong></div>
+                    <div class="fc-kv"><span>Billing Frequency</span><strong>@(_data.Billing.BillingFrequency is { Length: > 0 } f ? f : "-")</strong></div>
+                    <div class="fc-kv"><span>Next Invoice</span><strong>@(_data.Billing.NextInvoiceDate == default ? "-" : _data.Billing.NextInvoiceDate.ToString("dd MMM yyyy"))</strong></div>
+                    <div class="fc-kv"><span>Outstanding Balance</span>
+                        <strong class="@(_data.Billing.OutstandingBalance > 0 ? "fc-text-danger" : "")">
+                            @_data.Billing.Currency @_data.Billing.OutstandingBalance.ToString("N2")
+                        </strong>
+                    </div>
+                </div>
+            </div>
         }
 
         @if (_tab == "licences")
@@ -584,7 +598,7 @@
                                         <td>#@row.PaymentId</td>
                                         <td>#@row.InvoiceId</td>
                                         <td>
-                                            <span class="fc-badge @(row.Status == "Completed" || row.Status == "Succeeded" ? "fc-badge--success" : row.Status == "Failed" ? "fc-badge--danger" : "fc-badge--warning")">
+                                            <span class="fc-badge @(row.Status == "Confirmed" ? "fc-badge--success" : row.Status == "Failed" || row.Status == "Cancelled" ? "fc-badge--danger" : "fc-badge--warning")">
                                                 @row.Status
                                             </span>
                                         </td>
@@ -715,7 +729,7 @@
                                         </span>
                                     </td>
                                     <td>
-                                        <span class="fc-badge @(row.SubmissionStatus == "Submitted" ? "fc-badge--success" : row.SubmissionStatus == "Overdue" ? "fc-badge--danger" : "fc-badge--neutral")">
+                                        <span class="fc-badge @GetSubmissionStatusBadge(row.SubmissionStatus)">
                                             @row.SubmissionStatus
                                         </span>
                                     </td>
@@ -1186,6 +1200,16 @@
         TenantStatus.PendingActivation => "fc-badge--warning",
         TenantStatus.Suspended => "fc-badge--danger",
         TenantStatus.Deactivated => "fc-badge--neutral",
+        _ => "fc-badge--neutral"
+    };
+
+    private static string GetSubmissionStatusBadge(string status) => status switch
+    {
+        "Accepted" or "AcceptedWithWarnings" or "SubmittedToRegulator"
+            or "RegulatorAccepted" or "RegulatorAcknowledged" => "fc-badge--success",
+        "Rejected" or "ApprovalRejected" => "fc-badge--danger",
+        "PendingApproval" or "Parsing" or "Validating" => "fc-badge--warning",
+        "RegulatorQueriesRaised" => "fc-badge--warning",
         _ => "fc-badge--neutral"
     };
 

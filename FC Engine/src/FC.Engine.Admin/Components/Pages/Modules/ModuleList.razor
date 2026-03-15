@@ -155,20 +155,30 @@
             .ThenBy(m => m.ModuleCode)
             .ToListAsync();
 
-        var versions = await db.ModuleVersions
+        // Load all versions then group client-side — EF Core cannot translate
+        // OrderByDescending().First() inside a GroupBy projection to SQL.
+        var allVersions = await db.ModuleVersions
             .AsNoTracking()
-            .GroupBy(v => v.ModuleId)
-            .Select(g => g.OrderByDescending(x => x.Id).First())
+            .OrderByDescending(v => v.Id)
             .ToListAsync();
+        var versions = allVersions
+            .GroupBy(v => v.ModuleId)
+            .Select(g => g.First())
+            .ToList();
 
-        var tenantCounts = await db.SubscriptionModules
+        // Materialize the join first; GroupBy with Distinct().Count() inside a server-side
+        // projection is not guaranteed to translate across all EF Core provider versions.
+        var rawTenantRows = await db.SubscriptionModules
             .AsNoTracking()
             .Where(sm => sm.IsActive)
             .Join(db.Subscriptions.AsNoTracking(), sm => sm.SubscriptionId, s => s.Id,
                 (sm, s) => new { sm.ModuleId, s.TenantId })
+            .ToListAsync();
+
+        var tenantCounts = rawTenantRows
             .GroupBy(x => x.ModuleId)
             .Select(g => new { ModuleId = g.Key, Tenants = g.Select(x => x.TenantId).Distinct().Count() })
-            .ToListAsync();
+            .ToList();
 
         var versionMap = versions.ToDictionary(v => v.ModuleId);
         var tenantMap = tenantCounts.ToDictionary(v => v.ModuleId, v => v.Tenants);

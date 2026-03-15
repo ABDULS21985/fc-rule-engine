@@ -7038,6 +7038,80 @@ select.fc-detail-float-input {
     outline-offset: 2px;
 }
 
+/* ── Draft delta badge (shown on stat cards when a draft version is active) ── */
+.fc-ia-stat-delta {
+    display: inline-block;
+    margin-top: var(--space-1);
+    font-size: var(--text-caption);
+    font-weight: var(--font-weight-semibold);
+    padding: 2px var(--space-2);
+    border-radius: var(--radius-sm);
+    letter-spacing: var(--tracking-wide);
+}
+.fc-ia-delta-plus {
+    background: color-mix(in srgb, var(--cbn-success) 12%, transparent);
+    color: var(--cbn-success);
+    border: 1px solid color-mix(in srgb, var(--cbn-success) 25%, transparent);
+}
+.fc-ia-delta-minus {
+    background: color-mix(in srgb, var(--cbn-danger) 10%, transparent);
+    color: var(--cbn-danger);
+    border: 1px solid color-mix(in srgb, var(--cbn-danger) 22%, transparent);
+}
+.fc-ia-delta-neutral {
+    background: color-mix(in srgb, var(--cbn-text-muted) 10%, transparent);
+    color: var(--cbn-text-muted);
+    border: 1px solid var(--cbn-border);
+}
+
+/* ── Draft version status chip inside scenario header ── */
+.fc-ia-draft-badge {
+    margin-left: var(--space-2);
+    vertical-align: middle;
+    font-size: var(--text-caption);
+}
+
+/* ── Added/removed field lists inside the Direct Impact accordion ── */
+.fc-ia-field-delta-lists {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-4);
+    margin-top: var(--space-4);
+}
+.fc-ia-field-delta-col h5 {
+    font-size: var(--text-body-sm);
+    font-weight: var(--font-weight-semibold);
+    margin: 0 0 var(--space-2) 0;
+}
+.fc-ia-field-delta-col h5.fc-ia-delta-added  { color: var(--cbn-success); }
+.fc-ia-field-delta-col h5.fc-ia-delta-removed { color: var(--cbn-danger); }
+.fc-ia-field-delta-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+}
+.fc-ia-field-delta-list li {
+    font-size: var(--text-body-sm);
+    font-family: var(--font-mono, monospace);
+    padding: var(--space-1) var(--space-2);
+    border-radius: var(--radius-sm);
+}
+.fc-ia-field-delta-list--added  li { background: color-mix(in srgb, var(--cbn-success) 8%, transparent); color: var(--cbn-success); }
+.fc-ia-field-delta-list--removed li { background: color-mix(in srgb, var(--cbn-danger) 8%, transparent); color: var(--cbn-danger); }
+
+/* Scenario no-draft notice */
+.fc-ia-no-draft-notice {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1-5);
+    font-size: var(--text-caption);
+    color: var(--cbn-text-muted);
+    margin-left: var(--space-2);
+}
+
 
 /* ==================================================================
    31. IMPACT ANALYSIS — Responsive
@@ -7132,36 +7206,33 @@ select.fc-detail-float-input {
    ================================================================== */
 
 @media print {
-    /* Hide non-essential UI for printing */
-    .fc-shell__sidebar,
-    .fc-topbar,
-    .fc-sidebar__overlay,
-    .fc-ia-header-actions,
-    .fc-ia-selector-card,
-    .fc-ia-scenario-card,
-    .fc-ia-print-overlay,
-    .fc-toast-container,
-    .fc-ia-print-action {
+    /* ── Case A: Print overlay is NOT in the DOM (printing the main analysis page) ── */
+    body:not(:has(.fc-ia-print-overlay)) .fc-shell__sidebar,
+    body:not(:has(.fc-ia-print-overlay)) .fc-topbar,
+    body:not(:has(.fc-ia-print-overlay)) .fc-sidebar__overlay,
+    body:not(:has(.fc-ia-print-overlay)) .fc-ia-selector-card,
+    body:not(:has(.fc-ia-print-overlay)) .fc-ia-scenario-card,
+    body:not(:has(.fc-ia-print-overlay)) .fc-toast-container {
         display: none !important;
     }
 
-    .fc-shell__main {
+    body:not(:has(.fc-ia-print-overlay)) .fc-shell__main {
         margin-left: 0 !important;
     }
 
-    .fc-shell__content {
+    body:not(:has(.fc-ia-print-overlay)) .fc-shell__content {
         padding: 0 !important;
     }
 
-    .fc-ia-page {
+    body:not(:has(.fc-ia-print-overlay)) .fc-ia-page {
         animation: none;
     }
 
-    .fc-ia-stat-card,
-    .fc-ia-metrics-card,
-    .fc-ia-graph-card,
-    .fc-ia-accordions,
-    .fc-ia-accordion {
+    body:not(:has(.fc-ia-print-overlay)) .fc-ia-stat-card,
+    body:not(:has(.fc-ia-print-overlay)) .fc-ia-metrics-card,
+    body:not(:has(.fc-ia-print-overlay)) .fc-ia-graph-card,
+    body:not(:has(.fc-ia-print-overlay)) .fc-ia-accordions,
+    body:not(:has(.fc-ia-print-overlay)) .fc-ia-accordion {
         animation: none;
         opacity: 1;
         box-shadow: none;
@@ -7169,37 +7240,58 @@ select.fc-detail-float-input {
         break-inside: avoid;
     }
 
-    .fc-ia-stat-card:hover,
-    .fc-ia-node:hover,
-    .fc-ia-accordion:hover {
+    body:not(:has(.fc-ia-print-overlay)) .fc-ia-stat-card:hover,
+    body:not(:has(.fc-ia-print-overlay)) .fc-ia-node:hover,
+    body:not(:has(.fc-ia-print-overlay)) .fc-ia-accordion:hover {
         transform: none;
         box-shadow: none;
     }
 
-    .fc-ia-risk-pulse {
-        display: none;
-    }
-
-    .fc-ia-accordion-body {
+    body:not(:has(.fc-ia-print-overlay)) .fc-ia-accordion-body {
         max-height: none !important;
         overflow: visible !important;
     }
 
-    .fc-ia-rings-row {
+    body:not(:has(.fc-ia-print-overlay)) .fc-ia-rings-row {
         gap: var(--space-4);
     }
 
-    .fc-ia-ring-track {
-        -webkit-print-color-adjust: exact;
-        print-color-adjust: exact;
+    /* ── Case B: Print overlay IS in the DOM (user clicked "Print" inside the report overlay) ── */
+    /* Hide the entire shell — the overlay will fill the page instead. */
+    body:has(.fc-ia-print-overlay) .fc-shell__sidebar,
+    body:has(.fc-ia-print-overlay) .fc-topbar,
+    body:has(.fc-ia-print-overlay) .fc-sidebar__overlay,
+    body:has(.fc-ia-print-overlay) .fc-shell__main,
+    body:has(.fc-ia-print-overlay) .fc-toast-container {
+        display: none !important;
     }
 
-    /* Print report formatting */
-    .fc-ia-print-report {
-        box-shadow: none;
-        border: 1px solid var(--cbn-border-strong);
+    /* Strip the dark overlay backdrop; make it a plain white page surface. */
+    body:has(.fc-ia-print-overlay) .fc-ia-print-overlay {
+        position: static !important;
+        background: white !important;
+        backdrop-filter: none !important;
+        -webkit-backdrop-filter: none !important;
+        padding: 0 !important;
+        overflow: visible !important;
+        display: block !important;
     }
 
+    /* Allow the report to expand to full print width. */
+    body:has(.fc-ia-print-overlay) .fc-ia-print-report {
+        max-width: none !important;
+        width: 100% !important;
+        border-radius: 0 !important;
+        box-shadow: none !important;
+        animation: none !important;
+        border: none !important;
+    }
+
+    /* ── Shared rules (both cases) ── */
+    .fc-ia-risk-pulse           { display: none !important; }
+    .fc-ia-print-action         { display: none !important; }
+
+    .fc-ia-ring-track,
     .fc-ia-print-header {
         -webkit-print-color-adjust: exact;
         print-color-adjust: exact;

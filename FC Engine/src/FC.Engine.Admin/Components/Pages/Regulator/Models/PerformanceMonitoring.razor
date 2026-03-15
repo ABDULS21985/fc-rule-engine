@@ -244,7 +244,9 @@
         if (!_chartsRendered && _data is not null)
         {
             _chartsRendered = true;
-            await RenderSignalChartAsync();
+            var rendered = await RenderSignalChartAsync();
+            if (!rendered)
+                _chartsRendered = false;
         }
     }
 
@@ -263,14 +265,14 @@
         finally { _loading = false; }
     }
 
-    private async Task RenderSignalChartAsync()
+    private async Task<bool> RenderSignalChartAsync()
     {
-        if (_data is null) return;
+        if (_data is null) return false;
         var allSignals = _data.PerformanceEvidence.Select(e => e.Signal)
             .Concat(_data.Backtesting.Select(b => b.Signal))
             .Concat(_data.MonitoringSummary.Select(m => m.Signal))
             .ToList();
-        var groups = new[] { "Pass", "Watch", "Alert", "Breach" };
+        var groups = new[] { "Pass", "Monitor", "Watch", "Alert", "Breach" };
         var counts = groups.Select(g => allSignals.Count(s => s == g)).ToArray();
         try
         {
@@ -279,14 +281,18 @@
                 labels = groups,
                 datasets = new object[]
                 {
-                    new { label = "Count", data = counts, backgroundColor = new[] { "#006B3F", "#C8A415", "#E07C24", "#D32F2F" } }
+                    new { label = "Count", data = counts, backgroundColor = new[] { "#006B3F", "#2563EB", "#C8A415", "#E07C24", "#D32F2F" } }
                 }
             });
+            return true;
         }
-        catch { }
+        catch
+        {
+            return false;
+        }
     }
 
-    private static string SignalBadge(string s) => s switch { "Pass" or "Stable" => "fc-badge--success", "Watch" or "Degraded" => "fc-badge--warning", "Alert" or "Breach" => "fc-badge--danger", _ => "fc-badge--neutral" };
+    private static string SignalBadge(string s) => s switch { "Pass" or "Stable" => "fc-badge--success", "Monitor" => "fc-badge--info", "Watch" or "Degraded" => "fc-badge--warning", "Alert" or "Breach" => "fc-badge--danger", _ => "fc-badge--neutral" };
     private static string CalibBadge(string c) => c switch { "Calibrated" or "In Range" => "fc-badge--success", "Review" or "Marginal" => "fc-badge--warning", "Miscalibrated" or "Out of Range" => "fc-badge--danger", _ => "fc-badge--neutral" };
 
     private string ResolvePerformanceBannerTone()

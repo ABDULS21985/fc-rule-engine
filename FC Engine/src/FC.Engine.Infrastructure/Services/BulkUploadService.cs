@@ -57,6 +57,7 @@ public class BulkUploadService : IBulkUploadService
         result.RowsImported = parsed.Rows.Count;
 
         var submission = Submission.Create(institutionId, returnPeriodId, returnCode, tenantId);
+        submission.MarkSubmitted();
         submission.SubmittedByUserId = requestedByUserId;
         submission.SetTemplateVersion(template.CurrentVersion.Id);
         await _submissionRepository.Add(submission, ct);
@@ -201,6 +202,7 @@ public class BulkUploadService : IBulkUploadService
         var record = BuildRecord(returnCode, template.CurrentVersion.Id, template.StructuralCategory, parsedRows);
 
         var submission = Submission.Create(institutionId, returnPeriodId, returnCode, tenantId);
+        submission.MarkSubmitted();
         submission.SubmittedByUserId = requestedByUserId;
         submission.SetTemplateVersion(template.CurrentVersion.Id);
         await _submissionRepository.Add(submission, ct);

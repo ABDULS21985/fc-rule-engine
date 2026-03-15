@@ -2576,7 +2576,7 @@ public sealed partial class RegulatorResponseGenerator : IRegulatorResponseGener
 
             var hasAccepted = acceptedLookup.TryGetValue((period.TenantId, period.Id), out var submittedAt);
             var status = hasAccepted
-                ? submittedAt.Date > period.DeadlineDate.Date ? "FILED_LATE" : "FILED"
+                ? submittedAt!.Value.Date > period.DeadlineDate.Date ? "FILED_LATE" : "FILED"
                 : DateTime.UtcNow.Date > period.DeadlineDate.Date ? "OVERDUE" : "PENDING";
 
             rows.Add(new FilingStatusRow
@@ -2652,8 +2652,8 @@ public sealed partial class RegulatorResponseGenerator : IRegulatorResponseGener
                 LicenceCategory = x.Institution?.LicenseType ?? string.Empty,
                 ModuleCode = x.ReturnPeriod?.Module?.ModuleCode ?? x.ReturnCode,
                 PeriodCode = x.ReturnPeriod is null ? string.Empty : RegulatorAnalyticsSupport.FormatPeriodCode(x.ReturnPeriod),
-                ReportingDate = x.ReturnPeriod?.ReportingDate ?? x.SubmittedAt,
-                SubmittedAt = x.SubmittedAt,
+                ReportingDate = x.ReturnPeriod?.ReportingDate ?? x.SubmittedAt ?? default,
+                SubmittedAt = x.SubmittedAt ?? default,
                 ParsedDataJson = x.ParsedDataJson
             })
             .OrderBy(x => x.ReportingDate)

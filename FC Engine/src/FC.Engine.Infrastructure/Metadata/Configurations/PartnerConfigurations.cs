@@ -85,6 +85,8 @@ public class PartnerSupportTicketConfiguration : IEntityTypeConfiguration<Partne
             .HasMaxLength(20)
             .HasConversion<string>()
             .HasDefaultValue(PartnerSupportTicketPriority.Normal);
+        builder.Property(x => x.Priority)
+            .HasSentinel((PartnerSupportTicketPriority)(-1));
         builder.Property(x => x.Status)
             .HasMaxLength(20)
             .HasConversion<string>()

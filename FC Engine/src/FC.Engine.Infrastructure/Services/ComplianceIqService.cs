@@ -2236,7 +2236,7 @@ public sealed partial class ComplianceIqService : IComplianceIqService
             module.RegulatorCode,
             RegulatorAnalyticsSupport.FormatPeriodCode(period),
             PeriodSortKey(period),
-            submission.SubmittedAt,
+            submission.SubmittedAt ?? default,
             AnomalySupport.ExtractSubmissionMetrics(submission.ParsedDataJson));
     }
 

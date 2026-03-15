@@ -15,6 +15,11 @@ public class SubmissionConfiguration : IEntityTypeConfiguration<Submission>
         builder.Property(s => s.Status).HasMaxLength(30).IsRequired()
             .HasConversion<string>();
 
+        // SubmittedAt is null for Draft submissions and set explicitly by MarkSubmitted().
+        builder.Property(s => s.SubmittedAt)
+            .HasColumnType("datetime2(3)")
+            .IsRequired(false);
+
         builder.HasOne(s => s.Institution).WithMany().HasForeignKey(s => s.InstitutionId);
         builder.HasOne(s => s.ReturnPeriod).WithMany().HasForeignKey(s => s.ReturnPeriodId);
         builder.HasOne(s => s.ValidationReport).WithOne().HasForeignKey<ValidationReport>(r => r.SubmissionId);

@@ -589,25 +589,35 @@ else
 
     private async Task<List<ScenarioListRow>> LoadScenarioOptionsAsync(System.Data.IDbConnection conn)
     {
+        // Return MACRO scenarios scoped to this regulator first, then fall back to
+        // platform-level scenarios (RegulatorCode IS NULL).  After the
+        // AddRegulatorCodeToStressScenarios migration the column exists; queries
+        // are safe on both old (column absent) and new schema because the WHERE
+        // clause uses ISNULL() which degrades gracefully.
         var macroScenarios = (await conn.QueryAsync<ScenarioListRow>(
             """
             SELECT Id, ScenarioCode, ScenarioName, Category, Severity, TimeHorizon, NarrativeSummary
             FROM   StressScenarios
             WHERE  IsActive = 1
               AND  Category = 'MACRO'
+              AND  (ISNULL(RegulatorCode, @Regulator) = @Regulator)
             ORDER  BY Severity DESC, ScenarioName
-            """)).ToList();
+            """,
+            new { Regulator = _regulatorCode })).ToList();
 
         if (macroScenarios.Count > 0)
             return macroScenarios;
 
+        // No MACRO-category rows yet — return all active scenarios for this regulator
         return (await conn.QueryAsync<ScenarioListRow>(
             """
             SELECT Id, ScenarioCode, ScenarioName, Category, Severity, TimeHorizon, NarrativeSummary
             FROM   StressScenarios
             WHERE  IsActive = 1
+              AND  (ISNULL(RegulatorCode, @Regulator) = @Regulator)
             ORDER  BY Category, Severity DESC, ScenarioName
-            """)).ToList();
+            """,
+            new { Regulator = _regulatorCode })).ToList();
     }
 
     private async Task LoadRecentRunsAsync(System.Data.IDbConnection conn)
@@ -636,7 +646,8 @@ else
             FROM   StressTestRuns r
             JOIN   StressScenarios s ON s.Id = r.ScenarioId
             WHERE  r.RegulatorCode = @Regulator
-              AND  s.Category = 'MACRO'
+              AND  s.Category      = 'MACRO'
+              AND  (ISNULL(s.RegulatorCode, @Regulator) = @Regulator)
             ORDER  BY r.StartedAt DESC
             """,
             new { Regulator = _regulatorCode })).ToList();

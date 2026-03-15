@@ -96,6 +96,16 @@ END;
             object? newValues,
             string performedBy,
             CancellationToken ct = default) => Task.CompletedTask;
+
+        public Task Log(
+            string entityType,
+            string entityRef,
+            string action,
+            object? oldValues,
+            object? newValues,
+            string performedBy,
+            Guid? explicitTenantId = null,
+            CancellationToken ct = default) => Task.CompletedTask;
     }
 
     private sealed class NoopAnomalyModelTrainingService : IAnomalyModelTrainingService

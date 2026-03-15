@@ -152,9 +152,9 @@ public sealed class ModuleWorkspaceService
                 SubmissionId = submission.Id,
                 ReturnCode = submission.ReturnCode,
                 PeriodLabel = submission.ReturnPeriod is null
-                    ? submission.SubmittedAt.ToString("MMM yyyy")
+                    ? (submission.SubmittedAt ?? submission.CreatedAt).ToString("MMM yyyy")
                     : new DateTime(submission.ReturnPeriod.Year, submission.ReturnPeriod.Month, 1).ToString("MMM yyyy"),
-                SubmittedAt = submission.SubmittedAt,
+                SubmittedAt = submission.SubmittedAt ?? submission.CreatedAt,
                 Status = submission.Status.ToString(),
                 ErrorCount = submission.ValidationReport?.ErrorCount ?? 0,
                 WarningCount = submission.ValidationReport?.WarningCount ?? 0,
@@ -313,7 +313,7 @@ public sealed class ModuleWorkspaceService
     private static ModuleWorkspaceAttentionItem? BuildAttentionItem(string moduleCode, Submission submission)
     {
         var periodLabel = submission.ReturnPeriod is null
-            ? submission.SubmittedAt.ToString("MMM yyyy")
+            ? (submission.SubmittedAt ?? submission.CreatedAt).ToString("MMM yyyy")
             : new DateTime(submission.ReturnPeriod.Year, submission.ReturnPeriod.Month, 1).ToString("MMM yyyy");
 
         return submission.Status switch
@@ -327,7 +327,7 @@ public sealed class ModuleWorkspaceService
                 Tone = "danger",
                 ActionLabel = "Fix Return",
                 ActionHref = PortalSubmissionLinkBuilder.BuildSubmitHref(submission.ReturnCode, moduleCode, submission.ReturnPeriodId),
-                OccurredAt = submission.SubmittedAt,
+                OccurredAt = submission.SubmittedAt ?? submission.CreatedAt,
                 Priority = 400
             },
             SubmissionStatus.PendingApproval => new ModuleWorkspaceAttentionItem
@@ -339,7 +339,7 @@ public sealed class ModuleWorkspaceService
                 Tone = "info",
                 ActionLabel = "Open Submission",
                 ActionHref = $"/submissions/{submission.Id}",
-                OccurredAt = submission.SubmittedAt,
+                OccurredAt = submission.SubmittedAt ?? submission.CreatedAt,
                 Priority = 300
             },
             SubmissionStatus.Draft => new ModuleWorkspaceAttentionItem
@@ -351,7 +351,7 @@ public sealed class ModuleWorkspaceService
                 Tone = "warning",
                 ActionLabel = "Resume Filing",
                 ActionHref = PortalSubmissionLinkBuilder.BuildSubmitHref(submission.ReturnCode, moduleCode, submission.ReturnPeriodId),
-                OccurredAt = submission.SubmittedAt,
+                OccurredAt = submission.SubmittedAt ?? submission.CreatedAt,
                 Priority = 200
             },
             SubmissionStatus.AcceptedWithWarnings when (submission.ValidationReport?.WarningCount ?? 0) > 0 || (submission.ValidationReport?.ErrorCount ?? 0) > 0 => new ModuleWorkspaceAttentionItem
@@ -363,7 +363,7 @@ public sealed class ModuleWorkspaceService
                 Tone = "warning",
                 ActionLabel = "Review Validation",
                 ActionHref = $"/validation/hub/{submission.Id}",
-                OccurredAt = submission.SubmittedAt,
+                OccurredAt = submission.SubmittedAt ?? submission.CreatedAt,
                 Priority = 100
             },
             _ => null

@@ -119,7 +119,7 @@ public class FilingCalendarService : IFilingCalendarService
         if (submission is null) return;
 
         var effectiveDeadline = period.EffectiveDeadline;
-        var submittedDate = submission.SubmittedAt.Date;
+        var submittedDate = (submission.SubmittedAt ?? DateTime.UtcNow).Date;
         var daysToDeadline = (effectiveDeadline.Date - submittedDate).Days;
         var periodEndDate = DeadlineComputationService.GetPeriodEndDate(
             period.Frequency, period.Year, period.Month, period.Quarter);

@@ -81,7 +81,7 @@ public sealed class RegulatorIqServiceIntegrationTests : IClassFixture<Regulator
             conversation.Scope.Should().Be("ENTITY");
         }
 
-        await service.EndExaminationSessionAsync(conversationId);
+        await service.EndExaminationSessionAsync(conversationId, "examiner-001");
 
         await using (var db = _fixture.CreateDbContext())
         {
@@ -131,7 +131,7 @@ public sealed class RegulatorIqServiceIntegrationTests : IClassFixture<Regulator
             UserRole = "Examiner"
         });
 
-        await service.SubmitFeedbackAsync(result.TurnId!.Value, 5, "Grounded and useful.");
+        await service.SubmitFeedbackAsync(result.TurnId!.Value, 5, "Grounded and useful.", "examiner-001");
 
         await using var db = _fixture.CreateDbContext();
         var feedback = await db.ComplianceIqFeedback
@@ -165,7 +165,7 @@ public sealed class RegulatorIqServiceIntegrationTests : IClassFixture<Regulator
             UserRole = "Examiner"
         });
 
-        var history = await service.GetConversationHistoryAsync(firstTurn.ConversationId);
+        var history = await service.GetConversationHistoryAsync(firstTurn.ConversationId, "examiner-001");
 
         history.Should().HaveCount(2);
         history.Select(x => x.TurnNumber).Should().ContainInOrder(1, 2);

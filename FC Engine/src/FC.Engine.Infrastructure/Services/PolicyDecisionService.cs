@@ -209,4 +209,13 @@ public sealed class PolicyDecisionService : IPolicyDecisionService
 
         return Encoding.UTF8.GetBytes(sb.ToString());
     }
+
+    public async Task<long?> GetDecisionIdForScenarioAsync(
+        long scenarioId, int regulatorId, CancellationToken ct = default)
+    {
+        return await _db.PolicyDecisions
+            .Where(d => d.ScenarioId == scenarioId && d.RegulatorId == regulatorId)
+            .Select(d => (long?)d.Id)
+            .FirstOrDefaultAsync(ct);
+    }
 }

@@ -222,6 +222,7 @@
             if (_importResult.Success)
             {
                 _moduleCode = _importResult.ModuleCode;
+                _canImport = false; // Prevent duplicate import — ReturnCodes now exist in DB
                 Toast.Success($"Module {_importResult.ModuleCode} imported successfully.", "Import Complete");
             }
             else
@@ -279,9 +280,12 @@
         try
         {
             using var doc = JsonDocument.Parse(json);
-            if (doc.RootElement.TryGetProperty("moduleCode", out var moduleCode))
+            // TryGetProperty is case-sensitive; the schema allows both camelCase and PascalCase
+            // because the import service uses PropertyNameCaseInsensitive = true. Try both.
+            if (doc.RootElement.TryGetProperty("moduleCode", out var mc) ||
+                doc.RootElement.TryGetProperty("ModuleCode", out mc))
             {
-                return moduleCode.GetString();
+                return mc.GetString();
             }
         }
         catch { }

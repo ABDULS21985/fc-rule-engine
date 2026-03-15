@@ -1018,7 +1018,7 @@ public sealed class RegulatorDataService : IRegulatorDataService
             module.RegulatorCode,
             RegulatorAnalyticsSupport.FormatPeriodCode(period),
             PeriodSortKey(period),
-            submission.SubmittedAt,
+            submission.SubmittedAt ?? default,
             AnomalySupport.ExtractSubmissionMetrics(submission.ParsedDataJson));
     }
 

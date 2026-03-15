@@ -4,6 +4,7 @@
 @inject IScenarioEngine Engine
 @inject IScenarioTemplateService TemplateService
 @inject NavigationManager Nav
+@inject FC.Engine.Admin.Services.RegulatorSessionService RegulatorSession
 
 <PageHeader Title="@(_isEdit ? "Edit Scenario" : "Build Scenario")" BackUrl="/scenarios">
     <PrimaryAction>
@@ -331,6 +332,7 @@
     private bool _isEdit;
     private bool _running;
     private int _step = 1;
+    private Guid _tenantId = Guid.Empty;
     private ScenarioDefinition _definition = new();
     private string _selectedTemplateId = "";
     private List<ScenarioTemplate> _templates = [];
@@ -349,6 +351,13 @@
 
     protected override async Task OnInitializedAsync()
     {
+        try
+        {
+            var session = await RegulatorSession.GetRequiredAsync();
+            _tenantId = session.TenantId;
+        }
+        catch { /* unauthenticated context — engine resolves session internally */ }
+
         _templates = TemplateService.GetAllTemplates();
 
         if (Id.HasValue)
@@ -463,7 +472,7 @@
         try
         {
             var saved = await Engine.SaveScenario(_definition);
-            await Engine.RunScenario(Guid.Empty, saved.Id);
+            await Engine.RunScenario(_tenantId, saved.Id);
             Nav.NavigateTo($"/scenarios/{saved.Id}/results");
         }
         finally

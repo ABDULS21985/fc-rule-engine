@@ -167,7 +167,7 @@ else
                                                     <span class="@BuildSubmissionChipClass(sub.Status)">@FormatStatus(sub.Status)</span>
                                                 </div>
                                             </div>
-                                            <div class="rg-premium-list__meta">Submitted @sub.SubmittedAt.ToString("dd MMM yyyy HH:mm") UTC</div>
+                                            <div class="rg-premium-list__meta">Submitted @(sub.SubmittedAt?.ToString("dd MMM yyyy HH:mm") ?? "—") UTC</div>
                                         </a>
                                     }
                                 </div>
@@ -390,7 +390,7 @@ else
 
             var today = DateTime.UtcNow.Date;
             _submissionSparkline = Enumerable.Range(0, 7)
-                .Select(i => _recentSubmissions.Count(s => s.SubmittedAt.Date == today.AddDays(i - 6)))
+                .Select(i => _recentSubmissions.Count(s => s.SubmittedAt?.Date == today.AddDays(i - 6)))
                 .ToList();
         }
         catch
@@ -487,14 +487,15 @@ else
         _ => frequency.ToString()
     };
 
-    private static string FormatTimeAgo(DateTime utcTime)
+    private static string FormatTimeAgo(DateTime? utcTime)
     {
-        var span = DateTime.UtcNow - utcTime;
+        if (utcTime is null) return "—";
+        var span = DateTime.UtcNow - utcTime.Value;
         if (span.TotalMinutes < 1) return "just now";
         if (span.TotalMinutes < 60) return $"{(int)span.TotalMinutes}m ago";
         if (span.TotalHours < 24) return $"{(int)span.TotalHours}h ago";
         if (span.TotalDays < 7) return $"{(int)span.TotalDays}d ago";
-        return utcTime.ToString("dd MMM yyyy");
+        return utcTime.Value.ToString("dd MMM yyyy");
     }
 
     private sealed record ActionCard(string Code, string Title, string Description, string Href);

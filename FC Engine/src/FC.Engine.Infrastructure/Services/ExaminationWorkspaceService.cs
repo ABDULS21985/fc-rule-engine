@@ -1255,7 +1255,7 @@ public class ExaminationWorkspaceService : IExaminationWorkspaceService
             ModuleCode = s.ReturnPeriod?.Module?.ModuleCode ?? "N/A",
             ModuleName = s.ReturnPeriod?.Module?.ModuleName ?? "Unknown",
             PeriodLabel = s.ReturnPeriod is null ? "N/A" : RegulatorAnalyticsSupport.FormatPeriodLabel(s.ReturnPeriod),
-            SubmittedAt = s.SubmittedAt,
+            SubmittedAt = s.SubmittedAt ?? default,
             SubmissionStatus = s.Status.ToString(),
             ReceiptStatus = RegulatorReceiptStatus.Received,
             OpenQueryCount = 0

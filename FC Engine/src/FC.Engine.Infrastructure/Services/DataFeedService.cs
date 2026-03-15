@@ -164,6 +164,7 @@ public class DataFeedService : IDataFeedService
         record.AddRow(row);
 
         var submission = Submission.Create(institution.Id, period.Id, returnCode, tenantId);
+        submission.MarkSubmitted();
         submission.SetTemplateVersion(template.CurrentVersion.Id);
         await _submissionRepository.Add(submission, ct);
 

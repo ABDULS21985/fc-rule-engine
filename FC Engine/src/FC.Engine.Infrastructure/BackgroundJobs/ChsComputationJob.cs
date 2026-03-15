@@ -5,6 +5,7 @@ using FC.Engine.Domain.Events;
 using FC.Engine.Domain.Models;
 using FC.Engine.Infrastructure.Metadata;
 using FC.Engine.Infrastructure.Services;
+using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -94,7 +95,20 @@ public class ChsComputationJob : BackgroundService
                 };
 
                 db.ChsScoreSnapshots.Add(snapshot);
-                await db.SaveChangesAsync(ct);
+                try
+                {
+                    await db.SaveChangesAsync(ct);
+                }
+                catch (DbUpdateException ex) when (IsUniquePeriodViolation(ex))
+                {
+                    db.Entry(snapshot).State = EntityState.Detached;
+                    _logger.LogDebug(
+                        "CHS snapshot for tenant {TenantId} and period {Period} was already created by another worker.",
+                        tenantId,
+                        currentPeriodLabel);
+                    continue;
+                }
+
                 computed++;
 
                 // Detect rating band change
@@ -137,4 +151,7 @@ public class ChsComputationJob : BackgroundService
     private static int GetIsoWeek(DateTime date) =>
         System.Globalization.CultureInfo.InvariantCulture.Calendar
             .GetWeekOfYear(date, System.Globalization.CalendarWeekRule.FirstFourDayWeek, DayOfWeek.Monday);
+
+    private static bool IsUniquePeriodViolation(DbUpdateException ex) =>
+        ex.InnerException is SqlException sqlEx && sqlEx.Number is 2601 or 2627;
 }

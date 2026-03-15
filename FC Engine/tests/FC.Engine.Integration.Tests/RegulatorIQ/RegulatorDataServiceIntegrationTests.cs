@@ -717,8 +717,8 @@ public sealed class RegulatorIqFixture : IAsyncLifetime
 
         await db.SaveChangesAsync();
 
-        await EnsureFilingSlaAsync(db, fixture.AccessBankTenantId, module.Id, accessQ12026.Id, accessQ1Submission.Id, accessQ12026.DeadlineDate, accessQ1Submission.SubmittedAt, false);
-        await EnsureFilingSlaAsync(db, fixture.ZenithBankTenantId, module.Id, zenithQ12026.Id, zenithQ1Submission.Id, zenithQ12026.DeadlineDate, zenithQ1Submission.SubmittedAt, true);
+        await EnsureFilingSlaAsync(db, fixture.AccessBankTenantId, module.Id, accessQ12026.Id, accessQ1Submission.Id, accessQ12026.DeadlineDate, accessQ1Submission.SubmittedAt ?? default, false);
+        await EnsureFilingSlaAsync(db, fixture.ZenithBankTenantId, module.Id, zenithQ12026.Id, zenithQ1Submission.Id, zenithQ12026.DeadlineDate, zenithQ1Submission.SubmittedAt ?? default, true);
 
         var anomalyModel = await db.AnomalyModelVersions
             .FirstOrDefaultAsync(x => x.ModuleCode == module.ModuleCode && x.RegulatorCode == "CBN" && x.VersionNumber == 1);
@@ -1249,6 +1249,9 @@ END;
     {
         public Task Log(string entityType, int entityId, string action, object? oldValues, object? newValues, string performedBy, CancellationToken ct = default)
             => Task.CompletedTask;
+
+        public Task Log(string entityType, string entityRef, string action, object? oldValues, object? newValues, string performedBy, Guid? explicitTenantId = null, CancellationToken ct = default)
+            => Task.CompletedTask;
     }
 
     private sealed class NoopLlmService : ILlmService
@@ -1355,7 +1358,8 @@ END;
                 PolicyStatus.Draft,
                 1,
                 Array.Empty<PolicyParameterChange>(),
-                Array.Empty<PolicyScenarioRunSummary>()));
+                Array.Empty<PolicyScenarioRunSummary>(),
+                null));
 
         public Task<PagedResult<PolicyScenarioSummary>> ListScenariosAsync(int regulatorId, PolicyDomain? domain, PolicyStatus? status, int page, int pageSize, CancellationToken ct = default)
         {
@@ -1381,5 +1385,8 @@ END;
 
         public Task TransitionStatusAsync(long scenarioId, int regulatorId, PolicyStatus newStatus, int userId, CancellationToken ct = default)
             => Task.CompletedTask;
+
+        public Task<ScenarioStatusCounts> GetStatusCountsAsync(int regulatorId, CancellationToken ct = default)
+            => Task.FromResult(new ScenarioStatusCounts(0, 0, 0, 0, 0, 0, 0));
     }
 }

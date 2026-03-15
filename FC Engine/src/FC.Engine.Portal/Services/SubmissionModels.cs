@@ -12,7 +12,7 @@ public class SubmissionListItem
     public string TemplateName { get; set; } = "";
     public string? ModuleCode { get; set; }
     public string PeriodLabel { get; set; } = "—";
-    public DateTime SubmittedAt { get; set; }
+    public DateTime? SubmittedAt { get; set; }
     public string Status { get; set; } = "";
     public int ErrorCount { get; set; }
     public int WarningCount { get; set; }
@@ -32,7 +32,7 @@ public class SubmissionDetailModel
     public int InstitutionId { get; set; }
     public int ReturnPeriodId { get; set; }
     public string Status { get; set; } = "";
-    public DateTime SubmittedAt { get; set; }
+    public DateTime? SubmittedAt { get; set; }
     public DateTime CreatedAt { get; set; }
     public int? ProcessingDurationMs { get; set; }
     public string? RawXml { get; set; }

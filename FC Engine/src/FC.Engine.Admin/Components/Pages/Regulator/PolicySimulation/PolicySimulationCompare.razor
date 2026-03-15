@@ -95,10 +95,17 @@
                     </table>
                 </div>
 
-                @if (_comparison.EntityRows.Count > 100)
+                @if (_comparison.EntityRows.Count > 100 || _comparison.IsTruncated)
                 {
                     <p class="rg-ps-text-sm rg-ps-text-muted rg-ps-mt">
-                        Showing 100 of @_comparison.EntityRows.Count entities.
+                        @if (_comparison.IsTruncated)
+                        {
+                            <span>Results are capped at 500 entities per comparison. Export individual run results for full data.</span>
+                        }
+                        else
+                        {
+                            <span>Showing 100 of @_comparison.EntityRows.Count entities.</span>
+                        }
                     </p>
                 }
             }

@@ -182,7 +182,7 @@ public class JurisdictionConsolidationService : IJurisdictionConsolidationServic
                 InstitutionId = s.InstitutionId,
                 ReturnCode = s.ReturnCode,
                 Status = s.Status,
-                SubmittedAt = s.SubmittedAt
+                SubmittedAt = s.SubmittedAt ?? default
             }).ToList());
 
         // ── Aggregation Fields ────────────────────────────────────────────────

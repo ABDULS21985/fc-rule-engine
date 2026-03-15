@@ -199,12 +199,18 @@ else
 
         if (targetStatus == sub.Status) return;
 
-        // Optimistic UI update
+        // Domain guard: reject semantically invalid transitions before any UI mutation
         var previousStatus = sub.Status;
+        if (!sub.TryTransitionTo(targetStatus))
+        {
+            _error = $"Cannot move submission #{id} from {previousStatus} to {targetStatus}.";
+            await InvokeAsync(StateHasChanged);
+            return;
+        }
+        // TryTransitionTo already set sub.Status = targetStatus; optimistic UI update
         var colLabel = _columns.FirstOrDefault(c => c.Status == newColumnStatus)?.Label ?? newColumnStatus;
         _movedCardId   = id;
         _movedToColumn = colLabel;
-        sub.Status = targetStatus;
         await InvokeAsync(StateHasChanged);
 
         // Persist to database; roll back optimistic update on failure

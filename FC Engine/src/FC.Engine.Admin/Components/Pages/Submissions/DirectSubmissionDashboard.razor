@@ -257,7 +257,7 @@
 
         var submitted = await DirectSubmissionRepo.GetSubmittedAwaitingStatus(500);
         var retries = await DirectSubmissionRepo.GetPendingRetries(500);
-        allSubmissions = submitted.Concat(retries).OrderByDescending(d => d.CreatedAt).ToList();
+        allSubmissions = submitted.Concat(retries).DistinctBy(d => d.Id).OrderByDescending(d => d.CreatedAt).ToList();
 
         totalSubmissions = allSubmissions.Count;
         acceptedCount = allSubmissions.Count(d => d.Status == DirectSubmissionStatus.Accepted);

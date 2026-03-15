@@ -111,4 +111,32 @@ public class TemplateRepository : ITemplateRepository
             .OrderBy(t => t.ReturnCode)
             .ToListAsync(ct);
     }
+
+    public async Task<TemplateVersion?> GetLatestDraftVersion(string returnCode, CancellationToken ct = default)
+    {
+        // Load the template with its Draft/Review versions and their fields.
+        var template = await _db.ReturnTemplates
+            .Include(t => t.Versions.Where(v =>
+                v.Status == TemplateStatus.Draft || v.Status == TemplateStatus.Review))
+                .ThenInclude(v => v.Fields)
+            .FirstOrDefaultAsync(t => t.ReturnCode == returnCode, ct);
+
+        if (template is null) return null;
+
+        var draftVersion = template.Versions
+            .Where(v => v.Status is TemplateStatus.Draft or TemplateStatus.Review)
+            .OrderByDescending(v => v.VersionNumber)
+            .FirstOrDefault();
+
+        if (draftVersion is null) return null;
+
+        // Load formulas separately to keep the filtered-include query simple.
+        var formulas = await _db.IntraSheetFormulas
+            .Where(f => f.TemplateVersionId == draftVersion.Id)
+            .OrderBy(f => f.SortOrder)
+            .ToListAsync(ct);
+
+        draftVersion.SetFormulas(formulas);
+        return draftVersion;
+    }
 }

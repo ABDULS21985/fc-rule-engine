@@ -10,6 +10,7 @@
 @inject NavigationManager Nav
 @inject IJSRuntime JS
 @inject ToastService Toast
+@inject ILogger<PolicySimulationDetail> Logger
 
 <PageTitle>@(_scenario?.Title ?? "Scenario") — Policy Simulation</PageTitle>
 
@@ -1000,15 +1001,54 @@
                 await LoadEntityResults();
             }
 
-            // Try load CBA
-            try { _cba = await CbaService.GetAnalysisAsync(ScenarioId, _regulatorId); } catch { /* not generated yet */ }
+            // Try load CBA — may legitimately not exist yet; log unexpected failures
+            try
+            {
+                _cba = await CbaService.GetAnalysisAsync(ScenarioId, _regulatorId);
+            }
+            catch (InvalidOperationException)
+            {
+                // Normal: CBA has not been generated for this scenario yet
+            }
+            catch (Exception ex)
+            {
+                Logger.LogWarning(ex,
+                    "Unexpected error loading CBA for Scenario={ScenarioId}, Regulator={RegulatorId}",
+                    ScenarioId, _regulatorId);
+            }
 
             // Load consultation — look up by scenario ID across all statuses
             _consultation = await ConsultationService.GetLatestConsultationForScenarioAsync(ScenarioId, _regulatorId);
 
-            // Populate decision ID from the loaded scenario so tracking works on page reload
+            // Populate decision ID from the loaded scenario so tracking works on page reload.
+            // If the scenario is in a terminal status but has no linked Decision record
+            // (data inconsistency), perform a direct fallback query to recover the ID.
             if (_scenario.DecisionId.HasValue)
+            {
                 _decisionId = _scenario.DecisionId.Value;
+            }
+            else if (_scenario.Status is PolicyStatus.Enacted
+                                      or PolicyStatus.Withdrawn
+                                      or PolicyStatus.DecisionPending)
+            {
+                var fallbackId = await DecisionService.GetDecisionIdForScenarioAsync(ScenarioId, _regulatorId);
+                if (fallbackId.HasValue)
+                {
+                    _decisionId = fallbackId.Value;
+                    Logger.LogWarning(
+                        "Scenario {ScenarioId} has terminal status {Status} but its Decision navigation " +
+                        "property was null. Recovered DecisionId={DecisionId} via fallback query. " +
+                        "This indicates a data inconsistency in policy_scenarios.Decision relationship.",
+                        ScenarioId, _scenario.Status, _decisionId);
+                }
+                else
+                {
+                    Logger.LogError(
+                        "Scenario {ScenarioId} has terminal status {Status} but no PolicyDecision " +
+                        "record exists. The decision record may have been deleted or was never written.",
+                        ScenarioId, _scenario.Status);
+                }
+            }
 
             // Load tracking for enacted scenarios with a recorded decision
             if (_scenario.Status == PolicyStatus.Enacted && _decisionId > 0)

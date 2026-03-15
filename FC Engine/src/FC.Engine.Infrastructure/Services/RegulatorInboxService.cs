@@ -171,7 +171,7 @@ public class RegulatorInboxService : IRegulatorInboxService
                 ModuleCode = row.ModuleCode,
                 ModuleName = row.ModuleName,
                 PeriodLabel = RegulatorAnalyticsSupport.FormatPeriodLabel(period),
-                SubmittedAt = row.SubmittedAt,
+                SubmittedAt = row.SubmittedAt ?? default,
                 SubmissionStatus = row.SubmissionStatus,
                 ReceiptStatus = receipts.TryGetValue(row.Id, out var receipt)
                     ? receipt.Status
@@ -209,7 +209,7 @@ public class RegulatorInboxService : IRegulatorInboxService
             ModuleCode = submission.ReturnPeriod.Module?.ModuleCode ?? "N/A",
             ModuleName = submission.ReturnPeriod.Module?.ModuleName ?? "Unknown",
             PeriodLabel = RegulatorAnalyticsSupport.FormatPeriodLabel(submission.ReturnPeriod),
-            SubmittedAt = submission.SubmittedAt,
+            SubmittedAt = submission.SubmittedAt ?? default,
             SubmissionStatus = submission.Status.ToString(),
             ReceiptStatus = RegulatorReceiptStatus.Received
         };

@@ -3,6 +3,7 @@
 @inject IScenarioEngine Engine
 @inject IScenarioTemplateService Templates
 @inject NavigationManager Nav
+@inject FC.Engine.Admin.Services.RegulatorSessionService RegulatorSession
 
 <PageHeader Title="Regulatory Sandbox" Subtitle="Scenario Simulation Engine">
     <PrimaryAction>
@@ -170,9 +171,21 @@ else
     private List<ScenarioDefinition> _scenarios = [];
     private List<ScenarioTemplate> _templates = [];
     private int _totalBreaches;
+    private Guid _tenantId = Guid.Empty;
 
     protected override async Task OnInitializedAsync()
     {
+        try
+        {
+            var session = await RegulatorSession.GetRequiredAsync();
+            _tenantId = session.TenantId;
+        }
+        catch
+        {
+            // Unauthenticated context or missing session — engine will use Guid.Empty
+            // which PersistedScenarioEngine handles via RegulatorSessionService internally.
+        }
+
         _templates = Templates.GetAllTemplates();
         _scenarios = await Engine.GetAllScenarios();
         _totalBreaches = _scenarios.Count(s => s.Status == ScenarioStatus.Completed) * 2; // Simplified count
@@ -188,13 +201,13 @@ else
     {
         var definition = Templates.CreateFromTemplate(templateId);
         var saved = await Engine.SaveScenario(definition);
-        await Engine.RunScenario(Guid.Empty, saved.Id);
+        await Engine.RunScenario(_tenantId, saved.Id);
         Nav.NavigateTo($"/scenarios/{saved.Id}/results");
     }
 
     private async Task RunScenario(int id)
     {
-        await Engine.RunScenario(Guid.Empty, id);
+        await Engine.RunScenario(_tenantId, id);
         Nav.NavigateTo($"/scenarios/{id}/results");
     }
 

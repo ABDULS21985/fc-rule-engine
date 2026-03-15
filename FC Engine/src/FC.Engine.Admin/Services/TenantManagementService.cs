@@ -169,7 +169,20 @@ public class TenantManagementService
         await using var db = await _dbFactory.CreateDbContextAsync(ct);
         var tenant = await db.Tenants.FindAsync(new object[] { tenantId }, ct)
             ?? throw new InvalidOperationException("Tenant not found");
-        tenant.Activate();
+
+        if (tenant.Status == TenantStatus.PendingActivation)
+        {
+            tenant.Activate();
+        }
+        else if (tenant.Status == TenantStatus.Suspended)
+        {
+            tenant.Reactivate();
+        }
+        else if (tenant.Status != TenantStatus.Active)
+        {
+            throw new InvalidOperationException($"Tenant cannot be activated from status {tenant.Status}.");
+        }
+
         await db.SaveChangesAsync(ct);
         await LogPlatformAction("TenantActivated", tenantId, ct);
     }

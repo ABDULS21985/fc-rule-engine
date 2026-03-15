@@ -40,7 +40,7 @@ internal static class ExportUtility
             return new DateTime(period.Year, period.Month, DateTime.DaysInMonth(period.Year, period.Month), 0, 0, 0, DateTimeKind.Utc);
         }
 
-        return submission.SubmittedAt.Date;
+        return (submission.SubmittedAt ?? DateTime.MinValue).Date;
     }
 
     public static string? ResolveStoragePath(string? pathOrUrl)

@@ -1,14 +1,12 @@
 @page "/impact-analysis"
-@using Microsoft.AspNetCore.Authorization
 @attribute [Authorize(Policy = "ApproverOrAdmin")]
-@using FC.Engine.Domain.Abstractions
-@using FC.Engine.Domain.Enums
 @using FC.Engine.Domain.Validation
-@using FC.Engine.Application.Services
+@using FC.Engine.Domain.Metadata
 @inject ITemplateMetadataCache Cache
 @inject ITemplateRepository TemplateRepo
 @inject IFormulaRepository FormulaRepo
 @inject ToastService Toast
+@inject IJSRuntime JS
 
 <PageHeader Title="Impact Analysis"
             Subtitle="Assess downstream dependencies, formula exposure, and operational risk before publishing template changes.">
@@ -106,6 +104,10 @@
                     <div class="fc-ia-stat-data">
                         <span class="fc-ia-stat-number">@_analysis.FieldCount</span>
                         <span class="fc-ia-stat-label">Fields Defined</span>
+                        @if (_analysis.HasDraftVersion && _analysis.FieldDelta != 0)
+                        {
+                            <span class="fc-ia-stat-delta @(_analysis.FieldDelta > 0 ? "fc-ia-delta-plus" : "fc-ia-delta-minus")">@(_analysis.FieldDelta > 0 ? "+" : "")@_analysis.FieldDelta vs published</span>
+                        }
                     </div>
                 </div>
             </div>
@@ -122,6 +124,10 @@
                     <div class="fc-ia-stat-data">
                         <span class="fc-ia-stat-number">@_analysis.FormulaCount</span>
                         <span class="fc-ia-stat-label">Intra-Sheet Formulas</span>
+                        @if (_analysis.HasDraftVersion && _analysis.FormulaDelta != 0)
+                        {
+                            <span class="fc-ia-stat-delta @(_analysis.FormulaDelta > 0 ? "fc-ia-delta-plus" : "fc-ia-delta-minus")">@(_analysis.FormulaDelta > 0 ? "+" : "")@_analysis.FormulaDelta vs published</span>
+                        }
                     </div>
                 </div>
             </div>
@@ -178,7 +184,7 @@
                     <button class="fc-ia-scenario-btn @(scenario == _activeScenario ? "fc-ia-scenario-btn-active" : "")"
                             role="radio"
                             aria-checked="@(scenario == _activeScenario)"
-                            @onclick="() => _activeScenario = scenario">
+                            @onclick="() => SelectScenario(scenario)">
                         <span class="fc-ia-scenario-dot" aria-hidden="true"></span>
                         @scenario
                     </button>
@@ -197,7 +203,20 @@
                     </svg>
                     Impact Exposure Metrics
                 </h2>
-                <span class="fc-ia-metrics-scenario">Scenario: @_activeScenario</span>
+                <span class="fc-ia-metrics-scenario">
+                    Scenario: @_activeScenario
+                    @if (_analysis?.HasDraftVersion == true)
+                    {
+                        <span class="fc-badge fc-badge--review fc-ia-draft-badge">@_analysis.DraftVersionStatus v@(_analysis.DraftVersionNumber)</span>
+                    }
+                    else if (_activeScenario != "Current Published Version" && _analysis != null && !_analysis.HasDraftVersion)
+                    {
+                        <span class="fc-ia-no-draft-notice">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                            No draft — showing published
+                        </span>
+                    }
+                </span>
             </div>
             <div class="fc-ia-rings-row">
                 <RingChart Value="@TemplatesAffectedPct" Label="Templates" Variant="@(TemplatesAffectedPct > 50 ? "red" : TemplatesAffectedPct > 20 ? "gold" : "green")" />
@@ -354,6 +373,31 @@
                                         </div>
                                     </div>
                                 }
+                            </div>
+                        }
+
+                        @if (_analysis.HasDraftVersion && (_analysis.AddedFields.Any() || _analysis.RemovedFields.Any()))
+                        {
+                            <h4 class="fc-ia-sub-heading">Draft Field Changes vs Published</h4>
+                            <div class="fc-ia-field-delta-lists">
+                                <div class="fc-ia-field-delta-col">
+                                    <h5 class="fc-ia-delta-added">+ @_analysis.AddedFields.Count Added</h5>
+                                    <ul class="fc-ia-field-delta-list fc-ia-field-delta-list--added">
+                                        @foreach (var f in _analysis.AddedFields)
+                                        {
+                                            <li>@f</li>
+                                        }
+                                    </ul>
+                                </div>
+                                <div class="fc-ia-field-delta-col">
+                                    <h5 class="fc-ia-delta-removed">− @_analysis.RemovedFields.Count Removed</h5>
+                                    <ul class="fc-ia-field-delta-list fc-ia-field-delta-list--removed">
+                                        @foreach (var f in _analysis.RemovedFields)
+                                        {
+                                            <li>@f</li>
+                                        }
+                                    </ul>
+                                </div>
                             </div>
                         }
                     }
@@ -889,6 +933,13 @@
     private string GetTemplateName(string rc) =>
         _templateNames.TryGetValue(rc, out var name) ? name : rc;
 
+    private async Task SelectScenario(string scenario)
+    {
+        _activeScenario = scenario;
+        if (!string.IsNullOrEmpty(_selectedTemplate))
+            await AnalyzeTemplate();
+    }
+
     private async Task AnalyzeTemplate()
     {
         if (string.IsNullOrEmpty(_selectedTemplate))
@@ -901,72 +952,117 @@
         _analyzing = true;
         try
         {
+            // Published version is always loaded — it is the baseline for cross-sheet analysis.
             var template = await Cache.GetPublishedTemplate(_selectedTemplate);
             _templateDetail = template;
 
-            var allRules = await FormulaRepo.GetAllActiveCrossSheetRules();
+            var allRules    = await FormulaRepo.GetAllActiveCrossSheetRules();
             var businessRules = await FormulaRepo.GetBusinessRulesForTemplate(_selectedTemplate);
 
-            // Find all cross-sheet rules that reference this template
+            // Cross-sheet rules are always evaluated against the published version.
             var relevantRules = allRules
                 .Where(r => r.Operands.Any(o => o.TemplateReturnCode == _selectedTemplate))
                 .ToList();
 
-            // Find dependent templates
             var dependents = new List<(string ReturnCode, string RuleCode)>();
             foreach (var rule in relevantRules)
-            {
                 foreach (var op in rule.Operands)
-                {
                     if (op.TemplateReturnCode != _selectedTemplate)
-                    {
                         dependents.Add((op.TemplateReturnCode, rule.RuleCode));
-                    }
+
+            // ── Scenario-specific data ────────────────────────────────────────
+            // For any scenario other than "Current Published Version" we load the
+            // latest Draft/Review version so field counts and formula distributions
+            // reflect pending changes, not just what is already live.
+            var activeFields   = template.CurrentVersion.Fields.ToList();
+            var activeFormulas = template.CurrentVersion.IntraSheetFormulas.ToList();
+
+            bool hasDraft          = false;
+            string draftStatus     = "";
+            int    draftVersionNum = 0;
+            int    fieldDelta      = 0;
+            int    formulaDelta    = 0;
+            var    addedFields     = new List<string>();
+            var    removedFields   = new List<string>();
+
+            if (_activeScenario != "Current Published Version")
+            {
+                var draftVersion = await TemplateRepo.GetLatestDraftVersion(_selectedTemplate);
+                if (draftVersion is not null)
+                {
+                    hasDraft       = true;
+                    draftStatus    = draftVersion.Status.ToString();
+                    draftVersionNum = draftVersion.VersionNumber;
+
+                    var draftFields   = draftVersion.Fields.ToList();
+                    var draftFormulas = draftVersion.IntraSheetFormulas.Where(f => f.IsActive).ToList();
+
+                    var pubNames   = activeFields.Select(f => f.FieldName).ToHashSet(StringComparer.OrdinalIgnoreCase);
+                    var draftNames = draftFields.Select(f => f.FieldName).ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+                    addedFields   = draftNames.Except(pubNames, StringComparer.OrdinalIgnoreCase).Order().ToList();
+                    removedFields = pubNames.Except(draftNames, StringComparer.OrdinalIgnoreCase).Order().ToList();
+                    fieldDelta    = draftFields.Count - activeFields.Count;
+                    formulaDelta  = draftFormulas.Count - activeFormulas.Count;
+
+                    // Switch the active data to the draft version.
+                    activeFields   = draftFields;
+                    activeFormulas = draftFormulas;
                 }
             }
 
-            // Group formulas by type
-            var formulasByType = template.CurrentVersion.IntraSheetFormulas
+            var formulasByType = activeFormulas
                 .GroupBy(f => f.FormulaType.ToString())
                 .ToDictionary(g => g.Key, g => g.Count());
 
-            // Group fields by section
-            var fieldsBySection = template.CurrentVersion.Fields
+            var fieldsBySection = activeFields
                 .GroupBy(f => f.SectionName ?? "")
                 .OrderByDescending(g => g.Count())
                 .ToDictionary(g => g.Key, g => g.Count());
 
             _analysis = new ImpactAnalysisResult
             {
-                FieldCount = template.CurrentVersion.Fields.Count,
-                FormulaCount = template.CurrentVersion.IntraSheetFormulas.Count,
-                CrossSheetRuleCount = relevantRules.Count,
-                CrossSheetRules = relevantRules,
-                DependentTemplates = dependents.Distinct().ToList(),
-                BusinessRules = businessRules.ToList(),
-                BusinessRuleCount = businessRules.Count,
-                ComputedFieldCount = template.CurrentVersion.Fields.Count(f => f.IsComputed),
-                RequiredFieldCount = template.CurrentVersion.Fields.Count(f => f.IsRequired),
-                KeyFieldCount = template.CurrentVersion.Fields.Count(f => f.IsKeyField),
-                FormulasByType = formulasByType,
-                FieldsBySection = fieldsBySection
+                FieldCount           = activeFields.Count,
+                FormulaCount         = activeFormulas.Count,
+                CrossSheetRuleCount  = relevantRules.Count,
+                CrossSheetRules      = relevantRules,
+                DependentTemplates   = dependents.Distinct().ToList(),
+                BusinessRules        = businessRules.ToList(),
+                BusinessRuleCount    = businessRules.Count,
+                ComputedFieldCount   = activeFields.Count(f => f.IsComputed),
+                RequiredFieldCount   = activeFields.Count(f => f.IsRequired),
+                KeyFieldCount        = activeFields.Count(f => f.IsKeyField),
+                FormulasByType       = formulasByType,
+                FieldsBySection      = fieldsBySection,
+                HasDraftVersion      = hasDraft,
+                DraftVersionStatus   = draftStatus,
+                DraftVersionNumber   = draftVersionNum,
+                FieldDelta           = fieldDelta,
+                FormulaDelta         = formulaDelta,
+                AddedFields          = addedFields,
+                RemovedFields        = removedFields,
             };
         }
         catch (Exception ex)
         {
             Toast.Error(ex.Message, "Analysis Failed");
             _analysis = null;
+            _templateDetail = null;
         }
-        _analyzing = false;
+        finally
+        {
+            _analyzing = false;
+        }
     }
 
-    private void PrintReport()
+    private async Task PrintReport()
     {
-        // Print report view - browser print dialog
+        await JS.InvokeVoidAsync("window.print");
     }
 
     private class ImpactAnalysisResult
     {
+        // ── Active scenario counts (draft when in draft mode, published otherwise) ──
         public int FieldCount { get; set; }
         public int FormulaCount { get; set; }
         public int CrossSheetRuleCount { get; set; }
@@ -974,11 +1070,22 @@
         public int RequiredFieldCount { get; set; }
         public int KeyFieldCount { get; set; }
         public int BusinessRuleCount { get; set; }
+
+        // ── Cross-sheet / business rule data (always from published) ──
         public List<CrossSheetRule> CrossSheetRules { get; set; } = new();
         public List<(string ReturnCode, string RuleCode)> DependentTemplates { get; set; } = new();
         public List<BusinessRule> BusinessRules { get; set; } = new();
         public Dictionary<string, int> FormulasByType { get; set; } = new();
         public Dictionary<string, int> FieldsBySection { get; set; } = new();
+
+        // ── Draft / pending-change delta ──
+        public bool HasDraftVersion { get; set; }
+        public string DraftVersionStatus { get; set; } = "";
+        public int DraftVersionNumber { get; set; }
+        public int FieldDelta { get; set; }       // +N = fields added; −N = removed
+        public int FormulaDelta { get; set; }
+        public List<string> AddedFields { get; set; } = new();
+        public List<string> RemovedFields { get; set; } = new();
     }
 
     private static string StatusBadge(string status) => status.ToLowerInvariant() switch

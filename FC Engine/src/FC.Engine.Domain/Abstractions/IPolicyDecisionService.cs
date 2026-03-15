@@ -22,4 +22,14 @@ public interface IPolicyDecisionService
         long decisionId,
         int regulatorId,
         CancellationToken ct = default);
+
+    /// <summary>
+    /// Returns the decision ID for the given scenario, or null if no decision exists.
+    /// Used as a fallback when the scenario's Decision navigation property is missing
+    /// due to data inconsistency (e.g. status is Enacted but Decision record is absent).
+    /// </summary>
+    Task<long?> GetDecisionIdForScenarioAsync(
+        long scenarioId,
+        int regulatorId,
+        CancellationToken ct = default);
 }

@@ -14,7 +14,7 @@ public class Submission
     public string ReturnCode { get; set; } = string.Empty;
     public int? TemplateVersionId { get; set; }
     public SubmissionStatus Status { get; set; }
-    public DateTime SubmittedAt { get; set; }
+    public DateTime? SubmittedAt { get; set; }
     public string? RawXml { get; set; }
     public string? ParsedDataJson { get; set; }
     public int? ProcessingDurationMs { get; set; }
@@ -45,7 +45,6 @@ public class Submission
             ReturnPeriodId = returnPeriodId,
             ReturnCode = returnCode,
             Status = SubmissionStatus.Draft,
-            SubmittedAt = DateTime.UtcNow,
             CreatedAt = DateTime.UtcNow
         };
 
@@ -58,6 +57,8 @@ public class Submission
     }
 
     public void SetTemplateVersion(int templateVersionId) => TemplateVersionId = templateVersionId;
+    /// <summary>Records the wall-clock moment the institution formally submitted this return.</summary>
+    public void MarkSubmitted() => SubmittedAt ??= DateTime.UtcNow;
     public void MarkParsing() => Status = SubmissionStatus.Parsing;
     public void MarkValidating() => Status = SubmissionStatus.Validating;
     public void MarkAccepted() => Status = SubmissionStatus.Accepted;
@@ -65,6 +66,34 @@ public class Submission
     public void MarkRejected() => Status = SubmissionStatus.Rejected;
     public void MarkPendingApproval() => Status = SubmissionStatus.PendingApproval;
     public void MarkApprovalRejected() => Status = SubmissionStatus.ApprovalRejected;
+    // ── Kanban status-transition guard ──
+    private static readonly IReadOnlyDictionary<SubmissionStatus, IReadOnlySet<SubmissionStatus>> _allowedTransitions =
+        new Dictionary<SubmissionStatus, IReadOnlySet<SubmissionStatus>>
+        {
+            [SubmissionStatus.Draft]           = new HashSet<SubmissionStatus> { SubmissionStatus.PendingApproval, SubmissionStatus.Rejected },
+            [SubmissionStatus.PendingApproval] = new HashSet<SubmissionStatus> { SubmissionStatus.Accepted, SubmissionStatus.AcceptedWithWarnings, SubmissionStatus.Rejected, SubmissionStatus.ApprovalRejected, SubmissionStatus.Draft },
+            [SubmissionStatus.Validating]      = new HashSet<SubmissionStatus> { SubmissionStatus.Accepted, SubmissionStatus.AcceptedWithWarnings, SubmissionStatus.Rejected },
+            [SubmissionStatus.Parsing]         = new HashSet<SubmissionStatus> { SubmissionStatus.Rejected },
+            [SubmissionStatus.Accepted]        = new HashSet<SubmissionStatus> { SubmissionStatus.Historical },
+            [SubmissionStatus.AcceptedWithWarnings] = new HashSet<SubmissionStatus> { SubmissionStatus.Historical },
+            [SubmissionStatus.Rejected]        = new HashSet<SubmissionStatus> { SubmissionStatus.Draft },
+            [SubmissionStatus.ApprovalRejected] = new HashSet<SubmissionStatus> { SubmissionStatus.Draft },
+        };
+
+    /// <summary>
+    /// Attempts a manual status transition (e.g. from the Kanban board).
+    /// Returns <c>false</c> without mutating state if the transition is semantically invalid.
+    /// </summary>
+    public bool TryTransitionTo(SubmissionStatus target)
+    {
+        if (_allowedTransitions.TryGetValue(Status, out var allowed) && allowed.Contains(target))
+        {
+            Status = target;
+            return true;
+        }
+        return false;
+    }
+
     public void AttachValidationReport(ValidationReport report) => ValidationReport = report;
     public void StoreRawXml(string xml) => RawXml = xml;
     public void StoreParsedDataJson(string json) => ParsedDataJson = json;

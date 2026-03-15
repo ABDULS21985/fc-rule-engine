@@ -21,4 +21,10 @@ public interface ITemplateRepository
 
     /// <summary>Get templates filtered by module IDs (for entitlement-scoped queries).</summary>
     Task<IReadOnlyList<ReturnTemplate>> GetByModuleIds(IEnumerable<int> moduleIds, CancellationToken ct = default);
+
+    /// <summary>
+    /// Get the most recent Draft or Review version of a template (for impact analysis of pending changes).
+    /// Returns <c>null</c> when no in-flight version exists.
+    /// </summary>
+    Task<TemplateVersion?> GetLatestDraftVersion(string returnCode, CancellationToken ct = default);
 }

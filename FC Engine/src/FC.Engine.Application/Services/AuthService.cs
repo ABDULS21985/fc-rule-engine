@@ -220,6 +220,13 @@ public class AuthService
         await _userRepo.Update(user, ct);
     }
 
+    /// <summary>
+    /// Entity-based overload. Prefer this over the bare <c>int userId</c> overload to keep the
+    /// call site decoupled from the concrete PK type of <see cref="PortalUser"/>.
+    /// </summary>
+    public Task ChangePassword(PortalUser user, string newPassword, CancellationToken ct = default)
+        => ChangePassword(user.Id, newPassword, ct);
+
     public ClaimsPrincipal BuildClaimsPrincipal(PortalUser user)
     {
         var claims = new List<Claim>

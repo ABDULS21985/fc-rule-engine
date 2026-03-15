@@ -12,6 +12,7 @@ using FC.Engine.Domain.Notifications;
 using FC.Engine.Infrastructure.Metadata;
 using FC.Engine.Infrastructure.Services;
 using Microsoft.EntityFrameworkCore;
+using StackExchange.Redis;
 
 namespace FC.Engine.Admin.Services;
 
@@ -25,6 +26,8 @@ public class PlatformAdminService
     private readonly IAuditLogger _auditLogger;
     private readonly INotificationOrchestrator _notificationOrchestrator;
     private readonly IFeatureFlagService _featureFlagService;
+    private readonly IHttpClientFactory _httpClientFactory;
+    private readonly IConnectionMultiplexer? _redis;
 
     public PlatformAdminService(
         IDbContextFactory<MetadataDbContext> dbFactory,
@@ -34,7 +37,9 @@ public class PlatformAdminService
         TemplateVersioningService templateVersioningService,
         IAuditLogger auditLogger,
         INotificationOrchestrator notificationOrchestrator,
-        IFeatureFlagService featureFlagService)
+        IFeatureFlagService featureFlagService,
+        IHttpClientFactory httpClientFactory,
+        IConnectionMultiplexer? redis = null)
     {
         _dbFactory = dbFactory;
         _dashboardService = dashboardService;
@@ -44,6 +49,8 @@ public class PlatformAdminService
         _auditLogger = auditLogger;
         _notificationOrchestrator = notificationOrchestrator;
         _featureFlagService = featureFlagService;
+        _httpClientFactory = httpClientFactory;
+        _redis = redis;
     }
 
     public async Task<PlatformTenantListResult> GetTenantList(PlatformTenantListQuery query, CancellationToken ct = default)
@@ -568,7 +575,7 @@ public class PlatformAdminService
 
         var supportTickets = await db.PartnerSupportTickets
             .AsNoTracking()
-            .Where(t => t.TenantId == tenantId)
+            .Where(t => t.TenantId == tenantId || t.PartnerTenantId == tenantId)
             .OrderByDescending(t => t.CreatedAt)
             .Take(100)
             .ToListAsync(ct);
@@ -1100,7 +1107,7 @@ public class PlatformAdminService
         await db.Tenants.AsNoTracking().Select(t => t.TenantId).FirstOrDefaultAsync(ct);
         sw.Stop();
 
-        var serviceProbes = await CheckServiceHealth(sw.ElapsedMilliseconds, queuedNotifications + queuedExports, ct);
+        var serviceProbes = await CheckServiceHealthAsync(sw.ElapsedMilliseconds, queuedNotifications + queuedExports, ct);
 
         return new PlatformHealthData
         {
@@ -1128,40 +1135,112 @@ public class PlatformAdminService
         };
     }
 
-    private static Task<List<ServiceProbe>> CheckServiceHealth(long sqlDbMs, int rabbitMqPending, CancellationToken ct)
+    private async Task<List<ServiceProbe>> CheckServiceHealthAsync(long sqlDbMs, int rabbitMqPending, CancellationToken ct)
     {
         var now = DateTime.UtcNow;
 
-        // API — lightweight stub (HttpClient not injected; real impl would GET /api/health)
-        var apiMs = (long)Random.Shared.Next(12, 55);
-        var apiStatus = apiMs >= 2000 ? ServiceStatus.Down : apiMs >= 500 ? ServiceStatus.Degraded : ServiceStatus.Healthy;
+        // ── API — HTTP GET /api/ping ─────────────────────────────────────────────
+        var apiMs = 0L;
+        var apiStatus = ServiceStatus.Healthy;
+        try
+        {
+            var client = _httpClientFactory.CreateClient("ApiHealthProbe");
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            var response = await client.GetAsync("/api/ping", HttpCompletionOption.ResponseHeadersRead, ct);
+            sw.Stop();
+            apiMs = sw.ElapsedMilliseconds;
+            apiStatus = !response.IsSuccessStatusCode ? ServiceStatus.Degraded
+                      : apiMs >= 2000 ? ServiceStatus.Down
+                      : apiMs >= 500  ? ServiceStatus.Degraded
+                      : ServiceStatus.Healthy;
+        }
+        catch
+        {
+            apiMs = 9999;
+            apiStatus = ServiceStatus.Down;
+        }
         ProbeHistoryStore.Record("API", new ProbeResult { Status = apiStatus, ResponseMs = apiMs, CheckedAt = now });
 
-        // SQL Server — re-use Stopwatch result already captured
+        // ── SQL Server — re-use Stopwatch result already captured ─────────────────
         var sqlStatus = sqlDbMs >= 2000 ? ServiceStatus.Down : sqlDbMs >= 500 ? ServiceStatus.Degraded : ServiceStatus.Healthy;
         ProbeHistoryStore.Record("SQL Server", new ProbeResult { Status = sqlStatus, ResponseMs = sqlDbMs, CheckedAt = now });
 
-        // Redis — PING stub (IConnectionMultiplexer not injected)
-        var redisMs = (long)Random.Shared.Next(1, 6);
-        ProbeHistoryStore.Record("Redis", new ProbeResult { Status = ServiceStatus.Healthy, ResponseMs = redisMs, CheckedAt = now });
+        // ── Redis — PING via IConnectionMultiplexer ──────────────────────────────
+        var redisMs = 0L;
+        var redisStatus = ServiceStatus.Healthy;
+        if (_redis is not null)
+        {
+            try
+            {
+                var sw = System.Diagnostics.Stopwatch.StartNew();
+                await _redis.GetDatabase().PingAsync();
+                sw.Stop();
+                redisMs = sw.ElapsedMilliseconds;
+                redisStatus = redisMs >= 2000 ? ServiceStatus.Down
+                            : redisMs >= 200  ? ServiceStatus.Degraded
+                            : ServiceStatus.Healthy;
+            }
+            catch
+            {
+                redisMs = 9999;
+                redisStatus = ServiceStatus.Down;
+            }
+        }
+        else
+        {
+            redisStatus = ServiceStatus.Down;
+        }
+        ProbeHistoryStore.Record("Redis", new ProbeResult { Status = redisStatus, ResponseMs = redisMs, CheckedAt = now });
 
-        // RabbitMQ — infer health from pending backlog depth
-        var rabbitMs = (long)Random.Shared.Next(4, 18);
+        // ── RabbitMQ — infer status from queue backlog; time a lightweight DB probe
+        var rabbitMs = 0L;
+        try
+        {
+            await using var db = await _dbFactory.CreateDbContextAsync(ct);
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            await db.NotificationDeliveries.AsNoTracking().CountAsync(ct);
+            sw.Stop();
+            rabbitMs = sw.ElapsedMilliseconds;
+        }
+        catch
+        {
+            rabbitMs = 9999;
+        }
         var rabbitStatus = rabbitMqPending > 500 ? ServiceStatus.Down : rabbitMqPending > 100 ? ServiceStatus.Degraded : ServiceStatus.Healthy;
         ProbeHistoryStore.Record("RabbitMQ", new ProbeResult { Status = rabbitStatus, ResponseMs = rabbitMs, CheckedAt = now });
 
-        // Background Jobs — lightweight heartbeat stub
-        var bgMs = (long)Random.Shared.Next(2, 12);
-        ProbeHistoryStore.Record("Background Jobs", new ProbeResult { Status = ServiceStatus.Healthy, ResponseMs = bgMs, CheckedAt = now });
-
-        return Task.FromResult(new List<ServiceProbe>
+        // ── Background Jobs — check last job activity timestamp ──────────────────
+        var bgMs = 0L;
+        var bgStatus = ServiceStatus.Healthy;
+        try
         {
-            new() { Name = "API",            Status = apiStatus,            ResponseMs = apiMs,   UptimePercent = 99.98m, LastChecked = now, History = ProbeHistoryStore.Get("API") },
-            new() { Name = "SQL Server",     Status = sqlStatus,            ResponseMs = sqlDbMs, UptimePercent = 99.97m, LastChecked = now, History = ProbeHistoryStore.Get("SQL Server") },
-            new() { Name = "Redis",          Status = ServiceStatus.Healthy, ResponseMs = redisMs, UptimePercent = 100.00m, LastChecked = now, History = ProbeHistoryStore.Get("Redis") },
-            new() { Name = "RabbitMQ",       Status = rabbitStatus,         ResponseMs = rabbitMs, UptimePercent = 99.95m, LastChecked = now, History = ProbeHistoryStore.Get("RabbitMQ") },
-            new() { Name = "Background Jobs",Status = ServiceStatus.Healthy, ResponseMs = bgMs,   UptimePercent = 99.99m, LastChecked = now, History = ProbeHistoryStore.Get("Background Jobs") },
-        });
+            await using var db2 = await _dbFactory.CreateDbContextAsync(ct);
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            var lastActivity = await db2.ExportRequests.AsNoTracking()
+                .OrderByDescending(e => e.RequestedAt)
+                .Select(e => (DateTime?)e.RequestedAt)
+                .FirstOrDefaultAsync(ct);
+            sw.Stop();
+            bgMs = sw.ElapsedMilliseconds;
+            bgStatus = lastActivity is null
+                ? ServiceStatus.Degraded
+                : (now - lastActivity.Value).TotalHours > 24 ? ServiceStatus.Degraded : ServiceStatus.Healthy;
+        }
+        catch
+        {
+            bgMs = 9999;
+            bgStatus = ServiceStatus.Down;
+        }
+        ProbeHistoryStore.Record("Background Jobs", new ProbeResult { Status = bgStatus, ResponseMs = bgMs, CheckedAt = now });
+
+        return
+        [
+            new() { Name = "API",            Status = apiStatus,    ResponseMs = apiMs,   UptimePercent = 99.98m, LastChecked = now, History = ProbeHistoryStore.Get("API") },
+            new() { Name = "SQL Server",     Status = sqlStatus,    ResponseMs = sqlDbMs, UptimePercent = 99.97m, LastChecked = now, History = ProbeHistoryStore.Get("SQL Server") },
+            new() { Name = "Redis",          Status = redisStatus,  ResponseMs = redisMs, UptimePercent = 100.00m, LastChecked = now, History = ProbeHistoryStore.Get("Redis") },
+            new() { Name = "RabbitMQ",       Status = rabbitStatus, ResponseMs = rabbitMs, UptimePercent = 99.95m, LastChecked = now, History = ProbeHistoryStore.Get("RabbitMQ") },
+            new() { Name = "Background Jobs",Status = bgStatus,     ResponseMs = bgMs,   UptimePercent = 99.99m, LastChecked = now, History = ProbeHistoryStore.Get("Background Jobs") },
+        ];
     }
 
     public async Task<ModuleAnalyticsData> GetModuleAnalytics(CancellationToken ct = default)

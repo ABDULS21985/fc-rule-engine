@@ -402,7 +402,12 @@ public sealed class PlatformIntelligenceService : IPlatformIntelligenceWorkspace
         var modelPerformanceRows = BuildModelPerformanceRows(modelInventorySeeds, modelInventory, submissions, policyScenarios, historicalImpact);
         var modelBacktestingRows = BuildModelBacktestingRows(modelInventorySeeds, modelInventory, submissions, policyScenarios, historicalImpact);
         var modelMonitoringRows = BuildModelMonitoringSummaryRows(modelInventory, modelPerformanceRows, modelBacktestingRows);
-        var modelApprovalQueue = BuildModelApprovalQueue(modelInventory, modelChanges);
+        var terminalWorkflowKeys = new HashSet<string>(
+            modelApprovalWorkflowState.Stages
+                .Where(s => s.Stage is "Approved" or "Rejected" or "Completed")
+                .Select(s => s.WorkflowKey),
+            StringComparer.OrdinalIgnoreCase);
+        var modelApprovalQueue = BuildModelApprovalQueue(modelInventory, modelChanges, terminalWorkflowKeys);
         var modelRiskAppetiteRows = BuildModelRiskAppetiteRows(modelInventory, modelValidationCalendar, modelPerformanceRows, modelApprovalQueue);
         var modelRiskReportingPack = BuildModelRiskReportingRows(modelInventory, modelValidationCalendar, modelPerformanceRows, modelChanges, modelRiskAppetiteRows);
         var modelRiskReturnPack = BuildModelRiskReturnPackRows(
@@ -902,7 +907,7 @@ public sealed class PlatformIntelligenceService : IPlatformIntelligenceWorkspace
                 {
                     IncidentKey = BuildResilienceIncidentKey(x),
                     Title = x.Title,
-                    Severity = x.Severity.ToString(),
+                    Severity = Capitalize(x.Severity.ToString()),
                     Status = x.Status.ToString(),
                     DetectedAt = x.DetectedAt,
                     ContainedAt = x.ContainedAt,
@@ -913,7 +918,7 @@ public sealed class PlatformIntelligenceService : IPlatformIntelligenceWorkspace
                 {
                     Title = x.Title,
                     AlertType = x.AlertType,
-                    Severity = x.Severity,
+                    Severity = Capitalize(x.Severity),
                     Status = x.Status,
                     CreatedAt = x.CreatedAt
                 }).ToList()
@@ -2124,7 +2129,7 @@ public sealed class PlatformIntelligenceService : IPlatformIntelligenceWorkspace
                                 ? institution.InstitutionName
                                 : $"Institution #{x.InstitutionId}",
                             Status = x.Status.ToString(),
-                            SubmittedAt = x.SubmittedAt
+                            SubmittedAt = x.SubmittedAt ?? x.CreatedAt
                         })
                         .ToList()
                 };
@@ -3302,7 +3307,7 @@ public sealed class PlatformIntelligenceService : IPlatformIntelligenceWorkspace
                 {
                     IncidentKey = BuildResilienceIncidentKey(incident),
                     Title = incident.Title,
-                    Severity = incident.Severity.ToString(),
+                    Severity = Capitalize(incident.Severity.ToString()),
                     Status = incident.Status.ToString(),
                     CurrentPhase = currentPhase,
                     DetectionToContainHours = steps[1].ElapsedHours,
@@ -3346,7 +3351,7 @@ public sealed class PlatformIntelligenceService : IPlatformIntelligenceWorkspace
                     : dueDate < DateTime.UtcNow
                         ? "Overdue"
                         : "Open",
-                Severity = incident.Severity.ToString()
+                Severity = Capitalize(incident.Severity.ToString())
             };
         });
 
@@ -3362,7 +3367,7 @@ public sealed class PlatformIntelligenceService : IPlatformIntelligenceWorkspace
                 OwnerLane = "Cyber Defence",
                 DueDate = alert.CreatedAt.AddDays(alert.Severity.Equals("critical", StringComparison.OrdinalIgnoreCase) ? 2 : 5),
                 Status = alert.CreatedAt.AddDays(5) < DateTime.UtcNow ? "Overdue" : "Open",
-                Severity = alert.Severity
+                Severity = Capitalize(alert.Severity)
             });
 
         var hotspotActions = hotspots
@@ -3967,7 +3972,8 @@ public sealed class PlatformIntelligenceService : IPlatformIntelligenceWorkspace
 
     private static List<ModelApprovalQueueRow> BuildModelApprovalQueue(
         IReadOnlyList<ModelInventoryRow> inventory,
-        IReadOnlyList<ModelChangeRow> modelChanges)
+        IReadOnlyList<ModelChangeRow> modelChanges,
+        HashSet<string> terminalWorkflowKeys)
     {
         return modelChanges
             .Where(x => x.ReviewSignal is "Critical" or "Review")
@@ -3976,10 +3982,11 @@ public sealed class PlatformIntelligenceService : IPlatformIntelligenceWorkspace
                 var model = ResolveModelForChange(change, inventory);
                 var currentStage = change.ReviewSignal == "Critical" ? "Validation Team" : "Model Owner";
                 var dueDate = change.ChangedAt.Date.AddDays(change.ReviewSignal == "Critical" ? 5 : 10);
+                var workflowKey = $"{model.ModelCode}|{change.Artifact}|{change.ChangedAt.Ticks}";
 
                 return new ModelApprovalQueueRow
                 {
-                    WorkflowKey = $"{model.ModelCode}|{change.Artifact}|{change.ChangedAt.Ticks}",
+                    WorkflowKey = workflowKey,
                     ModelCode = model.ModelCode,
                     ModelName = model.ModelName,
                     Artifact = change.Artifact,
@@ -3993,6 +4000,7 @@ public sealed class PlatformIntelligenceService : IPlatformIntelligenceWorkspace
                     ReviewSignal = change.ReviewSignal
                 };
             })
+            .Where(row => !terminalWorkflowKeys.Contains(row.WorkflowKey))
             .OrderByDescending(x => x.ReviewSignal == "Critical")
             .ThenBy(x => x.DueDate)
             .Take(12)
@@ -4446,7 +4454,7 @@ public sealed class PlatformIntelligenceService : IPlatformIntelligenceWorkspace
                 Detail = institution is null
                     ? $"Submission #{submission.Id}"
                     : $"{institution.InstitutionName} · Submission #{submission.Id}",
-                HappenedAt = submission.SubmittedAt,
+                HappenedAt = submission.SubmittedAt ?? submission.CreatedAt,
                 Severity = submission.Status switch
                 {
                     SubmissionStatus.Rejected or SubmissionStatus.ApprovalRejected => "High",
@@ -4791,7 +4799,7 @@ public sealed class PlatformIntelligenceService : IPlatformIntelligenceWorkspace
                             SubmissionId = x.Id,
                             ReturnCode = x.ReturnCode,
                             Status = x.Status.ToString(),
-                            SubmittedAt = x.SubmittedAt
+                            SubmittedAt = x.SubmittedAt ?? x.CreatedAt
                         })
                         .ToList()
                         ?? [],

@@ -263,6 +263,7 @@ public class InterModuleDataFlowEngine : IInterModuleDataFlowEngine
         }
 
         var created = Submission.Create(institutionId, returnPeriodId, targetTemplateCode, tenantId);
+        created.MarkSubmitted();
         _db.Submissions.Add(created);
         await _db.SaveChangesAsync(ct);
         return created;

@@ -351,9 +351,9 @@ public partial class ModuleImportService : IModuleImportService
                     _db.TemplateSections.Add(new TemplateSection
                     {
                         TemplateVersionId = version.Id,
-                        SectionName = sectionDef.Name,
+                        SectionCode = sectionDef.Code,      // machine-readable identifier (e.g. "ASSETS_AND_LIABILITIES")
+                        SectionName = sectionDef.Name,      // human-readable display name
                         SectionOrder = sectionDef.DisplayOrder,
-                        Description = sectionDef.Code,
                         IsRepeating = false
                     });
                 }
@@ -380,7 +380,8 @@ public partial class ModuleImportService : IModuleImportService
                         MinValue = fieldDef.MinValue?.ToString(),
                         MaxValue = fieldDef.MaxValue?.ToString(),
                         AllowedValues = fieldDef.EnumValues,
-                        HelpText = fieldDef.ValidationNote ?? fieldDef.HelpText,
+                        HelpText = fieldDef.HelpText,
+                        ValidationNote = fieldDef.ValidationNote,
                         RegulatoryReference = fieldDef.RegulatoryReference,
                         IsYtdField = fieldDef.CarryForward,
                         DataClassification = classification,
@@ -591,6 +592,10 @@ public partial class ModuleImportService : IModuleImportService
                     : _ddlEngine.GenerateAlterTable(draft.Template, publishedVersion, draft.Version);
 
                 result.DdlStatements.Add(ddl.ForwardSql);
+
+                // Persist the DDL to TemplateVersion for audit trail and rollback capability.
+                // Must be done before execution so the script is recorded even if execution fails.
+                draft.Version.SetDdlScript(ddl.ForwardSql, ddl.RollbackSql);
 
                 var migration = await _ddlExecutor.Execute(
                     draft.Template.Id,

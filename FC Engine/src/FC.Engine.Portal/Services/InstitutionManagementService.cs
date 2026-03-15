@@ -359,7 +359,7 @@ public class InstitutionManagementService
                         ? "reject"
                         : "submit",
                 Description = BuildSubmissionActivityDescription(submission),
-                OccurredAt = submission.SubmittedAt
+                OccurredAt = submission.SubmittedAt ?? default
             });
         }
 
@@ -496,10 +496,31 @@ public class InstitutionManagementService
         var inst = await _institutionRepo.GetById(institutionId, ct);
         if (inst is null) return false;
 
+        ValidatePortalSettings(settings);
+
         var envelope = LoadSettingsEnvelope(inst);
         envelope.PortalSettings = settings;
         await SaveSettingsEnvelope(inst, envelope, ct);
         return true;
+    }
+
+    private static void ValidatePortalSettings(InstitutionPortalSettings settings)
+    {
+        if (!new[] { 1, 3, 5, 7 }.Contains(settings.DeadlineReminderDays))
+            throw new ArgumentOutOfRangeException(nameof(settings.DeadlineReminderDays),
+                "Deadline reminder days must be 1, 3, 5, or 7.");
+
+        if (!new[] { 2, 4, 8 }.Contains(settings.SessionTimeoutHours))
+            throw new ArgumentOutOfRangeException(nameof(settings.SessionTimeoutHours),
+                "Session timeout must be 2, 4, or 8 hours.");
+
+        if (!new[] { "XmlUpload", "ManualEntry" }.Contains(settings.DefaultSubmissionFormat, StringComparer.Ordinal))
+            throw new ArgumentOutOfRangeException(nameof(settings.DefaultSubmissionFormat),
+                "Default submission format must be 'XmlUpload' or 'ManualEntry'.");
+
+        if (!new[] { "Africa/Lagos", "UTC", "Europe/London" }.Contains(settings.TimezoneId, StringComparer.Ordinal))
+            throw new ArgumentOutOfRangeException(nameof(settings.TimezoneId),
+                "Timezone must be one of: Africa/Lagos, UTC, Europe/London.");
     }
 
     public async Task<bool> SetMakerChecker(int institutionId, bool enabled, CancellationToken ct = default)

@@ -84,8 +84,8 @@ public class ExportService
             ReturnCode = submission.ReturnCode,
             Period = FormatPeriod(submission.ReturnPeriod),
             Status = submission.Status,
-            SubmittedAt = submission.SubmittedAt,
-            ProcessedAt = submission.ValidationReport?.FinalizedAt ?? submission.SubmittedAt,
+            SubmittedAt = submission.SubmittedAt ?? submission.CreatedAt,
+            ProcessedAt = submission.ValidationReport?.FinalizedAt ?? submission.SubmittedAt ?? submission.CreatedAt,
             SubmittedBy = submittedByName,
             ErrorCount = errorCount,
             WarningCount = warningCount,
@@ -147,7 +147,7 @@ public class ExportService
         if (submission.Status != SubmissionStatus.Accepted && submission.Status != SubmissionStatus.AcceptedWithWarnings)
             return null;
 
-        var expectedCertNum = $"CBN-FCE-{submission.Id:D8}-{submission.SubmittedAt:yyyyMMdd}";
+        var expectedCertNum = $"CBN-FCE-{submission.Id:D8}-{(submission.SubmittedAt ?? submission.CreatedAt):yyyyMMdd}";
         if (!string.Equals(certId, expectedCertNum, StringComparison.OrdinalIgnoreCase))
             return null;
 
@@ -215,7 +215,7 @@ public class ExportService
         if (string.IsNullOrEmpty(approvedByName) && approval is not null)
             approvedByName = "Regulatory Officer";
 
-        var certNum = $"CBN-FCE-{submission.Id:D8}-{submission.SubmittedAt:yyyyMMdd}";
+        var certNum = $"CBN-FCE-{submission.Id:D8}-{(submission.SubmittedAt ?? submission.CreatedAt):yyyyMMdd}";
 
         return new ComplianceCertificateModel
         {
@@ -227,8 +227,8 @@ public class ExportService
             Period = FormatPeriod(submission.ReturnPeriod),
             SubmissionId = submission.Id,
             Status = submission.Status,
-            SubmittedAt = submission.SubmittedAt,
-            AcceptedAt = submission.ValidationReport?.FinalizedAt ?? submission.SubmittedAt,
+            SubmittedAt = submission.SubmittedAt ?? submission.CreatedAt,
+            AcceptedAt = submission.ValidationReport?.FinalizedAt ?? submission.SubmittedAt ?? submission.CreatedAt,
             CertificateNumber = certNum,
             VerificationToken = certNum,
             GeneratedAt = DateTime.UtcNow,
@@ -282,7 +282,7 @@ public class ExportService
                 WorkspaceHref = moduleContext.GetValueOrDefault(s.ReturnCode)?.WorkspaceHref,
                 Period = FormatPeriod(s.ReturnPeriod),
                 Status = s.Status,
-                SubmittedAt = s.SubmittedAt,
+                SubmittedAt = s.SubmittedAt ?? s.CreatedAt,
                 SubmittedBy = s.SubmittedByUserId.HasValue
                     ? userMap.GetValueOrDefault(s.SubmittedByUserId.Value, "Unknown")
                     : "API",
@@ -310,7 +310,7 @@ public class ExportService
             {
                 entries.Add(new AuditTrailEntry
                 {
-                    Timestamp = sub.SubmittedAt,
+                    Timestamp = sub.SubmittedAt ?? sub.CreatedAt,
                     UserName = sub.SubmittedByUserId.HasValue
                         ? userMap.GetValueOrDefault(sub.SubmittedByUserId.Value, "Unknown")
                         : "API",
@@ -387,20 +387,20 @@ public class ExportService
         // Build event rows
         var entries = new List<(DateTime At, string Actor, string Action, string Detail, string Comment)>();
 
-        entries.Add((submission.SubmittedAt, "System", "Submission Created", $"Return {submission.ReturnCode} — {FormatPeriod(submission.ReturnPeriod)}", ""));
+        entries.Add((submission.SubmittedAt ?? submission.CreatedAt, "System", "Submission Created", $"Return {submission.ReturnCode} — {FormatPeriod(submission.ReturnPeriod)}", ""));
 
         if (submission.SubmittedByUserId.HasValue)
         {
             var user = await _userRepo.GetById(submission.SubmittedByUserId.Value);
             var name = user?.DisplayName ?? "Unknown";
-            entries.Add((submission.SubmittedAt, name, "Submitted", $"Status: {submission.Status}", approval?.SubmitterNotes ?? ""));
+            entries.Add((submission.SubmittedAt ?? submission.CreatedAt, name, "Submitted", $"Status: {submission.Status}", approval?.SubmitterNotes ?? ""));
         }
 
         if (submission.ValidationReport is not null)
         {
             var errors   = submission.ValidationReport.ErrorCount;
             var warnings = submission.ValidationReport.WarningCount;
-            entries.Add((submission.ValidationReport.FinalizedAt ?? submission.SubmittedAt,
+            entries.Add((submission.ValidationReport.FinalizedAt ?? submission.SubmittedAt ?? submission.CreatedAt,
                 "Validation Engine", "Validated",
                 $"{errors} error(s), {warnings} warning(s)", ""));
         }

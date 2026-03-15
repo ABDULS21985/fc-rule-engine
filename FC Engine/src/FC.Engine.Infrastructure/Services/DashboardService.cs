@@ -1132,7 +1132,7 @@ public class DashboardService : IDashboardService
                 Id = s.Id,
                 ReturnPeriodId = s.ReturnPeriodId,
                 Status = s.Status,
-                SubmittedAt = s.SubmittedAt,
+                SubmittedAt = s.SubmittedAt ?? default,
                 TemplateVersionId = s.TemplateVersionId
             })
             .ToListAsync(ct);

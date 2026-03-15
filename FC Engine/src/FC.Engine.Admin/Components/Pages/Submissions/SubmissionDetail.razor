@@ -70,9 +70,9 @@
                 </div>
                 <p class="fc-detail-hero-subtitle">
                     Return Code <a href="/templates/@_submission.ReturnCode">@_submission.ReturnCode</a>
-                    @if (_submission.SubmittedAt != default)
+                    @if (_submission.SubmittedAt is not null)
                     {
-                        @:&middot; Submitted @_submission.SubmittedAt.ToString("d MMM yyyy, HH:mm") UTC
+                        @:&middot; Submitted @_submission.SubmittedAt.Value.ToString("d MMM yyyy, HH:mm") UTC
                     }
                     else
                     {
@@ -181,9 +181,9 @@
                         <div class="fc-detail-info-item">
                             <span class="fc-detail-info-label">Submitted At</span>
                             <span class="fc-detail-info-value">
-                                @if (_submission.SubmittedAt != default)
+                                @if (_submission.SubmittedAt is not null)
                                 {
-                                    @(_submission.SubmittedAt.ToString("d MMM yyyy, HH:mm:ss"))@: UTC
+                                    @(_submission.SubmittedAt.Value.ToString("d MMM yyyy, HH:mm:ss"))@: UTC
                                 }
                                 else
                                 {
@@ -279,10 +279,8 @@
                 </div>
 
                 <!-- Error Table -->
-                @{
-                    var errors   = report.Errors.Where(e => e.Severity == ValidationSeverity.Error).ToList();
-                    var nonErrors = report.Errors.Where(e => e.Severity != ValidationSeverity.Error).ToList();
-                }
+                var errors    = report.Errors.Where(e => e.Severity == ValidationSeverity.Error).ToList();
+                var nonErrors = report.Errors.Where(e => e.Severity != ValidationSeverity.Error).ToList();
                 @if (report.Errors.Any())
                 {
                     @if (errors.Count > 0)
