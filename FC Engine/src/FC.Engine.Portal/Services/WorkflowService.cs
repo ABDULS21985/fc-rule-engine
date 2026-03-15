@@ -3,6 +3,7 @@ using FC.Engine.Domain.Entities;
 using FC.Engine.Domain.Enums;
 using FC.Engine.Domain.Events;
 using FC.Engine.Domain.Notifications;
+using Microsoft.Extensions.Logging;
 
 namespace FC.Engine.Portal.Services;
 
@@ -17,6 +18,7 @@ public class WorkflowService
     private readonly INotificationOrchestrator _notificationOrchestrator;
     private readonly IFilingCalendarService _filingCalendarService;
     private readonly IDomainEventPublisher? _domainEventPublisher;
+    private readonly ILogger<WorkflowService> _logger;
 
     public WorkflowService(
         ISubmissionRepository submissionRepo,
@@ -24,6 +26,7 @@ public class WorkflowService
         IInstitutionUserRepository userRepo,
         INotificationOrchestrator notificationOrchestrator,
         IFilingCalendarService filingCalendarService,
+        ILogger<WorkflowService> logger,
         IDomainEventPublisher? domainEventPublisher = null)
     {
         _submissionRepo = submissionRepo;
@@ -31,6 +34,7 @@ public class WorkflowService
         _userRepo = userRepo;
         _notificationOrchestrator = notificationOrchestrator;
         _filingCalendarService = filingCalendarService;
+        _logger = logger;
         _domainEventPublisher = domainEventPublisher;
     }
 
@@ -84,9 +88,9 @@ public class WorkflowService
         {
             await _filingCalendarService.RecordSla(submission.ReturnPeriodId, submission.Id, ct);
         }
-        catch
+        catch (Exception ex)
         {
-            // SLA tracking should not block approval.
+            _logger.LogWarning(ex, "SLA recording failed during approval for submission {SubmissionId}", submission.Id);
         }
 
         try
@@ -100,9 +104,9 @@ public class WorkflowService
                 comments,
                 ct);
         }
-        catch
+        catch (Exception ex)
         {
-            // Notification failures should not block approval flow.
+            _logger.LogWarning(ex, "Failed to send approval notification for submission {SubmissionId}", submission.Id);
         }
 
         // Publish domain event for webhook/event bus (RG-30)
@@ -116,7 +120,10 @@ public class WorkflowService
                     (await _userRepo.GetById(reviewerUserId, ct))?.DisplayName ?? "Reviewer",
                     DateTime.UtcNow, DateTime.UtcNow, Guid.NewGuid()), ct);
             }
-            catch { }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to publish ReturnApprovedEvent for submission {SubmissionId}", submission.Id);
+            }
         }
 
         return ApprovalActionResult.Success;
@@ -172,9 +179,9 @@ public class WorkflowService
                     comments,
                     ct);
             }
-            catch
+            catch (Exception ex)
             {
-                // Notification failures should not block rejection flow.
+                _logger.LogWarning(ex, "Failed to send rejection notification for submission {SubmissionId}", submission.Id);
             }
 
             // Publish domain event for webhook/event bus (RG-30)
@@ -188,7 +195,10 @@ public class WorkflowService
                         (await _userRepo.GetById(reviewerUserId, ct))?.DisplayName ?? "Reviewer",
                         comments, DateTime.UtcNow, DateTime.UtcNow, Guid.NewGuid()), ct);
                 }
-                catch { }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to publish ReturnRejectedEvent for submission {SubmissionId}", submission.Id);
+                }
             }
         }
 

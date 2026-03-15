@@ -74,4 +74,5 @@ public class Submission
     public void MarkRegulatorAcknowledged() => Status = SubmissionStatus.RegulatorAcknowledged;
     public void MarkRegulatorAccepted() => Status = SubmissionStatus.RegulatorAccepted;
     public void MarkRegulatorQueriesRaised() => Status = SubmissionStatus.RegulatorQueriesRaised;
+    public void MarkHistorical() => Status = SubmissionStatus.Historical;
 }

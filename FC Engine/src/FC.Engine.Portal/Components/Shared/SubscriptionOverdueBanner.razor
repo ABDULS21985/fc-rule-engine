@@ -1,5 +1,6 @@
-@inject ISubscriptionService SubscriptionService
+@inject SubscriptionOverdueStateService OverdueState
 @inject ITenantContext TenantContext
+@implements IDisposable
 
 @if (_overdueAmount > 0)
 {
@@ -23,16 +24,26 @@
 @code {
     private decimal _overdueAmount;
 
+    protected override void OnInitialized()
+    {
+        OverdueState.OnChange += HandleChange;
+        _overdueAmount = OverdueState.OverdueAmount;
+    }
+
     protected override async Task OnInitializedAsync()
     {
         if (!TenantContext.CurrentTenantId.HasValue) return;
-        try
-        {
-            var invoices = await SubscriptionService.GetInvoices(TenantContext.CurrentTenantId.Value, 1, 100);
-            _overdueAmount = invoices
-                .Where(i => i.Status == InvoiceStatus.Overdue)
-                .Sum(i => i.TotalAmount);
-        }
-        catch { /* non-critical — banner is informational */ }
+        _overdueAmount = await OverdueState.GetOverdueAmountAsync(TenantContext.CurrentTenantId.Value);
+    }
+
+    private void HandleChange()
+    {
+        _overdueAmount = OverdueState.OverdueAmount;
+        InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose()
+    {
+        OverdueState.OnChange -= HandleChange;
     }
 }

@@ -5,6 +5,7 @@ using FC.Engine.Domain.Metadata;
 using FC.Engine.Domain.Notifications;
 using FC.Engine.Portal.Services;
 using FluentAssertions;
+using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Xunit;
 
@@ -103,7 +104,8 @@ public class ApprovalServiceTests
             approvalRepo.Object,
             Mock.Of<IInstitutionUserRepository>(),
             Mock.Of<INotificationOrchestrator>(),
-            Mock.Of<IFilingCalendarService>());
+            Mock.Of<IFilingCalendarService>(),
+            NullLogger<WorkflowService>.Instance);
 
         var sut = new ApprovalService(
             submissionRepo.Object,

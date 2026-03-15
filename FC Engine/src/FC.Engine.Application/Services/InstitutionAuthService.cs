@@ -176,6 +176,9 @@ public class InstitutionAuthService
     /// </summary>
     public async Task<bool> ChangePassword(int userId, string oldPassword, string newPassword, CancellationToken ct = default)
     {
+        if (string.IsNullOrEmpty(newPassword) || !IsPasswordValid(newPassword))
+            return false;
+
         var user = await _userRepo.GetById(userId, ct);
         if (user is null) return false;
 
@@ -186,6 +189,17 @@ public class InstitutionAuthService
         user.MustChangePassword = false;
         await _userRepo.Update(user, ct);
         return true;
+    }
+
+    /// <summary>
+    /// Validates password meets minimum requirements: 8+ chars, uppercase, lowercase, digit.
+    /// </summary>
+    private static bool IsPasswordValid(string password)
+    {
+        return password.Length >= 8
+            && password.Any(char.IsUpper)
+            && password.Any(char.IsLower)
+            && password.Any(char.IsDigit);
     }
 
     /// <summary>

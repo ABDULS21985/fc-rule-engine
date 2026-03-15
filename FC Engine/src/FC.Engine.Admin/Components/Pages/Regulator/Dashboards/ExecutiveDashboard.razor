@@ -2,6 +2,7 @@
 @attribute [Authorize(Policy = "RegulatorOnly")]
 @inject FC.Engine.Admin.Services.Dashboards.StakeholderDashboardService DashboardService
 @inject IJSRuntime JS
+@inject ILogger<FC.Engine.Admin.Components.Pages.Regulator.Dashboards.ExecutiveDashboard> Logger
 
 <PageTitle>Executive Dashboard</PageTitle>
 
@@ -290,8 +291,9 @@
                     }
                 });
             }
-            catch
+            catch (Exception ex)
             {
+                Logger.LogWarning(ex, "Executive dashboard chart rendering failed");
             }
         }
     }

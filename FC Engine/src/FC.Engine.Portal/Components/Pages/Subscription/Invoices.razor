@@ -1,7 +1,10 @@
 @page "/subscription/invoices"
 @attribute [Authorize(Policy = "InstitutionUser")]
 @inject ISubscriptionService SubscriptionService
+@inject SubscriptionOverdueStateService OverdueState
 @inject ITenantContext TenantContext
+@inject DialogService Dialog
+@inject ToastService Toast
 @inject IJSRuntime JS
 
 <PageTitle>My Invoices</PageTitle>
@@ -29,7 +32,7 @@
     @if (_loading)
     {
         <SkeletonGuard OnRetry="Load">
-            <div aria-busy="true" aria-label="Loading invoices…">
+            <div aria-busy="true" aria-label="Loading invoices...">
                 <div class="fc-skel-stats-row fc-skel-section">
                     <SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Stat" Index="0" />
                     <SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.Stat" Index="3" />
@@ -73,7 +76,7 @@
         <section class="portal-dash-stats">
             <article class="portal-stat-card">
                 <div class="portal-stat-label">Total Invoices</div>
-                <div class="portal-stat-value">@_invoices.Count</div>
+                <div class="portal-stat-value">@_totalCount</div>
                 <div class="portal-stat-detail">all billing documents</div>
             </article>
             <article class="portal-stat-card">
@@ -114,7 +117,7 @@
         else
         {
             <div class="portal-sub-inv-grid">
-                @foreach (var invoice in _invoices.OrderByDescending(i => i.CreatedAt))
+                @foreach (var invoice in _invoices)
                 {
                     var isExpanded = _expandedInvoiceIds.Contains(invoice.Id);
                     var invoiceId = invoice.Id;
@@ -123,7 +126,7 @@
                         && invoice.Status == InvoiceStatus.Issued
                         && (invoice.DueDate.Value.ToDateTime(TimeOnly.MinValue) - DateTime.UtcNow).TotalDays <= 7;
 
-                    <article class="portal-sub-inv-card @(isOverdue ? "portal-sub-inv-card--overdue" : "")">
+                    <article class="portal-sub-inv-card @(isOverdue ? "portal-sub-inv-card--overdue" : "") @(invoice.Status == InvoiceStatus.Voided ? "portal-sub-inv-card--voided" : "")">
 
                         <div class="portal-sub-inv-card-head">
                             <div>
@@ -178,6 +181,20 @@
                                     <span>@invoice.PaidAt.Value.ToString("dd MMM yyyy")</span>
                                 </div>
                             }
+                            @if (invoice.VoidedAt.HasValue)
+                            {
+                                <div class="portal-sub-inv-row">
+                                    <span class="portal-sub-inv-row-label">Voided On</span>
+                                    <span>@invoice.VoidedAt.Value.ToString("dd MMM yyyy")</span>
+                                </div>
+                                @if (!string.IsNullOrWhiteSpace(invoice.VoidReason))
+                                {
+                                    <div class="portal-sub-inv-row">
+                                        <span class="portal-sub-inv-row-label">Void Reason</span>
+                                        <span>@invoice.VoidReason</span>
+                                    </div>
+                                }
+                            }
                         </div>
 
                         <footer class="portal-sub-inv-footer">
@@ -199,17 +216,33 @@
                                     <span class="portal-sub-caption">Awaiting payment</span>
                                 }
 
-                                <button class="portal-btn portal-btn-outline portal-btn-sm"
-                                        @onclick="() => DownloadInvoice(invoice)"
-                                        title="Download invoice as HTML">
-                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                                         width="14" height="14" aria-hidden="true">
-                                        <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
-                                        <polyline points="7 10 12 15 17 10"/>
-                                        <line x1="12" y1="15" x2="12" y2="3"/>
-                                    </svg>
-                                    Download PDF
-                                </button>
+                                @if (invoice.Status != InvoiceStatus.Voided)
+                                {
+                                    <button class="portal-btn portal-btn-outline portal-btn-sm"
+                                            @onclick="() => DownloadInvoice(invoice)"
+                                            title="Download invoice as HTML">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                                             width="14" height="14" aria-hidden="true">
+                                            <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+                                            <polyline points="7 10 12 15 17 10"/>
+                                            <line x1="12" y1="15" x2="12" y2="3"/>
+                                        </svg>
+                                        Download PDF
+                                    </button>
+                                }
+
+                                @if (invoice.Status is InvoiceStatus.Draft or InvoiceStatus.Issued or InvoiceStatus.Overdue)
+                                {
+                                    <button class="portal-btn portal-btn-danger-outline portal-btn-sm"
+                                            disabled="@(_busyInvoiceId == invoiceId)"
+                                            @onclick="() => ConfirmVoid(invoiceId, invoice.InvoiceNumber)">
+                                        @if (_busyInvoiceId == invoiceId)
+                                        {
+                                            <span class="portal-btn-spinner" aria-hidden="true"></span>
+                                        }
+                                        Void
+                                    </button>
+                                }
                             </div>
 
                             <button class="portal-sub-inv-timeline-toggle"
@@ -274,10 +307,14 @@
                                         }
                                         else if (invoice.VoidedAt.HasValue)
                                         {
-                                            <div class="portal-sub-tl-dot portal-sub-tl-dot--pending" aria-hidden="true"></div>
+                                            <div class="portal-sub-tl-dot portal-sub-tl-dot--voided" aria-hidden="true">✕</div>
                                             <div class="portal-sub-tl-content">
                                                 <p class="portal-sub-tl-label portal-sub-tl-label--muted">Invoice Voided</p>
-                                                <p class="portal-sub-tl-date">@invoice.VoidedAt.Value.ToString("dd MMM yyyy")</p>
+                                                <p class="portal-sub-tl-date">@invoice.VoidedAt.Value.ToString("dd MMM yyyy, HH:mm") UTC</p>
+                                                @if (!string.IsNullOrWhiteSpace(invoice.VoidReason))
+                                                {
+                                                    <p class="portal-sub-tl-date">Reason: @invoice.VoidReason</p>
+                                                }
                                             </div>
                                         }
                                         else
@@ -295,11 +332,88 @@
                     </article>
                 }
             </div>
+
+            @* ── Pagination ────────────────────────────────────────── *@
+            @if (_totalPages > 1)
+            {
+                <nav class="portal-pagination" role="navigation" aria-label="Invoice list pagination">
+                    <span class="portal-pagination-info">
+                        Showing @(((_currentPage - 1) * PageSize) + 1)–@(Math.Min(_currentPage * PageSize, _totalCount)) of @_totalCount
+                    </span>
+                    <div class="portal-pagination-controls">
+                        <button class="portal-btn portal-btn-ghost portal-btn-sm"
+                                disabled="@(_currentPage <= 1)"
+                                @onclick="() => GoToPage(_currentPage - 1)"
+                                aria-label="Previous page">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                                <polyline points="15 18 9 12 15 6"/>
+                            </svg>
+                        </button>
+                        @for (int p = 1; p <= _totalPages; p++)
+                        {
+                            var pageNum = p;
+                            @if (ShouldShowPageButton(pageNum))
+                            {
+                                <button class="portal-btn @(pageNum == _currentPage ? "portal-btn-primary portal-btn-sm" : "portal-btn-ghost portal-btn-sm")"
+                                        @onclick="() => GoToPage(pageNum)"
+                                        aria-label="Go to page @pageNum"
+                                        aria-current="@(pageNum == _currentPage ? "page" : null)">
+                                    @pageNum
+                                </button>
+                            }
+                            else if (ShouldShowEllipsis(pageNum))
+                            {
+                                <span class="portal-pagination-ellipsis">...</span>
+                            }
+                        }
+                        <button class="portal-btn portal-btn-ghost portal-btn-sm"
+                                disabled="@(_currentPage >= _totalPages)"
+                                @onclick="() => GoToPage(_currentPage + 1)"
+                                aria-label="Next page">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                                <polyline points="9 18 15 12 9 6"/>
+                            </svg>
+                        </button>
+                    </div>
+                </nav>
+            }
         }
     }
 </div>
 
+@* ── Void Reason Modal ─────────────────────────────────────────── *@
+@if (_showVoidModal)
+{
+    <div class="portal-modal-backdrop" @onclick="CloseVoidModal">
+        <div class="portal-sub-void-modal" @onclick:stopPropagation="true" role="dialog" aria-modal="true"
+             aria-labelledby="void-modal-title">
+            <h3 id="void-modal-title">Void Invoice @_voidInvoiceNumber</h3>
+            <p class="portal-sub-caption">This action cannot be undone. The invoice will be permanently voided.</p>
+            <div class="portal-sub-void-field">
+                <label for="void-reason">Reason for voiding <span class="portal-sub-required">*</span></label>
+                <textarea id="void-reason" class="portal-input" rows="3"
+                          placeholder="e.g. Duplicate invoice, billing error, customer request..."
+                          @bind="_voidReason"></textarea>
+            </div>
+            <div class="portal-sub-void-actions">
+                <button class="portal-btn portal-btn-outline portal-btn-sm" @onclick="CloseVoidModal">Cancel</button>
+                <button class="portal-btn portal-btn-danger portal-btn-sm"
+                        disabled="@(string.IsNullOrWhiteSpace(_voidReason) || _busyInvoiceId.HasValue)"
+                        @onclick="ExecuteVoid">
+                    @if (_busyInvoiceId == _voidInvoiceId)
+                    {
+                        <span class="portal-btn-spinner" aria-hidden="true"></span>
+                    }
+                    Void Invoice
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
 @code {
+    private const int PageSize = 20;
+
     private bool _loading = true;
     private string? _error;
     private string? _message;
@@ -307,6 +421,17 @@
     private Guid _tenantId;
     private List<Invoice> _invoices = new();
     private readonly HashSet<int> _expandedInvoiceIds = new();
+
+    // Pagination
+    private int _currentPage = 1;
+    private int _totalCount;
+    private int _totalPages => _totalCount <= 0 ? 1 : (int)Math.Ceiling((double)_totalCount / PageSize);
+
+    // Void modal
+    private bool _showVoidModal;
+    private int? _voidInvoiceId;
+    private string? _voidInvoiceNumber;
+    private string? _voidReason;
 
     protected override async Task OnInitializedAsync()
     {
@@ -325,7 +450,8 @@
     {
         try
         {
-            _invoices = await SubscriptionService.GetInvoices(_tenantId, 1, 100);
+            _totalCount = await SubscriptionService.GetInvoiceCount(_tenantId);
+            _invoices = await SubscriptionService.GetInvoices(_tenantId, _currentPage, PageSize);
         }
         catch (Exception ex)
         {
@@ -337,6 +463,31 @@
             StateHasChanged();
         }
     }
+
+    private async Task GoToPage(int page)
+    {
+        if (page < 1 || page > _totalPages || page == _currentPage) return;
+        _currentPage = page;
+        _expandedInvoiceIds.Clear();
+        _message = null;
+        _error = null;
+        try
+        {
+            _invoices = await SubscriptionService.GetInvoices(_tenantId, _currentPage, PageSize);
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        StateHasChanged();
+    }
+
+    private bool ShouldShowPageButton(int pageNum)
+        => pageNum == 1 || pageNum == _totalPages
+           || (pageNum >= _currentPage - 1 && pageNum <= _currentPage + 1);
+
+    private bool ShouldShowEllipsis(int pageNum)
+        => pageNum == _currentPage - 2 || pageNum == _currentPage + 2;
 
     private void ToggleTimeline(int invoiceId)
     {
@@ -353,7 +504,9 @@
         {
             var invoice = await SubscriptionService.GenerateInvoice(_tenantId);
             _message = $"Generated draft invoice {invoice.InvoiceNumber}.";
+            _currentPage = 1;
             await Load();
+            await OverdueState.InvalidateAsync(_tenantId);
         }
         catch (Exception ex)
         {
@@ -375,10 +528,52 @@
             var invoice = await SubscriptionService.IssueInvoice(invoiceId);
             _message = $"Invoice {invoice.InvoiceNumber} has been issued.";
             await Load();
+            await OverdueState.InvalidateAsync(_tenantId);
         }
         catch (Exception ex)
         {
             _error = ex.Message;
+        }
+        finally
+        {
+            _busyInvoiceId = null;
+        }
+    }
+
+    private void ConfirmVoid(int invoiceId, string invoiceNumber)
+    {
+        _voidInvoiceId = invoiceId;
+        _voidInvoiceNumber = invoiceNumber;
+        _voidReason = null;
+        _showVoidModal = true;
+    }
+
+    private void CloseVoidModal()
+    {
+        _showVoidModal = false;
+        _voidInvoiceId = null;
+        _voidInvoiceNumber = null;
+        _voidReason = null;
+    }
+
+    private async Task ExecuteVoid()
+    {
+        if (_voidInvoiceId is null || string.IsNullOrWhiteSpace(_voidReason)) return;
+
+        _busyInvoiceId = _voidInvoiceId;
+        _error = null;
+        _message = null;
+        try
+        {
+            await SubscriptionService.VoidInvoice(_voidInvoiceId.Value, _voidReason.Trim());
+            Toast.Success("Invoice voided successfully.");
+            CloseVoidModal();
+            await Load();
+            await OverdueState.InvalidateAsync(_tenantId);
+        }
+        catch (Exception ex)
+        {
+            Toast.Error("Failed to void invoice: " + ex.Message);
         }
         finally
         {

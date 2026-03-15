@@ -197,6 +197,70 @@ public class ReportBuilderService
 
         return await _boardPackGenerator.Generate(sections, branding, title, ct);
     }
+
+    /// <summary>
+    /// Generates a real .xlsx Excel workbook from report query results using ClosedXML.
+    /// </summary>
+    public static byte[] GenerateExcel(ReportQueryResult result, string reportName)
+    {
+        using var wb = new ClosedXML.Excel.XLWorkbook();
+        var usedNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var wsName = SanitizeWorksheetName(reportName, usedNames);
+        var ws = wb.AddWorksheet(wsName);
+
+        // Headers
+        for (var col = 0; col < result.Columns.Count; col++)
+        {
+            ws.Cell(1, col + 1).Value = result.Columns[col];
+            ws.Cell(1, col + 1).Style.Font.Bold = true;
+            ws.Cell(1, col + 1).Style.Fill.BackgroundColor = ClosedXML.Excel.XLColor.FromHtml("#006B3F");
+            ws.Cell(1, col + 1).Style.Font.FontColor = ClosedXML.Excel.XLColor.White;
+        }
+
+        // Data rows
+        for (var row = 0; row < result.Rows.Count; row++)
+        {
+            for (var col = 0; col < result.Columns.Count; col++)
+            {
+                var colName = result.Columns[col];
+                result.Rows[row].TryGetValue(colName, out var value);
+                var cell = ws.Cell(row + 2, col + 1);
+                if (value is decimal d) cell.Value = (double)d;
+                else if (value is int i) cell.Value = i;
+                else if (value is long l) cell.Value = l;
+                else if (value is double dbl) cell.Value = dbl;
+                else if (value is DateTime dt) cell.Value = dt;
+                else cell.Value = value?.ToString() ?? "";
+            }
+        }
+
+        ws.SheetView.FreezeRows(1);
+        ws.Columns().AdjustToContents(1, Math.Min(result.Rows.Count + 1, 100), 5, 50);
+
+        using var stream = new MemoryStream();
+        wb.SaveAs(stream);
+        return stream.ToArray();
+    }
+
+    private static string SanitizeWorksheetName(string source, ISet<string> existingNames)
+    {
+        if (string.IsNullOrWhiteSpace(source)) source = "Sheet";
+        var invalid = Path.GetInvalidFileNameChars()
+            .Concat(new[] { ':', '\\', '/', '?', '*', '[', ']' })
+            .Distinct().ToHashSet();
+        var sanitized = new string(source.Select(ch => invalid.Contains(ch) ? '_' : ch).ToArray()).Trim();
+        if (string.IsNullOrWhiteSpace(sanitized)) sanitized = "Sheet";
+        if (sanitized.Length > 31) sanitized = sanitized[..31];
+        var unique = sanitized;
+        var index = 1;
+        while (existingNames.Contains(unique))
+        {
+            var suffix = $"_{index++}";
+            unique = sanitized[..Math.Min(31 - suffix.Length, sanitized.Length)] + suffix;
+        }
+        existingNames.Add(unique);
+        return unique;
+    }
 }
 
 // Field tree models for the UI

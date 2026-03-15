@@ -68,8 +68,16 @@ builder.Services.AddScoped<FC.Engine.Portal.Services.TourService>();
 builder.Services.AddScoped<FC.Engine.Portal.Services.TourStateService>();
 builder.Services.AddScoped<FC.Engine.Portal.Services.PortalShortcutService>();
 builder.Services.AddScoped<FC.Engine.Portal.Services.OnboardingStateService>();
+builder.Services.AddScoped<FC.Engine.Portal.Services.SubscriptionOverdueStateService>();
 builder.Services.AddSingleton<FC.Engine.Portal.Services.IPresenceService, FC.Engine.Portal.Services.InMemoryPresenceService>();
 builder.Services.AddSingleton<FC.Engine.Portal.Services.IAuditCommentService, FC.Engine.Portal.Services.InMemoryAuditCommentService>();
+
+// HttpClient for cross-project API calls (e.g. BatchSubmissions → FC.Engine.Api)
+var apiBaseUrl = builder.Configuration["EngineApi:BaseUrl"] ?? "https://localhost:5001";
+builder.Services.AddHttpClient(string.Empty, client =>
+{
+    client.BaseAddress = new Uri(apiBaseUrl);
+});
 
 // Caching
 builder.Services.AddMemoryCache();

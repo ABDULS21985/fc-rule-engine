@@ -656,9 +656,9 @@
                                 <div class="portal-form-group">
                                     <label class="portal-form-label">Format</label>
                                     <div class="rb3-freq-group">
-                                        <button class="rb3-freq-btn @(_scheduleFormat == "pdf" ? "rb3-freq-btn--on" : "")" @onclick='() => _scheduleFormat = "pdf"'>PDF</button>
-                                        <button class="rb3-freq-btn @(_scheduleFormat == "excel" ? "rb3-freq-btn--on" : "")" @onclick='() => _scheduleFormat = "excel"'>Excel</button>
-                                        <button class="rb3-freq-btn @(_scheduleFormat == "csv" ? "rb3-freq-btn--on" : "")" @onclick='() => _scheduleFormat = "csv"'>CSV</button>
+                                        <button class="rb3-freq-btn @(_scheduleFormat == "PDF" ? "rb3-freq-btn--on" : "")" @onclick='() => _scheduleFormat = "PDF"'>PDF</button>
+                                        <button class="rb3-freq-btn @(_scheduleFormat == "Excel" ? "rb3-freq-btn--on" : "")" @onclick='() => _scheduleFormat = "Excel"'>Excel</button>
+                                        <button class="rb3-freq-btn @(_scheduleFormat == "CSV" ? "rb3-freq-btn--on" : "")" @onclick='() => _scheduleFormat = "CSV"'>CSV</button>
                                     </div>
                                 </div>
                                 <div class="rb3-schedule-summary">
@@ -670,7 +670,7 @@
                                     {
                                         <span> to <strong>@_scheduleEmail</strong></span>
                                     }
-                                    as <strong>@_scheduleFormat.ToUpper()</strong>.
+                                    as <strong>@_scheduleFormat</strong>.
                                 </div>
                             }
                             else
@@ -757,7 +757,7 @@
     private string _saveTab = "details";
     private string _scheduleFrequency = "none";
     private string _scheduleEmail = "";
-    private string _scheduleFormat = "pdf";
+    private string _scheduleFormat = "PDF";
 
     protected override async Task OnInitializedAsync()
     {
@@ -1222,9 +1222,20 @@
 
     private async Task ExportExcel()
     {
-        // Fallback: download as CSV with xlsx-friendly content type hint
-        Toast.Info("Generating export…");
-        await ExportCsv();
+        var r = _result ?? _previewResult;
+        if (r is null) return;
+        try
+        {
+            var excelBytes = ReportBuilderService.GenerateExcel(r, _saveName ?? "Report");
+            var base64 = Convert.ToBase64String(excelBytes);
+            var fileName = $"report-{DateTime.UtcNow:yyyyMMddHHmm}.xlsx";
+            await JS.InvokeVoidAsync("portalDownloadBase64File", base64, fileName,
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+        }
+        catch (Exception ex)
+        {
+            Toast.Error($"Excel export failed: {ex.Message}");
+        }
     }
 
     private void ExportPdf()

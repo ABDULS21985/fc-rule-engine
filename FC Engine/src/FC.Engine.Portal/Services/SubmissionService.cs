@@ -7,6 +7,7 @@ using FC.Engine.Domain.Entities;
 using FC.Engine.Domain.Enums;
 using FC.Engine.Infrastructure.Metadata;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 /// <summary>
 /// Portal service that orchestrates the submission wizard workflow:
@@ -24,6 +25,7 @@ public class SubmissionService
     private readonly IDbContextFactory<MetadataDbContext> _dbFactory;
     private readonly NotificationService _notificationSvc;
     private readonly IFilingCalendarService _filingCalendarService;
+    private readonly ILogger<SubmissionService> _logger;
 
     public SubmissionService(
         TemplateService templateService,
@@ -34,7 +36,8 @@ public class SubmissionService
         IngestionOrchestrator orchestrator,
         IDbContextFactory<MetadataDbContext> dbFactory,
         NotificationService notificationSvc,
-        IFilingCalendarService filingCalendarService)
+        IFilingCalendarService filingCalendarService,
+        ILogger<SubmissionService> logger)
     {
         _templateService = templateService;
         _entitlementService = entitlementService;
@@ -45,6 +48,7 @@ public class SubmissionService
         _dbFactory = dbFactory;
         _notificationSvc = notificationSvc;
         _filingCalendarService = filingCalendarService;
+        _logger = logger;
     }
 
     /// <summary>
@@ -259,7 +263,10 @@ public class SubmissionService
                         submittedByUserId.Value, institutionId, result.SubmissionId,
                         returnCode, periodStr, status, result.ValidationReport?.ErrorCount ?? 0, result.ValidationReport?.WarningCount ?? 0);
                 }
-                catch { }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to send submission result notification for submission {SubmissionId}", result.SubmissionId);
+                }
             }
             return result;
         }
@@ -287,7 +294,10 @@ public class SubmissionService
                     submittedByUserId.Value, institutionId, result.SubmissionId,
                     returnCode, periodStr, status, result.ValidationReport?.ErrorCount ?? 0, result.ValidationReport?.WarningCount ?? 0);
             }
-            catch { }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to send direct acceptance notification for submission {SubmissionId}", result.SubmissionId);
+            }
 
             return result;
         }
@@ -327,9 +337,9 @@ public class SubmissionService
         {
             await _filingCalendarService.RecordSla(periodId, submissionId);
         }
-        catch
+        catch (Exception ex)
         {
-            // SLA tracking should not break submission flow.
+            _logger.LogWarning(ex, "SLA recording failed for period {PeriodId}, submission {SubmissionId}", periodId, submissionId);
         }
     }
 }

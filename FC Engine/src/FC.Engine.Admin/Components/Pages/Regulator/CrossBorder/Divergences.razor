@@ -1,6 +1,7 @@
 @page "/regulator/cross-border/divergences"
 @attribute [Authorize(Policy = "RegulatorOnly")]
 @inject IDivergenceDetectionService DivergenceService
+@inject RegulatorSessionService RegulatorSession
 @inject NavigationManager Nav
 @inject ToastService Toast
 
@@ -138,12 +139,18 @@
     private string _severityFilter = "";
     private Exception? _loadException;
     private List<DivergenceAlert> _divergences = [];
+    private int _currentUserId;
 
     private bool _showResolveModal;
     private long _resolveId;
     private string _resolution = "";
 
-    protected override async Task OnInitializedAsync() => await LoadDivergences();
+    protected override async Task OnInitializedAsync()
+    {
+        var session = await RegulatorSession.GetRequiredAsync();
+        _currentUserId = session.UserId;
+        await LoadDivergences();
+    }
 
     private async Task LoadDivergences()
     {
@@ -191,7 +198,7 @@
     {
         try
         {
-            await DivergenceService.AcknowledgeDivergenceAsync(id, 1);
+            await DivergenceService.AcknowledgeDivergenceAsync(id, _currentUserId);
             Toast.Success("Divergence acknowledged.");
             await LoadDivergences();
         }
@@ -212,7 +219,7 @@
     {
         try
         {
-            await DivergenceService.ResolveDivergenceAsync(_resolveId, _resolution, 1);
+            await DivergenceService.ResolveDivergenceAsync(_resolveId, _resolution, _currentUserId);
             _showResolveModal = false;
             Toast.Success("Divergence resolved.");
             await LoadDivergences();

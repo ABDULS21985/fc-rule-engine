@@ -596,11 +596,17 @@ public class SubscriptionService : ISubscriptionService
         pageSize = Math.Clamp(pageSize, 1, 100);
 
         return await _db.Invoices
+            .Include(i => i.LineItems)
             .Where(i => i.TenantId == tenantId)
             .OrderByDescending(i => i.CreatedAt)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
             .ToListAsync(ct);
+    }
+
+    public async Task<int> GetInvoiceCount(Guid tenantId, CancellationToken ct = default)
+    {
+        return await _db.Invoices.CountAsync(i => i.TenantId == tenantId, ct);
     }
 
     public async Task<List<Payment>> GetPayments(Guid tenantId, int page = 1, int pageSize = 20, CancellationToken ct = default)
@@ -614,6 +620,11 @@ public class SubscriptionService : ISubscriptionService
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
             .ToListAsync(ct);
+    }
+
+    public async Task<int> GetPaymentCount(Guid tenantId, CancellationToken ct = default)
+    {
+        return await _db.Payments.CountAsync(p => p.TenantId == tenantId, ct);
     }
 
     public async Task<string> GenerateInvoiceNumber(Guid tenantId, DateTime periodStart, CancellationToken ct = default)

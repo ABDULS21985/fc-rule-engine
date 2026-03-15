@@ -70,7 +70,14 @@
                 </div>
                 <p class="fc-detail-hero-subtitle">
                     Return Code <a href="/templates/@_submission.ReturnCode">@_submission.ReturnCode</a>
-                    &middot; Submitted @_submission.SubmittedAt.ToString("d MMM yyyy, HH:mm") UTC
+                    @if (_submission.SubmittedAt != default)
+                    {
+                        @:&middot; Submitted @_submission.SubmittedAt.ToString("d MMM yyyy, HH:mm") UTC
+                    }
+                    else
+                    {
+                        @:&middot; Created @_submission.CreatedAt.ToString("d MMM yyyy, HH:mm") UTC
+                    }
                 </p>
 
                 <div class="fc-detail-hero-meta">
@@ -173,7 +180,16 @@
                         }
                         <div class="fc-detail-info-item">
                             <span class="fc-detail-info-label">Submitted At</span>
-                            <span class="fc-detail-info-value">@_submission.SubmittedAt.ToString("d MMM yyyy, HH:mm:ss") UTC</span>
+                            <span class="fc-detail-info-value">
+                                @if (_submission.SubmittedAt != default)
+                                {
+                                    @(_submission.SubmittedAt.ToString("d MMM yyyy, HH:mm:ss"))@: UTC
+                                }
+                                else
+                                {
+                                    <span class="fc-text-subtle">Not yet submitted</span>
+                                }
+                            </span>
                         </div>
                         <div class="fc-detail-info-item">
                             <span class="fc-detail-info-label">Processing Duration</span>

@@ -90,10 +90,40 @@ public class ScheduledReportJob : BackgroundService
                     fileBytes = GenerateExcelFromResult(result, report.Name);
                 }
 
-                // Notify recipients
-                var recipients = !string.IsNullOrWhiteSpace(report.ScheduleRecipients)
-                    ? JsonSerializer.Deserialize<List<int>>(report.ScheduleRecipients) ?? new()
-                    : new List<int> { report.CreatedByUserId };
+                // Notify recipients — ScheduleRecipients may contain a JSON array of
+                // int user IDs (from SetSchedule API) or string email addresses (from Portal UI).
+                // Parse both gracefully and route accordingly.
+                var recipientUserIds = new List<int> { report.CreatedByUserId };
+                var externalEmails = new List<string>();
+
+                if (!string.IsNullOrWhiteSpace(report.ScheduleRecipients))
+                {
+                    try
+                    {
+                        var jsonEl = JsonSerializer.Deserialize<JsonElement>(report.ScheduleRecipients);
+                        if (jsonEl.ValueKind == JsonValueKind.Array)
+                        {
+                            foreach (var item in jsonEl.EnumerateArray())
+                            {
+                                if (item.ValueKind == JsonValueKind.Number && item.TryGetInt32(out var userId))
+                                {
+                                    if (!recipientUserIds.Contains(userId))
+                                        recipientUserIds.Add(userId);
+                                }
+                                else
+                                {
+                                    var str = item.GetString();
+                                    if (!string.IsNullOrWhiteSpace(str) && str.Contains('@'))
+                                        externalEmails.Add(str);
+                                }
+                            }
+                        }
+                    }
+                    catch
+                    {
+                        // Malformed JSON — fall back to creator only
+                    }
+                }
 
                 await notificationOrchestrator.Notify(new NotificationRequest
                 {
@@ -102,7 +132,8 @@ public class ScheduledReportJob : BackgroundService
                     Title = $"Scheduled Report: {report.Name}",
                     Message = "Your scheduled report has been generated and is ready.",
                     Priority = NotificationPriority.Normal,
-                    RecipientUserIds = recipients,
+                    RecipientUserIds = recipientUserIds,
+                    ExternalEmailAddresses = externalEmails,
                     ActionUrl = "/reports/saved"
                 }, ct);
 
@@ -128,23 +159,34 @@ public class ScheduledReportJob : BackgroundService
             return false;
 
         // Simple cron evaluation: support daily, weekly, monthly patterns
-        // Format: "0 8 * * *" (daily at 8am), "0 8 * * 1" (weekly Monday), "0 8 1 * *" (monthly 1st)
+        // Format: "30 8 * * *" (daily at 08:30), "0 8 * * 1" (weekly Monday), "0 8 1 * *" (monthly 1st)
         var now = DateTime.UtcNow;
         var parts = cronExpression.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
         if (parts.Length < 5) return false;
 
-        var minute = parts[0];
-        var hour = parts[1];
+        var minutePart = parts[0];
+        var hourPart = parts[1];
         var dayOfMonth = parts[2];
-        var month = parts[3];
+        var monthPart = parts[3];
         var dayOfWeek = parts[4];
 
-        // Check if current time matches the cron pattern
-        if (minute != "*" && int.TryParse(minute, out var m) && now.Minute != m) return false;
-        if (hour != "*" && int.TryParse(hour, out var h) && now.Hour != h) return false;
+        // Day/month/weekday must match exactly (these are coarse-grained)
         if (dayOfMonth != "*" && int.TryParse(dayOfMonth, out var dom) && now.Day != dom) return false;
-        if (month != "*" && int.TryParse(month, out var mon) && now.Month != mon) return false;
+        if (monthPart != "*" && int.TryParse(monthPart, out var mon) && now.Month != mon) return false;
         if (dayOfWeek != "*" && int.TryParse(dayOfWeek, out var dow) && (int)now.DayOfWeek != dow) return false;
+
+        // Hour must match exactly
+        if (hourPart != "*" && int.TryParse(hourPart, out var h) && now.Hour != h) return false;
+
+        // Minute: use a 2-minute tolerance window to handle timer drift.
+        // The background job ticks every ~1 minute, so a ±1 minute window ensures
+        // we don't miss the scheduled minute if processing delays push the tick.
+        if (minutePart != "*" && int.TryParse(minutePart, out var m))
+        {
+            var diff = Math.Abs(now.Minute - m);
+            // Also handle wrap-around (e.g. scheduled at 59, current is 0)
+            if (diff > 2 && diff < 58) return false;
+        }
 
         // Don't run if already ran in this period
         if (lastRunAt.HasValue)

@@ -816,11 +816,60 @@
             ViewDetail(submissionId);
     }
 
-    [JSInvokable]
-    public Task OnCardMoved(string cardId, string fromColId, string toColId)
+    // Allowed kanban drag transitions: column ID → target SubmissionStatus.
+    // Only user-meaningful moves are permitted; system-driven transitions (Parsing, Validating, etc.) are excluded.
+    private static readonly Dictionary<(string from, string to), SubmissionStatus> _allowedKanbanMoves = new()
     {
-        // Optimistic update already applied in JS DOM; call an API here to persist status if needed.
-        return Task.CompletedTask;
+        // Maker withdraws a draft (archive it)
+        [("draft", "archived")] = SubmissionStatus.Historical,
+        // Checker sends back to rejected
+        [("review", "rejected")] = SubmissionStatus.ApprovalRejected,
+    };
+
+    [JSInvokable]
+    public async Task OnCardMoved(string cardId, string fromColId, string toColId)
+    {
+        if (fromColId == toColId || !int.TryParse(cardId, out var submissionId))
+            return;
+
+        if (!_allowedKanbanMoves.TryGetValue((fromColId, toColId), out var targetStatus))
+        {
+            // Invalid move — revert the JS DOM by reloading submissions
+            await LoadSubmissions();
+            StateHasChanged();
+            return;
+        }
+
+        try
+        {
+            var submission = await SubmissionRepo.GetById(submissionId);
+            if (submission is null || submission.InstitutionId != institutionId)
+                return;
+
+            switch (targetStatus)
+            {
+                case SubmissionStatus.Historical:
+                    submission.MarkHistorical();
+                    break;
+                case SubmissionStatus.ApprovalRejected:
+                    submission.MarkApprovalRejected();
+                    break;
+                default:
+                    return; // safety guard
+            }
+
+            await SubmissionRepo.Update(submission);
+
+            // Refresh list to reflect the change
+            await LoadSubmissions();
+            StateHasChanged();
+        }
+        catch
+        {
+            // Revert on failure
+            await LoadSubmissions();
+            StateHasChanged();
+        }
     }
 
     public void Dispose()

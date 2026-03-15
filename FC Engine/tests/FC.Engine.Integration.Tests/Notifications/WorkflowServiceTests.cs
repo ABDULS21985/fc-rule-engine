@@ -5,6 +5,8 @@ using FC.Engine.Domain.Enums;
 using FC.Engine.Domain.Notifications;
 using FC.Engine.Portal.Services;
 using FluentAssertions;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Xunit;
 
@@ -78,7 +80,8 @@ public class WorkflowServiceTests
             approvalRepo.Object,
             userRepo.Object,
             notificationOrchestrator.Object,
-            filingCalendarService.Object);
+            filingCalendarService.Object,
+            NullLogger<WorkflowService>.Instance);
 
         var result = await sut.Approve(submissionId, checkerUserId, "Looks good", CancellationToken.None);
 

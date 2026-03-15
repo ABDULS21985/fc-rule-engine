@@ -572,9 +572,21 @@
             return;
         }
 
-        if (passwordStrength < 50)
+        if (!newPassword.Any(char.IsUpper))
         {
-            newPasswordError = "Password is too weak. Add uppercase, numbers, or special characters.";
+            newPasswordError = "Password must include at least one uppercase letter.";
+            return;
+        }
+
+        if (!newPassword.Any(char.IsLower))
+        {
+            newPasswordError = "Password must include at least one lowercase letter.";
+            return;
+        }
+
+        if (!newPassword.Any(char.IsDigit))
+        {
+            newPasswordError = "Password must include at least one number.";
             return;
         }
 

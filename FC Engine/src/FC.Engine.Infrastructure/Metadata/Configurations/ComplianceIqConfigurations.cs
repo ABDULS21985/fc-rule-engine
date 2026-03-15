@@ -222,7 +222,11 @@ public sealed class ComplianceIqTurnConfiguration : IEntityTypeConfiguration<Com
 {
     public void Configure(EntityTypeBuilder<ComplianceIqTurn> builder)
     {
-        builder.ToTable("complianceiq_turns", "meta");
+        builder.ToTable("complianceiq_turns", "meta", t =>
+        {
+            t.HasCheckConstraint("CK_complianceiq_turns_classification", "[ClassificationLevel] IN ('UNCLASSIFIED','RESTRICTED','CONFIDENTIAL')");
+            t.HasCheckConstraint("CK_complianceiq_turns_entities_json", "ISJSON([EntitiesAccessedJson]) = 1");
+        });
         builder.HasKey(x => x.Id);
         builder.Property(x => x.UserId).HasMaxLength(100).IsRequired();
         builder.Property(x => x.UserRole).HasMaxLength(60).IsRequired();
@@ -245,8 +249,6 @@ public sealed class ComplianceIqTurnConfiguration : IEntityTypeConfiguration<Com
         builder.Property(x => x.RegulatorAgency).HasMaxLength(20);
         builder.Property(x => x.ErrorMessage).HasColumnType("nvarchar(500)");
         builder.Property(x => x.CreatedAt).HasColumnType("datetime2(3)").IsRequired();
-        builder.HasCheckConstraint("CK_complianceiq_turns_classification", "[ClassificationLevel] IN ('UNCLASSIFIED','RESTRICTED','CONFIDENTIAL')");
-        builder.HasCheckConstraint("CK_complianceiq_turns_entities_json", "ISJSON([EntitiesAccessedJson]) = 1");
         builder.HasIndex(x => new { x.ConversationId, x.TurnNumber }).HasDatabaseName("IX_complianceiq_turns_conversation");
         builder.HasIndex(x => new { x.TenantId, x.CreatedAt }).HasDatabaseName("IX_complianceiq_turns_tenant");
         builder.HasIndex(x => new { x.ClassificationLevel, x.CreatedAt }).HasDatabaseName("IX_complianceiq_turns_classification");

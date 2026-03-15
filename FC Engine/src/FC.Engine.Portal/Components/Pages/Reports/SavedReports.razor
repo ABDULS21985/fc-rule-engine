@@ -6,6 +6,7 @@
 @using FC.Engine.Domain.ValueObjects
 @inject FC.Engine.Portal.Services.ReportBuilderService ReportSvc
 @inject FC.Engine.Portal.Services.ToastService Toast
+@inject DialogService Dialog
 @inject NavigationManager Nav
 @inject IJSRuntime JS
 
@@ -579,19 +580,25 @@
         {
             var def = JsonSerializer.Deserialize<ReportDefinition>(report.Definition,
                 new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-            if (def is not null)
+            if (def is null || def.Fields.Count == 0)
             {
-                var result = await ReportSvc.RunReport(def, tenantId);
-                _runPreviewText = $"{result.Rows.Count} rows · Generated {DateTime.UtcNow:HH:mm:ss} UTC";
+                // No valid definition — open in builder for configuration
+                _runPreviewId = null;
                 _runPreviewLoading = false;
+                Nav.NavigateTo($"/reports/builder/{report.Id}");
                 return;
             }
-        }
-        catch { }
 
-        _runPreviewId = null;
-        _runPreviewLoading = false;
-        Nav.NavigateTo($"/reports/builder/{report.Id}");
+            var result = await ReportSvc.RunReport(def, tenantId);
+            _runPreviewText = $"{result.Rows.Count} rows · Generated {DateTime.UtcNow:HH:mm:ss} UTC";
+            _runPreviewLoading = false;
+        }
+        catch (Exception ex)
+        {
+            _runPreviewId = null;
+            _runPreviewLoading = false;
+            Toast.Error($"Report execution failed: {ex.Message}");
+        }
     }
 
     private void EditReport(FC.Engine.Domain.Entities.SavedReport report)
@@ -603,6 +610,9 @@
     private async Task DeleteReport(FC.Engine.Domain.Entities.SavedReport report)
     {
         _openOverflowId = null;
+        var confirmed = await Dialog.ConfirmDelete("Report");
+        if (!confirmed) return;
+
         try
         {
             await ReportSvc.DeleteReport(report.Id);
@@ -627,13 +637,57 @@
         scheduleReport     = report;
         scheduleFrequency  = "daily";
         scheduleFormat     = report.ScheduleFormat ?? "Excel";
-        scheduleHour       = 8;
-        scheduleMinute     = "00";
-        scheduleEmails     = string.IsNullOrEmpty(report.ScheduleRecipients)
-            ? new()
-            : report.ScheduleRecipients.Split(',', StringSplitOptions.RemoveEmptyEntries)
+        scheduleEmails     = new();
+
+        // Parse existing cron to restore hour/minute
+        scheduleHour   = 8;
+        scheduleMinute = "00";
+        if (!string.IsNullOrWhiteSpace(report.ScheduleCron))
+        {
+            var parts = report.ScheduleCron.Split(' ');
+            if (parts.Length >= 2)
+            {
+                if (int.TryParse(parts[0], out var cronMin)) scheduleMinute = cronMin.ToString("D2");
+                if (int.TryParse(parts[1], out var cronHour)) scheduleHour = cronHour;
+            }
+            if (parts.Length >= 5)
+            {
+                if (parts[4] != "*" && parts[4] != "?") scheduleFrequency = "weekly";
+                else if (parts[2] != "*" && parts[2] != "?") scheduleFrequency = "monthly";
+            }
+        }
+
+        // ScheduleRecipients is stored as JSON List<int> of user IDs by SetSchedule(),
+        // but the UI manages email addresses. Load any previously-saved email list from
+        // the _scheduleEmailsJson auxiliary field pattern. For backwards compatibility,
+        // try parsing as JSON array first; fallback to comma-separated strings.
+        if (!string.IsNullOrWhiteSpace(report.ScheduleRecipients))
+        {
+            try
+            {
+                // If it's a JSON array (could be int IDs or strings), extract as strings
+                var parsed = JsonSerializer.Deserialize<JsonElement>(report.ScheduleRecipients);
+                if (parsed.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var el in parsed.EnumerateArray())
+                    {
+                        var val = el.ToString();
+                        if (!string.IsNullOrWhiteSpace(val) && val.Contains('@'))
+                            scheduleEmails.Add(val);
+                    }
+                }
+            }
+            catch
+            {
+                // Fallback: comma-separated emails (legacy format)
+                scheduleEmails = report.ScheduleRecipients
+                    .Split(',', StringSplitOptions.RemoveEmptyEntries)
                     .Select(e => e.Trim())
+                    .Where(e => e.Contains('@'))
                     .ToList();
+            }
+        }
+
         showScheduleDialog = true;
     }
 
@@ -676,19 +730,23 @@
         {
             if (!string.IsNullOrWhiteSpace(_emailInput)) AddEmailChip(_emailInput);
 
+            var minute = int.TryParse(scheduleMinute, out var m) ? m : 0;
             var cron = scheduleFrequency switch
             {
-                "weekly"  => $"0 {scheduleHour} * * 1",
-                "monthly" => $"0 {scheduleHour} 1 * *",
-                _         => $"0 {scheduleHour} * * *"
+                "weekly"  => $"{minute} {scheduleHour} * * 1",
+                "monthly" => $"{minute} {scheduleHour} 1 * *",
+                _         => $"{minute} {scheduleHour} * * *"
             };
 
-            await ReportSvc.SetSchedule(scheduleReport.Id, cron, scheduleFormat, new List<int>());
-
-            scheduleReport.ScheduleRecipients = string.Join(",", scheduleEmails);
-            scheduleReport.IsScheduleActive   = true;
+            // Single atomic save — update all schedule fields on the entity directly
+            // to avoid the double-save race from calling SetSchedule + UpdateReport.
             scheduleReport.ScheduleCron       = cron;
             scheduleReport.ScheduleFormat     = scheduleFormat;
+            scheduleReport.IsScheduleActive   = true;
+            // Store recipient emails as a JSON string array for forward compatibility.
+            // The background ScheduledReportJob uses recipientIds (List<int>);
+            // email-based delivery uses this field for external addresses.
+            scheduleReport.ScheduleRecipients = JsonSerializer.Serialize(scheduleEmails);
             await ReportSvc.UpdateReport(scheduleReport);
 
             Toast.Success("Schedule saved.");

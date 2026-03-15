@@ -25,7 +25,9 @@ public interface ISubscriptionService
 
     Task<Subscription> GetActiveSubscription(Guid tenantId, CancellationToken ct = default);
     Task<List<Invoice>> GetInvoices(Guid tenantId, int page = 1, int pageSize = 20, CancellationToken ct = default);
+    Task<int> GetInvoiceCount(Guid tenantId, CancellationToken ct = default);
     Task<List<Payment>> GetPayments(Guid tenantId, int page = 1, int pageSize = 20, CancellationToken ct = default);
+    Task<int> GetPaymentCount(Guid tenantId, CancellationToken ct = default);
     Task<List<SubscriptionPlan>> GetAvailablePlans(Guid tenantId, CancellationToken ct = default);
 }
 

@@ -440,6 +440,7 @@
             _subscription = await SubscriptionService.UpgradePlan(
                 TenantContext.CurrentTenantId.Value, _selectedPlanCode);
             _features = _subscription.Plan?.GetFeatures() ?? new List<string>();
+            _usage = await SubscriptionService.GetUsageSummary(TenantContext.CurrentTenantId.Value);
             _availablePlans = await SubscriptionService.GetAvailablePlans(
                 TenantContext.CurrentTenantId.Value);
             Toast.Success("Plan upgraded successfully.");

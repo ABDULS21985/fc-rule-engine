@@ -2,6 +2,7 @@
 @attribute [Authorize(Policy = "RegulatorOnly")]
 @inject FC.Engine.Admin.Services.Dashboards.StakeholderDashboardService DashboardService
 @inject IJSRuntime JS
+@inject ILogger<FC.Engine.Admin.Components.Pages.Regulator.Dashboards.DeputyGovernorDashboard> Logger
 
 <PageTitle>Deputy Governor Dashboard</PageTitle>
 
@@ -336,8 +337,9 @@
                     }
                 });
             }
-            catch
+            catch (Exception ex)
             {
+                Logger.LogWarning(ex, "Deputy Governor dashboard chart rendering failed");
             }
         }
     }

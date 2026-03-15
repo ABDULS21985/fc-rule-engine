@@ -140,6 +140,10 @@
 
             foreach (var eventType in NotificationEvents.All)
             {
+                // System-internal events should not appear in user preferences
+                if (eventType == NotificationEvents.WebhookTest)
+                    continue;
+
                 byEvent.TryGetValue(eventType, out var pref);
 
                 var isMandatory = NotificationPolicy.MandatoryEvents.Contains(eventType);
@@ -251,6 +255,13 @@
             NotificationEvents.SystemAnnouncement => "System Announcement",
             NotificationEvents.ExportReady => "Export Ready",
             NotificationEvents.DataFlowCompleted => "Data Flow Completed",
+            NotificationEvents.BreachDetected => "Data Breach Detected",
+            NotificationEvents.BreachEscalation => "Breach Escalation",
+            NotificationEvents.ScheduledReportReady => "Scheduled Report Ready",
+            NotificationEvents.ValidationCompleted => "Validation Completed",
+            NotificationEvents.ExportCompleted => "Export Completed",
+            NotificationEvents.UserProvisioned => "User Provisioned",
+            NotificationEvents.WebhookTest => "Webhook Test",
             _ => eventType
         };
     }
