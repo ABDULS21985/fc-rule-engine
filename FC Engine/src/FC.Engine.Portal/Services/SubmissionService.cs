@@ -387,11 +387,12 @@ public class SubmissionService
             : moduleCode.Trim().ToUpperInvariant();
 
         await using var db = await _dbFactory.CreateDbContextAsync();
+        var tenantId = await ResolveTenantIdForInstitutionAsync(db, institutionId);
 
         List<TemplateSelectItem> publishedTemplates;
-        if (_tenantContext.CurrentTenantId is { } tenantId)
+        if (tenantId.HasValue)
         {
-            var entitlement = await _entitlementService.ResolveEntitlements(tenantId);
+            var entitlement = await _entitlementService.ResolveEntitlements(tenantId.Value);
             var activeModuleIds = entitlement.ActiveModules
                 .Select(x => x.ModuleId)
                 .Distinct()
@@ -407,7 +408,7 @@ public class SubmissionService
                 .Where(x => activeModuleIds.Contains(x.Id))
                 .ToDictionaryAsync(x => x.Id, x => x.ModuleCode);
 
-            var entitledTemplates = await _templateService.GetEntitledTemplates(tenantId);
+            var entitledTemplates = await _templateService.GetEntitledTemplates(tenantId.Value);
             publishedTemplates = entitledTemplates
                 .Where(x => x.CurrentPublishedVersion is not null)
                 .Select(x => new TemplateSelectItem
@@ -427,18 +428,10 @@ public class SubmissionService
         }
         else
         {
-            var allTemplates = await _templateService.GetAllTemplates();
-            publishedTemplates = allTemplates
-                .Where(x => x.PublishedVersionId.HasValue)
-                .Select(x => new TemplateSelectItem
-                {
-                    ReturnCode = x.ReturnCode,
-                    TemplateName = x.Name,
-                    Frequency = x.Frequency,
-                    StructuralCategory = x.StructuralCategory
-                })
-                .OrderBy(x => x.ReturnCode)
-                .ToList();
+            _logger.LogWarning(
+                "Unable to resolve tenant scope for institution {InstitutionId}; refusing to load unscoped submission templates.",
+                institutionId);
+            return new List<TemplateSelectItem>();
         }
 
         var submissions = await _submissionRepo.GetByInstitution(institutionId);
@@ -468,23 +461,28 @@ public class SubmissionService
     public async Task<List<PeriodSelectItem>> GetOpenPeriods(int institutionId, string returnCode)
     {
         await using var db = await _dbFactory.CreateDbContextAsync();
+        var tenantId = await ResolveTenantIdForInstitutionAsync(db, institutionId);
+
+        if (!tenantId.HasValue)
+        {
+            _logger.LogWarning(
+                "Unable to resolve tenant scope for institution {InstitutionId}; refusing to load unscoped return periods for {ReturnCode}.",
+                institutionId,
+                returnCode);
+            return new List<PeriodSelectItem>();
+        }
 
         var query = db.ReturnPeriods
             .AsNoTracking()
-            .Where(rp => rp.IsOpen);
+            .Where(rp => rp.IsOpen && rp.TenantId == tenantId.Value);
 
-        if (_tenantContext.CurrentTenantId is { } tenantId)
+        var entitledTemplates = await _templateService.GetEntitledTemplates(tenantId.Value);
+        var template = entitledTemplates.FirstOrDefault(x =>
+            x.ReturnCode.Equals(returnCode, StringComparison.OrdinalIgnoreCase));
+
+        if (template?.ModuleId is int moduleId)
         {
-            query = query.Where(rp => rp.TenantId == tenantId);
-
-            var entitledTemplates = await _templateService.GetEntitledTemplates(tenantId);
-            var template = entitledTemplates.FirstOrDefault(x =>
-                x.ReturnCode.Equals(returnCode, StringComparison.OrdinalIgnoreCase));
-
-            if (template?.ModuleId is int moduleId)
-            {
-                query = query.Where(rp => rp.ModuleId == moduleId);
-            }
+            query = query.Where(rp => rp.ModuleId == moduleId);
         }
 
         var periods = await query
@@ -517,6 +515,20 @@ public class SubmissionService
                 ExistingSubmissionId = hasSub ? sub!.Id : null
             };
         }).ToList();
+    }
+
+    private async Task<Guid?> ResolveTenantIdForInstitutionAsync(MetadataDbContext db, int institutionId)
+    {
+        if (_tenantContext.CurrentTenantId is { } currentTenantId)
+        {
+            return currentTenantId;
+        }
+
+        return await db.Institutions
+            .AsNoTracking()
+            .Where(i => i.Id == institutionId)
+            .Select(i => (Guid?)i.TenantId)
+            .FirstOrDefaultAsync();
     }
 
     /// <summary>

@@ -19,6 +19,7 @@ public class DataFeedService : IDataFeedService
     private readonly IGenericDataRepository _dataRepository;
     private readonly ISubmissionRepository _submissionRepository;
     private readonly ValidationOrchestrator _validationOrchestrator;
+    private readonly IAnomalyDetectionService? _anomalyDetectionService;
     private readonly MetadataDbContext _db;
     private readonly ILogger<DataFeedService> _logger;
 
@@ -28,12 +29,14 @@ public class DataFeedService : IDataFeedService
         ISubmissionRepository submissionRepository,
         ValidationOrchestrator validationOrchestrator,
         MetadataDbContext db,
-        ILogger<DataFeedService> logger)
+        ILogger<DataFeedService> logger,
+        IAnomalyDetectionService? anomalyDetectionService = null)
     {
         _templateCache = templateCache;
         _dataRepository = dataRepository;
         _submissionRepository = submissionRepository;
         _validationOrchestrator = validationOrchestrator;
+        _anomalyDetectionService = anomalyDetectionService;
         _db = db;
         _logger = logger;
     }
@@ -166,6 +169,7 @@ public class DataFeedService : IDataFeedService
         var submission = Submission.Create(institution.Id, period.Id, returnCode, tenantId);
         submission.MarkSubmitted();
         submission.SetTemplateVersion(template.CurrentVersion.Id);
+        submission.StoreParsedDataJson(SubmissionPayloadSerializer.Serialize(record));
         await _submissionRepository.Add(submission, ct);
 
         var report = await _validationOrchestrator.Validate(record, submission, institution.Id, period.Id, ct);
@@ -212,6 +216,7 @@ public class DataFeedService : IDataFeedService
 
         report.FinalizeAt(DateTime.UtcNow);
         await _submissionRepository.Update(submission, ct);
+        await TryAnalyzeSubmissionAsync(submission, ct);
 
         result.Success = true;
         result.SubmissionId = submission.Id;
@@ -220,6 +225,29 @@ public class DataFeedService : IDataFeedService
         result.Message = "Data feed processed successfully.";
         await PersistIdempotency(tenantId, returnCode, idempotencyKey, request, result, ct);
         return result;
+    }
+
+    private async Task TryAnalyzeSubmissionAsync(Submission submission, CancellationToken ct)
+    {
+        if (_anomalyDetectionService is null
+            || submission.TenantId == Guid.Empty
+            || submission.Status is not (SubmissionStatus.Accepted or SubmissionStatus.AcceptedWithWarnings))
+        {
+            return;
+        }
+
+        try
+        {
+            await _anomalyDetectionService.AnalyzeSubmissionAsync(
+                submission.Id,
+                submission.TenantId,
+                "data-feed",
+                ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to generate anomaly report for data-feed submission {SubmissionId}", submission.Id);
+        }
     }
 
     public async Task UpsertFieldMapping(

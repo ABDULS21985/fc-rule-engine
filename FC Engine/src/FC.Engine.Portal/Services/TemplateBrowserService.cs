@@ -42,38 +42,22 @@ public class TemplateBrowserService
     /// </summary>
     public async Task<List<TemplateBrowseItem>> GetAllTemplates(CancellationToken ct = default)
     {
-        var templates = await _templateCache.GetAllPublishedTemplates(ct);
-
-        // Filter by module entitlement if we have a tenant context
         var tenantId = _tenantContext.CurrentTenantId;
-        if (tenantId.HasValue)
+        if (!tenantId.HasValue)
         {
-            var entitlement = await _entitlementService.ResolveEntitlements(tenantId.Value, ct);
-            var activeModuleCodes = entitlement.ActiveModules
-                .Select(m => m.ModuleCode)
-                .ToHashSet(StringComparer.OrdinalIgnoreCase);
-
-            templates = templates
-                .Where(t => t.ModuleCode is null || activeModuleCodes.Contains(t.ModuleCode))
-                .ToList()
-                .AsReadOnly();
+            return [];
         }
 
-        return templates.Select(t => new TemplateBrowseItem
-        {
-            ReturnCode = t.ReturnCode,
-            TemplateName = t.Name,
-            Frequency = t.Frequency.ToString(),
-            StructuralCategory = t.StructuralCategory,
-            FieldCount = t.CurrentVersion.Fields.Count,
-            FormulaCount = t.CurrentVersion.IntraSheetFormulas.Count,
-            SectionCount = t.CurrentVersion.Fields
-                .Select(f => f.SectionName ?? "General")
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .Count(),
-            ModuleCode = t.ModuleCode,
-            RegulatoryBody = DeriveRegulatoryBody(t.ModuleCode, t.ReturnCode)
-        }).OrderBy(t => t.ReturnCode).ToList();
+        return await GetAllTemplates(tenantId.Value, ct);
+    }
+
+    public async Task<List<TemplateBrowseItem>> GetAllTemplates(Guid tenantId, CancellationToken ct = default)
+    {
+        var templates = await GetScopedTemplatesAsync(tenantId, ct);
+        return templates
+            .Select(MapToBrowseItem)
+            .OrderBy(t => t.ReturnCode)
+            .ToList();
     }
 
     /// <summary>
@@ -81,12 +65,19 @@ public class TemplateBrowserService
     /// </summary>
     public async Task<TemplateDetailModel?> GetTemplateDetail(string returnCode, CancellationToken ct = default)
     {
-        CachedTemplate template;
-        try
+        var tenantId = _tenantContext.CurrentTenantId;
+        if (!tenantId.HasValue)
         {
-            template = await _templateCache.GetPublishedTemplate(returnCode, ct);
+            return null;
         }
-        catch (InvalidOperationException)
+
+        return await GetTemplateDetail(returnCode, tenantId.Value, ct);
+    }
+
+    public async Task<TemplateDetailModel?> GetTemplateDetail(string returnCode, Guid tenantId, CancellationToken ct = default)
+    {
+        var template = await GetAccessibleTemplateAsync(returnCode, tenantId, ct);
+        if (template is null)
         {
             return null;
         }
@@ -173,6 +164,22 @@ public class TemplateBrowserService
     /// </summary>
     public async Task<string?> GetSchemaXml(string returnCode, CancellationToken ct = default)
     {
+        var tenantId = _tenantContext.CurrentTenantId;
+        if (!tenantId.HasValue)
+        {
+            return null;
+        }
+
+        return await GetSchemaXml(returnCode, tenantId.Value, ct);
+    }
+
+    public async Task<string?> GetSchemaXml(string returnCode, Guid tenantId, CancellationToken ct = default)
+    {
+        if (await GetAccessibleTemplateAsync(returnCode, tenantId, ct) is null)
+        {
+            return null;
+        }
+
         try
         {
             return await _xsdGenerator.GenerateSchemaXml(returnCode, ct);
@@ -188,12 +195,19 @@ public class TemplateBrowserService
     /// </summary>
     public async Task<string?> GenerateSampleXml(string returnCode, CancellationToken ct = default)
     {
-        CachedTemplate template;
-        try
+        var tenantId = _tenantContext.CurrentTenantId;
+        if (!tenantId.HasValue)
         {
-            template = await _templateCache.GetPublishedTemplate(returnCode, ct);
+            return null;
         }
-        catch
+
+        return await GenerateSampleXml(returnCode, tenantId.Value, ct);
+    }
+
+    public async Task<string?> GenerateSampleXml(string returnCode, Guid tenantId, CancellationToken ct = default)
+    {
+        var template = await GetAccessibleTemplateAsync(returnCode, tenantId, ct);
+        if (template is null)
         {
             return null;
         }
@@ -330,8 +344,106 @@ public class TemplateBrowserService
 
     // ── Private Helpers ──────────────────────────────────────────
 
-    private static string DeriveRegulatoryBody(string? moduleCode, string returnCode)
+    private async Task<List<CachedTemplate>> GetScopedTemplatesAsync(Guid tenantId, CancellationToken ct)
     {
+        var accessScope = await GetTemplateAccessScopeAsync(tenantId, ct);
+        if (accessScope.ActiveModuleCodes.Count == 0 && accessScope.LicenceTypeCodes.Count == 0)
+        {
+            return [];
+        }
+
+        var templates = await _templateCache.GetAllPublishedTemplates(tenantId, ct);
+        return templates
+            .Where(t => IsTemplateAccessible(t, accessScope))
+            .ToList();
+    }
+
+    private async Task<CachedTemplate?> GetAccessibleTemplateAsync(string returnCode, Guid tenantId, CancellationToken ct)
+    {
+        CachedTemplate template;
+        try
+        {
+            template = await _templateCache.GetPublishedTemplate(tenantId, returnCode, ct);
+        }
+        catch (InvalidOperationException)
+        {
+            return null;
+        }
+
+        var accessScope = await GetTemplateAccessScopeAsync(tenantId, ct);
+        return IsTemplateAccessible(template, accessScope)
+            ? template
+            : null;
+    }
+
+    private async Task<TemplateAccessScope> GetTemplateAccessScopeAsync(Guid tenantId, CancellationToken ct)
+    {
+        var entitlement = await _entitlementService.ResolveEntitlements(tenantId, ct);
+        return new TemplateAccessScope(
+            entitlement.ActiveModules
+                .Select(m => m.ModuleCode)
+                .Where(code => !string.IsNullOrWhiteSpace(code))
+                .ToHashSet(StringComparer.OrdinalIgnoreCase),
+            entitlement.LicenceTypeCodes
+                .Where(code => !string.IsNullOrWhiteSpace(code))
+                .ToHashSet(StringComparer.OrdinalIgnoreCase));
+    }
+
+    private static bool IsTemplateAccessible(CachedTemplate template, TemplateAccessScope accessScope)
+    {
+        if (!string.IsNullOrWhiteSpace(template.ModuleCode))
+        {
+            return accessScope.ActiveModuleCodes.Contains(template.ModuleCode);
+        }
+
+        if (!string.IsNullOrWhiteSpace(template.InstitutionType))
+        {
+            return accessScope.LicenceTypeCodes.Contains(template.InstitutionType);
+        }
+
+        return false;
+    }
+
+    private static TemplateBrowseItem MapToBrowseItem(CachedTemplate t)
+    {
+        return new TemplateBrowseItem
+        {
+            ReturnCode = t.ReturnCode,
+            TemplateName = t.Name,
+            Frequency = t.Frequency.ToString(),
+            StructuralCategory = t.StructuralCategory,
+            FieldCount = t.CurrentVersion.Fields.Count,
+            FormulaCount = t.CurrentVersion.IntraSheetFormulas.Count,
+            SectionCount = t.CurrentVersion.Fields
+                .Select(f => f.SectionName ?? "General")
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Count(),
+            ModuleCode = t.ModuleCode,
+            RegulatoryBody = DeriveRegulatoryBody(t.ModuleCode, t.ReturnCode, t.InstitutionType)
+        };
+    }
+
+    private static string DeriveRegulatoryBody(string? moduleCode, string returnCode, string? institutionType)
+    {
+        switch (institutionType?.Trim().ToUpperInvariant())
+        {
+            case "FC":
+            case "BDC":
+            case "DMB":
+            case "MFB":
+            case "PMB":
+            case "PSP":
+            case "DFI":
+            case "IMTO":
+                return "CBN";
+            case "INSURANCE":
+                return "NAICOM";
+            case "PFA":
+                return "PENCOM";
+            case "CMO":
+                return "SEC";
+        }
+
         foreach (var s in new[] { moduleCode ?? "", returnCode })
         {
             if (s.StartsWith("CBN", StringComparison.OrdinalIgnoreCase)) return "CBN";
@@ -342,6 +454,10 @@ public class TemplateBrowserService
         }
         return "Other";
     }
+
+    private sealed record TemplateAccessScope(
+        HashSet<string> ActiveModuleCodes,
+        HashSet<string> LicenceTypeCodes);
 
     private static string GetPlaceholderValue(TemplateField field)
     {

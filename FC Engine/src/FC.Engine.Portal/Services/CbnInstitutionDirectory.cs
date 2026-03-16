@@ -2,7 +2,9 @@ namespace FC.Engine.Portal.Services;
 
 /// <summary>
 /// Static directory of all CBN-licensed financial institutions in Nigeria.
-/// Source: https://www.cbn.gov.ng/supervision/finstitutions.html
+/// Sources:
+/// - https://www.cbn.gov.ng/supervision/finstitutions.html
+/// - CBN press release dated December 8, 2025 announcing 82 final BDC licences
 /// </summary>
 public static class CbnInstitutionDirectory
 {
@@ -24,10 +26,89 @@ public static class CbnInstitutionDirectory
 
     private static readonly CbnInstitutionEntry[] _all =
     [
-        // Bureau de Change (3)
+        // Bureau de Change (82)
         new("DULA GLOBAL BUREAU DE CHANGE LIMITED", "BDC", "Bureau de Change"),
-        new("GREENVAULT BUREAU DE CHANGE LIMITED", "BDC", "Bureau de Change"),
         new("TRURATE GLOBAL BUREAU DE CHANGE LIMITED", "BDC", "Bureau de Change"),
+        new("ABBUFX BDC LTD", "BDC", "Bureau de Change"),
+        new("ACHA GLOBAL BDC LTD", "BDC", "Bureau de Change"),
+        new("ARCTANGENT SWIFT BDC LTD", "BDC", "Bureau de Change"),
+        new("ASCENDANT BDC LTD", "BDC", "Bureau de Change"),
+        new("BARACAI BDC LTD", "BDC", "Bureau de Change"),
+        new("BERGPOINT BDC LTD", "BDC", "Bureau de Change"),
+        new("BRAVO MODEL BDC LTD", "BDC", "Bureau de Change"),
+        new("BRIMESTONE BDC LTD", "BDC", "Bureau de Change"),
+        new("BROWNSTON BDC LTD", "BDC", "Bureau de Change"),
+        new("BUZZWALLET BDC LTD", "BDC", "Bureau de Change"),
+        new("CASHCODE BDC LTD", "BDC", "Bureau de Change"),
+        new("CHATTERED BDC LTD", "BDC", "Bureau de Change"),
+        new("CHRONICLES BDC LTD", "BDC", "Bureau de Change"),
+        new("COOL FOREX BDC LTD", "BDC", "Bureau de Change"),
+        new("CORPORATE EXCHANGE BDC LTD", "BDC", "Bureau de Change"),
+        new("COURTESY CURRENCY BDC LTD", "BDC", "Bureau de Change"),
+        new("DANYARO BDC LTD", "BDC", "Bureau de Change"),
+        new("DASHAD BDC LTD", "BDC", "Bureau de Change"),
+        new("DEVAL BDC LTD", "BDC", "Bureau de Change"),
+        new("DFS BDC LTD", "BDC", "Bureau de Change"),
+        new("EASY CASH BDC LTD", "BDC", "Bureau de Change"),
+        new("ELELEM BDC LTD", "BDC", "Bureau de Change"),
+        new("E-LIOYDS BDC LTD", "BDC", "Bureau de Change"),
+        new("ELOGOZ BDC LTD", "BDC", "Bureau de Change"),
+        new("ENOUF BDC LTD", "BDC", "Bureau de Change"),
+        new("EVER JOJ GOLD BDC LTD", "BDC", "Bureau de Change"),
+        new("EXCEL RIJIYA FOREX BDC LTD", "BDC", "Bureau de Change"),
+        new("FABFOREX BDC LTD", "BDC", "Bureau de Change"),
+        new("FELLOM BDC LTD", "BDC", "Bureau de Change"),
+        new("FINE BDC LTD", "BDC", "Bureau de Change"),
+        new("FOMAT BDC LTD", "BDC", "Bureau de Change"),
+        new("GENELO BDC LTD", "BDC", "Bureau de Change"),
+        new("GENTLE BREEZE BDC LTD", "BDC", "Bureau de Change"),
+        new("GRACEFUL GLORY AND HUMILITY BDC LTD", "BDC", "Bureau de Change"),
+        new("GREENGATE BDC LTD", "BDC", "Bureau de Change"),
+        new("GREENVAULT BUREAU DE CHANGE LIMITED", "BDC", "Bureau de Change"),
+        new("HAZON CAPITAL BDC LTD", "BDC", "Bureau de Change"),
+        new("HIGH-POINT BDC LTD", "BDC", "Bureau de Change"),
+        new("I & I EXCHANGE BDC LTD", "BDC", "Bureau de Change"),
+        new("IBN MARYAM BDC LTD", "BDC", "Bureau de Change"),
+        new("JOURNEY WELL BDC LTD", "BDC", "Bureau de Change"),
+        new("KEEPERS BDC LTD", "BDC", "Bureau de Change"),
+        new("KHADHOUSE SOLUTIONS BDC LTD", "BDC", "Bureau de Change"),
+        new("KIMMELFX BDC LTD", "BDC", "Bureau de Change"),
+        new("KINGSOFT ATLANTIC BDC LTD", "BDC", "Bureau de Change"),
+        new("M.S. ALHERI BDC LTD", "BDC", "Bureau de Change"),
+        new("MASTERS BDC LTD", "BDC", "Bureau de Change"),
+        new("MCMENA BDC LTD", "BDC", "Bureau de Change"),
+        new("MKOO BDC LTD", "BDC", "Bureau de Change"),
+        new("MKS BDC LTD", "BDC", "Bureau de Change"),
+        new("MR J GOLF BDC LTD", "BDC", "Bureau de Change"),
+        new("MUSDIQ BDC LTD", "BDC", "Bureau de Change"),
+        new("MZ FOREX BDC LTD", "BDC", "Bureau de Change"),
+        new("NEJJ BDC LTD LTD", "BDC", "Bureau de Change"),
+        new("NETVALUE BDC LTD", "BDC", "Bureau de Change"),
+        new("NEW WAVE BDC LTD", "BDC", "Bureau de Change"),
+        new("NOTABLE AND KINGSTON BDC LTD", "BDC", "Bureau de Change"),
+        new("PILCROW BDC LTD", "BDC", "Bureau de Change"),
+        new("RAPID BDC LTD", "BDC", "Bureau de Change"),
+        new("RIGHTWAY BDC LTD", "BDC", "Bureau de Change"),
+        new("RWANDA BDC LTD", "BDC", "Bureau de Change"),
+        new("SABLES BDC LTD", "BDC", "Bureau de Change"),
+        new("SAFETRANZ BDC LTD", "BDC", "Bureau de Change"),
+        new("SAMFIK BDC LTD", "BDC", "Bureau de Change"),
+        new("SEVENLOCKS BDC LTD", "BDC", "Bureau de Change"),
+        new("SHAPEARL BDC LTD", "BDC", "Bureau de Change"),
+        new("SIMTEX BDC LTD", "BDC", "Bureau de Change"),
+        new("SOLID WHITE BDC LTD", "BDC", "Bureau de Change"),
+        new("ST. NICHOLAS GLOBAL BDC LTD", "BDC", "Bureau de Change"),
+        new("TOPFIRST UNIQUE MULTICHOICE BDC LTD", "BDC", "Bureau de Change"),
+        new("TOPGATE BDC LTD", "BDC", "Bureau de Change"),
+        new("TRAVELLER'S CHOICE BDC LTD", "BDC", "Bureau de Change"),
+        new("TUCA GLOBAL BDC LTD", "BDC", "Bureau de Change"),
+        new("TURBOVA BDC LTD", "BDC", "Bureau de Change"),
+        new("TURN-UP BDC LTD", "BDC", "Bureau de Change"),
+        new("UNIGO BDC LTD", "BDC", "Bureau de Change"),
+        new("VICTORY AHEAD BDC LTD", "BDC", "Bureau de Change"),
+        new("WHITEWAY WWW BDC LTD", "BDC", "Bureau de Change"),
+        new("YUND GLOBAL LINK BDC LTD", "BDC", "Bureau de Change"),
+        new("ZAMAD FOREX BDC LTD", "BDC", "Bureau de Change"),
 
         // Development Finance Institutions (8)
         new("Bank of Agriculture (BOA)", "DFI", "Development Finance Institutions"),
@@ -1028,7 +1109,7 @@ public static class CbnInstitutionDirectory
 
     ];
 
-    /// <summary>All 978 CBN-licensed institutions.</summary>
+    /// <summary>All 1,057 CBN-licensed institutions.</summary>
     public static IReadOnlyList<CbnInstitutionEntry> All => _all;
 
     /// <summary>

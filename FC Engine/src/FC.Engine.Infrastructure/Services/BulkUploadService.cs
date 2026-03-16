@@ -17,6 +17,7 @@ public class BulkUploadService : IBulkUploadService
     private readonly IGenericDataRepository _dataRepository;
     private readonly ISubmissionRepository _submissionRepository;
     private readonly ValidationOrchestrator _validationOrchestrator;
+    private readonly IAnomalyDetectionService? _anomalyDetectionService;
     private readonly ILogger<BulkUploadService> _logger;
 
     public BulkUploadService(
@@ -24,12 +25,14 @@ public class BulkUploadService : IBulkUploadService
         IGenericDataRepository dataRepository,
         ISubmissionRepository submissionRepository,
         ValidationOrchestrator validationOrchestrator,
-        ILogger<BulkUploadService> logger)
+        ILogger<BulkUploadService> logger,
+        IAnomalyDetectionService? anomalyDetectionService = null)
     {
         _templateCache = templateCache;
         _dataRepository = dataRepository;
         _submissionRepository = submissionRepository;
         _validationOrchestrator = validationOrchestrator;
+        _anomalyDetectionService = anomalyDetectionService;
         _logger = logger;
     }
 
@@ -60,6 +63,7 @@ public class BulkUploadService : IBulkUploadService
         submission.MarkSubmitted();
         submission.SubmittedByUserId = requestedByUserId;
         submission.SetTemplateVersion(template.CurrentVersion.Id);
+        submission.StoreParsedDataJson(SubmissionPayloadSerializer.Serialize(record));
         await _submissionRepository.Add(submission, ct);
 
         var report = await _validationOrchestrator.Validate(record, submission, institutionId, returnPeriodId, ct);
@@ -109,6 +113,7 @@ public class BulkUploadService : IBulkUploadService
         report.FinalizeAt(DateTime.UtcNow);
         submission.AttachValidationReport(report);
         await _submissionRepository.Update(submission, ct);
+        await TryAnalyzeSubmissionAsync(submission, requestedByUserId, ct);
 
         result.Success = true;
         result.Status = submission.Status.ToString();
@@ -205,6 +210,7 @@ public class BulkUploadService : IBulkUploadService
         submission.MarkSubmitted();
         submission.SubmittedByUserId = requestedByUserId;
         submission.SetTemplateVersion(template.CurrentVersion.Id);
+        submission.StoreParsedDataJson(SubmissionPayloadSerializer.Serialize(record));
         await _submissionRepository.Add(submission, ct);
 
         var report = await _validationOrchestrator.Validate(record, submission, institutionId, returnPeriodId, ct);
@@ -253,11 +259,39 @@ public class BulkUploadService : IBulkUploadService
         report.FinalizeAt(DateTime.UtcNow);
         submission.AttachValidationReport(report);
         await _submissionRepository.Update(submission, ct);
+        await TryAnalyzeSubmissionAsync(submission, requestedByUserId, ct);
 
         result.Success = true;
         result.Status = submission.Status.ToString();
         result.Message = $"Imported {result.RowsImported} row(s).";
         return result;
+    }
+
+    private async Task TryAnalyzeSubmissionAsync(Submission submission, int? requestedByUserId, CancellationToken ct)
+    {
+        if (_anomalyDetectionService is null
+            || submission.TenantId == Guid.Empty
+            || submission.Status is not (SubmissionStatus.Accepted or SubmissionStatus.AcceptedWithWarnings))
+        {
+            return;
+        }
+
+        var performedBy = requestedByUserId.HasValue
+            ? $"institution-user:{requestedByUserId.Value}"
+            : "bulk-upload";
+
+        try
+        {
+            await _anomalyDetectionService.AnalyzeSubmissionAsync(
+                submission.Id,
+                submission.TenantId,
+                performedBy,
+                ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to generate anomaly report for bulk-upload submission {SubmissionId}", submission.Id);
+        }
     }
 
     private static Dictionary<int, Domain.Metadata.TemplateField> BuildColumnMapping(

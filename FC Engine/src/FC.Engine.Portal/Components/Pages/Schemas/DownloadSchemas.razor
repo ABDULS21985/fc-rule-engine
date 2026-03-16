@@ -1,5 +1,6 @@
 @page "/schemas"
 @attribute [Authorize(Policy = "InstitutionUser")]
+@using FC.Engine.Portal.Services
 @inject IJSRuntime JS
 
 <PageTitle>Download Schemas — RegOS™ Portal</PageTitle>
@@ -292,11 +293,13 @@
 </div>
 
 @code {
+    [CascadingParameter] private Task<AuthenticationState>? AuthStateTask { get; set; }
     [Inject] private TemplateBrowserService BrowserSvc { get; set; } = default!;
 
     // ── State ─────────────────────────────────────────────────────
     private bool isLoading = true;
     private List<TemplateBrowseItem> allTemplates = new();
+    private Guid? tenantId;
     private string searchQuery = "";
     private string filterFrequency = "";
     private string filterCategory = "";
@@ -349,7 +352,18 @@
     {
         try
         {
-            allTemplates = await BrowserSvc.GetAllTemplates();
+            if (AuthStateTask is not null)
+            {
+                var authState = await AuthStateTask;
+                if (PortalTenantClaimResolver.TryResolveTenantId(authState.User, out var resolvedTenantId))
+                {
+                    tenantId = resolvedTenantId;
+                }
+            }
+
+            allTemplates = tenantId.HasValue
+                ? await BrowserSvc.GetAllTemplates(tenantId.Value)
+                : [];
         }
         catch
         {
@@ -414,8 +428,8 @@
         try
         {
             previewContent = tab == "xsd"
-                ? await BrowserSvc.GetSchemaXml(returnCode)
-                : await BrowserSvc.GenerateSampleXml(returnCode);
+                ? tenantId.HasValue ? await BrowserSvc.GetSchemaXml(returnCode, tenantId.Value) : null
+                : tenantId.HasValue ? await BrowserSvc.GenerateSampleXml(returnCode, tenantId.Value) : null;
         }
         catch
         {
@@ -467,7 +481,9 @@
 
         try
         {
-            var xsd = await BrowserSvc.GetSchemaXml(returnCode);
+            var xsd = tenantId.HasValue
+                ? await BrowserSvc.GetSchemaXml(returnCode, tenantId.Value)
+                : null;
             if (!string.IsNullOrEmpty(xsd))
             {
                 await JS.InvokeVoidAsync("portalDownloadFile", xsd, $"{returnCode}.xsd", "application/xml");
@@ -489,7 +505,9 @@
 
         try
         {
-            var xml = await BrowserSvc.GenerateSampleXml(returnCode);
+            var xml = tenantId.HasValue
+                ? await BrowserSvc.GenerateSampleXml(returnCode, tenantId.Value)
+                : null;
             if (!string.IsNullOrEmpty(xml))
             {
                 await JS.InvokeVoidAsync("portalDownloadFile", xml, $"{returnCode}_sample.xml", "application/xml");
@@ -515,7 +533,9 @@
         {
             foreach (var code in selectedCodes.ToList())
             {
-                var xsd = await BrowserSvc.GetSchemaXml(code);
+                var xsd = tenantId.HasValue
+                    ? await BrowserSvc.GetSchemaXml(code, tenantId.Value)
+                    : null;
                 if (!string.IsNullOrEmpty(xsd))
                 {
                     await JS.InvokeVoidAsync("portalDownloadFile", xsd, $"{code}.xsd", "application/xml");

@@ -185,6 +185,7 @@
     [Parameter] public bool IsFavorite { get; set; }
     [Parameter] public EventCallback<bool> OnFavoriteChanged { get; set; }
     [Parameter] public int InstitutionId { get; set; }
+    [Parameter] public Guid? TenantId { get; set; }
 
     private TemplateDetailModel? _detail;
     private List<TemplateSubmissionHistoryItem> _history = new();
@@ -225,7 +226,9 @@
 
         try
         {
-            _detail = await BrowserSvc.GetTemplateDetail(ReturnCode, ct);
+            _detail = TenantId.HasValue
+                ? await BrowserSvc.GetTemplateDetail(ReturnCode, TenantId.Value, ct)
+                : null;
             if (_detail is not null)
             {
                 _sectionNames = _detail.Fields

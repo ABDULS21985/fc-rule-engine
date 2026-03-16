@@ -5,7 +5,9 @@ using FC.Engine.Infrastructure;
 using FC.Engine.Infrastructure.Metadata;
 using FC.Engine.Domain.Models;
 using FC.Engine.Infrastructure.Export;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -20,6 +22,22 @@ builder.Configuration
         optional: true,
         reloadOnChange: false);
 
+builder.Services.AddSingleton<IWebHostEnvironment>(_ =>
+{
+    var webRootPath = Path.Combine(configurationBasePath, "wwwroot");
+    Directory.CreateDirectory(webRootPath);
+
+    return new MigratorWebHostEnvironment
+    {
+        ApplicationName = typeof(Program).Assembly.GetName().Name ?? "FC.Engine.Migrator",
+        ContentRootPath = configurationBasePath,
+        ContentRootFileProvider = new PhysicalFileProvider(configurationBasePath),
+        EnvironmentName = builder.Environment.EnvironmentName,
+        WebRootPath = webRootPath,
+        WebRootFileProvider = new PhysicalFileProvider(webRootPath)
+    };
+});
+
 builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddScoped<SeedService>();
 builder.Services.AddScoped<FormulaSeedService>();
@@ -31,6 +49,7 @@ builder.Services.AddScoped<InstitutionAuthService>();
 
 var host = builder.Build();
 var logger = host.Services.GetRequiredService<ILogger<Program>>();
+var command = args.FirstOrDefault()?.Trim();
 
 try
 {
@@ -38,6 +57,16 @@ try
 
     using var scope = host.Services.CreateScope();
     var db = scope.ServiceProvider.GetRequiredService<MetadataDbContext>();
+
+    if (string.Equals(command, "backfill-anomalies", StringComparison.OrdinalIgnoreCase))
+    {
+        var (backfilled, skipped) = await BackfillMissingAnomalyReportsAsync(scope.ServiceProvider, logger);
+        logger.LogInformation(
+            "Anomaly backfill completed: {Backfilled} reports created, {Skipped} submissions skipped",
+            backfilled,
+            skipped);
+        return;
+    }
 
     // Step 1: Apply EF Core migrations (metadata + operational tables)
     logger.LogInformation("Applying EF Core migrations...");
@@ -303,6 +332,72 @@ static async Task<bool> PhysicalTableExistsAsync(MetadataDbContext db, string ta
         .AnyAsync(ct);
 }
 
+static async Task<(int Backfilled, int Skipped)> BackfillMissingAnomalyReportsAsync(
+    IServiceProvider services,
+    ILogger logger,
+    CancellationToken ct = default)
+{
+    var db = services.GetRequiredService<MetadataDbContext>();
+    var dataRepository = services.GetRequiredService<IGenericDataRepository>();
+    var anomalyDetectionService = services.GetRequiredService<IAnomalyDetectionService>();
+
+    var submissionIds = await db.Submissions
+        .AsNoTracking()
+        .Where(s =>
+            (s.Status == SubmissionStatus.Accepted || s.Status == SubmissionStatus.AcceptedWithWarnings)
+            && !db.AnomalyReports.Any(r => r.SubmissionId == s.Id))
+        .OrderBy(s => s.Id)
+        .Select(s => s.Id)
+        .ToListAsync(ct);
+
+    var backfilled = 0;
+    var skipped = 0;
+
+    foreach (var submissionId in submissionIds)
+    {
+        var submission = await db.Submissions.FirstOrDefaultAsync(s => s.Id == submissionId, ct);
+        if (submission is null || submission.TenantId == Guid.Empty)
+        {
+            skipped++;
+            continue;
+        }
+
+        if (string.IsNullOrWhiteSpace(submission.ParsedDataJson))
+        {
+            try
+            {
+                var record = await dataRepository.GetBySubmission(submission.ReturnCode, submission.Id, ct);
+                if (record is not null)
+                {
+                    submission.StoreParsedDataJson(SubmissionPayloadSerializer.Serialize(record));
+                    await db.SaveChangesAsync(ct);
+                }
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Failed to rebuild parsed payload for submission {SubmissionId}", submission.Id);
+            }
+        }
+
+        try
+        {
+            await anomalyDetectionService.AnalyzeSubmissionAsync(
+                submission.Id,
+                submission.TenantId,
+                "migrator-backfill",
+                ct);
+            backfilled++;
+        }
+        catch (Exception ex)
+        {
+            skipped++;
+            logger.LogWarning(ex, "Failed to backfill anomaly report for submission {SubmissionId}", submission.Id);
+        }
+    }
+
+    return (backfilled, skipped);
+}
+
 static string ResolveConfigurationBasePath()
 {
     var currentDirectory = Directory.GetCurrentDirectory();
@@ -327,4 +422,14 @@ static string ResolveConfigurationBasePath()
     }
 
     return currentDirectory;
+}
+
+file sealed class MigratorWebHostEnvironment : IWebHostEnvironment
+{
+    public string ApplicationName { get; set; } = string.Empty;
+    public IFileProvider WebRootFileProvider { get; set; } = new NullFileProvider();
+    public string WebRootPath { get; set; } = string.Empty;
+    public string EnvironmentName { get; set; } = string.Empty;
+    public string ContentRootPath { get; set; } = string.Empty;
+    public IFileProvider ContentRootFileProvider { get; set; } = new NullFileProvider();
 }

@@ -25,6 +25,7 @@ public class CachedTemplate
     public Guid? TenantId { get; set; }
     public string ReturnCode { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
+    public string InstitutionType { get; set; } = string.Empty;
     public ReturnFrequency Frequency { get; set; }
     public string StructuralCategory { get; set; } = string.Empty;
     public string PhysicalTableName { get; set; } = string.Empty;

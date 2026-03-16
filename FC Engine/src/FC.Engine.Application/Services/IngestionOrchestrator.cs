@@ -1,6 +1,5 @@
 using System.Diagnostics;
 using System.Text;
-using System.Text.Json;
 using FC.Engine.Application.DTOs;
 using FC.Engine.Domain.Abstractions;
 using FC.Engine.Domain.DataRecord;
@@ -13,11 +12,6 @@ namespace FC.Engine.Application.Services;
 
 public class IngestionOrchestrator
 {
-    private static readonly JsonSerializerOptions SubmissionDataJsonOptions = new()
-    {
-        WriteIndented = true
-    };
-
     private readonly ITemplateMetadataCache _cache;
     private readonly IXsdGenerator _xsdGenerator;
     private readonly IGenericXmlParser _xmlParser;
@@ -141,7 +135,7 @@ public class IngestionOrchestrator
             // 4. Reset stream and parse XML
             bufferedStream.Position = 0;
             var record = await _xmlParser.Parse(bufferedStream, returnCode, ct);
-            submission.StoreParsedDataJson(SerializeRecord(record));
+            submission.StoreParsedDataJson(SubmissionPayloadSerializer.Serialize(record));
 
             // 5. Run validation pipeline
             submission.MarkValidating();
@@ -373,23 +367,6 @@ public class IngestionOrchestrator
         var rawXml = await reader.ReadToEndAsync();
         bufferedStream.Position = 0;
         return rawXml;
-    }
-
-    private static string SerializeRecord(ReturnDataRecord record)
-    {
-        var payload = new
-        {
-            record.ReturnCode,
-            record.TemplateVersionId,
-            Category = record.Category.ToString(),
-            Rows = record.Rows.Select(row => new
-            {
-                row.RowKey,
-                Fields = row.AllFields
-            })
-        };
-
-        return JsonSerializer.Serialize(payload, SubmissionDataJsonOptions);
     }
 
     private static SubmissionResultDto MapResult(Submission submission)

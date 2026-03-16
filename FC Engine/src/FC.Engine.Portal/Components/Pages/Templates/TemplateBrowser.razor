@@ -453,7 +453,6 @@
                 </div>
             }
 
-            <!-- ── NO RESULTS ── -->
             else if (FilteredCount == 0)
             {
                 <div class="portal-tb-no-results">
@@ -489,7 +488,6 @@
                 </div>
             }
 
-            <!-- ── CARD VIEW ── -->
             else if (_viewMode == "card")
             {
                 <div class="portal-template-grid portal-tb-grid">
@@ -575,7 +573,6 @@
                 </div>
             }
 
-            <!-- ── TABLE VIEW ── -->
             else
             {
                 <div class="portal-card portal-card-flush">
@@ -653,6 +650,7 @@
          TEMPLATE DETAIL DRAWER
          ═══════════════════════════════════════════════════════════════ -->
     <TemplateDetailDrawer ReturnCode="@_drawerCode"
+                          TenantId="@_tenantId"
                           OnClose="CloseDrawer"
                           ComplianceStatus="@(_drawerCode is not null ? GetComplianceStatus(_drawerCode) : "")"
                           IsFavorite="@(_drawerCode is not null && _favorites.Contains(_drawerCode))"
@@ -667,6 +665,7 @@
     // ── Auth ──────────────────────────────────────────────────────
     [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
     private int _institutionId;
+    private Guid? _tenantId;
 
     // ── Data ──────────────────────────────────────────────────────
     private List<TemplateBrowseItem> _allTemplates = new();
@@ -784,10 +783,16 @@
         var user = authState.User;
         _institutionId = int.TryParse(
             user.FindFirst("InstitutionId")?.Value, out var id) ? id : 0;
+        if (PortalTenantClaimResolver.TryResolveTenantId(user, out var tenantId))
+        {
+            _tenantId = tenantId;
+        }
 
         try
         {
-            _allTemplates = await BrowserSvc.GetAllTemplates();
+            _allTemplates = _tenantId.HasValue
+                ? await BrowserSvc.GetAllTemplates(_tenantId.Value)
+                : [];
             _allBodies = _allTemplates
                 .Select(t => t.RegulatoryBody)
                 .Distinct(StringComparer.OrdinalIgnoreCase)

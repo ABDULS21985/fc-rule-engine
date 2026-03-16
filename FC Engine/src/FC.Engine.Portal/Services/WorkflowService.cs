@@ -15,6 +15,7 @@ public class WorkflowService
     private readonly ISubmissionRepository _submissionRepo;
     private readonly ISubmissionApprovalRepository _approvalRepo;
     private readonly IInstitutionUserRepository _userRepo;
+    private readonly IAnomalyDetectionService? _anomalyDetectionService;
     private readonly INotificationOrchestrator _notificationOrchestrator;
     private readonly IFilingCalendarService _filingCalendarService;
     private readonly IDomainEventPublisher? _domainEventPublisher;
@@ -24,6 +25,7 @@ public class WorkflowService
         ISubmissionRepository submissionRepo,
         ISubmissionApprovalRepository approvalRepo,
         IInstitutionUserRepository userRepo,
+        IAnomalyDetectionService? anomalyDetectionService,
         INotificationOrchestrator notificationOrchestrator,
         IFilingCalendarService filingCalendarService,
         ILogger<WorkflowService> logger,
@@ -32,6 +34,7 @@ public class WorkflowService
         _submissionRepo = submissionRepo;
         _approvalRepo = approvalRepo;
         _userRepo = userRepo;
+        _anomalyDetectionService = anomalyDetectionService;
         _notificationOrchestrator = notificationOrchestrator;
         _filingCalendarService = filingCalendarService;
         _logger = logger;
@@ -84,6 +87,11 @@ public class WorkflowService
         await _approvalRepo.Update(approval, ct);
         await _submissionRepo.Update(submission, ct);
 
+        var reviewer = await _userRepo.GetById(reviewerUserId, ct);
+        var reviewerName = reviewer?.DisplayName ?? "Reviewer";
+
+        await TryAnalyzeSubmissionAsync(submission, reviewerName, ct);
+
         try
         {
             await _filingCalendarService.RecordSla(submission.ReturnPeriodId, submission.Id, ct);
@@ -95,12 +103,11 @@ public class WorkflowService
 
         try
         {
-            var reviewer = await _userRepo.GetById(reviewerUserId, ct);
             await NotifyApprovalOutcome(
                 submission,
                 approval.RequestedByUserId,
                 approved: true,
-                reviewer?.DisplayName ?? "Reviewer",
+                reviewerName,
                 comments,
                 ct);
         }
@@ -117,7 +124,7 @@ public class WorkflowService
                 await _domainEventPublisher.PublishAsync(new ReturnApprovedEvent(
                     submission.TenantId, submission.Id,
                     string.Empty, submission.ReturnCode, string.Empty,
-                    (await _userRepo.GetById(reviewerUserId, ct))?.DisplayName ?? "Reviewer",
+                    reviewerName,
                     DateTime.UtcNow, DateTime.UtcNow, Guid.NewGuid()), ct);
             }
             catch (Exception ex)
@@ -127,6 +134,29 @@ public class WorkflowService
         }
 
         return ApprovalActionResult.Success;
+    }
+
+    private async Task TryAnalyzeSubmissionAsync(Submission submission, string performedBy, CancellationToken ct)
+    {
+        if (_anomalyDetectionService is null
+            || submission.TenantId == Guid.Empty
+            || submission.Status is not (SubmissionStatus.Accepted or SubmissionStatus.AcceptedWithWarnings))
+        {
+            return;
+        }
+
+        try
+        {
+            await _anomalyDetectionService.AnalyzeSubmissionAsync(
+                submission.Id,
+                submission.TenantId,
+                performedBy,
+                ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to generate anomaly report for approved submission {SubmissionId}", submission.Id);
+        }
     }
 
     public async Task<ApprovalActionResult> Reject(

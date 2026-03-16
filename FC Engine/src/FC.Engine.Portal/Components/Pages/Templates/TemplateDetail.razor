@@ -496,6 +496,7 @@
     private bool historyLoaded;
     private List<TemplateSubmissionHistoryItem> submissionHistory = new();
     private int institutionId;
+    private Guid? tenantId;
 
     // ── Lifecycle ─────────────────────────────────────────────────
     protected override async Task OnInitializedAsync()
@@ -507,11 +508,17 @@
             var instClaim = authState.User.FindFirst("InstitutionId");
             if (instClaim is not null)
                 int.TryParse(instClaim.Value, out institutionId);
+            if (PortalTenantClaimResolver.TryResolveTenantId(authState.User, out var resolvedTenantId))
+            {
+                tenantId = resolvedTenantId;
+            }
         }
 
         try
         {
-            template = await BrowserSvc.GetTemplateDetail(ReturnCode);
+            template = tenantId.HasValue
+                ? await BrowserSvc.GetTemplateDetail(ReturnCode, tenantId.Value)
+                : null;
         }
         catch
         {
@@ -535,7 +542,9 @@
 
         try
         {
-            schemaXml = await BrowserSvc.GetSchemaXml(ReturnCode);
+            schemaXml = tenantId.HasValue
+                ? await BrowserSvc.GetSchemaXml(ReturnCode, tenantId.Value)
+                : null;
         }
         catch
         {
@@ -558,7 +567,9 @@
 
         try
         {
-            sampleXml = await BrowserSvc.GenerateSampleXml(ReturnCode);
+            sampleXml = tenantId.HasValue
+                ? await BrowserSvc.GenerateSampleXml(ReturnCode, tenantId.Value)
+                : null;
         }
         catch
         {

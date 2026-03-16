@@ -810,7 +810,7 @@ public class InstitutionManagementService
     {
         var baseUrl = (_configuration["RegOS:PortalBaseUrl"]
                        ?? _configuration["RegOS:BaseUrl"]
-                       ?? "http://localhost:5001").TrimEnd('/');
+                       ?? "http://localhost:5003").TrimEnd('/');
         return $"{baseUrl}/institution/invite/{institutionId}/{Uri.EscapeDataString(inviteId)}";
     }
 

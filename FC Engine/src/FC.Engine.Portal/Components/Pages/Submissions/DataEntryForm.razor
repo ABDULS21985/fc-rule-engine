@@ -1378,7 +1378,9 @@
         // Load template detail
         try
         {
-            templateDetail = await BrowserSvc.GetTemplateDetail(ReturnCode);
+            templateDetail = tenantId.HasValue
+                ? await BrowserSvc.GetTemplateDetail(ReturnCode, tenantId.Value)
+                : null;
             if (templateDetail is not null)
             {
                 structuralCategory = Enum.TryParse<StructuralCategory>(templateDetail.StructuralCategory, out var parsedCat)

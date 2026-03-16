@@ -74,7 +74,7 @@ builder.Services.AddSingleton<FC.Engine.Portal.Services.IPresenceService, FC.Eng
 builder.Services.AddSingleton<FC.Engine.Portal.Services.IAuditCommentService, FC.Engine.Portal.Services.InMemoryAuditCommentService>();
 
 // HttpClient for cross-project API calls (e.g. BatchSubmissions → FC.Engine.Api)
-var apiBaseUrl = builder.Configuration["EngineApi:BaseUrl"] ?? "https://localhost:5001";
+var apiBaseUrl = builder.Configuration["EngineApi:BaseUrl"] ?? "http://localhost:5002";
 builder.Services.AddHttpClient(string.Empty, client =>
 {
     client.BaseAddress = new Uri(apiBaseUrl);

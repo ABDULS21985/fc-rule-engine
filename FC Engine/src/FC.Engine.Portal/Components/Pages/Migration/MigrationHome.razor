@@ -1,15 +1,14 @@
 @page "/migration"
 @attribute [Authorize(Policy = "InstitutionAdmin")]
 @using System.Security.Claims
+@using FC.Engine.Portal.Services
 @using FC.Engine.Domain.Abstractions
 @using FC.Engine.Domain.Entities
 @using FC.Engine.Domain.Enums
 @using Microsoft.AspNetCore.Components.Forms
 @inject IHistoricalMigrationService MigrationService
-@inject ITenantContext TenantContext
-@inject ITemplateMetadataCache TemplateCache
-@inject FC.Engine.Portal.Services.TemplateBrowserService TemplateBrowserService
-@inject FC.Engine.Portal.Services.SubmissionService SubmissionSvc
+@inject TemplateBrowserService TemplateBrowserService
+@inject SubmissionService SubmissionSvc
 @inject NavigationManager Navigation
 
 <PageTitle>Historical Migration — RegOS™ Portal</PageTitle>
@@ -400,7 +399,9 @@
     protected override async Task OnInitializedAsync()
     {
         await LoadUserContext();
-        templates = await TemplateBrowserService.GetAllTemplates();
+        templates = tenantId.HasValue
+            ? await TemplateBrowserService.GetAllTemplates(tenantId.Value)
+            : [];
         await LoadJobs();
     }
 
@@ -413,7 +414,10 @@
         _ = int.TryParse(institutionIdRaw, out institutionId);
         var userIdRaw = user.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? user.FindFirst("sub")?.Value;
         _ = int.TryParse(userIdRaw, out userId);
-        tenantId = TenantContext.CurrentTenantId;
+        if (PortalTenantClaimResolver.TryResolveTenantId(user, out var resolvedTenantId))
+        {
+            tenantId = resolvedTenantId;
+        }
     }
 
     private async Task LoadJobs()

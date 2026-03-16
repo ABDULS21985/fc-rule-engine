@@ -252,6 +252,7 @@ public class TemplateMetadataCache : ITemplateMetadataCache
             TenantId = template.TenantId,
             ReturnCode = template.ReturnCode,
             Name = template.Name,
+            InstitutionType = template.InstitutionType,
             Frequency = template.Frequency,
             StructuralCategory = template.StructuralCategory.ToString(),
             PhysicalTableName = template.PhysicalTableName,

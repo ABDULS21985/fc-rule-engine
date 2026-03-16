@@ -131,7 +131,7 @@ builder.Services.AddCascadingAuthenticationState();
 builder.Services.AddHttpClient("ApiHealthProbe", (sp, client) =>
 {
     var config = sp.GetRequiredService<IConfiguration>();
-    var baseUrl = config["HealthCheck:ApiBaseUrl"] ?? "http://localhost";
+    var baseUrl = config["HealthCheck:ApiBaseUrl"] ?? "http://localhost:5002";
     client.BaseAddress = new Uri(baseUrl);
     client.Timeout = TimeSpan.FromSeconds(5);
 });
