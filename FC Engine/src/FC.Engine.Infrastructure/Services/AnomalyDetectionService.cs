@@ -16,20 +16,20 @@ namespace FC.Engine.Infrastructure.Services;
 
 public sealed class AnomalyDetectionService : IAnomalyDetectionService
 {
-    private readonly MetadataDbContext _db;
+    private readonly IDbContextFactory<MetadataDbContext> _dbFactory;
     private readonly IAnomalyModelTrainingService _modelTrainingService;
     private readonly IAuditLogger _auditLogger;
     private readonly INotificationOrchestrator? _notificationOrchestrator;
     private readonly ILogger<AnomalyDetectionService> _logger;
 
     public AnomalyDetectionService(
-        MetadataDbContext db,
+        IDbContextFactory<MetadataDbContext> dbFactory,
         IAnomalyModelTrainingService modelTrainingService,
         IAuditLogger auditLogger,
         ILogger<AnomalyDetectionService> logger,
         INotificationOrchestrator? notificationOrchestrator = null)
     {
-        _db = db;
+        _dbFactory = dbFactory;
         _modelTrainingService = modelTrainingService;
         _auditLogger = auditLogger;
         _logger = logger;
@@ -42,8 +42,9 @@ public sealed class AnomalyDetectionService : IAnomalyDetectionService
         string performedBy,
         CancellationToken ct = default)
     {
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
         var started = Stopwatch.StartNew();
-        var submission = await _db.Submissions
+        var submission = await db.Submissions
             .Include(x => x.Institution)
             .Include(x => x.ReturnPeriod)
                 .ThenInclude(x => x!.Module)
@@ -60,10 +61,10 @@ public sealed class AnomalyDetectionService : IAnomalyDetectionService
         var periodCode = AnomalySupport.BuildPeriodCode(submission.ReturnPeriod);
         var institutionName = submission.Institution?.InstitutionName ?? "Unknown institution";
         var institutionId = submission.InstitutionId;
-        var licenceType = await ResolveLicenceTypeAsync(submission, ct);
+        var licenceType = await ResolveLicenceTypeAsync(db, submission, ct);
         var currentMetrics = AnomalySupport.ExtractSubmissionMetrics(submission.ParsedDataJson);
 
-        var activeModel = await _db.AnomalyModelVersions
+        var activeModel = await db.AnomalyModelVersions
             .OrderByDescending(x => x.VersionNumber)
             .FirstOrDefaultAsync(x => x.ModuleCode == moduleCode && x.Status == "ACTIVE", ct);
 
@@ -73,25 +74,25 @@ public sealed class AnomalyDetectionService : IAnomalyDetectionService
             activeModel = await _modelTrainingService.TrainModuleModelAsync(moduleCode, "SYSTEM_BOOTSTRAP", true, ct);
         }
 
-        var config = await LoadConfigAsync(ct);
-        var baselines = await _db.AnomalyRuleBaselines
+        var config = await LoadConfigAsync(db, ct);
+        var baselines = await db.AnomalyRuleBaselines
             .AsNoTracking()
             .Where(x => x.IsActive
                         && x.RegulatorCode == regulatorCode
                         && (x.ModuleCode == null || x.ModuleCode == moduleCode))
             .ToListAsync(ct);
 
-        var fieldModels = await _db.AnomalyFieldModels
+        var fieldModels = await db.AnomalyFieldModels
             .AsNoTracking()
             .Where(x => x.ModelVersionId == activeModel.Id)
             .ToListAsync(ct);
 
-        var correlationRules = await _db.AnomalyCorrelationRules
+        var correlationRules = await db.AnomalyCorrelationRules
             .AsNoTracking()
             .Where(x => x.ModelVersionId == activeModel.Id && x.IsActive)
             .ToListAsync(ct);
 
-        var peerStats = await _db.AnomalyPeerGroupStatistics
+        var peerStats = await db.AnomalyPeerGroupStatistics
             .AsNoTracking()
             .Where(x => x.ModelVersionId == activeModel.Id
                         && x.ModuleCode == moduleCode
@@ -103,7 +104,7 @@ public sealed class AnomalyDetectionService : IAnomalyDetectionService
         var findings = new List<AnomalyFinding>();
         findings.AddRange(ScoreFieldLevelFindings(submissionId, tenantId, currentMetrics, fieldModels, baselines, config));
         findings.AddRange(ScoreCorrelationFindings(submissionId, tenantId, currentMetrics, correlationRules, config));
-        findings.AddRange(await ScoreTemporalFindingsAsync(submission, currentMetrics, config, ct));
+        findings.AddRange(await ScoreTemporalFindingsAsync(db, submission, currentMetrics, config, ct));
         findings.AddRange(ScorePeerFindings(submissionId, tenantId, licenceType, currentMetrics, peerStats, config));
 
         var qualityScore = CalculateQualityScore(findings, config);
@@ -139,19 +140,19 @@ public sealed class AnomalyDetectionService : IAnomalyDetectionService
             finding.SubmissionId = submissionId;
         }
 
-        var existing = await _db.AnomalyReports
+        var existing = await db.AnomalyReports
             .Include(x => x.Findings)
             .Where(x => x.SubmissionId == submissionId && x.ModelVersionId == activeModel.Id)
             .ToListAsync(ct);
 
         if (existing.Count > 0)
         {
-            _db.AnomalyReports.RemoveRange(existing);
+            db.AnomalyReports.RemoveRange(existing);
         }
 
         report.Findings = findings;
-        _db.AnomalyReports.Add(report);
-        await _db.SaveChangesAsync(ct);
+        db.AnomalyReports.Add(report);
+        await db.SaveChangesAsync(ct);
 
         await _auditLogger.Log(
             "AnomalyReport",
@@ -181,7 +182,8 @@ public sealed class AnomalyDetectionService : IAnomalyDetectionService
         Guid tenantId,
         CancellationToken ct = default)
     {
-        if (!await TableExistsAsync("meta", "anomaly_reports", ct))
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+        if (!await TableExistsAsync(db, "meta", "anomaly_reports", ct))
         {
             _logger.LogInformation(
                 "Skipping latest anomaly report lookup for tenant {TenantId} because meta.anomaly_reports is not available.",
@@ -189,7 +191,7 @@ public sealed class AnomalyDetectionService : IAnomalyDetectionService
             return null;
         }
 
-        var report = await _db.AnomalyReports
+        var report = await db.AnomalyReports
             .AsNoTracking()
             .Where(x => x.TenantId == tenantId && x.SubmissionId == submissionId)
             .OrderByDescending(x => x.AnalysedAt)
@@ -205,7 +207,8 @@ public sealed class AnomalyDetectionService : IAnomalyDetectionService
         Guid tenantId,
         CancellationToken ct = default)
     {
-        if (!await TableExistsAsync("meta", "anomaly_reports", ct))
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+        if (!await TableExistsAsync(db, "meta", "anomaly_reports", ct))
         {
             _logger.LogInformation(
                 "Skipping anomaly report lookup for report {ReportId} because meta.anomaly_reports is not available.",
@@ -213,8 +216,8 @@ public sealed class AnomalyDetectionService : IAnomalyDetectionService
             return null;
         }
 
-        var hasAnomalyFindings = await TableExistsAsync("meta", "anomaly_findings", ct);
-        var report = await _db.AnomalyReports
+        var hasAnomalyFindings = await TableExistsAsync(db, "meta", "anomaly_findings", ct);
+        var report = await db.AnomalyReports
             .AsNoTracking()
             .FirstOrDefaultAsync(x => x.Id == reportId && x.TenantId == tenantId, ct);
 
@@ -224,7 +227,7 @@ public sealed class AnomalyDetectionService : IAnomalyDetectionService
         }
 
         report.Findings = hasAnomalyFindings
-            ? await _db.AnomalyFindings
+            ? await db.AnomalyFindings
                 .AsNoTracking()
                 .Where(x => x.AnomalyReportId == report.Id)
                 .ToListAsync(ct)
@@ -245,7 +248,8 @@ public sealed class AnomalyDetectionService : IAnomalyDetectionService
         string? periodCode = null,
         CancellationToken ct = default)
     {
-        if (!await TableExistsAsync("meta", "anomaly_reports", ct))
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+        if (!await TableExistsAsync(db, "meta", "anomaly_reports", ct))
         {
             _logger.LogInformation(
                 "Skipping anomaly report lookup for tenant {TenantId} because meta.anomaly_reports is not available.",
@@ -253,7 +257,7 @@ public sealed class AnomalyDetectionService : IAnomalyDetectionService
             return [];
         }
 
-        var query = _db.AnomalyReports
+        var query = db.AnomalyReports
             .AsNoTracking()
             .Where(x => x.TenantId == tenantId);
 
@@ -286,7 +290,8 @@ public sealed class AnomalyDetectionService : IAnomalyDetectionService
         string? periodCode = null,
         CancellationToken ct = default)
     {
-        if (!await TableExistsAsync("meta", "anomaly_reports", ct))
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+        if (!await TableExistsAsync(db, "meta", "anomaly_reports", ct))
         {
             _logger.LogInformation(
                 "Skipping sector anomaly summary for regulator {RegulatorCode} because meta.anomaly_reports is not available.",
@@ -295,7 +300,7 @@ public sealed class AnomalyDetectionService : IAnomalyDetectionService
         }
 
         var normalizedRegulatorCode = regulatorCode.Trim().ToUpperInvariant();
-        var query = _db.AnomalyReports
+        var query = db.AnomalyReports
             .AsNoTracking()
             .Where(x => x.RegulatorCode == normalizedRegulatorCode);
 
@@ -323,7 +328,7 @@ public sealed class AnomalyDetectionService : IAnomalyDetectionService
             .ToList();
 
         var tenantIds = latestByTenant.Select(x => x.TenantId).Distinct().ToList();
-        var licenceByTenant = await _db.TenantLicenceTypes
+        var licenceByTenant = await db.TenantLicenceTypes
             .AsNoTracking()
             .Include(x => x.LicenceType)
             .Where(x => tenantIds.Contains(x.TenantId) && x.IsActive)
@@ -335,10 +340,10 @@ public sealed class AnomalyDetectionService : IAnomalyDetectionService
                 ct);
 
         Dictionary<int, int> unackByReport = [];
-        if (latestByTenant.Count > 0 && await TableExistsAsync("meta", "anomaly_findings", ct))
+        if (latestByTenant.Count > 0 && await TableExistsAsync(db, "meta", "anomaly_findings", ct))
         {
             var reportIds = latestByTenant.Select(x => x.Id).ToList();
-            unackByReport = await _db.AnomalyFindings
+            unackByReport = await db.AnomalyFindings
                 .AsNoTracking()
                 .Where(x => !x.IsAcknowledged && reportIds.Contains(x.AnomalyReportId))
                 .GroupBy(x => x.AnomalyReportId)
@@ -368,7 +373,8 @@ public sealed class AnomalyDetectionService : IAnomalyDetectionService
 
     public async Task AcknowledgeFindingAsync(AnomalyAcknowledgementRequest request, CancellationToken ct = default)
     {
-        var finding = await _db.AnomalyFindings
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+        var finding = await db.AnomalyFindings
             .Include(x => x.Report)
             .ThenInclude(x => x!.Findings)
             .FirstOrDefaultAsync(x => x.Id == request.FindingId && x.TenantId == request.TenantId, ct)
@@ -385,9 +391,9 @@ public sealed class AnomalyDetectionService : IAnomalyDetectionService
         finding.AcknowledgementReason = request.Reason;
         if (finding.Report is not null)
         {
-            await RefreshReportAggregateAsync(finding.Report, ct);
+            await RefreshReportAggregateAsync(db, finding.Report, ct);
         }
-        await _db.SaveChangesAsync(ct);
+        await db.SaveChangesAsync(ct);
 
         await _auditLogger.Log(
             "AnomalyFinding",
@@ -401,7 +407,8 @@ public sealed class AnomalyDetectionService : IAnomalyDetectionService
 
     public async Task RevokeAcknowledgementAsync(int findingId, Guid tenantId, string revokedBy, CancellationToken ct = default)
     {
-        var finding = await _db.AnomalyFindings
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+        var finding = await db.AnomalyFindings
             .Include(x => x.Report)
             .ThenInclude(x => x!.Findings)
             .FirstOrDefaultAsync(x => x.Id == findingId && x.TenantId == tenantId, ct)
@@ -418,9 +425,9 @@ public sealed class AnomalyDetectionService : IAnomalyDetectionService
         finding.AcknowledgementReason = null;
         if (finding.Report is not null)
         {
-            await RefreshReportAggregateAsync(finding.Report, ct);
+            await RefreshReportAggregateAsync(db, finding.Report, ct);
         }
-        await _db.SaveChangesAsync(ct);
+        await db.SaveChangesAsync(ct);
 
         await _auditLogger.Log(
             "AnomalyFinding",
@@ -441,23 +448,23 @@ public sealed class AnomalyDetectionService : IAnomalyDetectionService
         return document.GeneratePdf();
     }
 
-    private async Task<Dictionary<string, decimal>> LoadConfigAsync(CancellationToken ct)
+    private async Task<Dictionary<string, decimal>> LoadConfigAsync(MetadataDbContext db, CancellationToken ct)
     {
-        var configs = await _db.AnomalyThresholdConfigs
+        var configs = await db.AnomalyThresholdConfigs
             .AsNoTracking()
             .Where(x => x.EffectiveTo == null)
             .ToListAsync(ct);
         return AnomalySupport.BuildConfigMap(configs);
     }
 
-    private async Task<bool> TableExistsAsync(string schema, string table, CancellationToken ct)
+    private async Task<bool> TableExistsAsync(MetadataDbContext db, string schema, string table, CancellationToken ct)
     {
-        if (!_db.Database.IsRelational())
+        if (!db.Database.IsRelational())
         {
             return true;
         }
 
-        var connection = _db.Database.GetDbConnection();
+        var connection = db.Database.GetDbConnection();
         if (connection is not SqlConnection sqlConnection)
         {
             return true;
@@ -469,7 +476,7 @@ public sealed class AnomalyDetectionService : IAnomalyDetectionService
         }
 
         await using var command = sqlConnection.CreateCommand();
-        var currentTransaction = _db.Database.CurrentTransaction?.GetDbTransaction();
+        var currentTransaction = db.Database.CurrentTransaction?.GetDbTransaction();
         if (currentTransaction is SqlTransaction sqlTransaction)
         {
             command.Transaction = sqlTransaction;
@@ -665,13 +672,14 @@ public sealed class AnomalyDetectionService : IAnomalyDetectionService
     }
 
     private async Task<IEnumerable<AnomalyFinding>> ScoreTemporalFindingsAsync(
+        MetadataDbContext db,
         Submission submission,
         IReadOnlyDictionary<string, AnomalySupport.MetricPoint> currentMetrics,
         IReadOnlyDictionary<string, decimal> config,
         CancellationToken ct)
     {
         var minPeriods = (int)config.GetValueOrDefault("temporal.min_periods", 3m);
-        var periodCount = await _db.Submissions
+        var periodCount = await db.Submissions
             .AsNoTracking()
             .Where(x => x.TenantId == submission.TenantId
                         && AnomalySupport.AcceptedStatuses.Contains(x.Status)
@@ -687,7 +695,7 @@ public sealed class AnomalyDetectionService : IAnomalyDetectionService
             return Array.Empty<AnomalyFinding>();
         }
 
-        var previous = await _db.Submissions
+        var previous = await db.Submissions
             .AsNoTracking()
             .Include(x => x.ReturnPeriod)
             .Where(x => x.TenantId == submission.TenantId
@@ -852,14 +860,14 @@ public sealed class AnomalyDetectionService : IAnomalyDetectionService
         return decimal.Round(Math.Max(0m, 100m - penalty), 2);
     }
 
-    private async Task<string> ResolveLicenceTypeAsync(Submission submission, CancellationToken ct)
+    private async Task<string> ResolveLicenceTypeAsync(MetadataDbContext db, Submission submission, CancellationToken ct)
     {
         if (submission.Institution != null && !string.IsNullOrWhiteSpace(submission.Institution.LicenseType))
         {
             return submission.Institution.LicenseType!.Trim().ToUpperInvariant();
         }
 
-        var licence = await _db.TenantLicenceTypes
+        var licence = await db.TenantLicenceTypes
             .AsNoTracking()
             .Include(x => x.LicenceType)
             .Where(x => x.TenantId == submission.TenantId && x.IsActive)
@@ -931,9 +939,9 @@ public sealed class AnomalyDetectionService : IAnomalyDetectionService
             ct);
     }
 
-    private async Task RefreshReportAggregateAsync(AnomalyReport report, CancellationToken ct)
+    private async Task RefreshReportAggregateAsync(MetadataDbContext db, AnomalyReport report, CancellationToken ct)
     {
-        var config = await LoadConfigAsync(ct);
+        var config = await LoadConfigAsync(db, ct);
         report.OverallQualityScore = CalculateQualityScore(report.Findings, config);
         report.TrafficLight = AnomalySupport.DetermineTrafficLight(report.OverallQualityScore);
         report.NarrativeSummary = BuildNarrativeSummary(

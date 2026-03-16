@@ -13,7 +13,7 @@ namespace FC.Engine.Infrastructure.Webhooks;
 
 public class WebhookDeliveryService : IWebhookService
 {
-    private readonly MetadataDbContext _db;
+    private readonly IDbContextFactory<MetadataDbContext> _dbFactory;
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ITenantContext _tenantContext;
     private readonly IHttpContextAccessor _httpContextAccessor;
@@ -26,13 +26,13 @@ public class WebhookDeliveryService : IWebhookService
     };
 
     public WebhookDeliveryService(
-        MetadataDbContext db,
+        IDbContextFactory<MetadataDbContext> dbFactory,
         IHttpClientFactory httpClientFactory,
         ITenantContext tenantContext,
         IHttpContextAccessor httpContextAccessor,
         ILogger<WebhookDeliveryService> logger)
     {
-        _db = db;
+        _dbFactory = dbFactory;
         _httpClientFactory = httpClientFactory;
         _tenantContext = tenantContext;
         _httpContextAccessor = httpContextAccessor;
@@ -43,6 +43,7 @@ public class WebhookDeliveryService : IWebhookService
         Guid tenantId, string url, string? description,
         List<string> eventTypes, int createdBy, CancellationToken ct = default)
     {
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
         if (string.IsNullOrWhiteSpace(url))
             throw new ArgumentException("URL is required.", nameof(url));
 
@@ -57,19 +58,21 @@ public class WebhookDeliveryService : IWebhookService
             CreatedAt = DateTime.UtcNow
         };
 
-        _db.WebhookEndpoints.Add(endpoint);
-        await _db.SaveChangesAsync(ct);
+        db.WebhookEndpoints.Add(endpoint);
+        await db.SaveChangesAsync(ct);
         return endpoint;
     }
 
     public async Task<WebhookEndpoint?> GetEndpointAsync(int id, CancellationToken ct = default)
     {
-        return await GetAccessibleEndpointAsync(id, ct);
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+        return await GetAccessibleEndpointAsync(db, id, ct);
     }
 
     public async Task<List<WebhookEndpoint>> GetEndpointsAsync(Guid tenantId, CancellationToken ct = default)
     {
-        return await _db.WebhookEndpoints
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+        return await db.WebhookEndpoints
             .Where(e => e.TenantId == tenantId)
             .OrderByDescending(e => e.CreatedAt)
             .ToListAsync(ct);
@@ -79,7 +82,8 @@ public class WebhookDeliveryService : IWebhookService
         int id, string? url, string? description,
         List<string>? eventTypes, bool? isActive, CancellationToken ct = default)
     {
-        var endpoint = await GetAccessibleEndpointAsync(id, ct)
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+        var endpoint = await GetAccessibleEndpointAsync(db, id, ct)
             ?? throw new InvalidOperationException($"Webhook endpoint {id} not found.");
 
         if (url is not null) endpoint.Url = url.Trim();
@@ -95,39 +99,42 @@ public class WebhookDeliveryService : IWebhookService
             }
         }
 
-        await _db.SaveChangesAsync(ct);
+        await db.SaveChangesAsync(ct);
     }
 
     public async Task DeleteEndpointAsync(int id, CancellationToken ct = default)
     {
-        var endpoint = await GetAccessibleEndpointAsync(id, ct);
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+        var endpoint = await GetAccessibleEndpointAsync(db, id, ct);
         if (endpoint is not null)
         {
-            _db.WebhookEndpoints.Remove(endpoint);
-            await _db.SaveChangesAsync(ct);
+            db.WebhookEndpoints.Remove(endpoint);
+            await db.SaveChangesAsync(ct);
         }
     }
 
     public async Task<string> RotateSecretAsync(int id, CancellationToken ct = default)
     {
-        var endpoint = await GetAccessibleEndpointAsync(id, ct)
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+        var endpoint = await GetAccessibleEndpointAsync(db, id, ct)
             ?? throw new InvalidOperationException($"Webhook endpoint {id} not found.");
 
         endpoint.SecretKey = GenerateSecret();
-        await _db.SaveChangesAsync(ct);
+        await db.SaveChangesAsync(ct);
         return endpoint.SecretKey;
     }
 
     public async Task<List<WebhookDelivery>> GetDeliveryLogAsync(
         int endpointId, int take = 50, CancellationToken ct = default)
     {
-        var endpoint = await GetAccessibleEndpointAsync(endpointId, ct);
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+        var endpoint = await GetAccessibleEndpointAsync(db, endpointId, ct);
         if (endpoint is null)
         {
             return new List<WebhookDelivery>();
         }
 
-        return await _db.WebhookDeliveries
+        return await db.WebhookDeliveries
             .Where(d => d.EndpointId == endpoint.Id)
             .OrderByDescending(d => d.CreatedAt)
             .Take(take)
@@ -136,16 +143,17 @@ public class WebhookDeliveryService : IWebhookService
 
     public async Task SendTestWebhookAsync(int endpointId, CancellationToken ct = default)
     {
-        var endpoint = await GetAccessibleEndpointAsync(endpointId, ct)
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+        var endpoint = await GetAccessibleEndpointAsync(db, endpointId, ct)
             ?? throw new InvalidOperationException($"Webhook endpoint {endpointId} not found.");
 
         var testData = new { message = "Test webhook from RegOS", timestamp = DateTime.UtcNow };
         await DeliverAsync(endpoint, "webhook.test", testData, ct);
     }
 
-    private async Task<WebhookEndpoint?> GetAccessibleEndpointAsync(int endpointId, CancellationToken ct)
+    private async Task<WebhookEndpoint?> GetAccessibleEndpointAsync(MetadataDbContext db, int endpointId, CancellationToken ct)
     {
-        var query = _db.WebhookEndpoints.AsQueryable();
+        var query = db.WebhookEndpoints.AsQueryable();
         var tenantId = ResolveRequestTenant();
 
         if (tenantId == Guid.Empty)
@@ -175,6 +183,7 @@ public class WebhookDeliveryService : IWebhookService
         WebhookEndpoint endpoint, string eventType, object eventData,
         CancellationToken ct = default)
     {
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
         if (!endpoint.IsActive) return;
 
         var payload = JsonSerializer.Serialize(new
@@ -206,8 +215,8 @@ public class WebhookDeliveryService : IWebhookService
             Status = "Pending",
             CreatedAt = DateTime.UtcNow
         };
-        _db.WebhookDeliveries.Add(delivery);
-        await _db.SaveChangesAsync(ct);
+        db.WebhookDeliveries.Add(delivery);
+        await db.SaveChangesAsync(ct);
 
         try
         {
@@ -267,11 +276,12 @@ public class WebhookDeliveryService : IWebhookService
             _logger.LogWarning("Webhook endpoint {EndpointId} auto-disabled after 50 failures", endpoint.Id);
         }
 
-        await _db.SaveChangesAsync(ct);
+        await db.SaveChangesAsync(ct);
     }
 
     public async Task RetryDeliveryAsync(WebhookDelivery delivery, CancellationToken ct = default)
     {
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
         if (delivery.Endpoint is null || !delivery.Endpoint.IsActive)
         {
             delivery.Status = "Exhausted";

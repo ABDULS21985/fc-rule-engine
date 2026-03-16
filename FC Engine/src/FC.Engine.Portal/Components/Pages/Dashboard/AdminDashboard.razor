@@ -102,7 +102,21 @@
                     </div>
                     <div class="portal-ta39-hero-score">
                         <span>Workspace readiness</span>
-                        <strong>@controlScore.ToString("0")</strong>
+                        <div class="portal-ta39-score-ring">
+                            <svg viewBox="0 0 36 36">
+                                <circle cx="18" cy="18" r="15.5" fill="none" stroke="rgba(226,232,240,0.5)" stroke-width="3"></circle>
+                                <circle cx="18" cy="18" r="15.5" fill="none"
+                                        stroke="@(controlScore >= 75 ? "#0f766e" : controlScore >= 50 ? "#d97706" : "#b91c1c")"
+                                        stroke-width="3" stroke-linecap="round"
+                                        stroke-dasharray="@((controlScore * 97.4m / 100m).ToString("0.#")) 97.4"
+                                        style="transition: stroke-dasharray 1s ease;">
+                                </circle>
+                            </svg>
+                            <div class="portal-ta39-score-ring-label">
+                                <strong>@controlScore.ToString("0")</strong>
+                                <span>/100</span>
+                            </div>
+                        </div>
                         <small>Composite of validation, completeness, and headroom</small>
                     </div>
                 </div>
@@ -176,7 +190,7 @@
                                 <span>@item.UsedText / @item.LimitText</span>
                             </div>
                             <div class="portal-ta39-usage-track" aria-hidden="true">
-                                <span style="width: @Math.Min(100m, item.Percent).ToString("0.##")%;"></span>
+                                <span style="width: @Math.Min(100m, item.Percent).ToString("0.##")%; --bar-color: @(item.Percent >= 90 ? "linear-gradient(90deg, #b91c1c, #ef4444)" : item.Percent >= 70 ? "linear-gradient(90deg, #d97706, #f59e0b)" : "linear-gradient(90deg, #006b3f, #0ea5e9)");"></span>
                             </div>
                             <div class="portal-ta39-usage-percent">@item.Percent.ToString("0.##")%</div>
                         </div>
@@ -225,8 +239,12 @@
                     <span class="portal-ta39-inline-note">@deliveryRate.ToString("0.#")%</span>
                 </div>
                 <p class="portal-ta39-panel-copy">Delivered, sent, queued, and failed notifications in the current tenant scope.</p>
-                <div class="portal-ta39-chart-wrap">
+                <div class="portal-ta39-chart-wrap" style="position:relative;">
                     <canvas id="adminNotificationChart"></canvas>
+                    <div class="portal-ta39-chart-center">
+                        <strong>@deliveryRate.ToString("0.#")%</strong>
+                        <span>Delivered</span>
+                    </div>
                 </div>
             </article>
 
@@ -435,7 +453,7 @@
     }
 
     .portal-ta39-banner--critical {
-        background: linear-gradient(135deg, rgba(127, 29, 29, 0.98), rgba(185, 28, 28, 0.94));
+        background: linear-gradient(135deg, rgba(0, 74, 45, 0.98), rgba(0, 107, 63, 0.95), rgba(13, 148, 101, 0.9));
     }
 
     .portal-ta39-banner--warning {
@@ -857,27 +875,11 @@
         }
 
         await Charts.RenderLineChart("adminDataQualityChart", _data.DataQualityTrend);
-        await Charts.RenderDoughnutChart("adminNotificationChart", BuildNotificationTrend(_data.NotificationStats));
+        var notifLabels = new[] { "Delivered", "Sent", "Queued", "Failed" };
+        var notifValues = new[] { _data.NotificationStats.Delivered, _data.NotificationStats.Sent, _data.NotificationStats.Queued, _data.NotificationStats.Failed };
+        var notifColors = new[] { "#0f766e", "#3b82f6", "#d97706", "#b91c1c" };
+        await Charts.RenderDonutWithColors("adminNotificationChart", notifLabels, notifValues, notifColors);
         _chartsRendered = true;
-    }
-
-    private static TrendData BuildNotificationTrend(NotificationStats stats)
-    {
-        return new TrendData
-        {
-            Title = "Notification Delivery",
-            Labels = new List<string> { "Delivered", "Sent", "Queued", "Failed" },
-            Datasets =
-            {
-                new TrendDataset
-                {
-                    Label = "Notifications",
-                    Data = new List<decimal> { stats.Delivered, stats.Sent, stats.Queued, stats.Failed },
-                    BackgroundColor = "#0f766e",
-                    BorderColor = "#0f766e"
-                }
-            }
-        };
     }
 
     private static IReadOnlyList<UsageTile> BuildUsageTiles(AdminDashboardData data)

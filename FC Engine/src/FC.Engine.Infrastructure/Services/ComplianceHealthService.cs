@@ -13,7 +13,7 @@ namespace FC.Engine.Infrastructure.Services;
 
 public class ComplianceHealthService : IComplianceHealthService
 {
-    private readonly MetadataDbContext _db;
+    private readonly IDbContextFactory<MetadataDbContext> _dbFactory;
     private readonly IMemoryCache _cache;
     private readonly ILogger<ComplianceHealthService> _logger;
     private static readonly TimeSpan CacheTtl = TimeSpan.FromMinutes(5);
@@ -31,11 +31,11 @@ public class ComplianceHealthService : IComplianceHealthService
     private static readonly string[] LcrKeys = { "lcr", "liquiditycoverageratio", "liquidityratio" };
 
     public ComplianceHealthService(
-        MetadataDbContext db,
+        IDbContextFactory<MetadataDbContext> dbFactory,
         IMemoryCache cache,
         ILogger<ComplianceHealthService> logger)
     {
-        _db = db;
+        _dbFactory = dbFactory;
         _cache = cache;
         _logger = logger;
     }
@@ -78,7 +78,8 @@ public class ComplianceHealthService : IComplianceHealthService
         if (_cache.TryGetValue(key, out ChsTrendData? cached) && cached is not null)
             return cached;
 
-        var snapshots = await _db.ChsScoreSnapshots
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+        var snapshots = await db.ChsScoreSnapshots
             .Where(s => s.TenantId == tenantId)
             .OrderByDescending(s => s.ComputedAt)
             .Take(periods)
@@ -140,10 +141,11 @@ public class ComplianceHealthService : IComplianceHealthService
 
     public async Task<List<ChsAlert>> GetAlerts(Guid tenantId, CancellationToken ct = default)
     {
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
         var trend = await GetTrend(tenantId, 12, ct);
         var alerts = new List<ChsAlert>();
 
-        var tenant = await _db.Tenants
+        var tenant = await db.Tenants
             .Where(t => t.TenantId == tenantId)
             .Select(t => new { t.TenantName })
             .FirstOrDefaultAsync(ct);
@@ -253,12 +255,13 @@ public class ComplianceHealthService : IComplianceHealthService
 
     private async Task<ComplianceHealthScore> ComputeScoreFromData(Guid tenantId, CancellationToken ct)
     {
-        var tenant = await _db.Tenants
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+        var tenant = await db.Tenants
             .Where(t => t.TenantId == tenantId)
             .Select(t => new { t.TenantName })
             .FirstOrDefaultAsync(ct);
 
-        var licenceType = await _db.TenantLicenceTypes
+        var licenceType = await db.TenantLicenceTypes
             .Where(tl => tl.TenantId == tenantId && tl.IsActive)
             .Include(tl => tl.LicenceType)
             .Select(tl => tl.LicenceType!.Name)
@@ -268,11 +271,11 @@ public class ComplianceHealthService : IComplianceHealthService
         var lookback = now.AddMonths(-6);
 
         // Compute each pillar
-        var filing = await ComputeFilingTimeliness(tenantId, lookback, ct);
-        var dataQuality = await ComputeDataQuality(tenantId, lookback, ct);
-        var capital = await ComputeRegulatoryCapital(tenantId, ct);
-        var governance = await ComputeAuditGovernance(tenantId, lookback, ct);
-        var engagement = await ComputeEngagement(tenantId, lookback, ct);
+        var filing = await ComputeFilingTimeliness(db, tenantId, lookback, ct);
+        var dataQuality = await ComputeDataQuality(db, tenantId, lookback, ct);
+        var capital = await ComputeRegulatoryCapital(db, tenantId, ct);
+        var governance = await ComputeAuditGovernance(db, tenantId, lookback, ct);
+        var engagement = await ComputeEngagement(db, tenantId, lookback, ct);
 
         var overall = Math.Round(
             filing * FilingWeight +
@@ -282,7 +285,7 @@ public class ComplianceHealthService : IComplianceHealthService
             engagement * EngagementWeight, 1);
 
         // Get trend direction from snapshots
-        var recentSnapshots = await _db.ChsScoreSnapshots
+        var recentSnapshots = await db.ChsScoreSnapshots
             .Where(s => s.TenantId == tenantId)
             .OrderByDescending(s => s.ComputedAt)
             .Take(2)
@@ -317,9 +320,9 @@ public class ComplianceHealthService : IComplianceHealthService
 
     // ── Pillar 1: Filing Timeliness (25%) ──
 
-    private async Task<decimal> ComputeFilingTimeliness(Guid tenantId, DateTime lookback, CancellationToken ct)
+    private async Task<decimal> ComputeFilingTimeliness(MetadataDbContext db, Guid tenantId, DateTime lookback, CancellationToken ct)
     {
-        var records = await _db.FilingSlaRecords
+        var records = await db.FilingSlaRecords
             .Where(r => r.TenantId == tenantId && r.PeriodEndDate >= lookback)
             .ToListAsync(ct);
 
@@ -347,17 +350,17 @@ public class ComplianceHealthService : IComplianceHealthService
 
     // ── Pillar 2: Data Quality (25%) ──
 
-    private async Task<decimal> ComputeDataQuality(Guid tenantId, DateTime lookback, CancellationToken ct)
+    private async Task<decimal> ComputeDataQuality(MetadataDbContext db, Guid tenantId, DateTime lookback, CancellationToken ct)
     {
-        var reports = await _db.ValidationReports
+        var reports = await db.ValidationReports
             .Where(r => r.TenantId == tenantId && r.CreatedAt >= lookback)
             .Select(r => new { r.Id })
             .ToListAsync(ct);
 
         List<decimal> anomalyScores = [];
-        if (await HasAnomalyReportsTableAsync(ct))
+        if (await HasAnomalyReportsTableAsync(db, ct))
         {
-            anomalyScores = await _db.AnomalyReports
+            anomalyScores = await db.AnomalyReports
                 .AsNoTracking()
                 .Where(r => r.TenantId == tenantId && r.AnalysedAt >= lookback)
                 .Select(r => r.OverallQualityScore)
@@ -373,7 +376,7 @@ public class ComplianceHealthService : IComplianceHealthService
 
         var reportIds = reports.Select(r => r.Id).ToList();
 
-        var errors = await _db.ValidationErrors
+        var errors = await db.ValidationErrors
             .Where(e => reportIds.Contains(e.ValidationReportId))
             .GroupBy(e => e.ValidationReportId)
             .Select(g => new
@@ -395,7 +398,7 @@ public class ComplianceHealthService : IComplianceHealthService
         var severityScore = Math.Max(0, 100 - avgErrorsPerReport);
 
         // Sub-factor 3: Cross-sheet consistency (25%) — based on cross-sheet error ratio
-        var crossSheetErrors = await _db.ValidationErrors
+        var crossSheetErrors = await db.ValidationErrors
             .Where(e => reportIds.Contains(e.ValidationReportId)
                         && e.ReferencedReturnCode != null)
             .CountAsync(ct);
@@ -413,14 +416,14 @@ public class ComplianceHealthService : IComplianceHealthService
         return Clamp((validationScore * 0.6m) + (anomalyScore * 0.4m));
     }
 
-    private async Task<bool> HasAnomalyReportsTableAsync(CancellationToken ct)
+    private async Task<bool> HasAnomalyReportsTableAsync(MetadataDbContext db, CancellationToken ct)
     {
         if (_hasAnomalyReportsTable.HasValue)
         {
             return _hasAnomalyReportsTable.Value;
         }
 
-        var connection = (SqlConnection)_db.Database.GetDbConnection();
+        var connection = (SqlConnection)db.Database.GetDbConnection();
         var wasOpen = connection.State == ConnectionState.Open;
         if (!wasOpen)
         {
@@ -469,10 +472,10 @@ public class ComplianceHealthService : IComplianceHealthService
 
     // ── Pillar 3: Regulatory Capital (20%) ──
 
-    private async Task<decimal> ComputeRegulatoryCapital(Guid tenantId, CancellationToken ct)
+    private async Task<decimal> ComputeRegulatoryCapital(MetadataDbContext db, Guid tenantId, CancellationToken ct)
     {
         // Get latest submission with parsed data
-        var latestSubmission = await _db.Submissions
+        var latestSubmission = await db.Submissions
             .Where(s => s.TenantId == tenantId
                         && s.ParsedDataJson != null
                         && s.Status != SubmissionStatus.Rejected)
@@ -505,14 +508,14 @@ public class ComplianceHealthService : IComplianceHealthService
 
     // ── Pillar 4: Audit & Governance (15%) ──
 
-    private async Task<decimal> ComputeAuditGovernance(Guid tenantId, DateTime lookback, CancellationToken ct)
+    private async Task<decimal> ComputeAuditGovernance(MetadataDbContext db, Guid tenantId, DateTime lookback, CancellationToken ct)
     {
         // Sub-factor 1: Maker-checker compliance (40%)
-        var totalSubmissions = await _db.Submissions
+        var totalSubmissions = await db.Submissions
             .Where(s => s.TenantId == tenantId && s.SubmittedAt >= lookback)
             .CountAsync(ct);
 
-        var approvedSubmissions = await _db.SubmissionApprovals
+        var approvedSubmissions = await db.SubmissionApprovals
             .Where(a => a.TenantId == tenantId && a.RequestedAt >= lookback
                         && a.Status == ApprovalStatus.Approved)
             .CountAsync(ct);
@@ -522,11 +525,11 @@ public class ComplianceHealthService : IComplianceHealthService
             : 50m;
 
         // Sub-factor 2: MFA adoption (30%)
-        var totalUsers = await _db.Set<InstitutionUser>()
+        var totalUsers = await db.Set<InstitutionUser>()
             .Where(u => u.TenantId == tenantId && u.IsActive)
             .CountAsync(ct);
 
-        var mfaUsers = await _db.UserMfaConfigs
+        var mfaUsers = await db.UserMfaConfigs
             .Where(m => m.TenantId == tenantId && m.IsEnabled)
             .CountAsync(ct);
 
@@ -535,7 +538,7 @@ public class ComplianceHealthService : IComplianceHealthService
             : 50m;
 
         // Sub-factor 3: Audit trail completeness (30%)
-        var auditEntries = await _db.AuditLog
+        var auditEntries = await db.AuditLog
             .Where(a => a.TenantId == tenantId && a.PerformedAt >= lookback)
             .CountAsync(ct);
 
@@ -550,12 +553,12 @@ public class ComplianceHealthService : IComplianceHealthService
 
     // ── Pillar 5: Engagement (15%) ──
 
-    private async Task<decimal> ComputeEngagement(Guid tenantId, DateTime lookback, CancellationToken ct)
+    private async Task<decimal> ComputeEngagement(MetadataDbContext db, Guid tenantId, DateTime lookback, CancellationToken ct)
     {
         var months = Math.Max(1, (DateTime.UtcNow - lookback).Days / 30.0);
 
         // Sub-factor 1: Login frequency (40%) — logins per month, 20+/month = 100
-        var loginCount = await _db.LoginAttempts
+        var loginCount = await db.LoginAttempts
             .Where(l => l.TenantId == tenantId && l.Succeeded && l.AttemptedAt >= lookback)
             .CountAsync(ct);
 
@@ -563,7 +566,7 @@ public class ComplianceHealthService : IComplianceHealthService
         var loginScore = Clamp(loginsPerMonth / 20m * 100m);
 
         // Sub-factor 2: Filing lead time (35%) — avg days before deadline for submitted returns
-        var filingRecords = await _db.FilingSlaRecords
+        var filingRecords = await db.FilingSlaRecords
             .Where(r => r.TenantId == tenantId
                         && r.SubmittedDate.HasValue
                         && r.DaysToDeadline.HasValue
@@ -579,11 +582,11 @@ public class ComplianceHealthService : IComplianceHealthService
         }
 
         // Sub-factor 3: Draft utilization (25%) — using drafts before final submission
-        var draftCount = await _db.ReturnDrafts
+        var draftCount = await db.ReturnDrafts
             .Where(d => d.TenantId == tenantId && d.LastSavedAt >= lookback)
             .CountAsync(ct);
 
-        var submissionCount = await _db.Submissions
+        var submissionCount = await db.Submissions
             .Where(s => s.TenantId == tenantId && s.SubmittedAt >= lookback)
             .CountAsync(ct);
 
@@ -598,7 +601,8 @@ public class ComplianceHealthService : IComplianceHealthService
 
     private async Task<ChsPeerComparison> BuildPeerComparison(Guid tenantId, CancellationToken ct)
     {
-        var tenantLicence = await _db.TenantLicenceTypes
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+        var tenantLicence = await db.TenantLicenceTypes
             .Where(tl => tl.TenantId == tenantId && tl.IsActive)
             .Include(tl => tl.LicenceType)
             .FirstOrDefaultAsync(ct);
@@ -607,14 +611,14 @@ public class ComplianceHealthService : IComplianceHealthService
         var licenceTypeId = tenantLicence?.LicenceTypeId ?? 0;
 
         // Find peers with same licence type
-        var peerTenantIds = await _db.TenantLicenceTypes
+        var peerTenantIds = await db.TenantLicenceTypes
             .Where(tl => tl.LicenceTypeId == licenceTypeId && tl.IsActive)
             .Select(tl => tl.TenantId)
             .Distinct()
             .ToListAsync(ct);
 
         // Get latest snapshot for each peer
-        var latestSnapshots = await _db.ChsScoreSnapshots
+        var latestSnapshots = await db.ChsScoreSnapshots
             .Where(s => peerTenantIds.Contains(s.TenantId))
             .GroupBy(s => s.TenantId)
             .Select(g => g.OrderByDescending(s => s.ComputedAt).First())
@@ -684,15 +688,16 @@ public class ComplianceHealthService : IComplianceHealthService
 
     private async Task<SectorChsSummary> BuildSectorSummary(string regulatorCode, CancellationToken ct)
     {
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
         // Find all tenants under this regulator via licence types
-        var tenantIds = await _db.TenantLicenceTypes
+        var tenantIds = await db.TenantLicenceTypes
             .Where(tl => tl.IsActive && tl.LicenceType != null && tl.LicenceType.Regulator == regulatorCode)
             .Select(tl => tl.TenantId)
             .Distinct()
             .ToListAsync(ct);
 
         // Latest snapshot per tenant
-        var latestSnapshots = await _db.ChsScoreSnapshots
+        var latestSnapshots = await db.ChsScoreSnapshots
             .Where(s => tenantIds.Contains(s.TenantId))
             .GroupBy(s => s.TenantId)
             .Select(g => g.OrderByDescending(s => s.ComputedAt).First())
@@ -706,7 +711,7 @@ public class ComplianceHealthService : IComplianceHealthService
 
         // Sector trend: average score per week for last 12 weeks
         var twelveWeeksAgo = DateTime.UtcNow.AddDays(-84);
-        var sectorSnapshots = await _db.ChsScoreSnapshots
+        var sectorSnapshots = await db.ChsScoreSnapshots
             .Where(s => tenantIds.Contains(s.TenantId) && s.ComputedAt >= twelveWeeksAgo)
             .ToListAsync(ct);
 
@@ -735,14 +740,15 @@ public class ComplianceHealthService : IComplianceHealthService
 
     private async Task<List<ChsWatchListItem>> BuildWatchList(string regulatorCode, CancellationToken ct)
     {
-        var tenantIds = await _db.TenantLicenceTypes
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+        var tenantIds = await db.TenantLicenceTypes
             .Where(tl => tl.IsActive && tl.LicenceType != null && tl.LicenceType.Regulator == regulatorCode)
             .Select(tl => tl.TenantId)
             .Distinct()
             .ToListAsync(ct);
 
         // Latest snapshot per tenant
-        var latestSnapshots = await _db.ChsScoreSnapshots
+        var latestSnapshots = await db.ChsScoreSnapshots
             .Where(s => tenantIds.Contains(s.TenantId))
             .GroupBy(s => s.TenantId)
             .Select(g => g.OrderByDescending(s => s.ComputedAt).First())
@@ -758,12 +764,12 @@ public class ComplianceHealthService : IComplianceHealthService
 
             if (!isBelowThreshold && !isConsecutiveDecline) continue;
 
-            var tenantName = await _db.Tenants
+            var tenantName = await db.Tenants
                 .Where(t => t.TenantId == snap.TenantId)
                 .Select(t => t.TenantName)
                 .FirstOrDefaultAsync(ct) ?? "Unknown";
 
-            var licenceType = await _db.TenantLicenceTypes
+            var licenceType = await db.TenantLicenceTypes
                 .Where(tl => tl.TenantId == snap.TenantId && tl.IsActive)
                 .Include(tl => tl.LicenceType)
                 .Select(tl => tl.LicenceType!.Name)
@@ -799,13 +805,14 @@ public class ComplianceHealthService : IComplianceHealthService
 
     private async Task<List<ChsHeatmapItem>> BuildHeatmap(string regulatorCode, CancellationToken ct)
     {
-        var tenantIds = await _db.TenantLicenceTypes
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+        var tenantIds = await db.TenantLicenceTypes
             .Where(tl => tl.IsActive && tl.LicenceType != null && tl.LicenceType.Regulator == regulatorCode)
             .Select(tl => tl.TenantId)
             .Distinct()
             .ToListAsync(ct);
 
-        var latestSnapshots = await _db.ChsScoreSnapshots
+        var latestSnapshots = await db.ChsScoreSnapshots
             .Where(s => tenantIds.Contains(s.TenantId))
             .GroupBy(s => s.TenantId)
             .Select(g => g.OrderByDescending(s => s.ComputedAt).First())
@@ -815,12 +822,12 @@ public class ComplianceHealthService : IComplianceHealthService
 
         foreach (var snap in latestSnapshots)
         {
-            var tenantName = await _db.Tenants
+            var tenantName = await db.Tenants
                 .Where(t => t.TenantId == snap.TenantId)
                 .Select(t => t.TenantName)
                 .FirstOrDefaultAsync(ct) ?? "Unknown";
 
-            var licenceType = await _db.TenantLicenceTypes
+            var licenceType = await db.TenantLicenceTypes
                 .Where(tl => tl.TenantId == snap.TenantId && tl.IsActive)
                 .Include(tl => tl.LicenceType)
                 .Select(tl => tl.LicenceType!.Name)

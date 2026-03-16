@@ -6,20 +6,21 @@ namespace FC.Engine.Infrastructure.Metadata.Repositories;
 
 public class NotificationPreferenceRepository : INotificationPreferenceRepository
 {
-    private readonly MetadataDbContext _db;
+    private readonly IDbContextFactory<MetadataDbContext> _dbFactory;
 
-    public NotificationPreferenceRepository(MetadataDbContext db)
+    public NotificationPreferenceRepository(IDbContextFactory<MetadataDbContext> dbFactory)
     {
-        _db = db;
+        _dbFactory = dbFactory;
     }
 
-    public Task<NotificationPreference?> GetPreference(
+    public async Task<NotificationPreference?> GetPreference(
         Guid tenantId,
         int userId,
         string eventType,
         CancellationToken ct = default)
     {
-        return _db.NotificationPreferences.FirstOrDefaultAsync(p =>
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+        return await db.NotificationPreferences.FirstOrDefaultAsync(p =>
             p.TenantId == tenantId &&
             p.UserId == userId &&
             p.EventType == eventType, ct);
@@ -30,7 +31,8 @@ public class NotificationPreferenceRepository : INotificationPreferenceRepositor
         int userId,
         CancellationToken ct = default)
     {
-        return await _db.NotificationPreferences
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+        return await db.NotificationPreferences
             .Where(p => p.TenantId == tenantId && p.UserId == userId)
             .OrderBy(p => p.EventType)
             .ToListAsync(ct);
@@ -38,15 +40,16 @@ public class NotificationPreferenceRepository : INotificationPreferenceRepositor
 
     public async Task<NotificationPreference> Upsert(NotificationPreference preference, CancellationToken ct = default)
     {
-        var existing = await _db.NotificationPreferences.FirstOrDefaultAsync(p =>
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+        var existing = await db.NotificationPreferences.FirstOrDefaultAsync(p =>
             p.TenantId == preference.TenantId &&
             p.UserId == preference.UserId &&
             p.EventType == preference.EventType, ct);
 
         if (existing is null)
         {
-            _db.NotificationPreferences.Add(preference);
-            await _db.SaveChangesAsync(ct);
+            db.NotificationPreferences.Add(preference);
+            await db.SaveChangesAsync(ct);
             return preference;
         }
 
@@ -56,22 +59,23 @@ public class NotificationPreferenceRepository : INotificationPreferenceRepositor
         existing.SmsQuietHoursStart = preference.SmsQuietHoursStart;
         existing.SmsQuietHoursEnd = preference.SmsQuietHoursEnd;
 
-        await _db.SaveChangesAsync(ct);
+        await db.SaveChangesAsync(ct);
         return existing;
     }
 
     public async Task UpsertRange(IEnumerable<NotificationPreference> preferences, CancellationToken ct = default)
     {
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
         foreach (var preference in preferences)
         {
-            var existing = await _db.NotificationPreferences.FirstOrDefaultAsync(p =>
+            var existing = await db.NotificationPreferences.FirstOrDefaultAsync(p =>
                 p.TenantId == preference.TenantId &&
                 p.UserId == preference.UserId &&
                 p.EventType == preference.EventType, ct);
 
             if (existing is null)
             {
-                _db.NotificationPreferences.Add(preference);
+                db.NotificationPreferences.Add(preference);
                 continue;
             }
 
@@ -82,6 +86,6 @@ public class NotificationPreferenceRepository : INotificationPreferenceRepositor
             existing.SmsQuietHoursEnd = preference.SmsQuietHoursEnd;
         }
 
-        await _db.SaveChangesAsync(ct);
+        await db.SaveChangesAsync(ct);
     }
 }

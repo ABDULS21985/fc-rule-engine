@@ -31,16 +31,16 @@ public class RegulatorInboxService : IRegulatorInboxService
             [RegulatorReceiptStatus.FinalAccepted] = new()
         };
 
-    private readonly MetadataDbContext _db;
+    private readonly IDbContextFactory<MetadataDbContext> _dbFactory;
     private readonly INotificationOrchestrator _notifications;
     private readonly ILogger<RegulatorInboxService> _logger;
 
     public RegulatorInboxService(
-        MetadataDbContext db,
+        IDbContextFactory<MetadataDbContext> dbFactory,
         INotificationOrchestrator notifications,
         ILogger<RegulatorInboxService> logger)
     {
-        _db = db;
+        _dbFactory = dbFactory;
         _notifications = notifications;
         _logger = logger;
     }
@@ -51,9 +51,10 @@ public class RegulatorInboxService : IRegulatorInboxService
         RegulatorInboxFilter? filter = null,
         CancellationToken ct = default)
     {
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
         filter ??= new RegulatorInboxFilter();
 
-        var scoped = BuildScopedSubmissionQuery(regulatorCode);
+        var scoped = BuildScopedSubmissionQuery(db, regulatorCode);
 
         if (!string.IsNullOrWhiteSpace(filter.InstitutionName))
         {
@@ -82,7 +83,7 @@ public class RegulatorInboxService : IRegulatorInboxService
             {
                 if (receiptStatus == RegulatorReceiptStatus.Received)
                 {
-                    var nonReceivedSubmissionIds = await _db.RegulatorReceipts
+                    var nonReceivedSubmissionIds = await db.RegulatorReceipts
                         .AsNoTracking()
                         .Where(r => r.RegulatorTenantId == regulatorTenantId && r.Status != RegulatorReceiptStatus.Received)
                         .Select(r => r.SubmissionId)
@@ -92,7 +93,7 @@ public class RegulatorInboxService : IRegulatorInboxService
                 }
                 else
                 {
-                    var submissionIdsWithStatus = await _db.RegulatorReceipts
+                    var submissionIdsWithStatus = await db.RegulatorReceipts
                         .AsNoTracking()
                         .Where(r => r.RegulatorTenantId == regulatorTenantId && r.Status == receiptStatus)
                         .Select(r => r.SubmissionId)
@@ -145,12 +146,12 @@ public class RegulatorInboxService : IRegulatorInboxService
 
         var submissionIds = rows.Select(x => x.Id).ToList();
 
-        var receipts = await _db.RegulatorReceipts
+        var receipts = await db.RegulatorReceipts
             .AsNoTracking()
             .Where(r => r.RegulatorTenantId == regulatorTenantId && submissionIds.Contains(r.SubmissionId))
             .ToDictionaryAsync(x => x.SubmissionId, ct);
 
-        var openQueryCounts = await _db.ExaminerQueries
+        var openQueryCounts = await db.ExaminerQueries
             .AsNoTracking()
             .Where(q => q.RegulatorTenantId == regulatorTenantId && submissionIds.Contains(q.SubmissionId))
             .Where(q => q.Status == ExaminerQueryStatus.Open || q.Status == ExaminerQueryStatus.Escalated)
@@ -189,7 +190,8 @@ public class RegulatorInboxService : IRegulatorInboxService
         int submissionId,
         CancellationToken ct = default)
     {
-        var submission = await BuildScopedSubmissionQuery(regulatorCode)
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+        var submission = await BuildScopedSubmissionQuery(db, regulatorCode)
             .Include(s => s.ValidationReport)
                 .ThenInclude(r => r!.Errors)
             .FirstOrDefaultAsync(s => s.Id == submissionId, ct);
@@ -214,7 +216,7 @@ public class RegulatorInboxService : IRegulatorInboxService
             ReceiptStatus = RegulatorReceiptStatus.Received
         };
 
-        var receipt = await _db.RegulatorReceipts
+        var receipt = await db.RegulatorReceipts
             .AsNoTracking()
             .FirstOrDefaultAsync(x => x.RegulatorTenantId == regulatorTenantId && x.SubmissionId == submissionId, ct);
 
@@ -223,7 +225,7 @@ public class RegulatorInboxService : IRegulatorInboxService
             inboxItem.ReceiptStatus = receipt.Status;
         }
 
-        var queries = await _db.ExaminerQueries
+        var queries = await db.ExaminerQueries
             .AsNoTracking()
             .Where(q => q.RegulatorTenantId == regulatorTenantId && q.SubmissionId == submissionId)
             .OrderByDescending(q => q.RaisedAt)
@@ -258,12 +260,13 @@ public class RegulatorInboxService : IRegulatorInboxService
         string? notes,
         CancellationToken ct = default)
     {
-        var receipt = await _db.RegulatorReceipts
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+        var receipt = await db.RegulatorReceipts
             .FirstOrDefaultAsync(r => r.RegulatorTenantId == regulatorTenantId && r.SubmissionId == submissionId, ct);
 
         if (receipt is null)
         {
-            var submissionTenantId = await _db.Submissions
+            var submissionTenantId = await db.Submissions
                 .AsNoTracking()
                 .Where(s => s.Id == submissionId)
                 .Select(s => s.TenantId)
@@ -283,7 +286,7 @@ public class RegulatorInboxService : IRegulatorInboxService
                 ReceivedAt = DateTime.UtcNow
             };
 
-            _db.RegulatorReceipts.Add(receipt);
+            db.RegulatorReceipts.Add(receipt);
         }
 
         if (!IsTransitionAllowed(receipt.Status, status))
@@ -309,13 +312,14 @@ public class RegulatorInboxService : IRegulatorInboxService
             receipt.FinalAcceptedAt = DateTime.UtcNow;
         }
 
-        await _db.SaveChangesAsync(ct);
+        await db.SaveChangesAsync(ct);
         return receipt;
     }
 
     public async Task<IReadOnlyList<ExaminerQuery>> GetQueries(Guid regulatorTenantId, int submissionId, CancellationToken ct = default)
     {
-        return await _db.ExaminerQueries
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+        return await db.ExaminerQueries
             .AsNoTracking()
             .Where(q => q.RegulatorTenantId == regulatorTenantId && q.SubmissionId == submissionId)
             .OrderByDescending(q => q.RaisedAt)
@@ -324,7 +328,8 @@ public class RegulatorInboxService : IRegulatorInboxService
 
     public async Task<IReadOnlyList<ExaminerQuery>> GetSubmissionQueries(int submissionId, CancellationToken ct = default)
     {
-        return await _db.ExaminerQueries
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+        return await db.ExaminerQueries
             .AsNoTracking()
             .Where(q => q.SubmissionId == submissionId)
             .OrderByDescending(q => q.RaisedAt)
@@ -340,12 +345,13 @@ public class RegulatorInboxService : IRegulatorInboxService
         ExaminerQueryPriority priority = ExaminerQueryPriority.Normal,
         CancellationToken ct = default)
     {
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
         if (string.IsNullOrWhiteSpace(queryText))
         {
             throw new ArgumentException("Query text is required.", nameof(queryText));
         }
 
-        var submission = await _db.Submissions
+        var submission = await db.Submissions
             .Include(s => s.Institution)
             .FirstOrDefaultAsync(s => s.Id == submissionId, ct)
             ?? throw new InvalidOperationException($"Submission {submissionId} not found.");
@@ -363,8 +369,8 @@ public class RegulatorInboxService : IRegulatorInboxService
             Priority = priority
         };
 
-        _db.ExaminerQueries.Add(query);
-        await _db.SaveChangesAsync(ct);
+        db.ExaminerQueries.Add(query);
+        await db.SaveChangesAsync(ct);
 
         await UpdateReceiptStatus(
             regulatorTenantId,
@@ -395,12 +401,13 @@ public class RegulatorInboxService : IRegulatorInboxService
         string responseText,
         CancellationToken ct = default)
     {
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
         if (string.IsNullOrWhiteSpace(responseText))
         {
             throw new ArgumentException("Response text is required.", nameof(responseText));
         }
 
-        var query = await _db.ExaminerQueries
+        var query = await db.ExaminerQueries
             .Include(q => q.Submission)
             .FirstOrDefaultAsync(q => q.Id == queryId && q.RegulatorTenantId == regulatorTenantId, ct);
 
@@ -408,7 +415,7 @@ public class RegulatorInboxService : IRegulatorInboxService
         {
             return null;
         }
-        return await SaveQueryResponse(query, respondedBy, responseText, ct);
+        return await SaveQueryResponse(db, query, respondedBy, responseText, ct);
     }
 
     public async Task<ExaminerQuery?> RespondToQueryAsInstitution(
@@ -417,12 +424,13 @@ public class RegulatorInboxService : IRegulatorInboxService
         string responseText,
         CancellationToken ct = default)
     {
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
         if (string.IsNullOrWhiteSpace(responseText))
         {
             throw new ArgumentException("Response text is required.", nameof(responseText));
         }
 
-        var query = await _db.ExaminerQueries
+        var query = await db.ExaminerQueries
             .Include(q => q.Submission)
             .FirstOrDefaultAsync(q => q.Id == queryId, ct);
 
@@ -431,14 +439,14 @@ public class RegulatorInboxService : IRegulatorInboxService
             return null;
         }
 
-        return await SaveQueryResponse(query, respondedBy, responseText, ct);
+        return await SaveQueryResponse(db, query, respondedBy, responseText, ct);
     }
 
-    private IQueryable<Submission> BuildScopedSubmissionQuery(string regulatorCode)
+    private static IQueryable<Submission> BuildScopedSubmissionQuery(MetadataDbContext db, string regulatorCode)
     {
         var code = regulatorCode.Trim();
 
-        return _db.Submissions
+        return db.Submissions
             .AsNoTracking()
             .Include(s => s.Institution)
             .Include(s => s.ReturnPeriod)
@@ -460,6 +468,7 @@ public class RegulatorInboxService : IRegulatorInboxService
     }
 
     private async Task<ExaminerQuery> SaveQueryResponse(
+        MetadataDbContext db,
         ExaminerQuery query,
         int respondedBy,
         string responseText,
@@ -470,7 +479,7 @@ public class RegulatorInboxService : IRegulatorInboxService
         query.RespondedAt = DateTime.UtcNow;
         query.Status = ExaminerQueryStatus.Responded;
 
-        await _db.SaveChangesAsync(ct);
+        await db.SaveChangesAsync(ct);
 
         await UpdateReceiptStatus(
             query.RegulatorTenantId,

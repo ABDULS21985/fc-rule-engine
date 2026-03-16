@@ -13,9 +13,29 @@
         Chart.defaults.plugins.tooltip.padding = { x: 10, y: 8 };
         Chart.defaults.plugins.tooltip.titleFont = { size: 12, weight: '600' };
         Chart.defaults.plugins.tooltip.bodyFont = { size: 12 };
+
+        // Global interaction defaults
+        Chart.defaults.interaction.mode = 'index';
+        Chart.defaults.interaction.intersect = false;
+
+        // Global legend defaults
+        Chart.defaults.plugins.legend.labels.usePointStyle = true;
+        Chart.defaults.plugins.legend.labels.pointStyle = 'circle';
+        Chart.defaults.plugins.legend.labels.padding = 14;
+        Chart.defaults.plugins.legend.labels.font = { size: 11 };
     }
 
     var animDuration = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 600;
+
+    // Helper: convert hex color to "r,g,b" string for use in rgba()
+    function hexToRgb(hex) {
+        hex = hex.replace('#', '');
+        if (hex.length === 3) hex = hex[0]+hex[0]+hex[1]+hex[1]+hex[2]+hex[2];
+        var r = parseInt(hex.substring(0, 2), 16);
+        var g = parseInt(hex.substring(2, 4), 16);
+        var b = parseInt(hex.substring(4, 6), 16);
+        return r + ',' + g + ',' + b;
+    }
 
     window.renderChart = function (canvasId, type, data) {
         const canvas = document.getElementById(canvasId);
@@ -47,7 +67,37 @@
                     ];
 
                     const color = dataset.borderColor || dataset.backgroundColor || palette[index % palette.length];
-                    const fill = type === "line" ? false : true;
+
+                    if (type === "line") {
+                        // Build gradient fill for line charts
+                        var gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+                        var rgb = hexToRgb(color);
+                        gradient.addColorStop(0, "rgba(" + rgb + ",0.35)");
+                        gradient.addColorStop(1, "rgba(" + rgb + ",0.02)");
+
+                        return {
+                            label: dataset.label,
+                            data: dataset.data || [],
+                            borderColor: color,
+                            backgroundColor: gradient,
+                            borderWidth: 2,
+                            tension: 0.4,
+                            fill: true,
+                            pointRadius: 0,
+                            pointHoverRadius: 5
+                        };
+                    }
+
+                    if (type === "doughnut") {
+                        return {
+                            label: dataset.label,
+                            data: dataset.data || [],
+                            borderColor: color,
+                            backgroundColor: dataset.backgroundColor || color,
+                            borderWidth: 0,
+                            hoverOffset: 6
+                        };
+                    }
 
                     return {
                         label: dataset.label,
@@ -56,7 +106,7 @@
                         backgroundColor: dataset.backgroundColor || color,
                         borderWidth: 2,
                         tension: 0.3,
-                        fill: fill
+                        fill: true
                     };
                 })
             },
@@ -69,17 +119,20 @@
                         position: "bottom"
                     }
                 },
+                ...(type === "doughnut" ? { cutout: "68%", spacing: 3 } : {}),
                 scales: type !== "doughnut" ? {
                     y: {
                         beginAtZero: true,
                         grid: {
-                            color: "#E2E8F0"
-                        }
+                            color: "rgba(148, 163, 184, 0.12)"
+                        },
+                        ticks: { font: { size: 11 } }
                     },
                     x: {
                         grid: {
                             display: false
-                        }
+                        },
+                        ticks: { font: { size: 11 } }
                     }
                 } : undefined
             }
@@ -119,7 +172,7 @@
                 animation: { duration: animDuration },
                 plugins: { legend: { position: "bottom", labels: { usePointStyle: true, padding: 16 } } },
                 scales: {
-                    y: { beginAtZero: true, stacked: false, grid: { color: "#E2E8F0" }, ticks: { precision: 0 } },
+                    y: { beginAtZero: true, stacked: false, grid: { color: "rgba(148, 163, 184, 0.12)" }, ticks: { precision: 0, font: { size: 11 } } },
                     x: { grid: { display: false } }
                 }
             }
@@ -142,7 +195,7 @@
             type: "bar",
             data: {
                 labels: labels,
-                datasets: [{ label: "Submissions", data: values, backgroundColor: colors, borderRadius: 4, borderWidth: 0 }]
+                datasets: [{ label: "Submissions", data: values, backgroundColor: colors, borderRadius: 6, borderWidth: 0, barThickness: 18 }]
             },
             options: {
                 indexAxis: "y",
@@ -162,8 +215,8 @@
                     }
                 },
                 scales: {
-                    x: { beginAtZero: true, grid: { color: "#E2E8F0" }, ticks: { precision: 0 } },
-                    y: { grid: { display: false } }
+                    x: { beginAtZero: true, grid: { color: "rgba(148, 163, 184, 0.12)" }, ticks: { precision: 0, font: { size: 11 } } },
+                    y: { grid: { display: false }, ticks: { font: { size: 11 } } }
                 }
             }
         });
@@ -250,7 +303,7 @@
             type: "doughnut",
             data: {
                 labels: labels,
-                datasets: [{ data: values, backgroundColor: colors, borderColor: "#fff", borderWidth: 2 }]
+                datasets: [{ data: values, backgroundColor: colors, borderWidth: 0, hoverOffset: 8 }]
             },
             options: {
                 responsive: true, maintainAspectRatio: false,
@@ -265,7 +318,8 @@
                         dotNetRef.invokeMethodAsync('OnChartSegmentClick', canvasId, idx, labels[idx]);
                     }
                 },
-                cutout: "62%"
+                cutout: "68%",
+                spacing: 4
             }
         });
     };
@@ -358,7 +412,7 @@
 
     // ── Dark Mode Chart Theming ───────────────────────────────────────
     window.portalUpdateChartsTheme = function (isDark) {
-        var gridColor = isDark ? 'rgba(255,255,255,0.08)' : '#E2E8F0';
+        var gridColor = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(148, 163, 184, 0.12)';
         var tickColor = isDark ? '#94A3B8' : '#6B7280';
         var bgColor   = isDark ? '#1E293B' : '#FFFFFF';
         if (typeof Chart !== 'undefined') {

@@ -13,7 +13,7 @@ public class SubscriptionService : ISubscriptionService
 {
     private const decimal VatRate = 0.0750m;
 
-    private readonly MetadataDbContext _db;
+    private readonly IDbContextFactory<MetadataDbContext> _dbFactory;
     private readonly IEntitlementService _entitlementService;
     private readonly SubscriptionModuleEntitlementBootstrapService? _subscriptionModuleEntitlementBootstrapService;
     private readonly INotificationOrchestrator? _notificationOrchestrator;
@@ -21,14 +21,14 @@ public class SubscriptionService : ISubscriptionService
     private readonly ILogger<SubscriptionService> _logger;
 
     public SubscriptionService(
-        MetadataDbContext db,
+        IDbContextFactory<MetadataDbContext> dbFactory,
         IEntitlementService entitlementService,
         ILogger<SubscriptionService> logger,
         INotificationOrchestrator? notificationOrchestrator = null,
         IDomainEventPublisher? domainEventPublisher = null,
         SubscriptionModuleEntitlementBootstrapService? subscriptionModuleEntitlementBootstrapService = null)
     {
-        _db = db;
+        _dbFactory = dbFactory;
         _entitlementService = entitlementService;
         _logger = logger;
         _notificationOrchestrator = notificationOrchestrator;
@@ -42,10 +42,12 @@ public class SubscriptionService : ISubscriptionService
         BillingFrequency frequency,
         CancellationToken ct = default)
     {
-        var tenant = await _db.Tenants.FirstOrDefaultAsync(t => t.TenantId == tenantId, ct)
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+
+        var tenant = await db.Tenants.FirstOrDefaultAsync(t => t.TenantId == tenantId, ct)
             ?? throw new InvalidOperationException($"Tenant {tenantId} not found");
 
-        var existing = await _db.Subscriptions
+        var existing = await db.Subscriptions
             .FirstOrDefaultAsync(s => s.TenantId == tenantId
                 && s.Status != SubscriptionStatus.Cancelled
                 && s.Status != SubscriptionStatus.Expired, ct);
@@ -53,7 +55,7 @@ public class SubscriptionService : ISubscriptionService
         if (existing is not null)
             throw new InvalidOperationException($"Tenant {tenantId} already has an active/trial subscription");
 
-        var plan = await _db.SubscriptionPlans
+        var plan = await db.SubscriptionPlans
             .FirstOrDefaultAsync(p => p.PlanCode == planCode && p.IsActive, ct)
             ?? throw new InvalidOperationException($"Plan {planCode} not found or inactive");
 
@@ -70,8 +72,8 @@ public class SubscriptionService : ISubscriptionService
             UpdatedAt = now
         };
 
-        _db.Subscriptions.Add(sub);
-        await _db.SaveChangesAsync(ct);
+        db.Subscriptions.Add(sub);
+        await db.SaveChangesAsync(ct);
 
         _logger.LogInformation("Created {Status} subscription for tenant {TenantId} on plan {PlanCode}",
             sub.Status, tenantId, planCode);
@@ -95,46 +97,50 @@ public class SubscriptionService : ISubscriptionService
 
     public async Task CancelSubscription(Guid tenantId, string reason, CancellationToken ct = default)
     {
-        var subscription = await GetActiveSubscription(tenantId, ct);
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+
+        var subscription = await GetActiveSubscriptionInternal(db, tenantId, includeModules: true, ct);
         subscription.Cancel(reason);
-        await _db.SaveChangesAsync(ct);
+        await db.SaveChangesAsync(ct);
         await _entitlementService.InvalidateCache(tenantId);
     }
 
     public async Task<SubscriptionModule> ActivateModule(Guid tenantId, string moduleCode, CancellationToken ct = default)
     {
-        var subscription = await GetActiveSubscriptionInternal(tenantId, includeModules: true, ct);
-        var plan = subscription.Plan ?? await _db.SubscriptionPlans.FindAsync(new object[] { subscription.PlanId }, ct)
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+
+        var subscription = await GetActiveSubscriptionInternal(db, tenantId, includeModules: true, ct);
+        var plan = subscription.Plan ?? await db.SubscriptionPlans.FindAsync(new object[] { subscription.PlanId }, ct)
             ?? throw new InvalidOperationException("Subscription plan not found");
 
-        var module = await _db.Modules
+        var module = await db.Modules
             .FirstOrDefaultAsync(m => m.ModuleCode == moduleCode && m.IsActive, ct)
             ?? throw new InvalidOperationException($"Module {moduleCode} not found");
 
         // GATE 1: Licence eligibility
-        var licenceIds = await _db.TenantLicenceTypes
+        var licenceIds = await db.TenantLicenceTypes
             .Where(t => t.TenantId == tenantId && t.IsActive)
             .Select(t => t.LicenceTypeId)
             .ToListAsync(ct);
 
-        var eligible = await _db.LicenceModuleMatrix
+        var eligible = await db.LicenceModuleMatrix
             .AnyAsync(m => licenceIds.Contains(m.LicenceTypeId) && m.ModuleId == module.Id, ct);
 
         if (!eligible)
             throw new InvalidOperationException($"Module {moduleCode} not eligible for tenant licence type(s)");
 
         // GATE 2: Plan availability
-        var pricing = await _db.PlanModulePricing
+        var pricing = await db.PlanModulePricing
             .FirstOrDefaultAsync(p => p.PlanId == subscription.PlanId && p.ModuleId == module.Id, ct);
 
         if (pricing is null)
             throw new InvalidOperationException($"Module {moduleCode} not available on plan {plan.PlanName}");
 
         // GATE 3: Plan module limit
-        var activeCount = await _db.SubscriptionModules
+        var activeCount = await db.SubscriptionModules
             .CountAsync(sm => sm.SubscriptionId == subscription.Id && sm.IsActive, ct);
 
-        var existing = await _db.SubscriptionModules
+        var existing = await db.SubscriptionModules
             .FirstOrDefaultAsync(sm => sm.SubscriptionId == subscription.Id && sm.ModuleId == module.Id, ct);
 
         if (existing?.IsActive == true)
@@ -157,10 +163,10 @@ public class SubscriptionService : ISubscriptionService
                 PriceAnnual = pricing.PriceAnnual,
                 IsActive = true
             };
-            _db.SubscriptionModules.Add(existing);
+            db.SubscriptionModules.Add(existing);
         }
 
-        await _db.SaveChangesAsync(ct);
+        await db.SaveChangesAsync(ct);
         await _entitlementService.InvalidateCache(tenantId);
 
         if (_notificationOrchestrator is not null)
@@ -206,33 +212,37 @@ public class SubscriptionService : ISubscriptionService
 
     public async Task DeactivateModule(Guid tenantId, string moduleCode, CancellationToken ct = default)
     {
-        var subscription = await GetActiveSubscriptionInternal(tenantId, includeModules: true, ct);
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
 
-        var module = await _db.Modules
+        var subscription = await GetActiveSubscriptionInternal(db, tenantId, includeModules: true, ct);
+
+        var module = await db.Modules
             .FirstOrDefaultAsync(m => m.ModuleCode == moduleCode && m.IsActive, ct)
             ?? throw new InvalidOperationException($"Module {moduleCode} not found");
 
-        var requiredModuleIds = await GetRequiredModuleIdsForTenant(tenantId, ct);
+        var requiredModuleIds = await GetRequiredModuleIdsForTenant(db, tenantId, ct);
         if (requiredModuleIds.Contains(module.Id))
             throw new InvalidOperationException($"Module {moduleCode} is required for tenant licence and cannot be deactivated");
 
-        var subscriptionModule = await _db.SubscriptionModules
+        var subscriptionModule = await db.SubscriptionModules
             .FirstOrDefaultAsync(sm => sm.SubscriptionId == subscription.Id
                 && sm.ModuleId == module.Id
                 && sm.IsActive, ct)
             ?? throw new InvalidOperationException($"Module {moduleCode} is not active");
 
         subscriptionModule.Deactivate();
-        await _db.SaveChangesAsync(ct);
+        await db.SaveChangesAsync(ct);
         await _entitlementService.InvalidateCache(tenantId);
     }
 
     public async Task<List<ModuleAvailability>> GetAvailableModules(Guid tenantId, CancellationToken ct = default)
     {
-        var subscription = await GetActiveSubscriptionInternal(tenantId, includeModules: true, ct);
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
 
-        var eligibility = await GetEligibilityMap(tenantId, ct);
-        var pricing = await _db.PlanModulePricing
+        var subscription = await GetActiveSubscriptionInternal(db, tenantId, includeModules: true, ct);
+
+        var eligibility = await GetEligibilityMap(db, tenantId, ct);
+        var pricing = await db.PlanModulePricing
             .Where(p => p.PlanId == subscription.PlanId)
             .ToDictionaryAsync(p => p.ModuleId, ct);
 
@@ -241,7 +251,7 @@ public class SubscriptionService : ISubscriptionService
             .Select(m => m.ModuleId)
             .ToHashSet();
 
-        var modules = await _db.Modules
+        var modules = await db.Modules
             .Where(m => m.IsActive)
             .OrderBy(m => m.DisplayOrder)
             .ThenBy(m => m.ModuleCode)
@@ -274,9 +284,11 @@ public class SubscriptionService : ISubscriptionService
 
     public async Task<Invoice> GenerateInvoice(Guid tenantId, CancellationToken ct = default)
     {
-        var subscription = await GetActiveSubscriptionInternal(tenantId, includeModules: true, ct);
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+
+        var subscription = await GetActiveSubscriptionInternal(db, tenantId, includeModules: true, ct);
         var plan = subscription.Plan ?? throw new InvalidOperationException("Subscription plan not found");
-        var tenant = await _db.Tenants
+        var tenant = await db.Tenants
             .AsNoTracking()
             .FirstOrDefaultAsync(t => t.TenantId == tenantId, ct);
 
@@ -285,7 +297,7 @@ public class SubscriptionService : ISubscriptionService
         if (tenant?.ParentTenantId is Guid parentTenantId)
         {
             partnerTenantId = parentTenantId;
-            partnerConfig = await _db.PartnerConfigs
+            partnerConfig = await db.PartnerConfigs
                 .AsNoTracking()
                 .FirstOrDefaultAsync(pc => pc.TenantId == parentTenantId, ct);
         }
@@ -297,7 +309,7 @@ public class SubscriptionService : ISubscriptionService
         {
             TenantId = tenantId,
             SubscriptionId = subscription.Id,
-            InvoiceNumber = await GenerateInvoiceNumber(tenantId, subscription.CurrentPeriodStart, ct),
+            InvoiceNumber = await GenerateInvoiceNumber(db, tenantId, subscription.CurrentPeriodStart, ct),
             PeriodStart = periodStart,
             PeriodEnd = periodEnd,
             VatRate = VatRate,
@@ -323,23 +335,23 @@ public class SubscriptionService : ISubscriptionService
             .Where(m => m.IsActive)
             .ToList();
 
-        var pricingMap = await _db.PlanModulePricing
+        var pricingMap = await db.PlanModulePricing
             .Where(p => p.PlanId == subscription.PlanId)
             .ToDictionaryAsync(p => p.ModuleId, ct);
 
-        var moduleLookup = await _db.Modules
+        var moduleLookup = await db.Modules
             .Where(m => activeModules.Select(sm => sm.ModuleId).Contains(m.Id))
             .ToDictionaryAsync(m => m.Id, ct);
 
         var order = 2;
         foreach (var sm in activeModules.OrderBy(m => m.ModuleId))
         {
-            if (!pricingMap.TryGetValue(sm.ModuleId, out var pricing))
+            if (!pricingMap.TryGetValue(sm.ModuleId, out var pricingItem))
             {
                 continue;
             }
 
-            if (pricing.IsIncludedInBase)
+            if (pricingItem.IsIncludedInBase)
             {
                 continue;
             }
@@ -401,8 +413,8 @@ public class SubscriptionService : ISubscriptionService
         }
 
         invoice.RecalculateTotals();
-        _db.Invoices.Add(invoice);
-        await _db.SaveChangesAsync(ct);
+        db.Invoices.Add(invoice);
+        await db.SaveChangesAsync(ct);
 
         if (partnerConfig is not null && partnerTenantId.HasValue)
         {
@@ -418,7 +430,7 @@ public class SubscriptionService : ISubscriptionService
                     MidpointRounding.AwayFromZero);
             }
 
-            _db.PartnerRevenueRecords.Add(new PartnerRevenueRecord
+            db.PartnerRevenueRecords.Add(new PartnerRevenueRecord
             {
                 TenantId = tenantId,
                 PartnerTenantId = partnerTenantId.Value,
@@ -435,7 +447,7 @@ public class SubscriptionService : ISubscriptionService
                 CreatedAt = DateTime.UtcNow
             });
 
-            await _db.SaveChangesAsync(ct);
+            await db.SaveChangesAsync(ct);
         }
 
         return invoice;
@@ -443,7 +455,9 @@ public class SubscriptionService : ISubscriptionService
 
     public async Task<Invoice> IssueInvoice(int invoiceId, CancellationToken ct = default)
     {
-        var invoice = await _db.Invoices
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+
+        var invoice = await db.Invoices
             .Include(i => i.LineItems)
             .FirstOrDefaultAsync(i => i.Id == invoiceId, ct)
             ?? throw new InvalidOperationException($"Invoice {invoiceId} not found");
@@ -451,13 +465,15 @@ public class SubscriptionService : ISubscriptionService
         var dueDate = DateOnly.FromDateTime(DateTime.UtcNow.Date.AddDays(14));
         invoice.Issue(dueDate);
 
-        await _db.SaveChangesAsync(ct);
+        await db.SaveChangesAsync(ct);
         return invoice;
     }
 
     public async Task<Payment> RecordPayment(int invoiceId, RecordPaymentRequest request, CancellationToken ct = default)
     {
-        var invoice = await _db.Invoices
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+
+        var invoice = await db.Invoices
             .Include(i => i.Subscription)
             .FirstOrDefaultAsync(i => i.Id == invoiceId, ct)
             ?? throw new InvalidOperationException($"Invoice {invoiceId} not found");
@@ -500,26 +516,30 @@ public class SubscriptionService : ISubscriptionService
             payment.MarkFailed(request.FailureReason ?? "Payment was not successful");
         }
 
-        _db.Payments.Add(payment);
-        await _db.SaveChangesAsync(ct);
+        db.Payments.Add(payment);
+        await db.SaveChangesAsync(ct);
         return payment;
     }
 
     public async Task VoidInvoice(int invoiceId, string reason, CancellationToken ct = default)
     {
-        var invoice = await _db.Invoices.FirstOrDefaultAsync(i => i.Id == invoiceId, ct)
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+
+        var invoice = await db.Invoices.FirstOrDefaultAsync(i => i.Id == invoiceId, ct)
             ?? throw new InvalidOperationException($"Invoice {invoiceId} not found");
 
         invoice.Void(reason);
-        await _db.SaveChangesAsync(ct);
+        await db.SaveChangesAsync(ct);
     }
 
     public async Task<UsageSummary> GetUsageSummary(Guid tenantId, CancellationToken ct = default)
     {
-        var subscription = await GetActiveSubscriptionInternal(tenantId, includeModules: false, ct);
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+
+        var subscription = await GetActiveSubscriptionInternal(db, tenantId, includeModules: false, ct);
         var plan = subscription.Plan ?? throw new InvalidOperationException("Subscription plan not found");
 
-        var usage = await _db.UsageRecords
+        var usage = await db.UsageRecords
             .Where(u => u.TenantId == tenantId)
             .OrderByDescending(u => u.RecordDate)
             .FirstOrDefaultAsync(ct);
@@ -570,7 +590,9 @@ public class SubscriptionService : ISubscriptionService
             return false;
         }
 
-        var subscription = await _db.Subscriptions
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+
+        var subscription = await db.Subscriptions
             .Where(s => s.TenantId == tenantId)
             .Where(s => s.Status != SubscriptionStatus.Cancelled && s.Status != SubscriptionStatus.Expired)
             .OrderByDescending(s => s.UpdatedAt)
@@ -587,15 +609,19 @@ public class SubscriptionService : ISubscriptionService
 
     public async Task<Subscription> GetActiveSubscription(Guid tenantId, CancellationToken ct = default)
     {
-        return await GetActiveSubscriptionInternal(tenantId, includeModules: true, ct);
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+
+        return await GetActiveSubscriptionInternal(db, tenantId, includeModules: true, ct);
     }
 
     public async Task<List<Invoice>> GetInvoices(Guid tenantId, int page = 1, int pageSize = 20, CancellationToken ct = default)
     {
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+
         page = Math.Max(1, page);
         pageSize = Math.Clamp(pageSize, 1, 100);
 
-        return await _db.Invoices
+        return await db.Invoices
             .Include(i => i.LineItems)
             .Where(i => i.TenantId == tenantId)
             .OrderByDescending(i => i.CreatedAt)
@@ -606,12 +632,16 @@ public class SubscriptionService : ISubscriptionService
 
     public async Task<int> GetInvoiceCount(Guid tenantId, CancellationToken ct = default)
     {
-        return await _db.Invoices.CountAsync(i => i.TenantId == tenantId, ct);
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+
+        return await db.Invoices.CountAsync(i => i.TenantId == tenantId, ct);
     }
 
     public async Task<InvoiceStats> GetInvoiceStats(Guid tenantId, CancellationToken ct = default)
     {
-        var invoices = _db.Invoices.Where(i => i.TenantId == tenantId);
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+
+        var invoices = db.Invoices.Where(i => i.TenantId == tenantId);
 
         return new InvoiceStats
         {
@@ -629,10 +659,12 @@ public class SubscriptionService : ISubscriptionService
 
     public async Task<List<Payment>> GetPayments(Guid tenantId, int page = 1, int pageSize = 20, CancellationToken ct = default)
     {
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+
         page = Math.Max(1, page);
         pageSize = Math.Clamp(pageSize, 1, 100);
 
-        return await _db.Payments
+        return await db.Payments
             .Where(p => p.TenantId == tenantId)
             .OrderByDescending(p => p.CreatedAt)
             .Skip((page - 1) * pageSize)
@@ -642,12 +674,16 @@ public class SubscriptionService : ISubscriptionService
 
     public async Task<int> GetPaymentCount(Guid tenantId, CancellationToken ct = default)
     {
-        return await _db.Payments.CountAsync(p => p.TenantId == tenantId, ct);
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+
+        return await db.Payments.CountAsync(p => p.TenantId == tenantId, ct);
     }
 
     public async Task<PaymentStats> GetPaymentStats(Guid tenantId, CancellationToken ct = default)
     {
-        var payments = _db.Payments.Where(p => p.TenantId == tenantId);
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+
+        var payments = db.Payments.Where(p => p.TenantId == tenantId);
 
         return new PaymentStats
         {
@@ -664,31 +700,9 @@ public class SubscriptionService : ISubscriptionService
 
     public async Task<string> GenerateInvoiceNumber(Guid tenantId, DateTime periodStart, CancellationToken ct = default)
     {
-        var tenant = await _db.Tenants
-            .FirstOrDefaultAsync(t => t.TenantId == tenantId, ct)
-            ?? throw new InvalidOperationException($"Tenant {tenantId} not found");
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
 
-        var yearMonth = periodStart.ToString("yyyyMM");
-        var slugUpper = tenant.TenantSlug.Replace("_", "-").ToUpperInvariant();
-        var prefix = $"INV-{slugUpper}-{yearMonth}";
-
-        var lastNumber = await _db.Invoices
-            .Where(i => i.TenantId == tenantId && i.InvoiceNumber.StartsWith(prefix))
-            .OrderByDescending(i => i.InvoiceNumber)
-            .Select(i => i.InvoiceNumber)
-            .FirstOrDefaultAsync(ct);
-
-        var seq = 1;
-        if (!string.IsNullOrWhiteSpace(lastNumber))
-        {
-            var suffix = lastNumber.Split('-').LastOrDefault();
-            if (int.TryParse(suffix, out var parsed))
-            {
-                seq = parsed + 1;
-            }
-        }
-
-        return $"{prefix}-{seq:D4}";
+        return await GenerateInvoiceNumber(db, tenantId, periodStart, ct);
     }
 
     private static decimal NormalizeRate(decimal value)
@@ -718,10 +732,12 @@ public class SubscriptionService : ISubscriptionService
         bool isUpgrade,
         CancellationToken ct)
     {
-        var subscription = await GetActiveSubscriptionInternal(tenantId, includeModules: true, ct);
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+
+        var subscription = await GetActiveSubscriptionInternal(db, tenantId, includeModules: true, ct);
         var currentPlan = subscription.Plan ?? throw new InvalidOperationException("Current plan not found");
 
-        var newPlan = await _db.SubscriptionPlans
+        var newPlan = await db.SubscriptionPlans
             .FirstOrDefaultAsync(p => p.PlanCode == newPlanCode && p.IsActive, ct)
             ?? throw new InvalidOperationException($"Plan {newPlanCode} not found or inactive");
 
@@ -741,7 +757,7 @@ public class SubscriptionService : ISubscriptionService
                 $"Cannot move to {newPlan.PlanCode}: active modules {activeModules.Count} exceed new limit {newPlan.MaxModules}");
         }
 
-        var newPlanModuleIds = await _db.PlanModulePricing
+        var newPlanModuleIds = await db.PlanModulePricing
             .Where(p => p.PlanId == newPlan.Id)
             .Select(p => p.ModuleId)
             .ToListAsync(ct);
@@ -759,7 +775,7 @@ public class SubscriptionService : ISubscriptionService
 
         subscription.PlanId = newPlan.Id;
         subscription.UpdatedAt = DateTime.UtcNow;
-        await _db.SaveChangesAsync(ct);
+        await db.SaveChangesAsync(ct);
 
         if (_subscriptionModuleEntitlementBootstrapService is not null)
         {
@@ -785,12 +801,13 @@ public class SubscriptionService : ISubscriptionService
         return subscription;
     }
 
-    private async Task<Subscription> GetActiveSubscriptionInternal(
+    private static async Task<Subscription> GetActiveSubscriptionInternal(
+        MetadataDbContext db,
         Guid tenantId,
         bool includeModules,
         CancellationToken ct)
     {
-        IQueryable<Subscription> query = _db.Subscriptions
+        IQueryable<Subscription> query = db.Subscriptions
             .Include(s => s.Plan)
             .Where(s => s.TenantId == tenantId
                 && s.Status != SubscriptionStatus.Cancelled
@@ -811,14 +828,14 @@ public class SubscriptionService : ISubscriptionService
         return sub;
     }
 
-    private async Task<HashSet<int>> GetRequiredModuleIdsForTenant(Guid tenantId, CancellationToken ct)
+    private static async Task<HashSet<int>> GetRequiredModuleIdsForTenant(MetadataDbContext db, Guid tenantId, CancellationToken ct)
     {
-        var licenceIds = await _db.TenantLicenceTypes
+        var licenceIds = await db.TenantLicenceTypes
             .Where(t => t.TenantId == tenantId && t.IsActive)
             .Select(t => t.LicenceTypeId)
             .ToListAsync(ct);
 
-        var requiredModuleIds = await _db.LicenceModuleMatrix
+        var requiredModuleIds = await db.LicenceModuleMatrix
             .Where(m => licenceIds.Contains(m.LicenceTypeId) && m.IsRequired)
             .Select(m => m.ModuleId)
             .ToListAsync(ct);
@@ -826,14 +843,14 @@ public class SubscriptionService : ISubscriptionService
         return requiredModuleIds.ToHashSet();
     }
 
-    private async Task<Dictionary<int, bool>> GetEligibilityMap(Guid tenantId, CancellationToken ct)
+    private static async Task<Dictionary<int, bool>> GetEligibilityMap(MetadataDbContext db, Guid tenantId, CancellationToken ct)
     {
-        var licenceIds = await _db.TenantLicenceTypes
+        var licenceIds = await db.TenantLicenceTypes
             .Where(t => t.TenantId == tenantId && t.IsActive)
             .Select(t => t.LicenceTypeId)
             .ToListAsync(ct);
 
-        var matrix = await _db.LicenceModuleMatrix
+        var matrix = await db.LicenceModuleMatrix
             .Where(m => licenceIds.Contains(m.LicenceTypeId))
             .ToListAsync(ct);
 
@@ -844,7 +861,9 @@ public class SubscriptionService : ISubscriptionService
 
     public async Task<List<SubscriptionPlan>> GetAvailablePlans(Guid tenantId, CancellationToken ct = default)
     {
-        var sub = await _db.Subscriptions
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+
+        var sub = await db.Subscriptions
             .Include(s => s.Plan)
             .AsNoTracking()
             .FirstOrDefaultAsync(s => s.TenantId == tenantId
@@ -853,12 +872,41 @@ public class SubscriptionService : ISubscriptionService
 
         var currentTier = sub?.Plan?.Tier ?? 0;
 
-        return await _db.SubscriptionPlans
+        return await db.SubscriptionPlans
             .AsNoTracking()
             .Where(p => p.IsActive && p.Tier > currentTier)
             .OrderBy(p => p.DisplayOrder)
             .ThenBy(p => p.Tier)
             .ToListAsync(ct);
+    }
+
+    private async Task<string> GenerateInvoiceNumber(MetadataDbContext db, Guid tenantId, DateTime periodStart, CancellationToken ct)
+    {
+        var tenant = await db.Tenants
+            .FirstOrDefaultAsync(t => t.TenantId == tenantId, ct)
+            ?? throw new InvalidOperationException($"Tenant {tenantId} not found");
+
+        var yearMonth = periodStart.ToString("yyyyMM");
+        var slugUpper = tenant.TenantSlug.Replace("_", "-").ToUpperInvariant();
+        var prefix = $"INV-{slugUpper}-{yearMonth}";
+
+        var lastNumber = await db.Invoices
+            .Where(i => i.TenantId == tenantId && i.InvoiceNumber.StartsWith(prefix))
+            .OrderByDescending(i => i.InvoiceNumber)
+            .Select(i => i.InvoiceNumber)
+            .FirstOrDefaultAsync(ct);
+
+        var seq = 1;
+        if (!string.IsNullOrWhiteSpace(lastNumber))
+        {
+            var suffix = lastNumber.Split('-').LastOrDefault();
+            if (int.TryParse(suffix, out var parsed))
+            {
+                seq = parsed + 1;
+            }
+        }
+
+        return $"{prefix}-{seq:D4}";
     }
 
     private static string ResolveAvailabilityMessage(bool isEligible, bool isOnPlan, bool isActive)

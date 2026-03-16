@@ -11,18 +11,18 @@ public class BenchmarkingService : IBenchmarkingService
 {
     private static readonly TimeSpan CacheTtl = TimeSpan.FromMinutes(5);
 
-    private readonly MetadataDbContext _db;
+    private readonly IDbContextFactory<MetadataDbContext> _dbFactory;
     private readonly IMemoryCache _cache;
     private readonly IEntitlementService _entitlementService;
     private readonly ILogger<BenchmarkingService> _logger;
 
     public BenchmarkingService(
-        MetadataDbContext db,
+        IDbContextFactory<MetadataDbContext> dbFactory,
         IMemoryCache cache,
         IEntitlementService entitlementService,
         ILogger<BenchmarkingService> logger)
     {
-        _db = db;
+        _dbFactory = dbFactory;
         _cache = cache;
         _entitlementService = entitlementService;
         _logger = logger;
@@ -50,7 +50,9 @@ public class BenchmarkingService : IBenchmarkingService
                     return null;
                 }
 
-                var module = await _db.Modules
+                await using var db = await _dbFactory.CreateDbContextAsync(ct);
+
+                var module = await db.Modules
                     .AsNoTracking()
                     .FirstOrDefaultAsync(m => m.ModuleCode == normalizedCode, ct);
                 if (module is null)
@@ -58,7 +60,7 @@ public class BenchmarkingService : IBenchmarkingService
                     return null;
                 }
 
-                var tenantLicenceTypeId = await _db.TenantLicenceTypes
+                var tenantLicenceTypeId = await db.TenantLicenceTypes
                     .AsNoTracking()
                     .Where(tlt => tlt.TenantId == tenantId && tlt.IsActive)
                     .OrderByDescending(tlt => tlt.EffectiveDate)
@@ -70,7 +72,7 @@ public class BenchmarkingService : IBenchmarkingService
                     return null;
                 }
 
-                var peerTenantIds = await _db.TenantLicenceTypes
+                var peerTenantIds = await db.TenantLicenceTypes
                     .AsNoTracking()
                     .Where(tlt => tlt.LicenceTypeId == tenantLicenceTypeId.Value && tlt.IsActive)
                     .Select(tlt => tlt.TenantId)
@@ -82,7 +84,7 @@ public class BenchmarkingService : IBenchmarkingService
                     return null;
                 }
 
-                var peerRows = await _db.FilingSlaRecords
+                var peerRows = await db.FilingSlaRecords
                     .AsNoTracking()
                     .Where(r => r.ModuleId == module.Id
                              && r.DaysToDeadline != null
@@ -110,7 +112,7 @@ public class BenchmarkingService : IBenchmarkingService
                 var peerValues = peerRows.Select(x => x.Days).ToList();
                 var peerTenantsWithData = peerRows.Select(x => x.TenantId).Distinct().Count();
 
-                var tenantValues = await _db.FilingSlaRecords
+                var tenantValues = await db.FilingSlaRecords
                     .AsNoTracking()
                     .Where(r => r.TenantId == tenantId
                              && r.ModuleId == module.Id

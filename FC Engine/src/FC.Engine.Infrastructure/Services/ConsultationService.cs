@@ -11,13 +11,13 @@ namespace FC.Engine.Infrastructure.Services;
 
 public sealed class ConsultationService : IConsultationService
 {
-    private readonly MetadataDbContext _db;
+    private readonly IDbContextFactory<MetadataDbContext> _dbFactory;
     private readonly IPolicyAuditLogger _audit;
     private readonly ILogger<ConsultationService> _log;
 
-    public ConsultationService(MetadataDbContext db, IPolicyAuditLogger audit, ILogger<ConsultationService> log)
+    public ConsultationService(IDbContextFactory<MetadataDbContext> dbFactory, IPolicyAuditLogger audit, ILogger<ConsultationService> log)
     {
-        _db = db;
+        _dbFactory = dbFactory;
         _audit = audit;
         _log = log;
     }
@@ -27,7 +27,9 @@ public sealed class ConsultationService : IConsultationService
         DateOnly deadline, IReadOnlyList<ConsultationProvisionInput> provisions,
         int userId, CancellationToken ct = default)
     {
-        var scenario = await _db.PolicyScenarios
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+
+        var scenario = await db.PolicyScenarios
             .FirstOrDefaultAsync(s => s.Id == scenarioId && s.RegulatorId == regulatorId, ct)
             ?? throw new InvalidOperationException($"Policy scenario {scenarioId} not found.");
 
@@ -43,12 +45,12 @@ public sealed class ConsultationService : IConsultationService
             CreatedByUserId = userId
         };
 
-        _db.ConsultationRounds.Add(consultation);
-        await _db.SaveChangesAsync(ct);
+        db.ConsultationRounds.Add(consultation);
+        await db.SaveChangesAsync(ct);
 
         foreach (var p in provisions)
         {
-            _db.ConsultationProvisions.Add(new ConsultationProvision
+            db.ConsultationProvisions.Add(new ConsultationProvision
             {
                 ConsultationId = consultation.Id,
                 ProvisionNumber = p.ProvisionNumber,
@@ -58,7 +60,7 @@ public sealed class ConsultationService : IConsultationService
                 DisplayOrder = p.ProvisionNumber
             });
         }
-        await _db.SaveChangesAsync(ct);
+        await db.SaveChangesAsync(ct);
 
         await _audit.LogAsync(scenarioId, regulatorId, Guid.NewGuid(),
             "CONSULTATION_CREATED", new { consultationId = consultation.Id, title, provisionCount = provisions.Count }, userId, ct);
@@ -69,7 +71,9 @@ public sealed class ConsultationService : IConsultationService
     public async Task PublishConsultationAsync(
         long consultationId, int regulatorId, int userId, CancellationToken ct = default)
     {
-        var consultation = await _db.ConsultationRounds
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+
+        var consultation = await db.ConsultationRounds
             .FirstOrDefaultAsync(c => c.Id == consultationId && c.RegulatorId == regulatorId && c.Status == ConsultationStatus.Draft, ct)
             ?? throw new InvalidOperationException("Consultation not found or not in DRAFT status.");
 
@@ -78,14 +82,14 @@ public sealed class ConsultationService : IConsultationService
         consultation.UpdatedAt = DateTime.UtcNow;
 
         // Update parent scenario status
-        var scenario = await _db.PolicyScenarios.FindAsync(new object[] { consultation.ScenarioId }, ct);
+        var scenario = await db.PolicyScenarios.FindAsync(new object[] { consultation.ScenarioId }, ct);
         if (scenario is not null)
         {
             scenario.Status = PolicyStatus.Consultation;
             scenario.UpdatedAt = DateTime.UtcNow;
         }
 
-        await _db.SaveChangesAsync(ct);
+        await db.SaveChangesAsync(ct);
 
         await _audit.LogAsync(consultation.ScenarioId, regulatorId, Guid.NewGuid(),
             "CONSULTATION_PUBLISHED", new { consultationId, deadline = consultation.DeadlineDate }, userId, ct);
@@ -94,7 +98,9 @@ public sealed class ConsultationService : IConsultationService
     public async Task CloseConsultationAsync(
         long consultationId, int regulatorId, int userId, CancellationToken ct = default)
     {
-        var consultation = await _db.ConsultationRounds
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+
+        var consultation = await db.ConsultationRounds
             .FirstOrDefaultAsync(c => c.Id == consultationId && c.RegulatorId == regulatorId
                 && (c.Status == ConsultationStatus.Published || c.Status == ConsultationStatus.Open), ct)
             ?? throw new InvalidOperationException("Consultation not found or not in an open status.");
@@ -103,27 +109,29 @@ public sealed class ConsultationService : IConsultationService
         consultation.UpdatedAt = DateTime.UtcNow;
 
         // Update parent scenario
-        var scenario = await _db.PolicyScenarios.FindAsync(new object[] { consultation.ScenarioId }, ct);
+        var scenario = await db.PolicyScenarios.FindAsync(new object[] { consultation.ScenarioId }, ct);
         if (scenario is not null)
         {
             scenario.Status = PolicyStatus.FeedbackClosed;
             scenario.UpdatedAt = DateTime.UtcNow;
         }
 
-        await _db.SaveChangesAsync(ct);
+        await db.SaveChangesAsync(ct);
     }
 
     public async Task<FeedbackAggregationResult> AggregateFeedbackAsync(
         long consultationId, int regulatorId, int userId, CancellationToken ct = default)
     {
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+
         var correlationId = Guid.NewGuid();
 
-        var consultation = await _db.ConsultationRounds
+        var consultation = await db.ConsultationRounds
             .FirstOrDefaultAsync(c => c.Id == consultationId && c.RegulatorId == regulatorId && c.Status == ConsultationStatus.Closed, ct)
             ?? throw new InvalidOperationException("Consultation not found, not owned, or not yet closed.");
 
         // Aggregate overall positions
-        var feedbackEntries = await _db.ConsultationFeedback
+        var feedbackEntries = await db.ConsultationFeedback
             .Where(f => f.ConsultationId == consultationId)
             .ToListAsync(ct);
 
@@ -134,12 +142,12 @@ public sealed class ConsultationService : IConsultationService
         var totalFeedback = feedbackEntries.Count;
 
         // Aggregate per provision
-        var provisions = await _db.ConsultationProvisions
+        var provisions = await db.ConsultationProvisions
             .Where(p => p.ConsultationId == consultationId)
             .OrderBy(p => p.ProvisionNumber)
             .ToListAsync(ct);
 
-        var allProvisionFeedback = await _db.ProvisionFeedback
+        var allProvisionFeedback = await db.ProvisionFeedback
             .Include(pf => pf.Feedback)
             .Where(pf => pf.Feedback!.ConsultationId == consultationId)
             .ToListAsync(ct);
@@ -188,7 +196,7 @@ public sealed class ConsultationService : IConsultationService
                 entityBreakdown, concerns, amendments);
 
             // Persist/update aggregation
-            var existing = await _db.FeedbackAggregations
+            var existing = await db.FeedbackAggregations
                 .FirstOrDefaultAsync(a => a.ConsultationId == consultationId && a.ProvisionId == provision.Id, ct);
 
             if (existing is not null)
@@ -207,7 +215,7 @@ public sealed class ConsultationService : IConsultationService
             }
             else
             {
-                _db.FeedbackAggregations.Add(new FeedbackAggregation
+                db.FeedbackAggregations.Add(new FeedbackAggregation
                 {
                     ConsultationId = consultationId,
                     ProvisionId = provision.Id,
@@ -233,7 +241,7 @@ public sealed class ConsultationService : IConsultationService
         consultation.AggregationCompletedAt = DateTime.UtcNow;
         consultation.UpdatedAt = DateTime.UtcNow;
 
-        await _db.SaveChangesAsync(ct);
+        await db.SaveChangesAsync(ct);
 
         await _audit.LogAsync(consultation.ScenarioId, regulatorId, correlationId,
             "FEEDBACK_AGGREGATED",
@@ -245,16 +253,18 @@ public sealed class ConsultationService : IConsultationService
     public async Task<ConsultationDetail> GetConsultationAsync(
         long consultationId, int regulatorId, CancellationToken ct = default)
     {
-        var consultation = await _db.ConsultationRounds
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+
+        var consultation = await db.ConsultationRounds
             .FirstOrDefaultAsync(c => c.Id == consultationId && c.RegulatorId == regulatorId, ct)
             ?? throw new InvalidOperationException($"Consultation {consultationId} not found.");
 
-        var provisions = await _db.ConsultationProvisions
+        var provisions = await db.ConsultationProvisions
             .Where(p => p.ConsultationId == consultationId)
             .OrderBy(p => p.ProvisionNumber)
             .ToListAsync(ct);
 
-        var aggregations = await _db.FeedbackAggregations
+        var aggregations = await db.FeedbackAggregations
             .Where(a => a.ConsultationId == consultationId)
             .ToDictionaryAsync(a => a.ProvisionId, ct);
 
@@ -284,7 +294,9 @@ public sealed class ConsultationService : IConsultationService
     public async Task<ConsultationDetail?> GetLatestConsultationForScenarioAsync(
         long scenarioId, int regulatorId, CancellationToken ct = default)
     {
-        var consultationId = await _db.ConsultationRounds
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+
+        var consultationId = await db.ConsultationRounds
             .Where(c => c.ScenarioId == scenarioId && c.RegulatorId == regulatorId)
             .OrderByDescending(c => c.CreatedAt)
             .Select(c => (long?)c.Id)
@@ -299,12 +311,14 @@ public sealed class ConsultationService : IConsultationService
     public async Task<ConsultationDetail> GetConsultationForInstitutionAsync(
         long consultationId, CancellationToken ct = default)
     {
-        var consultation = await _db.ConsultationRounds
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+
+        var consultation = await db.ConsultationRounds
             .FirstOrDefaultAsync(c => c.Id == consultationId
                 && (c.Status == ConsultationStatus.Published || c.Status == ConsultationStatus.Open), ct)
             ?? throw new InvalidOperationException($"Consultation {consultationId} not found or not open.");
 
-        var provisions = await _db.ConsultationProvisions
+        var provisions = await db.ConsultationProvisions
             .Where(p => p.ConsultationId == consultationId)
             .OrderBy(p => p.ProvisionNumber)
             .ToListAsync(ct);
@@ -322,9 +336,11 @@ public sealed class ConsultationService : IConsultationService
     public async Task<IReadOnlyList<ConsultationSummary>> GetOpenConsultationsAsync(
         int institutionId, CancellationToken ct = default)
     {
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
 
-        var consultations = await _db.ConsultationRounds
+        var consultations = await db.ConsultationRounds
             .Where(c => (c.Status == ConsultationStatus.Published || c.Status == ConsultationStatus.Open)
                 && c.DeadlineDate >= today)
             .OrderBy(c => c.DeadlineDate)
@@ -334,7 +350,7 @@ public sealed class ConsultationService : IConsultationService
                 c.Title,
                 c.DeadlineDate,
                 c.Status,
-                HasSubmitted = _db.ConsultationFeedback
+                HasSubmitted = db.ConsultationFeedback
                     .Any(f => f.ConsultationId == c.Id && f.InstitutionId == institutionId)
             })
             .ToListAsync(ct);
@@ -348,9 +364,11 @@ public sealed class ConsultationService : IConsultationService
         string? generalComments, IReadOnlyList<ProvisionFeedbackInput> provisionFeedback,
         int submittedByUserId, CancellationToken ct = default)
     {
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
 
-        var isOpen = await _db.ConsultationRounds
+        var isOpen = await db.ConsultationRounds
             .AnyAsync(c => c.Id == consultationId
                 && (c.Status == ConsultationStatus.Published || c.Status == ConsultationStatus.Open)
                 && c.DeadlineDate >= today, ct);
@@ -359,7 +377,7 @@ public sealed class ConsultationService : IConsultationService
             throw new InvalidOperationException("Consultation is not open for feedback.");
 
         // Get institution details
-        var institution = await _db.Set<Institution>()
+        var institution = await db.Set<Institution>()
             .Where(i => i.Id == institutionId)
             .Select(i => new { i.InstitutionCode, EntityType = i.LicenseType ?? "" })
             .FirstAsync(ct);
@@ -375,12 +393,12 @@ public sealed class ConsultationService : IConsultationService
             GeneralComments = generalComments
         };
 
-        _db.ConsultationFeedback.Add(feedback);
-        await _db.SaveChangesAsync(ct); // This will throw on duplicate due to unique constraint
+        db.ConsultationFeedback.Add(feedback);
+        await db.SaveChangesAsync(ct); // This will throw on duplicate due to unique constraint
 
         foreach (var pf in provisionFeedback)
         {
-            _db.ProvisionFeedback.Add(new ProvisionFeedbackEntry
+            db.ProvisionFeedback.Add(new ProvisionFeedbackEntry
             {
                 FeedbackId = feedback.Id,
                 ProvisionId = pf.ProvisionId,
@@ -392,14 +410,14 @@ public sealed class ConsultationService : IConsultationService
         }
 
         // Update feedback count
-        var consultation = await _db.ConsultationRounds.FindAsync(new object[] { consultationId }, ct);
+        var consultation = await db.ConsultationRounds.FindAsync(new object[] { consultationId }, ct);
         if (consultation is not null)
         {
             consultation.TotalFeedbackReceived++;
             consultation.UpdatedAt = DateTime.UtcNow;
         }
 
-        await _db.SaveChangesAsync(ct);
+        await db.SaveChangesAsync(ct);
 
         return feedback.Id;
     }

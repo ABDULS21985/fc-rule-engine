@@ -13,18 +13,18 @@ public class DashboardService : IDashboardService
 {
     private static readonly TimeSpan CacheTtl = TimeSpan.FromMinutes(5);
 
-    private readonly MetadataDbContext _db;
+    private readonly IDbContextFactory<MetadataDbContext> _dbFactory;
     private readonly IMemoryCache _cache;
     private readonly IEntitlementService _entitlementService;
     private readonly ILogger<DashboardService> _logger;
 
     public DashboardService(
-        MetadataDbContext db,
+        IDbContextFactory<MetadataDbContext> dbFactory,
         IMemoryCache cache,
         IEntitlementService entitlementService,
         ILogger<DashboardService> logger)
     {
-        _db = db;
+        _dbFactory = dbFactory;
         _cache = cache;
         _entitlementService = entitlementService;
         _logger = logger;
@@ -34,14 +34,16 @@ public class DashboardService : IDashboardService
     {
         return GetOrCreateCached($"dashboard:summary:{tenantId}", async () =>
         {
+            await using var db = await _dbFactory.CreateDbContextAsync(ct);
+
             var entitlement = await _entitlementService.ResolveEntitlements(tenantId, ct);
 
-            var overdueReturns = await _db.ReturnPeriods
+            var overdueReturns = await db.ReturnPeriods
                 .AsNoTracking()
                 .Where(rp => rp.TenantId == tenantId && rp.Status == "Overdue")
                 .CountAsync(ct);
 
-            var pendingReturns = await _db.Submissions
+            var pendingReturns = await db.Submissions
                 .AsNoTracking()
                 .Where(s => s.TenantId == tenantId)
                 .Where(s => s.Status == SubmissionStatus.Draft
@@ -73,6 +75,8 @@ public class DashboardService : IDashboardService
         var normalizedCode = moduleCode.Trim().ToUpperInvariant();
         return GetOrCreateCached($"dashboard:module:{tenantId}:{normalizedCode}", async () =>
         {
+            await using var db = await _dbFactory.CreateDbContextAsync(ct);
+
             var entitlement = await _entitlementService.ResolveEntitlements(tenantId, ct);
             var entitledModule = entitlement.ActiveModules
                 .FirstOrDefault(m => string.Equals(m.ModuleCode, normalizedCode, StringComparison.OrdinalIgnoreCase));
@@ -82,12 +86,12 @@ public class DashboardService : IDashboardService
                 throw new InvalidOperationException($"Tenant {tenantId} is not entitled to module {normalizedCode}");
             }
 
-            var module = await _db.Modules
+            var module = await db.Modules
                 .AsNoTracking()
                 .FirstOrDefaultAsync(m => m.Id == entitledModule.ModuleId, ct)
                 ?? throw new InvalidOperationException($"Module {normalizedCode} not found");
 
-            var periodRows = await _db.ReturnPeriods
+            var periodRows = await db.ReturnPeriods
                 .AsNoTracking()
                 .Where(rp => rp.TenantId == tenantId && rp.ModuleId == module.Id)
                 .OrderByDescending(rp => rp.Year)
@@ -105,9 +109,9 @@ public class DashboardService : IDashboardService
                 .ToList();
 
             var periodIds = periodRows.Select(p => p.Id).ToList();
-            var submissions = await LoadLatestSubmissionsByPeriod(tenantId, periodIds, ct);
-            var errorCounts = await LoadValidationIssueCounts(submissions.Values.Select(v => v.Id), ct);
-            var slaLookup = await LoadSlaLookup(tenantId, module.Id, periodIds, ct);
+            var submissions = await LoadLatestSubmissionsByPeriod(db, tenantId, periodIds, ct);
+            var errorCounts = await LoadValidationIssueCounts(db, submissions.Values.Select(v => v.Id), ct);
+            var slaLookup = await LoadSlaLookup(db, tenantId, module.Id, periodIds, ct);
 
             var items = new List<ModulePeriodStatusItem>();
             foreach (var period in periodRows)
@@ -156,6 +160,8 @@ public class DashboardService : IDashboardService
     {
         return GetOrCreateCached($"dashboard:compliance:{tenantId}", async () =>
         {
+            await using var db = await _dbFactory.CreateDbContextAsync(ct);
+
             var entitlement = await _entitlementService.ResolveEntitlements(tenantId, ct);
             var moduleIds = entitlement.ActiveModules.Select(m => m.ModuleId).Distinct().ToList();
 
@@ -168,12 +174,12 @@ public class DashboardService : IDashboardService
                 };
             }
 
-            var moduleMap = await _db.Modules
+            var moduleMap = await db.Modules
                 .AsNoTracking()
                 .Where(m => moduleIds.Contains(m.Id))
                 .ToDictionaryAsync(m => m.Id, ct);
 
-            var allPeriods = await _db.ReturnPeriods
+            var allPeriods = await db.ReturnPeriods
                 .AsNoTracking()
                 .Where(rp => rp.TenantId == tenantId && rp.ModuleId != null && moduleIds.Contains(rp.ModuleId.Value))
                 .OrderByDescending(rp => rp.Year)
@@ -187,10 +193,10 @@ public class DashboardService : IDashboardService
                 .ToDictionary(g => g.Key, g => g.OrderByDescending(p => p.EffectiveDeadline).Take(6).ToList());
 
             var periodIds = groupedPeriods.Values.SelectMany(v => v).Select(v => v.Id).Distinct().ToList();
-            var submissions = await LoadLatestSubmissionsByPeriod(tenantId, periodIds, ct);
-            var errorCounts = await LoadValidationIssueCounts(submissions.Values.Select(v => v.Id), ct);
+            var submissions = await LoadLatestSubmissionsByPeriod(db, tenantId, periodIds, ct);
+            var errorCounts = await LoadValidationIssueCounts(db, submissions.Values.Select(v => v.Id), ct);
 
-            var slaRecords = await _db.FilingSlaRecords
+            var slaRecords = await db.FilingSlaRecords
                 .AsNoTracking()
                 .Where(s => s.TenantId == tenantId && moduleIds.Contains(s.ModuleId))
                 .ToListAsync(ct);
@@ -271,6 +277,8 @@ public class DashboardService : IDashboardService
         var normalizedCode = moduleCode.Trim().ToUpperInvariant();
         return GetOrCreateCached($"dashboard:trend:submission:{tenantId}:{normalizedCode}:{periods}", async () =>
         {
+            await using var db = await _dbFactory.CreateDbContextAsync(ct);
+
             var entitlement = await _entitlementService.ResolveEntitlements(tenantId, ct);
             var hasAccess = entitlement.ActiveModules.Any(m =>
                 string.Equals(m.ModuleCode, normalizedCode, StringComparison.OrdinalIgnoreCase));
@@ -279,12 +287,12 @@ public class DashboardService : IDashboardService
                 throw new InvalidOperationException($"Tenant {tenantId} is not entitled to module {normalizedCode}");
             }
 
-            var module = await _db.Modules
+            var module = await db.Modules
                 .AsNoTracking()
                 .FirstOrDefaultAsync(m => m.ModuleCode == normalizedCode, ct)
                 ?? throw new InvalidOperationException($"Module {normalizedCode} not found");
 
-            var periodRows = await _db.ReturnPeriods
+            var periodRows = await db.ReturnPeriods
                 .AsNoTracking()
                 .Where(rp => rp.TenantId == tenantId && rp.ModuleId == module.Id)
                 .OrderByDescending(rp => rp.EffectiveDeadline)
@@ -294,7 +302,7 @@ public class DashboardService : IDashboardService
             periodRows = periodRows.OrderBy(p => p.EffectiveDeadline).ToList();
             var periodIds = periodRows.Select(p => p.Id).ToList();
 
-            var slaLookup = await LoadSlaLookup(tenantId, module.Id, periodIds, ct);
+            var slaLookup = await LoadSlaLookup(db, tenantId, module.Id, periodIds, ct);
 
             var labels = new List<string>();
             var onTimeData = new List<decimal>();
@@ -350,6 +358,8 @@ public class DashboardService : IDashboardService
         var normalizedCode = moduleCode.Trim().ToUpperInvariant();
         return GetOrCreateCached($"dashboard:trend:validation:{tenantId}:{normalizedCode}:{periods}", async () =>
         {
+            await using var db = await _dbFactory.CreateDbContextAsync(ct);
+
             var entitlement = await _entitlementService.ResolveEntitlements(tenantId, ct);
             var hasAccess = entitlement.ActiveModules.Any(m =>
                 string.Equals(m.ModuleCode, normalizedCode, StringComparison.OrdinalIgnoreCase));
@@ -358,12 +368,12 @@ public class DashboardService : IDashboardService
                 throw new InvalidOperationException($"Tenant {tenantId} is not entitled to module {normalizedCode}");
             }
 
-            var module = await _db.Modules
+            var module = await db.Modules
                 .AsNoTracking()
                 .FirstOrDefaultAsync(m => m.ModuleCode == normalizedCode, ct)
                 ?? throw new InvalidOperationException($"Module {normalizedCode} not found");
 
-            var periodRows = await _db.ReturnPeriods
+            var periodRows = await db.ReturnPeriods
                 .AsNoTracking()
                 .Where(rp => rp.TenantId == tenantId && rp.ModuleId == module.Id)
                 .OrderByDescending(rp => rp.EffectiveDeadline)
@@ -373,8 +383,8 @@ public class DashboardService : IDashboardService
             periodRows = periodRows.OrderBy(p => p.EffectiveDeadline).ToList();
             var periodIds = periodRows.Select(p => p.Id).ToList();
 
-            var submissions = await LoadLatestSubmissionsByPeriod(tenantId, periodIds, ct);
-            var issueCounts = await LoadValidationIssueCounts(submissions.Values.Select(v => v.Id), ct);
+            var submissions = await LoadLatestSubmissionsByPeriod(db, tenantId, periodIds, ct);
+            var issueCounts = await LoadValidationIssueCounts(db, submissions.Values.Select(v => v.Id), ct);
 
             var labels = new List<string>();
             var errorData = new List<decimal>();
@@ -425,10 +435,12 @@ public class DashboardService : IDashboardService
     {
         return GetOrCreateCached($"dashboard:admin:{tenantId}", async () =>
         {
+            await using var db = await _dbFactory.CreateDbContextAsync(ct);
+
             var now = DateTime.UtcNow;
             var monthStart = new DateTime(now.Year, now.Month, 1);
 
-            var activeSubscription = await _db.Subscriptions
+            var activeSubscription = await db.Subscriptions
                 .AsNoTracking()
                 .Include(s => s.Plan)
                 .Where(s => s.TenantId == tenantId)
@@ -439,18 +451,18 @@ public class DashboardService : IDashboardService
                 .OrderByDescending(s => s.Id)
                 .FirstOrDefaultAsync(ct);
 
-            var latestUsage = await _db.UsageRecords
+            var latestUsage = await db.UsageRecords
                 .AsNoTracking()
                 .Where(u => u.TenantId == tenantId)
                 .OrderByDescending(u => u.RecordDate)
                 .FirstOrDefaultAsync(ct);
 
-            var activeUsersThisMonth = await _db.InstitutionUsers
+            var activeUsersThisMonth = await db.InstitutionUsers
                 .AsNoTracking()
                 .Where(u => u.TenantId == tenantId && u.IsActive && u.LastLoginAt >= monthStart)
                 .CountAsync(ct);
 
-            var successfulLogins = await _db.LoginAttempts
+            var successfulLogins = await db.LoginAttempts
                 .AsNoTracking()
                 .Where(a => a.TenantId == tenantId && a.Succeeded && a.AttemptedAt >= monthStart)
                 .CountAsync(ct);
@@ -459,7 +471,7 @@ public class DashboardService : IDashboardService
                 ? decimal.Round((decimal)successfulLogins / activeUsersThisMonth, 2)
                 : 0m;
 
-            var contributorRows = await _db.Submissions
+            var contributorRows = await db.Submissions
                 .AsNoTracking()
                 .Where(s => s.TenantId == tenantId && s.SubmittedAt >= monthStart && s.SubmittedByUserId != null)
                 .GroupBy(s => s.SubmittedByUserId!.Value)
@@ -468,36 +480,36 @@ public class DashboardService : IDashboardService
                 .Take(5)
                 .ToListAsync(ct);
 
-            var contributorNames = await _db.InstitutionUsers
+            var contributorNames = await db.InstitutionUsers
                 .AsNoTracking()
                 .Where(u => u.TenantId == tenantId && contributorRows.Select(c => c.UserId).Contains(u.Id))
                 .Select(u => new { u.Id, u.DisplayName })
                 .ToDictionaryAsync(x => x.Id, x => x.DisplayName, ct);
 
-            var entitiesUsed = await _db.Institutions
+            var entitiesUsed = await db.Institutions
                 .AsNoTracking()
                 .Where(i => i.TenantId == tenantId && i.IsActive)
                 .CountAsync(ct);
 
-            var usersUsed = await _db.InstitutionUsers
+            var usersUsed = await db.InstitutionUsers
                 .AsNoTracking()
                 .Where(u => u.TenantId == tenantId && u.IsActive)
                 .CountAsync(ct);
 
-            var modulesUsed = await _db.SubscriptionModules
+            var modulesUsed = await db.SubscriptionModules
                 .AsNoTracking()
                 .Where(sm => sm.Subscription != null
                           && sm.Subscription.TenantId == tenantId
                           && sm.IsActive)
                 .CountAsync(ct);
 
-            var outstandingBalance = await _db.Invoices
+            var outstandingBalance = await db.Invoices
                 .AsNoTracking()
                 .Where(i => i.TenantId == tenantId)
                 .Where(i => i.Status == InvoiceStatus.Issued || i.Status == InvoiceStatus.Overdue)
                 .SumAsync(i => (decimal?)i.TotalAmount, ct) ?? 0m;
 
-            var nextInvoiceDate = await _db.Invoices
+            var nextInvoiceDate = await db.Invoices
                 .AsNoTracking()
                 .Where(i => i.TenantId == tenantId)
                 .Where(i => i.Status == InvoiceStatus.Issued || i.Status == InvoiceStatus.Overdue)
@@ -506,14 +518,14 @@ public class DashboardService : IDashboardService
                 .Select(i => i.DueDate)
                 .FirstOrDefaultAsync(ct);
 
-            var notificationCounts = await _db.NotificationDeliveries
+            var notificationCounts = await db.NotificationDeliveries
                 .AsNoTracking()
                 .Where(d => d.TenantId == tenantId)
                 .GroupBy(d => d.Status)
                 .Select(g => new { Status = g.Key, Count = g.Count() })
                 .ToListAsync(ct);
 
-            var qualityTrend = await BuildTenantDataQualityTrend(tenantId, 6, ct);
+            var qualityTrend = await BuildTenantDataQualityTrend(db, tenantId, 6, ct);
 
             var validationPassRate = qualityTrend.Datasets.FirstOrDefault(d => d.Label == "Validation Pass %")?.Data.DefaultIfEmpty(0).Average() ?? 0;
             var completenessScore = qualityTrend.Datasets.FirstOrDefault(d => d.Label == "Completeness %")?.Data.DefaultIfEmpty(0).Average() ?? 0;
@@ -579,7 +591,9 @@ public class DashboardService : IDashboardService
     {
         return GetOrCreateCached($"dashboard:partner:{partnerTenantId}", async () =>
         {
-            var partnerTenant = await _db.Tenants
+            await using var db = await _dbFactory.CreateDbContextAsync(ct);
+
+            var partnerTenant = await db.Tenants
                 .AsNoTracking()
                 .FirstOrDefaultAsync(t => t.TenantId == partnerTenantId, ct)
                 ?? throw new InvalidOperationException($"Tenant {partnerTenantId} not found.");
@@ -589,7 +603,7 @@ public class DashboardService : IDashboardService
                 throw new InvalidOperationException("Tenant is not a white-label partner.");
             }
 
-            var subTenants = await _db.Tenants
+            var subTenants = await db.Tenants
                 .AsNoTracking()
                 .Where(t => t.ParentTenantId == partnerTenantId)
                 .ToListAsync(ct);
@@ -613,7 +627,7 @@ public class DashboardService : IDashboardService
             var sixtyDaysAgo = DateTime.UtcNow.Date.AddDays(-60);
             var renewalThreshold = DateTime.UtcNow.Date.AddDays(14);
 
-            var subscriptions = await _db.Subscriptions
+            var subscriptions = await db.Subscriptions
                 .AsNoTracking()
                 .Include(s => s.Plan)
                 .Where(s => subTenantIds.Contains(s.TenantId)
@@ -636,7 +650,7 @@ public class DashboardService : IDashboardService
                 .OrderByDescending(x => x.Amount)
                 .ToList();
 
-            var moduleUsageRows = await _db.SubscriptionModules
+            var moduleUsageRows = await db.SubscriptionModules
                 .AsNoTracking()
                 .Where(sm => sm.IsActive
                              && sm.Subscription != null
@@ -645,7 +659,7 @@ public class DashboardService : IDashboardService
                 .Select(g => new { g.Key, Count = g.Count() })
                 .ToListAsync(ct);
 
-            var moduleMap = await _db.Modules
+            var moduleMap = await db.Modules
                 .AsNoTracking()
                 .Where(m => moduleUsageRows.Select(x => x.Key).Contains(m.Id))
                 .ToDictionaryAsync(m => m.Id, ct);
@@ -659,30 +673,30 @@ public class DashboardService : IDashboardService
                 .OrderByDescending(x => x.Amount)
                 .ToList();
 
-            var activeUsers = await _db.InstitutionUsers
+            var activeUsers = await db.InstitutionUsers
                 .AsNoTracking()
                 .CountAsync(u => subTenantIds.Contains(u.TenantId) && u.IsActive, ct);
 
-            var activeInstitutions = await _db.Institutions
+            var activeInstitutions = await db.Institutions
                 .AsNoTracking()
                 .CountAsync(i => subTenantIds.Contains(i.TenantId) && i.IsActive, ct);
 
-            var submittedReturnsThisMonth = await _db.Submissions
+            var submittedReturnsThisMonth = await db.Submissions
                 .AsNoTracking()
                 .CountAsync(s => subTenantIds.Contains(s.TenantId)
                                  && s.SubmittedAt >= monthStart
                                  && s.Status != SubmissionStatus.Draft, ct);
 
-            var partnerConfig = await _db.PartnerConfigs
+            var partnerConfig = await db.PartnerConfigs
                 .AsNoTracking()
                 .FirstOrDefaultAsync(x => x.TenantId == partnerTenantId, ct);
 
-            var revenueRows = await _db.PartnerRevenueRecords
+            var revenueRows = await db.PartnerRevenueRecords
                 .AsNoTracking()
                 .Where(r => r.PartnerTenantId == partnerTenantId && r.CreatedAt >= monthStart)
                 .ToListAsync(ct);
 
-            var recentUsage = await _db.Submissions
+            var recentUsage = await db.Submissions
                 .AsNoTracking()
                 .Where(s => subTenantIds.Contains(s.TenantId)
                             && s.SubmittedAt >= thirtyDaysAgo
@@ -691,7 +705,7 @@ public class DashboardService : IDashboardService
                 .Select(g => new { g.Key, Count = g.Count() })
                 .ToDictionaryAsync(x => x.Key, x => x.Count, ct);
 
-            var previousUsage = await _db.Submissions
+            var previousUsage = await db.Submissions
                 .AsNoTracking()
                 .Where(s => subTenantIds.Contains(s.TenantId)
                             && s.SubmittedAt >= sixtyDaysAgo
@@ -733,7 +747,7 @@ public class DashboardService : IDashboardService
                 }
             }
 
-            var openPeriods = await _db.ReturnPeriods
+            var openPeriods = await db.ReturnPeriods
                 .AsNoTracking()
                 .Where(rp => subTenantIds.Contains(rp.TenantId))
                 .Where(rp => rp.DeadlineDate >= DateTime.UtcNow.Date.AddDays(-90))
@@ -795,11 +809,13 @@ public class DashboardService : IDashboardService
     {
         return GetOrCreateCached("dashboard:platform", async () =>
         {
+            await using var db = await _dbFactory.CreateDbContextAsync(ct);
+
             var now = DateTime.UtcNow;
             var monthStart = new DateTime(now.Year, now.Month, 1);
             var lookback30 = now.AddDays(-30);
 
-            var activeTenants = await _db.Tenants
+            var activeTenants = await db.Tenants
                 .AsNoTracking()
                 .Where(t => t.Status == TenantStatus.Active)
                 .Select(t => new { t.TenantId, t.TenantName, t.CreatedAt, t.DeactivatedAt })
@@ -808,14 +824,14 @@ public class DashboardService : IDashboardService
             var totalActiveTenants = activeTenants.Count;
             var newThisMonth = activeTenants.Count(t => t.CreatedAt >= monthStart);
 
-            var churnedThisMonth = await _db.Tenants
+            var churnedThisMonth = await db.Tenants
                 .AsNoTracking()
                 .Where(t => (t.Status == TenantStatus.Deactivated || t.Status == TenantStatus.Archived)
                          && t.DeactivatedAt != null
                          && t.DeactivatedAt >= monthStart)
                 .CountAsync(ct);
 
-            var subscriptions = await _db.Subscriptions
+            var subscriptions = await db.Subscriptions
                 .AsNoTracking()
                 .Include(s => s.Plan)
                 .Include(s => s.Modules)
@@ -824,7 +840,7 @@ public class DashboardService : IDashboardService
                          || s.Status == SubscriptionStatus.Suspended)
                 .ToListAsync(ct);
 
-            var moduleMap = await _db.Modules
+            var moduleMap = await db.Modules
                 .AsNoTracking()
                 .ToDictionaryAsync(m => m.Id, ct);
 
@@ -873,7 +889,7 @@ public class DashboardService : IDashboardService
                 .OrderByDescending(r => r.Amount)
                 .ToList();
 
-            var adoptionRows = await _db.SubscriptionModules
+            var adoptionRows = await db.SubscriptionModules
                 .AsNoTracking()
                 .Where(sm => sm.IsActive)
                 .Where(sm => sm.Subscription != null
@@ -898,49 +914,49 @@ public class DashboardService : IDashboardService
                 .ThenBy(a => a.ModuleName)
                 .ToList();
 
-            var processingTimes = await _db.Submissions
+            var processingTimes = await db.Submissions
                 .AsNoTracking()
                 .Where(s => s.ProcessingDurationMs != null && s.SubmittedAt >= lookback30)
                 .Select(s => s.ProcessingDurationMs!.Value)
                 .OrderBy(x => x)
                 .ToListAsync(ct);
 
-            var totalProcessed = await _db.Submissions
+            var totalProcessed = await db.Submissions
                 .AsNoTracking()
                 .Where(s => s.SubmittedAt >= lookback30)
                 .CountAsync(ct);
 
-            var failedProcessed = await _db.Submissions
+            var failedProcessed = await db.Submissions
                 .AsNoTracking()
                 .Where(s => s.SubmittedAt >= lookback30)
                 .Where(s => s.Status == SubmissionStatus.Rejected || s.Status == SubmissionStatus.ApprovalRejected)
                 .CountAsync(ct);
 
-            var activeInstitutionSessions = await _db.InstitutionUsers
+            var activeInstitutionSessions = await db.InstitutionUsers
                 .AsNoTracking()
                 .Where(u => u.LastLoginAt != null && u.LastLoginAt >= now.AddMinutes(-30))
                 .CountAsync(ct);
 
-            var activePortalSessions = await _db.PortalUsers
+            var activePortalSessions = await db.PortalUsers
                 .AsNoTracking()
                 .Where(u => u.LastLoginAt != null && u.LastLoginAt >= now.AddMinutes(-30))
                 .CountAsync(ct);
 
-            var submissionsThisPeriod = await _db.Submissions
+            var submissionsThisPeriod = await db.Submissions
                 .AsNoTracking()
                 .Where(s => s.SubmittedAt >= monthStart)
                 .Where(s => s.Status != SubmissionStatus.Draft)
                 .CountAsync(ct);
 
-            var onTimeRecords = await _db.FilingSlaRecords
+            var onTimeRecords = await db.FilingSlaRecords
                 .AsNoTracking()
                 .Where(r => r.SubmittedDate != null && r.SubmittedDate >= monthStart)
                 .Select(r => r.OnTime)
                 .ToListAsync(ct);
 
-            var validationErrorRows = await _db.ValidationErrors
+            var validationErrorRows = await db.ValidationErrors
                 .AsNoTracking()
-                .Join(_db.ValidationReports.AsNoTracking(),
+                .Join(db.ValidationReports.AsNoTracking(),
                     err => err.ValidationReportId,
                     report => report.Id,
                     (err, report) => new { err, report })
@@ -956,7 +972,7 @@ public class DashboardService : IDashboardService
                 .Take(10)
                 .ToListAsync(ct);
 
-            var topTenantUsageRows = await _db.Submissions
+            var topTenantUsageRows = await db.Submissions
                 .AsNoTracking()
                 .Where(s => s.SubmittedAt >= monthStart)
                 .Where(s => s.Status != SubmissionStatus.Draft)
@@ -966,7 +982,7 @@ public class DashboardService : IDashboardService
                 .Take(10)
                 .ToListAsync(ct);
 
-            var tenantNames = await _db.Tenants
+            var tenantNames = await db.Tenants
                 .AsNoTracking()
                 .Where(t => topTenantUsageRows.Select(x => x.TenantId).Contains(t.TenantId))
                 .ToDictionaryAsync(t => t.TenantId, t => t.TenantName, ct);
@@ -1016,7 +1032,7 @@ public class DashboardService : IDashboardService
         });
     }
 
-    private async Task<TrendData> BuildTenantDataQualityTrend(Guid tenantId, int months, CancellationToken ct)
+    private static async Task<TrendData> BuildTenantDataQualityTrend(MetadataDbContext db, Guid tenantId, int months, CancellationToken ct)
     {
         var now = DateTime.UtcNow;
         var monthStarts = Enumerable.Range(0, months)
@@ -1025,20 +1041,20 @@ public class DashboardService : IDashboardService
 
         var labels = monthStarts.Select(m => m.ToString("MMM yy")).ToList();
 
-        var submissions = await _db.Submissions
+        var submissions = await db.Submissions
             .AsNoTracking()
             .Where(s => s.TenantId == tenantId && s.SubmittedAt >= monthStarts.First())
             .Select(s => new { s.Id, s.SubmittedAt })
             .ToListAsync(ct);
 
         var submissionIds = submissions.Select(s => s.Id).ToList();
-        var reportBySubmission = await _db.ValidationReports
+        var reportBySubmission = await db.ValidationReports
             .AsNoTracking()
             .Where(r => submissionIds.Contains(r.SubmissionId))
             .Select(r => new { r.SubmissionId, r.Id })
             .ToListAsync(ct);
 
-        var errorCounts = await _db.ValidationErrors
+        var errorCounts = await db.ValidationErrors
             .AsNoTracking()
             .Where(e => reportBySubmission.Select(r => r.Id).Contains(e.ValidationReportId))
             .GroupBy(e => e.ValidationReportId)
@@ -1117,14 +1133,14 @@ public class DashboardService : IDashboardService
         };
     }
 
-    private async Task<Dictionary<int, SubmissionRow>> LoadLatestSubmissionsByPeriod(Guid tenantId, IReadOnlyCollection<int> periodIds, CancellationToken ct)
+    private static async Task<Dictionary<int, SubmissionRow>> LoadLatestSubmissionsByPeriod(MetadataDbContext db, Guid tenantId, IReadOnlyCollection<int> periodIds, CancellationToken ct)
     {
         if (periodIds.Count == 0)
         {
             return new Dictionary<int, SubmissionRow>();
         }
 
-        var rows = await _db.Submissions
+        var rows = await db.Submissions
             .AsNoTracking()
             .Where(s => s.TenantId == tenantId && periodIds.Contains(s.ReturnPeriodId))
             .Select(s => new SubmissionRow
@@ -1144,7 +1160,7 @@ public class DashboardService : IDashboardService
                 g => g.OrderByDescending(x => x.SubmittedAt).ThenByDescending(x => x.Id).First());
     }
 
-    private async Task<Dictionary<int, ValidationIssueCount>> LoadValidationIssueCounts(IEnumerable<int> submissionIds, CancellationToken ct)
+    private static async Task<Dictionary<int, ValidationIssueCount>> LoadValidationIssueCounts(MetadataDbContext db, IEnumerable<int> submissionIds, CancellationToken ct)
     {
         var submissionIdList = submissionIds.Distinct().ToList();
         if (submissionIdList.Count == 0)
@@ -1152,7 +1168,7 @@ public class DashboardService : IDashboardService
             return new Dictionary<int, ValidationIssueCount>();
         }
 
-        var reportRows = await _db.ValidationReports
+        var reportRows = await db.ValidationReports
             .AsNoTracking()
             .Where(r => submissionIdList.Contains(r.SubmissionId))
             .Select(r => new { r.Id, r.SubmissionId })
@@ -1164,7 +1180,7 @@ public class DashboardService : IDashboardService
         }
 
         var reportIds = reportRows.Select(r => r.Id).ToList();
-        var issueRows = await _db.ValidationErrors
+        var issueRows = await db.ValidationErrors
             .AsNoTracking()
             .Where(e => reportIds.Contains(e.ValidationReportId))
             .GroupBy(e => e.ValidationReportId)
@@ -1185,14 +1201,14 @@ public class DashboardService : IDashboardService
             r => issuesByReport.GetValueOrDefault(r.Id, ValidationIssueCount.Empty));
     }
 
-    private async Task<Dictionary<int, FilingSlaRecord>> LoadSlaLookup(Guid tenantId, int moduleId, IReadOnlyCollection<int> periodIds, CancellationToken ct)
+    private static async Task<Dictionary<int, FilingSlaRecord>> LoadSlaLookup(MetadataDbContext db, Guid tenantId, int moduleId, IReadOnlyCollection<int> periodIds, CancellationToken ct)
     {
         if (periodIds.Count == 0)
         {
             return new Dictionary<int, FilingSlaRecord>();
         }
 
-        return await _db.FilingSlaRecords
+        return await db.FilingSlaRecords
             .AsNoTracking()
             .Where(s => s.TenantId == tenantId && s.ModuleId == moduleId && periodIds.Contains(s.PeriodId))
             .ToDictionaryAsync(s => s.PeriodId, ct);

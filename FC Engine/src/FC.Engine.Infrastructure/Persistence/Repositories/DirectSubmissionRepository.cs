@@ -11,33 +11,35 @@ namespace FC.Engine.Infrastructure.Persistence.Repositories;
 
 public class DirectSubmissionRepository : IDirectSubmissionRepository
 {
-    private readonly MetadataDbContext _db;
+    private readonly IDbContextFactory<MetadataDbContext> _dbFactory;
     private readonly ILogger<DirectSubmissionRepository> _logger;
     private bool? _isDirectSubmissionTableAvailable;
 
-    public DirectSubmissionRepository(MetadataDbContext db, ILogger<DirectSubmissionRepository> logger)
+    public DirectSubmissionRepository(IDbContextFactory<MetadataDbContext> dbFactory, ILogger<DirectSubmissionRepository> logger)
     {
-        _db = db;
+        _dbFactory = dbFactory;
         _logger = logger;
     }
 
     public async Task<DirectSubmission> Add(DirectSubmission entity, CancellationToken ct = default)
     {
-        _db.DirectSubmissions.Add(entity);
-        await _db.SaveChangesAsync(ct);
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+        db.DirectSubmissions.Add(entity);
+        await db.SaveChangesAsync(ct);
         return entity;
     }
 
     public async Task Update(DirectSubmission entity, CancellationToken ct = default)
     {
-        _db.DirectSubmissions.Update(entity);
-        await _db.SaveChangesAsync(ct);
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+        db.DirectSubmissions.Update(entity);
+        await db.SaveChangesAsync(ct);
     }
 
     public async Task<DirectSubmission?> GetById(int id, CancellationToken ct = default)
     {
         return await ExecuteReadAsync(
-            async () => await _db.DirectSubmissions.FindAsync(new object[] { id }, ct),
+            async db => await db.DirectSubmissions.FindAsync(new object[] { id }, ct),
             default(DirectSubmission?),
             $"load direct submission {id}",
             ct);
@@ -46,7 +48,7 @@ public class DirectSubmissionRepository : IDirectSubmissionRepository
     public async Task<DirectSubmission?> GetByIdWithSubmission(int id, CancellationToken ct = default)
     {
         return await ExecuteReadAsync(
-            () => _db.DirectSubmissions
+            db => db.DirectSubmissions
                 .Include(d => d.Submission).ThenInclude(s => s!.Institution)
                 .Include(d => d.Submission).ThenInclude(s => s!.ReturnPeriod)
                 .FirstOrDefaultAsync(d => d.Id == id, ct),
@@ -58,7 +60,7 @@ public class DirectSubmissionRepository : IDirectSubmissionRepository
     public async Task<List<DirectSubmission>> GetBySubmission(int submissionId, CancellationToken ct = default)
     {
         return await ExecuteReadAsync(
-            () => _db.DirectSubmissions
+            db => db.DirectSubmissions
                 .Where(d => d.SubmissionId == submissionId)
                 .OrderByDescending(d => d.CreatedAt)
                 .ToListAsync(ct),
@@ -70,7 +72,7 @@ public class DirectSubmissionRepository : IDirectSubmissionRepository
     public async Task<List<DirectSubmission>> GetByTenantAndSubmission(Guid tenantId, int submissionId, CancellationToken ct = default)
     {
         return await ExecuteReadAsync(
-            () => _db.DirectSubmissions
+            db => db.DirectSubmissions
                 .Where(d => d.TenantId == tenantId && d.SubmissionId == submissionId)
                 .OrderByDescending(d => d.CreatedAt)
                 .ToListAsync(ct),
@@ -83,7 +85,7 @@ public class DirectSubmissionRepository : IDirectSubmissionRepository
     {
         var now = DateTime.UtcNow;
         return await ExecuteReadAsync(
-            () => _db.DirectSubmissions
+            db => db.DirectSubmissions
                 .Include(d => d.Submission).ThenInclude(s => s!.Institution)
                 .Where(d => d.Status == DirectSubmissionStatus.RetryScheduled
                     && d.NextRetryAt != null && d.NextRetryAt <= now
@@ -99,7 +101,7 @@ public class DirectSubmissionRepository : IDirectSubmissionRepository
     public async Task<List<DirectSubmission>> GetSubmittedAwaitingStatus(int batchSize, CancellationToken ct = default)
     {
         return await ExecuteReadAsync(
-            () => _db.DirectSubmissions
+            db => db.DirectSubmissions
                 .Where(d => d.Status == DirectSubmissionStatus.Submitted
                     || d.Status == DirectSubmissionStatus.Acknowledged)
                 .OrderBy(d => d.SubmittedAt)
@@ -110,7 +112,7 @@ public class DirectSubmissionRepository : IDirectSubmissionRepository
             ct);
     }
 
-    private async Task<T> ExecuteReadAsync<T>(Func<Task<T>> operation, T fallback, string description, CancellationToken ct)
+    private async Task<T> ExecuteReadAsync<T>(Func<MetadataDbContext, Task<T>> operation, T fallback, string description, CancellationToken ct)
     {
         if (!await IsDirectSubmissionTableAvailable(ct))
         {
@@ -119,7 +121,8 @@ public class DirectSubmissionRepository : IDirectSubmissionRepository
 
         try
         {
-            return await operation();
+            await using var db = await _dbFactory.CreateDbContextAsync(ct);
+            return await operation(db);
         }
         catch (Exception ex) when (IsMissingDirectSubmissionSchema(ex))
         {
@@ -137,7 +140,8 @@ public class DirectSubmissionRepository : IDirectSubmissionRepository
             return _isDirectSubmissionTableAvailable.Value;
         }
 
-        var connection = _db.Database.GetDbConnection();
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+        var connection = db.Database.GetDbConnection();
         var openedHere = false;
 
         try

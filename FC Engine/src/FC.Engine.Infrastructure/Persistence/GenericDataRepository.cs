@@ -15,20 +15,20 @@ public class GenericDataRepository : IGenericDataRepository
     private readonly ITenantContext _tenantContext;
     private readonly ITemplateMetadataCache _cache;
     private readonly DynamicSqlBuilder _sqlBuilder;
-    private readonly MetadataDbContext _metadataDb;
+    private readonly IDbContextFactory<MetadataDbContext> _metadataDbFactory;
 
     public GenericDataRepository(
         IDbConnectionFactory connectionFactory,
         ITenantContext tenantContext,
         ITemplateMetadataCache cache,
         DynamicSqlBuilder sqlBuilder,
-        MetadataDbContext metadataDb)
+        IDbContextFactory<MetadataDbContext> metadataDbFactory)
     {
         _connectionFactory = connectionFactory;
         _tenantContext = tenantContext;
         _cache = cache;
         _sqlBuilder = sqlBuilder;
-        _metadataDb = metadataDb;
+        _metadataDbFactory = metadataDbFactory;
     }
 
     public async Task Save(ReturnDataRecord record, int submissionId, CancellationToken ct = default)
@@ -252,7 +252,8 @@ public class GenericDataRepository : IGenericDataRepository
         var tenantId = _tenantContext.CurrentTenantId;
         if (!tenantId.HasValue) return;
 
-        _metadataDb.FieldChangeHistory.Add(new FieldChangeHistory
+        await using var metadataDb = await _metadataDbFactory.CreateDbContextAsync(ct);
+        metadataDb.FieldChangeHistory.Add(new FieldChangeHistory
         {
             TenantId = tenantId.Value,
             SubmissionId = submissionId,
@@ -265,7 +266,7 @@ public class GenericDataRepository : IGenericDataRepository
             ChangedBy = changedBy ?? "System",
             ChangedAt = DateTime.UtcNow
         });
-        await _metadataDb.SaveChangesAsync(ct);
+        await metadataDb.SaveChangesAsync(ct);
     }
 
     private async Task UpsertFieldSourceMetadata(
@@ -284,7 +285,8 @@ public class GenericDataRepository : IGenericDataRepository
 
         var effectiveDataSource = string.IsNullOrWhiteSpace(dataSource) ? "Manual" : dataSource.Trim();
 
-        var entry = await _metadataDb.SubmissionFieldSources.FirstOrDefaultAsync(
+        await using var metadataDb = await _metadataDbFactory.CreateDbContextAsync(ct);
+        var entry = await metadataDb.SubmissionFieldSources.FirstOrDefaultAsync(
             x => x.TenantId == tenantId.Value
                  && x.ReturnCode == returnCode
                  && x.SubmissionId == submissionId
@@ -293,7 +295,7 @@ public class GenericDataRepository : IGenericDataRepository
 
         if (entry is null)
         {
-            _metadataDb.SubmissionFieldSources.Add(new SubmissionFieldSource
+            metadataDb.SubmissionFieldSources.Add(new SubmissionFieldSource
             {
                 TenantId = tenantId.Value,
                 ReturnCode = returnCode,
@@ -311,7 +313,7 @@ public class GenericDataRepository : IGenericDataRepository
             entry.UpdatedAt = DateTime.UtcNow;
         }
 
-        await _metadataDb.SaveChangesAsync(ct);
+        await metadataDb.SaveChangesAsync(ct);
     }
 
     private async Task<IDbConnection> CreateConnectionAsync(CancellationToken ct)

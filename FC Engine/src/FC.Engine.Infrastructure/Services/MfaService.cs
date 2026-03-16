@@ -13,27 +13,29 @@ namespace FC.Engine.Infrastructure.Services;
 
 public class MfaService : IMfaService
 {
-    private readonly MetadataDbContext _db;
+    private readonly IDbContextFactory<MetadataDbContext> _dbFactory;
     private readonly ITenantContext _tenantContext;
     private readonly INotificationOrchestrator? _notificationOrchestrator;
 
     public MfaService(
-        MetadataDbContext db,
+        IDbContextFactory<MetadataDbContext> dbFactory,
         ITenantContext tenantContext,
         INotificationOrchestrator? notificationOrchestrator = null)
     {
-        _db = db;
+        _dbFactory = dbFactory;
         _tenantContext = tenantContext;
         _notificationOrchestrator = notificationOrchestrator;
     }
 
     public async Task<MfaSetupResult> InitiateSetup(int userId, string userType, string email)
     {
+        await using var db = await _dbFactory.CreateDbContextAsync();
+
         var secretBytes = KeyGeneration.GenerateRandomKey(20);
         var secretBase32 = Base32Encoding.ToString(secretBytes);
-        var tenantId = await ResolveTenantId(userId, userType);
+        var tenantId = await ResolveTenantId(db, userId, userType);
 
-        var config = await _db.UserMfaConfigs
+        var config = await db.UserMfaConfigs
             .FirstOrDefaultAsync(c => c.UserId == userId && c.UserType == userType);
 
         if (config is null)
@@ -47,7 +49,7 @@ public class MfaService : IMfaService
                 BackupCodes = "[]",
                 IsEnabled = false
             };
-            _db.UserMfaConfigs.Add(config);
+            db.UserMfaConfigs.Add(config);
         }
         else
         {
@@ -58,7 +60,7 @@ public class MfaService : IMfaService
             config.LastUsedAt = null;
         }
 
-        await _db.SaveChangesAsync();
+        await db.SaveChangesAsync();
 
         var issuer = "RegOS";
         var escapedIssuer = Uri.EscapeDataString(issuer);
@@ -81,7 +83,9 @@ public class MfaService : IMfaService
 
     public async Task<MfaActivationResult> ActivateWithVerification(int userId, string userType, string code)
     {
-        var config = await _db.UserMfaConfigs
+        await using var db = await _dbFactory.CreateDbContextAsync();
+
+        var config = await db.UserMfaConfigs
             .FirstOrDefaultAsync(c => c.UserId == userId && c.UserType == userType);
 
         if (config is null)
@@ -107,7 +111,7 @@ public class MfaService : IMfaService
         config.IsEnabled = true;
         config.EnabledAt = DateTime.UtcNow;
 
-        await _db.SaveChangesAsync();
+        await db.SaveChangesAsync();
 
         return new MfaActivationResult
         {
@@ -118,7 +122,9 @@ public class MfaService : IMfaService
 
     public async Task<bool> VerifyCode(int userId, string code, string? userType = null)
     {
-        var query = _db.UserMfaConfigs.Where(c => c.UserId == userId && c.IsEnabled);
+        await using var db = await _dbFactory.CreateDbContextAsync();
+
+        var query = db.UserMfaConfigs.Where(c => c.UserId == userId && c.IsEnabled);
         if (!string.IsNullOrWhiteSpace(userType))
         {
             query = query.Where(c => c.UserType == userType);
@@ -135,7 +141,7 @@ public class MfaService : IMfaService
         if (valid)
         {
             config.LastUsedAt = DateTime.UtcNow;
-            await _db.SaveChangesAsync();
+            await db.SaveChangesAsync();
         }
 
         return valid;
@@ -143,7 +149,9 @@ public class MfaService : IMfaService
 
     public async Task<bool> VerifyBackupCode(int userId, string backupCode, string? userType = null)
     {
-        var query = _db.UserMfaConfigs.Where(c => c.UserId == userId && c.IsEnabled);
+        await using var db = await _dbFactory.CreateDbContextAsync();
+
+        var query = db.UserMfaConfigs.Where(c => c.UserId == userId && c.IsEnabled);
         if (!string.IsNullOrWhiteSpace(userType))
         {
             query = query.Where(c => c.UserType == userType);
@@ -166,7 +174,7 @@ public class MfaService : IMfaService
             hashes.RemoveAt(i);
             config.BackupCodes = JsonSerializer.Serialize(hashes);
             config.LastUsedAt = DateTime.UtcNow;
-            await _db.SaveChangesAsync();
+            await db.SaveChangesAsync();
             return true;
         }
 
@@ -180,14 +188,16 @@ public class MfaService : IMfaService
             return false;
         }
 
-        var config = await _db.UserMfaConfigs
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+
+        var config = await db.UserMfaConfigs
             .FirstOrDefaultAsync(c => c.UserId == userId && c.UserType == userType && c.IsEnabled, ct);
         if (config is null)
         {
             return false;
         }
 
-        var phone = await ResolveUserPhone(userId, userType, ct);
+        var phone = await ResolveUserPhone(db, userId, userType, ct);
         if (string.IsNullOrWhiteSpace(phone))
         {
             return false;
@@ -216,7 +226,9 @@ public class MfaService : IMfaService
 
     public async Task Disable(int userId, string userType)
     {
-        var config = await _db.UserMfaConfigs
+        await using var db = await _dbFactory.CreateDbContextAsync();
+
+        var config = await db.UserMfaConfigs
             .FirstOrDefaultAsync(c => c.UserId == userId && c.UserType == userType);
         if (config is null)
         {
@@ -227,12 +239,14 @@ public class MfaService : IMfaService
         config.EnabledAt = null;
         config.LastUsedAt = null;
         config.BackupCodes = "[]";
-        await _db.SaveChangesAsync();
+        await db.SaveChangesAsync();
     }
 
-    public Task<bool> IsMfaEnabled(int userId, string userType)
+    public async Task<bool> IsMfaEnabled(int userId, string userType)
     {
-        return _db.UserMfaConfigs.AnyAsync(c =>
+        await using var db = await _dbFactory.CreateDbContextAsync();
+
+        return await db.UserMfaConfigs.AnyAsync(c =>
             c.UserId == userId &&
             c.UserType == userType &&
             c.IsEnabled);
@@ -246,7 +260,9 @@ public class MfaService : IMfaService
             return true;
         }
 
-        var brandingConfig = await _db.Tenants
+        await using var db = await _dbFactory.CreateDbContextAsync();
+
+        var brandingConfig = await db.Tenants
             .Where(t => t.TenantId == tenantId)
             .Select(t => t.BrandingConfig)
             .FirstOrDefaultAsync();
@@ -277,7 +293,7 @@ public class MfaService : IMfaService
         return false;
     }
 
-    private async Task<Guid> ResolveTenantId(int userId, string userType)
+    private async Task<Guid> ResolveTenantId(MetadataDbContext db, int userId, string userType)
     {
         if (_tenantContext.CurrentTenantId.HasValue)
         {
@@ -286,7 +302,7 @@ public class MfaService : IMfaService
 
         if (string.Equals(userType, "InstitutionUser", StringComparison.OrdinalIgnoreCase))
         {
-            var tenantId = await _db.InstitutionUsers
+            var tenantId = await db.InstitutionUsers
                 .Where(u => u.Id == userId)
                 .Select(u => (Guid?)u.TenantId)
                 .FirstOrDefaultAsync();
@@ -298,7 +314,7 @@ public class MfaService : IMfaService
 
         if (string.Equals(userType, "PortalUser", StringComparison.OrdinalIgnoreCase))
         {
-            var tenantId = await _db.PortalUsers
+            var tenantId = await db.PortalUsers
                 .Where(u => u.Id == userId)
                 .Select(u => u.TenantId)
                 .FirstOrDefaultAsync();
@@ -318,11 +334,11 @@ public class MfaService : IMfaService
         return $"{code[..4]}-{code[4..]}";
     }
 
-    private async Task<string?> ResolveUserPhone(int userId, string userType, CancellationToken ct)
+    private async Task<string?> ResolveUserPhone(MetadataDbContext db, int userId, string userType, CancellationToken ct)
     {
         if (string.Equals(userType, "InstitutionUser", StringComparison.OrdinalIgnoreCase))
         {
-            var user = await _db.InstitutionUsers
+            var user = await db.InstitutionUsers
                 .Include(u => u.Institution)
                 .FirstOrDefaultAsync(u => u.Id == userId, ct);
             return user?.PhoneNumber ?? user?.Institution?.ContactPhone;
@@ -330,13 +346,13 @@ public class MfaService : IMfaService
 
         if (string.Equals(userType, "PortalUser", StringComparison.OrdinalIgnoreCase))
         {
-            var user = await _db.PortalUsers.FirstOrDefaultAsync(u => u.Id == userId, ct);
+            var user = await db.PortalUsers.FirstOrDefaultAsync(u => u.Id == userId, ct);
             if (user?.TenantId is null)
             {
                 return null;
             }
 
-            var tenantPhone = await _db.Tenants
+            var tenantPhone = await db.Tenants
                 .Where(t => t.TenantId == user.TenantId.Value)
                 .Select(t => t.ContactPhone)
                 .FirstOrDefaultAsync(ct);
