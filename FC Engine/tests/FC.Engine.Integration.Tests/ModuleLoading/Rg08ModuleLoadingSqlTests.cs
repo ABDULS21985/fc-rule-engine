@@ -180,7 +180,7 @@ public class Rg08ModuleLoadingSqlTests : IAsyncLifetime
             tenantContext,
             templateCache,
             new DynamicSqlBuilder(),
-            db);
+            new TestDbContextFactory(db));
 
         var bdcRecord = await BuildDefaultRecord(
             templateCache,
@@ -1021,5 +1021,17 @@ public class Rg08ModuleLoadingSqlTests : IAsyncLifetime
         public string PolicyName { get; set; } = string.Empty;
         public int Operation { get; set; }
         public string PredicateDefinition { get; set; } = string.Empty;
+    }
+
+    private sealed class TestDbContextFactory : IDbContextFactory<MetadataDbContext>
+    {
+        private readonly MetadataDbContext _db;
+
+        public TestDbContextFactory(MetadataDbContext db) => _db = db;
+
+        public MetadataDbContext CreateDbContext() => _db;
+
+        public Task<MetadataDbContext> CreateDbContextAsync(CancellationToken cancellationToken = default) =>
+            Task.FromResult(_db);
     }
 }

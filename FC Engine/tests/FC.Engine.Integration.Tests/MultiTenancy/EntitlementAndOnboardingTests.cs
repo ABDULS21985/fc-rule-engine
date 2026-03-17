@@ -151,7 +151,7 @@ public class EntitlementAndOnboardingTests : IAsyncLifetime
         await using var db = CreateDbContext();
         using var cache = new MemoryCache(new MemoryCacheOptions());
         var entitlementService = new EntitlementService(CreateDbContextFactory(), cache, NullLogger<EntitlementService>.Instance);
-        var subscriptionService = new SubscriptionService(db, entitlementService, NullLogger<SubscriptionService>.Instance);
+        var subscriptionService = new SubscriptionService(CreateDbContextFactory(), entitlementService, NullLogger<SubscriptionService>.Instance);
         var sut = new TenantOnboardingService(
             db,
             entitlementService,
@@ -204,7 +204,7 @@ public class EntitlementAndOnboardingTests : IAsyncLifetime
         await using var db = CreateDbContext();
         using var cache = new MemoryCache(new MemoryCacheOptions());
         var entitlementService = new EntitlementService(CreateDbContextFactory(), cache, NullLogger<EntitlementService>.Instance);
-        var subscriptionService = new SubscriptionService(db, entitlementService, NullLogger<SubscriptionService>.Instance);
+        var subscriptionService = new SubscriptionService(CreateDbContextFactory(), entitlementService, NullLogger<SubscriptionService>.Instance);
         var sut = new TenantOnboardingService(
             db,
             entitlementService,
@@ -314,7 +314,7 @@ public class EntitlementAndOnboardingTests : IAsyncLifetime
         await using var db = CreateDbContext();
         using var cache = new MemoryCache(new MemoryCacheOptions());
         var entitlementService = new EntitlementService(CreateDbContextFactory(), cache, NullLogger<EntitlementService>.Instance);
-        var subscriptionService = new SubscriptionService(db, entitlementService, NullLogger<SubscriptionService>.Instance);
+        var subscriptionService = new SubscriptionService(CreateDbContextFactory(), entitlementService, NullLogger<SubscriptionService>.Instance);
 
         // GROUP guarantees pricing availability for all seeded modules in RG-03.
         await subscriptionService.CreateSubscription(tenantId, "GROUP", BillingFrequency.Monthly);
@@ -343,7 +343,7 @@ public class EntitlementAndOnboardingTests : IAsyncLifetime
         await using var db = CreateDbContext();
         using var cache = new MemoryCache(new MemoryCacheOptions());
         var entitlementService = new EntitlementService(CreateDbContextFactory(), cache, NullLogger<EntitlementService>.Instance);
-        var subscriptionService = new SubscriptionService(db, entitlementService, NullLogger<SubscriptionService>.Instance);
+        var subscriptionService = new SubscriptionService(CreateDbContextFactory(), entitlementService, NullLogger<SubscriptionService>.Instance);
         await subscriptionService.ActivateModule(tenantId, moduleCode);
         await entitlementService.InvalidateCache(tenantId);
     }

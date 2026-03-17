@@ -79,6 +79,7 @@ public class WorkflowServiceTests
             submissionRepo.Object,
             approvalRepo.Object,
             userRepo.Object,
+            null, // anomalyDetectionService
             notificationOrchestrator.Object,
             filingCalendarService.Object,
             NullLogger<WorkflowService>.Instance);

@@ -11,13 +11,16 @@ public sealed class ModelGovernanceService
 {
     private readonly PlatformIntelligenceService _intelligence;
     private readonly ModelApprovalWorkflowStoreService _approvalStore;
+    private readonly ModelInventoryCatalogService _modelInventoryCatalog;
 
     public ModelGovernanceService(
         PlatformIntelligenceService intelligence,
-        ModelApprovalWorkflowStoreService approvalStore)
+        ModelApprovalWorkflowStoreService approvalStore,
+        ModelInventoryCatalogService modelInventoryCatalog)
     {
         _intelligence = intelligence;
         _approvalStore = approvalStore;
+        _modelInventoryCatalog = modelInventoryCatalog;
     }
 
     public async Task<ModelDashboardData> GetDashboardAsync(CancellationToken ct = default)
@@ -43,6 +46,94 @@ public sealed class ModelGovernanceService
     {
         var ws = await _intelligence.GetWorkspaceAsync(ct);
         return ws.ModelRisk.Inventory;
+    }
+
+    public async Task<List<ModelInventoryDefinitionState>> GetInventoryCatalogAsync(CancellationToken ct = default)
+    {
+        var state = await _intelligence.GetModelInventoryCatalogStateAsync(ct);
+        return state.Definitions;
+    }
+
+    public async Task CreateInventoryDefinitionAsync(ModelInventoryDefinitionInput definition, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(definition);
+
+        var state = await _intelligence.GetModelInventoryCatalogStateAsync(ct);
+        var normalized = NormalizeDefinition(definition);
+
+        if (state.Definitions.Any(x => x.ModelCode.Equals(normalized.ModelCode, StringComparison.OrdinalIgnoreCase)))
+        {
+            throw new InvalidOperationException($"A model with code '{normalized.ModelCode}' already exists.");
+        }
+
+        var definitions = state.Definitions
+            .Select(MapDefinition)
+            .Append(normalized)
+            .OrderBy(x => x.ModelCode, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        await _modelInventoryCatalog.MaterializeAsync(definitions, ct);
+    }
+
+    public async Task UpdateInventoryDefinitionAsync(
+        string existingModelCode,
+        ModelInventoryDefinitionInput definition,
+        CancellationToken ct = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(existingModelCode);
+        ArgumentNullException.ThrowIfNull(definition);
+
+        var state = await _intelligence.GetModelInventoryCatalogStateAsync(ct);
+        var normalizedExistingCode = existingModelCode.Trim();
+        var existing = state.Definitions.FirstOrDefault(x =>
+            x.ModelCode.Equals(normalizedExistingCode, StringComparison.OrdinalIgnoreCase));
+
+        if (existing is null)
+        {
+            throw new InvalidOperationException($"Model '{existingModelCode}' could not be found.");
+        }
+
+        var normalized = NormalizeDefinition(definition);
+
+        if (state.Definitions.Any(x =>
+                !x.ModelCode.Equals(normalizedExistingCode, StringComparison.OrdinalIgnoreCase) &&
+                x.ModelCode.Equals(normalized.ModelCode, StringComparison.OrdinalIgnoreCase)))
+        {
+            throw new InvalidOperationException($"A model with code '{normalized.ModelCode}' already exists.");
+        }
+
+        var definitions = state.Definitions
+            .Where(x => !x.ModelCode.Equals(normalizedExistingCode, StringComparison.OrdinalIgnoreCase))
+            .Select(MapDefinition)
+            .Append(normalized)
+            .OrderBy(x => x.ModelCode, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        await _modelInventoryCatalog.MaterializeAsync(definitions, ct);
+    }
+
+    public async Task DeleteInventoryDefinitionAsync(string modelCode, CancellationToken ct = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(modelCode);
+
+        var state = await _intelligence.GetModelInventoryCatalogStateAsync(ct);
+        if (state.Definitions.Count <= 1)
+        {
+            throw new InvalidOperationException("The last model catalog record cannot be deleted.");
+        }
+
+        var normalizedCode = modelCode.Trim();
+        var definitions = state.Definitions
+            .Where(x => !x.ModelCode.Equals(normalizedCode, StringComparison.OrdinalIgnoreCase))
+            .Select(MapDefinition)
+            .ToList();
+
+        if (definitions.Count == state.Definitions.Count)
+        {
+            throw new InvalidOperationException($"Model '{modelCode}' could not be found.");
+        }
+
+        await _modelInventoryCatalog.MaterializeAsync(definitions, ct);
     }
 
     public async Task<List<ModelValidationScheduleRow>> GetValidationScheduleAsync(CancellationToken ct = default)
@@ -122,6 +213,65 @@ public sealed class ModelGovernanceService
             AppetiteRegister = m.AppetiteRegister,
             ReturnPack = m.ReturnPack
         };
+    }
+
+    private static ModelInventoryDefinitionInput NormalizeDefinition(ModelInventoryDefinitionInput definition)
+    {
+        var modelCode = NormalizeRequired(definition.ModelCode, "Model code").ToUpperInvariant();
+        var modelName = NormalizeRequired(definition.ModelName, "Model name");
+        var tier = NormalizeRequired(definition.Tier, "Tier");
+        var owner = NormalizeRequired(definition.Owner, "Owner");
+        var returnHint = NormalizeRequired(definition.ReturnHint, "Return hint");
+        var matchTerms = NormalizeMatchTerms(definition.MatchTerms);
+
+        return new ModelInventoryDefinitionInput
+        {
+            ModelCode = modelCode,
+            ModelName = modelName,
+            Tier = tier,
+            Owner = owner,
+            ReturnHint = returnHint,
+            MatchTerms = matchTerms
+        };
+    }
+
+    private static ModelInventoryDefinitionInput MapDefinition(ModelInventoryDefinitionState definition) =>
+        new()
+        {
+            ModelCode = definition.ModelCode,
+            ModelName = definition.ModelName,
+            Tier = definition.Tier,
+            Owner = definition.Owner,
+            ReturnHint = definition.ReturnHint,
+            MatchTerms = definition.MatchTerms
+        };
+
+    private static string NormalizeRequired(string? value, string fieldName)
+    {
+        var normalized = value?.Trim();
+        if (string.IsNullOrWhiteSpace(normalized))
+        {
+            throw new InvalidOperationException($"{fieldName} is required.");
+        }
+
+        return normalized;
+    }
+
+    private static IReadOnlyList<string> NormalizeMatchTerms(IReadOnlyList<string>? matchTerms)
+    {
+        var normalized = (matchTerms ?? [])
+            .SelectMany(x => (x ?? string.Empty).Split([',', ';', '\n', '\r'], StringSplitOptions.RemoveEmptyEntries))
+            .Select(x => x.Trim())
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (normalized.Count == 0)
+        {
+            throw new InvalidOperationException("At least one match term is required.");
+        }
+
+        return normalized;
     }
 }
 

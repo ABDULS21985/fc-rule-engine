@@ -79,11 +79,24 @@ END;
 
     private static AnomalyDetectionService CreateService(MetadataDbContext db)
     {
+        var factory = new TestDbContextFactory(db);
         return new AnomalyDetectionService(
-            db,
+            factory,
             new NoopAnomalyModelTrainingService(),
             new NoopAuditLogger(),
             NullLogger<AnomalyDetectionService>.Instance);
+    }
+
+    private sealed class TestDbContextFactory : IDbContextFactory<MetadataDbContext>
+    {
+        private readonly MetadataDbContext _db;
+
+        public TestDbContextFactory(MetadataDbContext db) => _db = db;
+
+        public MetadataDbContext CreateDbContext() => _db;
+
+        public Task<MetadataDbContext> CreateDbContextAsync(CancellationToken cancellationToken = default) =>
+            Task.FromResult(_db);
     }
 
     private sealed class NoopAuditLogger : IAuditLogger

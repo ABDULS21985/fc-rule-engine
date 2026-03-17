@@ -183,12 +183,13 @@ public sealed class RegulatorIqFixture : IAsyncLifetime
     public RegulatorIntelligenceService CreateIntelligenceService()
     {
         var db = CreateDbContext();
+        var dbFactory = new TestDbContextFactory(db);
         var cache = new MemoryCache(new MemoryCacheOptions());
         var connectionFactory = new TestSqlConnectionFactory(ConnectionString);
         var anomalyTraining = new NoopAnomalyModelTrainingService();
         var auditLogger = new NoopAuditLogger();
-        var complianceHealth = new ComplianceHealthService(db, cache, NullLogger<ComplianceHealthService>.Instance);
-        var anomaly = new AnomalyDetectionService(db, anomalyTraining, auditLogger, NullLogger<AnomalyDetectionService>.Instance);
+        var complianceHealth = new ComplianceHealthService(dbFactory, cache, NullLogger<ComplianceHealthService>.Instance);
+        var anomaly = new AnomalyDetectionService(dbFactory, anomalyTraining, auditLogger, NullLogger<AnomalyDetectionService>.Instance);
         var foreSight = new ForeSightService(db, connectionFactory, cache, NullLogger<ForeSightService>.Instance);
         var earlyWarning = new EarlyWarningService(db);
         var systemicRisk = new SystemicRiskService(db, earlyWarning, NullLogger<SystemicRiskService>.Instance);
@@ -220,12 +221,13 @@ public sealed class RegulatorIqFixture : IAsyncLifetime
     public RegulatorResponseGenerator CreateResponseGenerator(ILlmService? llmService = null)
     {
         var db = CreateDbContext();
+        var dbFactory = new TestDbContextFactory(db);
         var cache = new MemoryCache(new MemoryCacheOptions());
         var connectionFactory = new TestSqlConnectionFactory(ConnectionString);
         var anomalyTraining = new NoopAnomalyModelTrainingService();
         var auditLogger = new NoopAuditLogger();
-        var complianceHealth = new ComplianceHealthService(db, cache, NullLogger<ComplianceHealthService>.Instance);
-        var anomaly = new AnomalyDetectionService(db, anomalyTraining, auditLogger, NullLogger<AnomalyDetectionService>.Instance);
+        var complianceHealth = new ComplianceHealthService(dbFactory, cache, NullLogger<ComplianceHealthService>.Instance);
+        var anomaly = new AnomalyDetectionService(dbFactory, anomalyTraining, auditLogger, NullLogger<AnomalyDetectionService>.Instance);
         var foreSight = new ForeSightService(db, connectionFactory, cache, NullLogger<ForeSightService>.Instance);
         var earlyWarning = new EarlyWarningService(db);
         var systemicRisk = new SystemicRiskService(db, earlyWarning, NullLogger<SystemicRiskService>.Instance);
@@ -1388,5 +1390,17 @@ END;
 
         public Task<ScenarioStatusCounts> GetStatusCountsAsync(int regulatorId, CancellationToken ct = default)
             => Task.FromResult(new ScenarioStatusCounts(0, 0, 0, 0, 0, 0, 0));
+    }
+
+    private sealed class TestDbContextFactory : IDbContextFactory<MetadataDbContext>
+    {
+        private readonly MetadataDbContext _db;
+
+        public TestDbContextFactory(MetadataDbContext db) => _db = db;
+
+        public MetadataDbContext CreateDbContext() => _db;
+
+        public Task<MetadataDbContext> CreateDbContextAsync(CancellationToken cancellationToken = default) =>
+            Task.FromResult(_db);
     }
 }

@@ -152,7 +152,7 @@ public class Rg09ModuleLoadingSqlTests : IAsyncLifetime
             tenantContext,
             templateCache,
             new DynamicSqlBuilder(),
-            db);
+            new TestDbContextFactory(db));
 
         // Pre-seed full rows so subsequent dataflow updates do not violate NOT NULL columns.
         var dmbRecord = await BuildDefaultRecord(
@@ -844,5 +844,17 @@ public class Rg09ModuleLoadingSqlTests : IAsyncLifetime
         public void InvalidateAll()
         {
         }
+    }
+
+    private sealed class TestDbContextFactory : IDbContextFactory<MetadataDbContext>
+    {
+        private readonly MetadataDbContext _db;
+
+        public TestDbContextFactory(MetadataDbContext db) => _db = db;
+
+        public MetadataDbContext CreateDbContext() => _db;
+
+        public Task<MetadataDbContext> CreateDbContextAsync(CancellationToken cancellationToken = default) =>
+            Task.FromResult(_db);
     }
 }

@@ -1,49 +1,112 @@
 @page "/regulator/models/inventory"
 @attribute [Authorize(Policy = "RegulatorOnly")]
 @inject FC.Engine.Admin.Services.ModelRisk.ModelGovernanceService ModelService
+@inject ToastService Toast
+@inject DialogService Dialog
 
 <PageTitle>Model Inventory</PageTitle>
 
-<PageHeader Title="Model Inventory" Subtitle="Model codes, tiers, owners, coverage, and validation status." BackUrl="/regulator/models" CountBadge="@(!_loading ? _inventory?.Count : null)">
-    <PrimaryAction><button class="fc-btn fc-btn--primary" @onclick="ReloadAsync" disabled="@_loading">Refresh</button></PrimaryAction>
+<PageHeader Title="Model Inventory"
+            Subtitle="Manage the baseline catalog behind model codes, tiers, owners, coverage, and validation status."
+            BackUrl="/regulator/models"
+            CountBadge="@(!_loading ? _rows?.Count : null)">
+    <PrimaryAction>
+        <div class="model-inventory__header-actions">
+            <button class="fc-btn fc-btn--outline"
+                    @onclick="ReloadAsync"
+                    disabled="@(_loading || _saving)"
+                    type="button">
+                Refresh
+            </button>
+            <button class="fc-btn fc-btn--primary"
+                    @onclick="OpenCreateModal"
+                    disabled="@(_loading || _saving)"
+                    type="button">
+                Add Model
+            </button>
+        </div>
+    </PrimaryAction>
 </PageHeader>
 
 <div class="fc-page">
     <SectionErrorBoundary Title="Failed to load inventory" ExternalError="@_loadException" OnRetry="ReloadAsync">
-        @if (_loading) { <SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.TableRows" /> }
-        else if (_inventory is null || _inventory.Count == 0) { <EmptyState Context="data" Heading="No models" Description="Materialise the model inventory via the Intelligence Hub." /> }
+        @if (_loading)
+        {
+            <SkeletonLoader Variant="SkeletonLoader.SkeletonVariant.TableRows" />
+        }
+        else if (_rows is null || _rows.Count == 0)
+        {
+            <EmptyState Context="data"
+                        Heading="No models"
+                        Description="Create the first model inventory record to start governing the catalog from this page." />
+        }
         else
         {
             <div class="fc-card">
                 <div class="fc-card__body">
-                    <DataTable TItem="ModelInventoryRow" Items="@_inventory" PageSize="20" Sortable="true" ShowExport="true" ExportFileName="model-inventory">
+                    <AppAlert Variant="AppAlert.AlertVariant.Info"
+                              Title="Catalog-backed inventory"
+                              Message="Create, update, or delete model catalog records here. Coverage, validation, and performance columns are recalculated from the live workspace snapshot after each save." />
+
+                    <DataTable TItem="ModelInventoryGridRow"
+                               Items="@_rows"
+                               PageSize="20"
+                               Sortable="true"
+                               ShowExport="true"
+                               ExportFileName="model-inventory">
                         <ChildContent>
-                            <DataColumn TItem="ModelInventoryRow" Title="Code" Width="110px" SortKey="@(x => x.ModelCode)">
+                            <DataColumn TItem="ModelInventoryGridRow" Title="Code" Width="110px" SortKey="@(x => x.ModelCode)">
                                 <CellTemplate><span class="fc-badge fc-badge--neutral">@context.ModelCode</span></CellTemplate>
                             </DataColumn>
-                            <DataColumn TItem="ModelInventoryRow" Title="Model" SortKey="@(x => x.ModelName)">
-                                <CellTemplate><strong>@context.ModelName</strong></CellTemplate>
+                            <DataColumn TItem="ModelInventoryGridRow" Title="Model" MinWidth="220px" SortKey="@(x => x.ModelName)">
+                                <CellTemplate>
+                                    <div class="model-inventory__model-cell">
+                                        <strong>@context.ModelName</strong>
+                                        <span class="model-inventory__terms">@FormatMatchTerms(context.MatchTerms)</span>
+                                    </div>
+                                </CellTemplate>
                             </DataColumn>
-                            <DataColumn TItem="ModelInventoryRow" Title="Tier" Width="80px" SortKey="@(x => x.Tier)">
+                            <DataColumn TItem="ModelInventoryGridRow" Title="Tier" Width="96px" SortKey="@(x => x.Tier)">
                                 <CellTemplate><span class="fc-badge @TierBadge(context.Tier)">@context.Tier</span></CellTemplate>
                             </DataColumn>
-                            <DataColumn TItem="ModelInventoryRow" Title="Owner" Width="130px" SortKey="@(x => x.Owner)">
+                            <DataColumn TItem="ModelInventoryGridRow" Title="Owner" Width="150px" SortKey="@(x => x.Owner)">
                                 <CellTemplate>@context.Owner</CellTemplate>
                             </DataColumn>
-                            <DataColumn TItem="ModelInventoryRow" Title="Artifacts" Width="90px" SortKey="@(x => x.CoverageArtifacts)">
+                            <DataColumn TItem="ModelInventoryGridRow" Title="Return Hint" Width="120px" SortKey="@(x => x.ReturnHint)">
+                                <CellTemplate><span class="fc-badge fc-badge--info">@context.ReturnHint</span></CellTemplate>
+                            </DataColumn>
+                            <DataColumn TItem="ModelInventoryGridRow" Title="Artifacts" Width="90px" SortKey="@(x => x.CoverageArtifacts)">
                                 <CellTemplate>@context.CoverageArtifacts</CellTemplate>
                             </DataColumn>
-                            <DataColumn TItem="ModelInventoryRow" Title="Validation" Width="120px" SortKey="@(x => x.ValidationStatus)">
+                            <DataColumn TItem="ModelInventoryGridRow" Title="Validation" Width="120px" SortKey="@(x => x.ValidationStatus)">
                                 <CellTemplate><span class="fc-badge @ValBadge(context.ValidationStatus)">@context.ValidationStatus</span></CellTemplate>
                             </DataColumn>
-                            <DataColumn TItem="ModelInventoryRow" Title="Performance" Width="120px" SortKey="@(x => x.PerformanceStatus)">
+                            <DataColumn TItem="ModelInventoryGridRow" Title="Performance" Width="120px" SortKey="@(x => x.PerformanceStatus)">
                                 <CellTemplate><span class="fc-badge @PerfBadge(context.PerformanceStatus)">@context.PerformanceStatus</span></CellTemplate>
                             </DataColumn>
-                            <DataColumn TItem="ModelInventoryRow" Title="Score" Width="80px" SortKey="@(x => x.PerformanceScore)">
+                            <DataColumn TItem="ModelInventoryGridRow" Title="Score" Width="80px" SortKey="@(x => x.PerformanceScore ?? decimal.MinValue)">
                                 <CellTemplate>@(context.PerformanceScore?.ToString("F0") ?? "—")</CellTemplate>
                             </DataColumn>
-                            <DataColumn TItem="ModelInventoryRow" Title="Next Validation" Width="130px" SortKey="@(x => x.NextValidationDue)">
-                                <CellTemplate>@context.NextValidationDue.ToString("dd MMM yyyy")</CellTemplate>
+                            <DataColumn TItem="ModelInventoryGridRow" Title="Next Validation" Width="136px" SortKey="@(x => x.NextValidationDue ?? DateTime.MaxValue)">
+                                <CellTemplate>@(context.NextValidationDue?.ToString("dd MMM yyyy") ?? "Pending")</CellTemplate>
+                            </DataColumn>
+                            <DataColumn TItem="ModelInventoryGridRow" Title="Actions" Width="160px">
+                                <CellTemplate>
+                                    <div class="model-inventory__actions">
+                                        <button class="fc-btn fc-btn--ghost fc-btn--sm"
+                                                @onclick="() => OpenEditModal(context)"
+                                                disabled="@_saving"
+                                                type="button">
+                                            Edit
+                                        </button>
+                                        <button class="fc-btn fc-btn--ghost fc-btn--danger fc-btn--sm"
+                                                @onclick="() => ConfirmDeleteAsync(context)"
+                                                disabled="@_saving"
+                                                type="button">
+                                            Delete
+                                        </button>
+                                    </div>
+                                </CellTemplate>
                             </DataColumn>
                         </ChildContent>
                     </DataTable>
@@ -53,15 +116,373 @@
     </SectionErrorBoundary>
 </div>
 
+<AppModal @bind-Visible="_showEditor"
+          Title="@(_editingOriginalCode is null ? "Add Model" : "Edit Model")"
+          Subtitle="Maintain the baseline catalog record that powers the live model inventory."
+          Size="lg"
+          OnClose="ResetEditorState">
+    <ChildContent>
+        @if (!string.IsNullOrWhiteSpace(_formError))
+        {
+            <AppAlert Variant="AppAlert.AlertVariant.Error"
+                      Title="Save failed"
+                      Message="@_formError"
+                      Dismissible="true"
+                      OnDismiss="ClearFormError" />
+        }
+
+        <div class="model-inventory__form-grid">
+            <div class="fc-form-group">
+                <label class="fc-form-label fc-form-label-required" for="model-code">Model Code</label>
+                <input id="model-code"
+                       class="fc-form-input fc-form-input--mono"
+                       @bind="_editorModelCode"
+                       placeholder="ECL"
+                       disabled="@_saving" />
+            </div>
+            <div class="fc-form-group">
+                <label class="fc-form-label fc-form-label-required" for="model-name">Model Name</label>
+                <input id="model-name"
+                       class="fc-form-input"
+                       @bind="_editorModelName"
+                       placeholder="IFRS 9 Expected Credit Loss"
+                       disabled="@_saving" />
+            </div>
+            <div class="fc-form-group">
+                <label class="fc-form-label fc-form-label-required" for="model-tier">Tier</label>
+                <select id="model-tier" class="fc-form-input" @bind="_editorTier" disabled="@_saving">
+                    @foreach (var tier in TierOptions)
+                    {
+                        <option value="@tier">@tier</option>
+                    }
+                </select>
+            </div>
+            <div class="fc-form-group">
+                <label class="fc-form-label fc-form-label-required" for="model-owner">Owner</label>
+                <input id="model-owner"
+                       class="fc-form-input"
+                       @bind="_editorOwner"
+                       placeholder="Credit Risk"
+                       disabled="@_saving" />
+            </div>
+            <div class="fc-form-group">
+                <label class="fc-form-label fc-form-label-required" for="model-return-hint">Return Hint</label>
+                <input id="model-return-hint"
+                       class="fc-form-input"
+                       @bind="_editorReturnHint"
+                       placeholder="MFB_IFR"
+                       disabled="@_saving" />
+            </div>
+            <div class="fc-form-group model-inventory__form-group--full">
+                <label class="fc-form-label fc-form-label-required" for="model-match-terms">Match Terms</label>
+                <textarea id="model-match-terms"
+                          class="fc-form-input model-inventory__textarea"
+                          rows="4"
+                          @bind="_editorMatchTerms"
+                          placeholder="ecl, pd, lgd, ead"
+                          disabled="@_saving"></textarea>
+                <span class="model-inventory__field-hint">Use commas, semicolons, or new lines to separate aliases used to match evidence and returns.</span>
+            </div>
+        </div>
+    </ChildContent>
+    <FooterContent>
+        <button class="fc-btn fc-btn--outline" @onclick="CloseEditorModal" disabled="@_saving" type="button">Cancel</button>
+        <button class="fc-btn fc-btn--primary @(_saving ? "fc-btn--loading" : "")"
+                @onclick="SaveAsync"
+                disabled="@_saving"
+                aria-busy="@(_saving ? "true" : null)"
+                type="button">
+            @if (_saving)
+            {
+                <span class="fc-spinner fc-spinner--sm fc-spinner--white" aria-hidden="true"></span>
+            }
+            @(_editingOriginalCode is null ? "Create Model" : "Save Changes")
+        </button>
+    </FooterContent>
+</AppModal>
+
 @code {
+    private static readonly IReadOnlyList<string> TierOptions = ["Tier 1", "Tier 2", "Tier 3"];
+
     private bool _loading = true;
+    private bool _saving;
+    private bool _showEditor;
     private Exception? _loadException;
-    private List<ModelInventoryRow>? _inventory;
+    private string? _formError;
+    private string? _editingOriginalCode;
+    private List<ModelInventoryGridRow>? _rows;
+
+    private string _editorModelCode = string.Empty;
+    private string _editorModelName = string.Empty;
+    private string _editorTier = "Tier 1";
+    private string _editorOwner = string.Empty;
+    private string _editorReturnHint = string.Empty;
+    private string _editorMatchTerms = string.Empty;
 
     protected override async Task OnInitializedAsync() => await ReloadAsync();
-    private async Task ReloadAsync() { _loading = true; _loadException = null; try { _inventory = await ModelService.GetInventoryAsync(); } catch (Exception ex) { _loadException = ex; } finally { _loading = false; } }
 
-    private static string TierBadge(string t) => t switch { "T1" => "fc-badge--danger", "T2" => "fc-badge--warning", "T3" => "fc-badge--info", _ => "fc-badge--neutral" };
-    private static string ValBadge(string v) => v switch { "Current" => "fc-badge--success", "Due" or "Due Soon" => "fc-badge--warning", "Overdue" => "fc-badge--danger", _ => "fc-badge--neutral" };
-    private static string PerfBadge(string p) => p switch { "Stable" or "Pass" => "fc-badge--success", "Monitor" => "fc-badge--info", "Watch" or "Degraded" => "fc-badge--warning", "Alert" or "Breach" => "fc-badge--danger", _ => "fc-badge--neutral" };
+    private async Task ReloadAsync()
+    {
+        _loading = true;
+        _loadException = null;
+
+        try
+        {
+            var inventoryTask = ModelService.GetInventoryAsync();
+            var catalogTask = ModelService.GetInventoryCatalogAsync();
+            await Task.WhenAll(inventoryTask, catalogTask);
+
+            _rows = BuildRows(await inventoryTask, await catalogTask);
+        }
+        catch (Exception ex)
+        {
+            _loadException = ex;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private void OpenCreateModal()
+    {
+        ResetEditorState();
+        _showEditor = true;
+    }
+
+    private void OpenEditModal(ModelInventoryGridRow row)
+    {
+        _editingOriginalCode = row.ModelCode;
+        _editorModelCode = row.ModelCode;
+        _editorModelName = row.ModelName;
+        _editorTier = row.Tier;
+        _editorOwner = row.Owner;
+        _editorReturnHint = row.ReturnHint;
+        _editorMatchTerms = string.Join(", ", row.MatchTerms);
+        _formError = null;
+        _showEditor = true;
+    }
+
+    private Task CloseEditorModal()
+    {
+        _showEditor = false;
+        ResetEditorState();
+        return Task.CompletedTask;
+    }
+
+    private Task ResetEditorState()
+    {
+        _editingOriginalCode = null;
+        _editorModelCode = string.Empty;
+        _editorModelName = string.Empty;
+        _editorTier = "Tier 1";
+        _editorOwner = string.Empty;
+        _editorReturnHint = string.Empty;
+        _editorMatchTerms = string.Empty;
+        _formError = null;
+        return Task.CompletedTask;
+    }
+
+    private Task ClearFormError()
+    {
+        _formError = null;
+        return Task.CompletedTask;
+    }
+
+    private async Task SaveAsync()
+    {
+        if (_saving)
+        {
+            return;
+        }
+
+        _saving = true;
+        _formError = null;
+
+        try
+        {
+            var definition = new ModelInventoryDefinitionInput
+            {
+                ModelCode = _editorModelCode,
+                ModelName = _editorModelName,
+                Tier = _editorTier,
+                Owner = _editorOwner,
+                ReturnHint = _editorReturnHint,
+                MatchTerms = ParseMatchTerms(_editorMatchTerms)
+            };
+
+            if (_editingOriginalCode is null)
+            {
+                await ModelService.CreateInventoryDefinitionAsync(definition);
+                Toast.Show(new ToastItem
+                {
+                    Variant = ToastVariant.Success,
+                    Title = "Model created",
+                    Message = $"{definition.ModelCode.Trim().ToUpperInvariant()} has been added to the model inventory catalog."
+                });
+            }
+            else
+            {
+                await ModelService.UpdateInventoryDefinitionAsync(_editingOriginalCode, definition);
+                Toast.Show(new ToastItem
+                {
+                    Variant = ToastVariant.Success,
+                    Title = "Model updated",
+                    Message = $"{definition.ModelCode.Trim().ToUpperInvariant()} has been updated."
+                });
+            }
+
+            _showEditor = false;
+            await ResetEditorState();
+            await ReloadAsync();
+        }
+        catch (Exception ex)
+        {
+            _formError = ex.Message;
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private async Task ConfirmDeleteAsync(ModelInventoryGridRow row)
+    {
+        if (_saving)
+        {
+            return;
+        }
+
+        var confirmed = await Dialog.Confirm(new ConfirmRequest
+        {
+            Title = "Delete Model",
+            Message = $"Delete {row.ModelName} ({row.ModelCode}) from the baseline model inventory catalog? This removes it from the editable catalog for future refreshes.",
+            ConfirmText = "Delete",
+            IsDestructive = true,
+            Icon = "delete"
+        });
+
+        if (!confirmed)
+        {
+            return;
+        }
+
+        _saving = true;
+        try
+        {
+            await ModelService.DeleteInventoryDefinitionAsync(row.ModelCode);
+            Toast.Show(new ToastItem
+            {
+                Variant = ToastVariant.Success,
+                Title = "Model deleted",
+                Message = $"{row.ModelCode} has been removed from the model inventory catalog."
+            });
+
+            await ReloadAsync();
+        }
+        catch (Exception ex)
+        {
+            Toast.Show(new ToastItem
+            {
+                Variant = ToastVariant.Error,
+                Title = "Delete failed",
+                Message = ex.Message
+            });
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private static List<ModelInventoryGridRow> BuildRows(
+        IReadOnlyList<ModelInventoryRow> inventory,
+        IReadOnlyList<ModelInventoryDefinitionState> catalog)
+    {
+        var liveByCode = inventory.ToDictionary(x => x.ModelCode, StringComparer.OrdinalIgnoreCase);
+
+        return catalog
+            .OrderBy(x => x.ModelCode, StringComparer.OrdinalIgnoreCase)
+            .Select(definition =>
+            {
+                liveByCode.TryGetValue(definition.ModelCode, out var live);
+
+                return new ModelInventoryGridRow
+                {
+                    ModelCode = definition.ModelCode,
+                    ModelName = definition.ModelName,
+                    Tier = definition.Tier,
+                    Owner = definition.Owner,
+                    ReturnHint = definition.ReturnHint,
+                    MatchTerms = definition.MatchTerms,
+                    CoverageArtifacts = live?.CoverageArtifacts ?? 0,
+                    ValidationStatus = live?.ValidationStatus ?? "Pending",
+                    PerformanceStatus = live?.PerformanceStatus ?? "Pending",
+                    PerformanceScore = live?.PerformanceScore,
+                    NextValidationDue = live?.NextValidationDue
+                };
+            })
+            .ToList();
+    }
+
+    private static List<string> ParseMatchTerms(string? rawTerms) =>
+        (rawTerms ?? string.Empty)
+            .Split([',', ';', '\n', '\r'], StringSplitOptions.RemoveEmptyEntries)
+            .Select(x => x.Trim())
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+    private static string FormatMatchTerms(IReadOnlyList<string> terms)
+    {
+        if (terms.Count == 0)
+        {
+            return "No match terms";
+        }
+
+        var preview = string.Join(", ", terms.Take(3));
+        return terms.Count > 3 ? $"{preview} +{terms.Count - 3} more" : preview;
+    }
+
+    private static string TierBadge(string tier) => tier switch
+    {
+        "Tier 1" => "fc-badge--danger",
+        "Tier 2" => "fc-badge--warning",
+        "Tier 3" => "fc-badge--info",
+        _ => "fc-badge--neutral"
+    };
+
+    private static string ValBadge(string status) => status switch
+    {
+        "Current" => "fc-badge--success",
+        "Due" or "Due Soon" => "fc-badge--warning",
+        "Overdue" => "fc-badge--danger",
+        "Pending" => "fc-badge--info",
+        _ => "fc-badge--neutral"
+    };
+
+    private static string PerfBadge(string status) => status switch
+    {
+        "Stable" or "Pass" => "fc-badge--success",
+        "Monitor" => "fc-badge--info",
+        "Watch" or "Degraded" => "fc-badge--warning",
+        "Alert" or "Breach" => "fc-badge--danger",
+        "Pending" => "fc-badge--info",
+        _ => "fc-badge--neutral"
+    };
+
+    private sealed class ModelInventoryGridRow
+    {
+        public string ModelCode { get; init; } = string.Empty;
+        public string ModelName { get; init; } = string.Empty;
+        public string Tier { get; init; } = string.Empty;
+        public string Owner { get; init; } = string.Empty;
+        public string ReturnHint { get; init; } = string.Empty;
+        public List<string> MatchTerms { get; init; } = [];
+        public int CoverageArtifacts { get; init; }
+        public string ValidationStatus { get; init; } = string.Empty;
+        public string PerformanceStatus { get; init; } = string.Empty;
+        public decimal? PerformanceScore { get; init; }
+        public DateTime? NextValidationDue { get; init; }
+    }
 }

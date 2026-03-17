@@ -21,7 +21,7 @@ public class InstitutionHierarchyTests : IDisposable
             .Options;
 
         _db = new MetadataDbContext(options);
-        _sut = new InstitutionRepository(_db);
+        _sut = new InstitutionRepository(new TestDbContextFactory(_db));
 
         // Create tenant
         var tenant = Tenant.Create("HoldingGroup", "holding-group", TenantType.HoldingGroup);
@@ -165,5 +165,17 @@ public class InstitutionHierarchyTests : IDisposable
         var ids = await _sut.GetDescendantIds(branch.Id);
 
         ids.Should().BeEmpty();
+    }
+
+    private sealed class TestDbContextFactory : IDbContextFactory<MetadataDbContext>
+    {
+        private readonly MetadataDbContext _db;
+
+        public TestDbContextFactory(MetadataDbContext db) => _db = db;
+
+        public MetadataDbContext CreateDbContext() => _db;
+
+        public Task<MetadataDbContext> CreateDbContextAsync(CancellationToken cancellationToken = default) =>
+            Task.FromResult(_db);
     }
 }

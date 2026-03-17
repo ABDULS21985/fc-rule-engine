@@ -182,5 +182,8 @@ public class SeedServiceTests
 
         public Task<IReadOnlyList<ReturnTemplate>> GetByModuleIds(IEnumerable<int> moduleIds, CancellationToken ct = default) =>
             Task.FromResult<IReadOnlyList<ReturnTemplate>>(Templates.Where(t => t.ModuleId.HasValue && moduleIds.Contains(t.ModuleId.Value)).ToList());
+
+        public Task<TemplateVersion?> GetLatestDraftVersion(string returnCode, CancellationToken ct = default) =>
+            Task.FromResult<TemplateVersion?>(null);
     }
 }
