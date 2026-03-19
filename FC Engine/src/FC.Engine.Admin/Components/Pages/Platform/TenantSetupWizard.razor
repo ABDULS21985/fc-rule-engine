@@ -507,6 +507,13 @@
 
         try
         {
+            if (await TenantService.SlugExistsAsync(_form.Slug.Trim()))
+            {
+                Toast.Error($"The slug '{_form.Slug.Trim()}' is already in use. Please choose a different one.");
+                _saving = false;
+                return;
+            }
+
             var result = await TenantService.ProvisionTenantAsync(new PlatformTenantProvisionRequest
             {
                 TenantName = _form.TenantName.Trim(),

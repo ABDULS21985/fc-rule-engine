@@ -72,11 +72,14 @@ public class Tenant
         UpdatedAt = DateTime.UtcNow;
     }
 
+    public string? SuspensionReason { get; private set; }
+
     public void Suspend(string reason)
     {
         if (Status != TenantStatus.Active)
             throw new InvalidOperationException($"Cannot suspend tenant in {Status} state");
         Status = TenantStatus.Suspended;
+        SuspensionReason = reason;
         UpdatedAt = DateTime.UtcNow;
     }
 
@@ -85,6 +88,7 @@ public class Tenant
         if (Status != TenantStatus.Suspended)
             throw new InvalidOperationException($"Cannot reactivate tenant in {Status} state");
         Status = TenantStatus.Active;
+        SuspensionReason = null;
         UpdatedAt = DateTime.UtcNow;
     }
 

@@ -118,8 +118,17 @@
                         </span>
                     </CellTemplate>
                 </DataColumn>
-                <DataColumn TItem="Submission" Title="Submitted" SortKey="x => x.CreatedAt" CellClass="fc-list-cell-muted">
-                    <CellTemplate>@context.CreatedAt.ToString("yyyy-MM-dd HH:mm")</CellTemplate>
+                <DataColumn TItem="Submission" Title="Submitted" SortKey="x => x.SubmittedAt ?? x.CreatedAt" CellClass="fc-list-cell-muted">
+                    <CellTemplate>
+                        @if (context.SubmittedAt.HasValue)
+                        {
+                            @context.SubmittedAt.Value.ToString("yyyy-MM-dd HH:mm")
+                        }
+                        else
+                        {
+                            <span class="fc-list-cell-muted">—</span>
+                        }
+                    </CellTemplate>
                 </DataColumn>
                 <DataColumn TItem="Submission" Title="Errors" SortKey="x => x.ValidationReport!.Errors.Count">
                     <CellTemplate>

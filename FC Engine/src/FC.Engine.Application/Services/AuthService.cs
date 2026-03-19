@@ -172,6 +172,9 @@ public class AuthService
         string username, string displayName, string email,
         string password, PortalRole role, CancellationToken ct = default)
     {
+        if (string.IsNullOrWhiteSpace(password) || password.Length < 12)
+            throw new ArgumentException("Password must be at least 12 characters.");
+
         if (await _userRepo.UsernameExists(username, ct))
             throw new InvalidOperationException($"Username '{username}' already exists");
 
@@ -211,6 +214,9 @@ public class AuthService
 
     public async Task ChangePassword(int userId, string newPassword, CancellationToken ct = default)
     {
+        if (string.IsNullOrWhiteSpace(newPassword) || newPassword.Length < 12)
+            throw new ArgumentException("Password must be at least 12 characters.");
+
         var user = await _userRepo.GetById(userId, ct)
             ?? throw new InvalidOperationException("User not found");
 

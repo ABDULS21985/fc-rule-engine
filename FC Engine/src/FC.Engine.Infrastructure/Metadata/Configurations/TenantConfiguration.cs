@@ -49,6 +49,7 @@ public class TenantConfiguration : IEntityTypeConfiguration<Tenant>
         builder.Property(t => t.CustomDomain).HasMaxLength(255);
         builder.Property(t => t.MaxInstitutions).HasDefaultValue(1);
         builder.Property(t => t.MaxUsersPerEntity).HasDefaultValue(10);
+        builder.Property(t => t.SuspensionReason).HasMaxLength(500);
 
         builder.Property(t => t.CreatedAt).HasDefaultValueSql("SYSUTCDATETIME()");
         builder.Property(t => t.UpdatedAt).HasDefaultValueSql("SYSUTCDATETIME()");

@@ -76,6 +76,12 @@ public class TenantManagementService
         return await _onboardingService.OnboardTenant(request, ct);
     }
 
+    public async Task<bool> SlugExistsAsync(string slug, CancellationToken ct = default)
+    {
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+        return await db.Tenants.AnyAsync(t => t.TenantSlug == slug, ct);
+    }
+
     public async Task<PlatformTenantProvisionResult> ProvisionTenantAsync(
         PlatformTenantProvisionRequest request,
         CancellationToken ct = default)

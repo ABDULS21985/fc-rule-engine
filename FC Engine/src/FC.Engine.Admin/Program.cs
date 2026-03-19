@@ -117,6 +117,8 @@ builder.Services.AddAuthorization(options =>
     options.AddRegosPermissionPolicies();
     options.AddPolicy("AdminOnly", policy => policy.RequireRole("Admin"));
     options.AddPolicy("ApproverOrAdmin", policy => policy.RequireRole("Approver", "Admin"));
+    // Note: "Authenticated" in the Admin portal context requires PlatformAdmin role.
+    // This is intentional — all Admin portal API endpoints require platform-level access.
     options.AddPolicy("Authenticated", policy => policy.RequireRole("PlatformAdmin"));
     options.AddPolicy("PlatformAdmin", policy => policy.RequireRole("PlatformAdmin"));
     options.AddPolicy("RegulatorOnly", policy =>

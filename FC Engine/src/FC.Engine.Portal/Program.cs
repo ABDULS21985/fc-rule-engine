@@ -64,7 +64,7 @@ builder.Services.AddScoped<FC.Engine.Portal.Services.OnboardingWizardService>();
 builder.Services.AddScoped<FC.Engine.Portal.Services.SandboxService>();
 builder.Services.AddScoped<FC.Engine.Portal.Services.KnowledgeBaseService>();
 builder.Services.AddScoped<FC.Engine.Portal.Services.OverdueAlertService>();
-builder.Services.AddScoped<FC.Engine.Domain.Abstractions.IFormDataService, FC.Engine.Infrastructure.Services.FormDataService>();
+// IFormDataService is already registered in AddInfrastructure() — do not duplicate
 builder.Services.AddScoped<FC.Engine.Portal.Services.TourService>();
 builder.Services.AddScoped<FC.Engine.Portal.Services.TourStateService>();
 builder.Services.AddScoped<FC.Engine.Portal.Services.PortalShortcutService>();

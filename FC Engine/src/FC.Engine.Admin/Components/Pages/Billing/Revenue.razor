@@ -504,11 +504,22 @@
             SubscriptionStatus.Trial
         };
 
-        _mrr = await db.Subscriptions
+        var baseMrr = await db.Subscriptions
             .AsNoTracking()
             .Where(s => revenueStatuses.Contains(s.Status))
-            .Join(db.SubscriptionPlans, s => s.PlanId, p => p.Id, (_, p) => (decimal?)p.BasePriceMonthly)
+            .Join(db.SubscriptionPlans, s => s.PlanId, p => p.Id, (s, p) => new { s.BillingFrequency, p.BasePriceMonthly, p.BasePriceAnnual })
+            .SumAsync(x => x.BillingFrequency == BillingFrequency.Annual
+                ? (decimal?)(x.BasePriceAnnual / 12m)
+                : (decimal?)x.BasePriceMonthly) ?? 0m;
+
+        var moduleMrr = await db.SubscriptionModules
+            .AsNoTracking()
+            .Where(sm => sm.IsActive)
+            .Join(db.Subscriptions.Where(s => revenueStatuses.Contains(s.Status)),
+                sm => sm.SubscriptionId, s => s.Id, (sm, _) => (decimal?)sm.PriceMonthly)
             .SumAsync(x => x ?? 0m);
+
+        _mrr = baseMrr + moduleMrr;
 
         _arr = _mrr * 12;
 

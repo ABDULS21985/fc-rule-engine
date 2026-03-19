@@ -243,10 +243,20 @@
                             <p class="portal-sub-caption">Current Plan</p>
                             <p class="portal-sub-plan-card-name">@(_subscription?.Plan?.PlanName ?? "—")</p>
                         </div>
-                        <p class="portal-sub-plan-card-price">
-                            NGN @FormatCurrency(_subscription?.Plan?.BasePriceMonthly ?? 0)
-                            <span>/month</span>
-                        </p>
+                        @if (_subscription?.BillingFrequency == BillingFrequency.Annual)
+                        {
+                            <p class="portal-sub-plan-card-price">
+                                NGN @FormatCurrency(_subscription?.Plan?.BasePriceAnnual ?? 0)
+                                <span>/year</span>
+                            </p>
+                        }
+                        else
+                        {
+                            <p class="portal-sub-plan-card-price">
+                                NGN @FormatCurrency(_subscription?.Plan?.BasePriceMonthly ?? 0)
+                                <span>/month</span>
+                            </p>
+                        }
                         <ul class="portal-sub-plan-card-features">
                             <li>✓ @FormatLimit(_subscription?.Plan?.MaxModules ?? 0) modules</li>
                             <li>✓ @FormatLimit(_subscription?.Plan?.MaxUsersPerEntity ?? 0) users / entity</li>
@@ -273,10 +283,20 @@
                                 }
                                 <p class="portal-sub-plan-card-name">@plan.PlanName</p>
                             </div>
-                            <p class="portal-sub-plan-card-price">
-                                NGN @FormatCurrency(plan.BasePriceMonthly)
-                                <span>/month</span>
-                            </p>
+                            @if (_subscription?.BillingFrequency == BillingFrequency.Annual)
+                            {
+                                <p class="portal-sub-plan-card-price">
+                                    NGN @FormatCurrency(plan.BasePriceAnnual)
+                                    <span>/year</span>
+                                </p>
+                            }
+                            else
+                            {
+                                <p class="portal-sub-plan-card-price">
+                                    NGN @FormatCurrency(plan.BasePriceMonthly)
+                                    <span>/month</span>
+                                </p>
+                            }
                             <ul class="portal-sub-plan-card-features">
                                 <li>✓ @FormatLimit(plan.MaxModules) modules</li>
                                 <li>✓ @FormatLimit(plan.MaxUsersPerEntity) users / entity</li>
@@ -316,21 +336,28 @@
                                 <span class="portal-sub-inv-row-label">Upgrading to</span>
                                 <strong>@selectedPlan.PlanName</strong>
                             </div>
+                            @{
+                                var isAnnual = _subscription?.BillingFrequency == BillingFrequency.Annual;
+                                var periodLabel = isAnnual ? "annual" : "monthly";
+                                var previousPrice = isAnnual ? (_subscription?.Plan?.BasePriceAnnual ?? 0) : (_subscription?.Plan?.BasePriceMonthly ?? 0);
+                                var newPrice = isAnnual ? selectedPlan.BasePriceAnnual : selectedPlan.BasePriceMonthly;
+                                var periodSuffix = isAnnual ? "/year" : "/month";
+                            }
                             <div class="portal-sub-checkout-row">
-                                <span class="portal-sub-inv-row-label">Previous monthly price</span>
-                                <span>NGN @FormatCurrency(_subscription?.Plan?.BasePriceMonthly ?? 0)</span>
+                                <span class="portal-sub-inv-row-label">Previous @periodLabel price</span>
+                                <span>NGN @FormatCurrency(previousPrice)</span>
                             </div>
                             <div class="portal-sub-checkout-row">
-                                <span class="portal-sub-inv-row-label">New monthly price</span>
-                                <span>NGN @FormatCurrency(selectedPlan.BasePriceMonthly)</span>
+                                <span class="portal-sub-inv-row-label">New @periodLabel price</span>
+                                <span>NGN @FormatCurrency(newPrice)</span>
                             </div>
                             <div class="portal-sub-checkout-row">
                                 <span class="portal-sub-inv-row-label">Effective date</span>
                                 <span>Immediately on confirm</span>
                             </div>
                             <div class="portal-sub-checkout-row portal-sub-checkout-row--total">
-                                <span>New Monthly Total</span>
-                                <span>NGN @FormatCurrency(selectedPlan.BasePriceMonthly)</span>
+                                <span>New Total (@periodSuffix)</span>
+                                <span>NGN @FormatCurrency(newPrice)</span>
                             </div>
                         </div>
                         <p class="portal-sub-caption" style="padding: 0 var(--space-1);">
