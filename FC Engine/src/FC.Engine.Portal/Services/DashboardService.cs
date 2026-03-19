@@ -869,7 +869,7 @@ public class DashboardService
         var rangeStart = new DateTime(now.Year, now.Month, 1).AddMonths(-11);
 
         var submissionLookup = submissions
-            .GroupBy(s => $"{s.ReturnCode}|{CalendarService.GetPeriodKey(s)}", StringComparer.OrdinalIgnoreCase)
+            .GroupBy(s => $"{s.ReturnCode}|{FilingCalendarHelpers.GetPeriodKey(s)}", StringComparer.OrdinalIgnoreCase)
             .ToDictionary(
                 g => g.Key,
                 g => g.OrderByDescending(s => s.CreatedAt).First(),
@@ -879,13 +879,13 @@ public class DashboardService
         var calendarDue7Days = 0;
         foreach (var template in templates)
         {
-            var dueDates = CalendarService.GetDueDatesForRange(template.Frequency, rangeStart, in7Days);
+            var dueDates = FilingCalendarHelpers.GetDueDatesForRange(template.Frequency, rangeStart, in7Days);
             foreach (var dueDate in dueDates)
             {
                 var periodKey = $"{template.ReturnCode}|{dueDate:yyyy-MM}";
                 submissionLookup.TryGetValue(periodKey, out var existingSubmission);
 
-                var status = CalendarService.DetermineStatus(existingSubmission, dueDate);
+                var status = FilingCalendarHelpers.DetermineStatus(existingSubmission, dueDate);
                 if (status == CalendarEntryStatus.Overdue)
                 {
                     overdueCount++;

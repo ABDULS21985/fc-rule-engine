@@ -470,7 +470,7 @@ public class TemplateBrowserService
         if (field.DataType == FieldDataType.Text)
             return "SAMPLE_TEXT";
         if (field.DataType == FieldDataType.Date)
-            return "2026-01-31";
+            return DateTime.UtcNow.ToString("yyyy-MM-dd");
         if (field.DataType == FieldDataType.Boolean)
             return "true";
         return "VALUE";

@@ -4,6 +4,7 @@
 @inject NavigationManager Navigation
 @inject SubmissionBatchPortalService BatchPortalService
 @inject AuthenticationStateProvider AuthState
+@inject ToastService Toast
 
 <PageTitle>Batch Submissions — RegOS™ Portal</PageTitle>
 
@@ -373,7 +374,20 @@
         {
             var result = await BatchPortalService.RetryBatchAsync(_institutionId, batchId, default);
             if (result.Success)
+            {
+                Toast.Success("Batch retry queued successfully.");
                 await FetchBatchesAsync();
+            }
+            else
+            {
+                Toast.Error(string.IsNullOrWhiteSpace(result.ErrorMessage)
+                    ? "Batch retry failed. Please try again."
+                    : $"Batch retry failed: {result.ErrorMessage}");
+            }
+        }
+        catch (Exception ex)
+        {
+            Toast.Error($"Batch retry failed: {ex.Message}");
         }
         finally
         {
@@ -387,8 +401,20 @@
         StateHasChanged();
         try
         {
-            await BatchPortalService.RefreshStatusAsync(_institutionId, batchId, default);
+            var result = await BatchPortalService.RefreshStatusAsync(_institutionId, batchId, default);
+            if (result.StatusChanged)
+            {
+                Toast.Success($"Status updated: {result.PreviousStatus} → {result.CurrentStatus}");
+            }
+            else
+            {
+                Toast.Info($"Status unchanged ({result.CurrentStatus}). No update from regulator.");
+            }
             await FetchBatchesAsync();
+        }
+        catch (Exception ex)
+        {
+            Toast.Error($"Status refresh failed: {ex.Message}");
         }
         finally
         {

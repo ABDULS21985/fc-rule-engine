@@ -54,7 +54,7 @@ public class CalendarService
 
         // Build lookup: (returnCode, periodKey) → most recent submission
         var submissionLookup = submissions
-            .GroupBy(s => $"{s.ReturnCode}|{GetPeriodKey(s)}")
+            .GroupBy(s => $"{s.ReturnCode}|{FilingCalendarHelpers.GetPeriodKey(s)}")
             .ToDictionary(
                 g => g.Key,
                 g => g.OrderByDescending(s => s.CreatedAt).First(),
@@ -66,14 +66,14 @@ public class CalendarService
 
         foreach (var template in filteredTemplates)
         {
-            var dueDates = GetDueDatesForRange(template.Frequency, rangeStart, rangeEnd);
+            var dueDates = FilingCalendarHelpers.GetDueDatesForRange(template.Frequency, rangeStart, rangeEnd);
 
             foreach (var dueDate in dueDates)
             {
                 var periodKey = $"{template.ReturnCode}|{dueDate:yyyy-MM}";
                 submissionLookup.TryGetValue(periodKey, out var existingSub);
 
-                var status = DetermineStatus(existingSub, dueDate);
+                var status = FilingCalendarHelpers.DetermineStatus(existingSub, dueDate);
 
                 entries.Add(new CalendarEntry
                 {
@@ -153,113 +153,17 @@ public class CalendarService
             .ToList();
     }
 
-    // ── Due Date Computation ─────────────────────────────────────
+    // ── Delegates to shared helpers (see FilingCalendarHelpers.cs) ──
 
     internal static List<DateTime> GetDueDatesForRange(
-        ReturnFrequency frequency,
-        DateTime rangeStart,
-        DateTime rangeEnd)
-    {
-        var dates = new List<DateTime>();
-
-        if (frequency == ReturnFrequency.Monthly)
-        {
-            var current = new DateTime(rangeStart.Year, rangeStart.Month, 1);
-            while (current <= rangeEnd)
-            {
-                var dueDate = new DateTime(current.Year, current.Month, DateTime.DaysInMonth(current.Year, current.Month));
-                if (dueDate >= rangeStart && dueDate <= rangeEnd)
-                    dates.Add(dueDate);
-                current = current.AddMonths(1);
-            }
-        }
-        else if (frequency == ReturnFrequency.Quarterly)
-        {
-            var quarterEndMonths = new[] { 3, 6, 9, 12 };
-            var current = new DateTime(rangeStart.Year, 1, 1);
-            while (current.Year <= rangeEnd.Year)
-            {
-                foreach (var month in quarterEndMonths)
-                {
-                    var dueDate = new DateTime(current.Year, month, DateTime.DaysInMonth(current.Year, month));
-                    if (dueDate >= rangeStart && dueDate <= rangeEnd)
-                        dates.Add(dueDate);
-                }
-                current = current.AddYears(1);
-            }
-        }
-        else if (frequency == ReturnFrequency.SemiAnnual)
-        {
-            var semiEndMonths = new[] { 6, 12 };
-            var current = new DateTime(rangeStart.Year, 1, 1);
-            while (current.Year <= rangeEnd.Year)
-            {
-                foreach (var month in semiEndMonths)
-                {
-                    var dueDate = new DateTime(current.Year, month, DateTime.DaysInMonth(current.Year, month));
-                    if (dueDate >= rangeStart && dueDate <= rangeEnd)
-                        dates.Add(dueDate);
-                }
-                current = current.AddYears(1);
-            }
-        }
-        else // Computed or other
-        {
-            // Default to monthly
-            var current = new DateTime(rangeStart.Year, rangeStart.Month, 1);
-            while (current <= rangeEnd)
-            {
-                var dueDate = new DateTime(current.Year, current.Month, DateTime.DaysInMonth(current.Year, current.Month));
-                if (dueDate >= rangeStart && dueDate <= rangeEnd)
-                    dates.Add(dueDate);
-                current = current.AddMonths(1);
-            }
-        }
-
-        return dates;
-    }
-
-    // ── Status Determination ─────────────────────────────────────
+        ReturnFrequency frequency, DateTime rangeStart, DateTime rangeEnd)
+        => FilingCalendarHelpers.GetDueDatesForRange(frequency, rangeStart, rangeEnd);
 
     internal static CalendarEntryStatus DetermineStatus(Submission? submission, DateTime dueDate)
-    {
-        if (submission is null)
-        {
-            return dueDate.Date < DateTime.UtcNow.Date
-                ? CalendarEntryStatus.Overdue
-                : CalendarEntryStatus.NotStarted;
-        }
+        => FilingCalendarHelpers.DetermineStatus(submission, dueDate);
 
-        if (submission.Status == SubmissionStatus.Accepted
-            || submission.Status == SubmissionStatus.AcceptedWithWarnings)
-        {
-            return CalendarEntryStatus.Submitted;
-        }
-
-        if (submission.Status == SubmissionStatus.Rejected
-            || submission.Status == SubmissionStatus.ApprovalRejected)
-        {
-            return CalendarEntryStatus.Rejected;
-        }
-
-        // Draft, Parsing, Validating, PendingApproval
-        return CalendarEntryStatus.Draft;
-    }
-
-    // ── Helpers ──────────────────────────────────────────────────
-
-    /// <summary>
-    /// Extract a period key string from a submission for lookup matching.
-    /// Uses ReturnPeriod navigation (Year, Month) to produce "yyyy-MM".
-    /// </summary>
     internal static string GetPeriodKey(Submission s)
-    {
-        if (s.ReturnPeriod is not null)
-            return $"{s.ReturnPeriod.Year}-{s.ReturnPeriod.Month:D2}";
-
-        // Fallback: use submission date
-        return (s.SubmittedAt ?? s.CreatedAt).ToString("yyyy-MM");
-    }
+        => FilingCalendarHelpers.GetPeriodKey(s);
 
     private static string FormatPeriodLabel(DateTime dueDate, ReturnFrequency frequency)
     {
