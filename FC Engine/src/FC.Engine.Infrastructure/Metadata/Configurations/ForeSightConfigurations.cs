@@ -23,7 +23,9 @@ public sealed class ForeSightConfigConfiguration : IEntityTypeConfiguration<Fore
         builder.HasIndex(x => new { x.ConfigKey, x.EffectiveFrom }).IsUnique().HasDatabaseName("UX_foresight_config_key_effective");
         builder.HasIndex(x => x.ConfigKey).HasFilter("[EffectiveTo] IS NULL").HasDatabaseName("IX_foresight_config_active");
 
-        builder.HasData(
+        // NOTE: Seed data removed from HasData() — already seeded via raw SQL in migration
+        // 20260326120000_AddForeSightSchema.cs. Keeping both causes PK conflicts on next migration generation.
+        /* builder.HasData(
             new ForeSightConfig { Id = 1, ConfigKey = "filing.risk_high_threshold", ConfigValue = "0.70", Description = "Probability threshold for a high filing-risk alert.", CreatedBy = "SYSTEM", EffectiveFrom = seedDate, CreatedAt = seedDate },
             new ForeSightConfig { Id = 2, ConfigKey = "filing.risk_medium_threshold", ConfigValue = "0.40", Description = "Probability threshold for a medium filing-risk classification.", CreatedBy = "SYSTEM", EffectiveFrom = seedDate, CreatedAt = seedDate },
             new ForeSightConfig { Id = 3, ConfigKey = "filing.alert_horizon_days", ConfigValue = "14", Description = "First warning horizon, in days before deadline, for high filing-risk returns.", CreatedBy = "SYSTEM", EffectiveFrom = seedDate, CreatedAt = seedDate },
@@ -43,7 +45,7 @@ public sealed class ForeSightConfigConfiguration : IEntityTypeConfiguration<Fore
             new ForeSightConfig { Id = 17, ConfigKey = "prediction.min_confidence", ConfigValue = "0.55", Description = "Predictions below this confidence score are persisted as suppressed.", CreatedBy = "SYSTEM", EffectiveFrom = seedDate, CreatedAt = seedDate },
             new ForeSightConfig { Id = 18, ConfigKey = "prediction.suppress_low_data", ConfigValue = "true", Description = "Suppress predictions when the historical dataset is below the configured minimum.", CreatedBy = "SYSTEM", EffectiveFrom = seedDate, CreatedAt = seedDate },
             new ForeSightConfig { Id = 19, ConfigKey = "alert.cooldown_hours", ConfigValue = "24", Description = "Minimum number of hours between equivalent advisory alerts for the same prediction target.", CreatedBy = "SYSTEM", EffectiveFrom = seedDate, CreatedAt = seedDate },
-            new ForeSightConfig { Id = 20, ConfigKey = "prediction.stale_after_hours", ConfigValue = "24", Description = "Hours after which a tenant dashboard run is considered stale and will be recomputed on demand.", CreatedBy = "SYSTEM", EffectiveFrom = seedDate, CreatedAt = seedDate });
+            new ForeSightConfig { Id = 20, ConfigKey = "prediction.stale_after_hours", ConfigValue = "24", Description = "Hours after which a tenant dashboard run is considered stale and will be recomputed on demand.", CreatedBy = "SYSTEM", EffectiveFrom = seedDate, CreatedAt = seedDate }); */
     }
 }
 
@@ -68,12 +70,11 @@ public sealed class ForeSightModelVersionConfiguration : IEntityTypeConfiguratio
             t.HasCheckConstraint("CK_foresight_model_versions_status", "[Status] IN ('ACTIVE','RETIRED','TRAINING','FAILED')");
         });
 
-        builder.HasData(
-            new ForeSightModelVersion { Id = 1, ModelCode = ForeSightModelCodes.FilingRisk, VersionNumber = 1, Status = "ACTIVE", AccuracyMetric = 0.8125m, AccuracyMetricName = "ROC_AUC", Notes = "Weighted logistic seed tuned for Nigerian filing behaviour.", TrainedAt = seedDate, CreatedAt = seedDate },
-            new ForeSightModelVersion { Id = 2, ModelCode = ForeSightModelCodes.CapitalBreach, VersionNumber = 1, Status = "ACTIVE", AccuracyMetric = 0.7680m, AccuracyMetricName = "MAPE", Notes = "Holt linear smoothing for CAR, NPL and liquidity trajectories.", TrainedAt = seedDate, CreatedAt = seedDate },
-            new ForeSightModelVersion { Id = 3, ModelCode = ForeSightModelCodes.ComplianceTrend, VersionNumber = 1, Status = "ACTIVE", AccuracyMetric = 0.7425m, AccuracyMetricName = "RMSE", Notes = "Weighted moving-average projection for CHS deterioration and recovery.", TrainedAt = seedDate, CreatedAt = seedDate },
-            new ForeSightModelVersion { Id = 4, ModelCode = ForeSightModelCodes.ChurnRisk, VersionNumber = 1, Status = "ACTIVE", AccuracyMetric = 0.7934m, AccuracyMetricName = "ROC_AUC", Notes = "Tenant-engagement classifier for subscription-retention risk.", TrainedAt = seedDate, CreatedAt = seedDate },
-            new ForeSightModelVersion { Id = 5, ModelCode = ForeSightModelCodes.RegulatoryAction, VersionNumber = 1, Status = "ACTIVE", AccuracyMetric = 0.7811m, AccuracyMetricName = "ROC_AUC", Notes = "Composite supervisory-priority classifier combining EWI, CHS, anomaly and timeliness pressure.", TrainedAt = seedDate, CreatedAt = seedDate });
+        // Seed data removed — already seeded via raw SQL in migration 20260326120000_AddForeSightSchema.cs
+        /* builder.HasData(
+            new ForeSightModelVersion { Id = 1, ... },
+            ...
+            new ForeSightModelVersion { Id = 5, ... }); */
     }
 }
 
@@ -93,7 +94,8 @@ public sealed class ForeSightFeatureDefinitionConfiguration : IEntityTypeConfigu
         builder.Property(x => x.DefaultWeight).HasColumnType("decimal(8,4)").IsRequired();
         builder.HasIndex(x => new { x.ModelCode, x.FeatureName }).IsUnique().HasDatabaseName("UX_foresight_feature_definition");
 
-        builder.HasData(
+        // Seed data removed — already seeded via raw SQL in migration 20260326120000_AddForeSightSchema.cs
+        /* builder.HasData(
             new ForeSightFeatureDefinition { Id = 1, ModelCode = ForeSightModelCodes.FilingRisk, FeatureName = "days_to_deadline", FeatureLabel = "Days to Deadline", Description = "Normalized countdown pressure before the regulatory deadline.", DataSource = "return_periods", DefaultWeight = 0.22m, IsActive = true },
             new ForeSightFeatureDefinition { Id = 2, ModelCode = ForeSightModelCodes.FilingRisk, FeatureName = "historical_late_rate", FeatureLabel = "Historical Late Rate", Description = "Late-filing share for the same module across recent filing periods.", DataSource = "filing_sla_records", DefaultWeight = 0.18m, IsActive = true },
             new ForeSightFeatureDefinition { Id = 3, ModelCode = ForeSightModelCodes.FilingRisk, FeatureName = "draft_completeness_gap", FeatureLabel = "Draft Completeness Gap", Description = "Share of expected template fields that are still blank in the current draft.", DataSource = "return_drafts", DefaultWeight = 0.16m, IsActive = true },
@@ -128,7 +130,7 @@ public sealed class ForeSightFeatureDefinitionConfiguration : IEntityTypeConfigu
             new ForeSightFeatureDefinition { Id = 28, ModelCode = ForeSightModelCodes.RegulatoryAction, FeatureName = "anomaly_pressure", FeatureLabel = "Anomaly Pressure", Description = "Severity and density of unresolved anomaly findings.", DataSource = "anomaly_reports", DefaultWeight = 0.18m, IsActive = true },
             new ForeSightFeatureDefinition { Id = 29, ModelCode = ForeSightModelCodes.RegulatoryAction, FeatureName = "filing_delinquency", FeatureLabel = "Filing Delinquency", Description = "Late, overdue, or deteriorating filing posture across recent obligations.", DataSource = "filing_sla_records,return_periods", DefaultWeight = 0.14m, IsActive = true },
             new ForeSightFeatureDefinition { Id = 30, ModelCode = ForeSightModelCodes.RegulatoryAction, FeatureName = "capital_proximity", FeatureLabel = "Capital Proximity", Description = "How close prudential capital and liquidity metrics are to binding thresholds.", DataSource = "prudential_metrics", DefaultWeight = 0.16m, IsActive = true },
-            new ForeSightFeatureDefinition { Id = 31, ModelCode = ForeSightModelCodes.RegulatoryAction, FeatureName = "camels_pressure", FeatureLabel = "CAMELS Pressure", Description = "Composite CAMELS severity from the latest supervisory scoring.", DataSource = "camels_ratings", DefaultWeight = 0.08m, IsActive = true });
+            new ForeSightFeatureDefinition { Id = 31, ModelCode = ForeSightModelCodes.RegulatoryAction, FeatureName = "camels_pressure", FeatureLabel = "CAMELS Pressure", Description = "Composite CAMELS severity from the latest supervisory scoring.", DataSource = "camels_ratings", DefaultWeight = 0.08m, IsActive = true }); */
     }
 }
 
@@ -156,7 +158,8 @@ public sealed class ForeSightRegulatoryThresholdConfiguration : IEntityTypeConfi
             t.HasCheckConstraint("CK_foresight_thresholds_severity", "[SeverityIfBreached] IN ('WARNING','CRITICAL')");
         });
 
-        builder.HasData(
+        // Seed data removed — already seeded via raw SQL in migration 20260326120000_AddForeSightSchema.cs
+        /* builder.HasData(
             new ForeSightRegulatoryThreshold { Id = 1, Regulator = "CBN", LicenceCategory = "DMB", MetricCode = "CAR", MetricLabel = "Capital Adequacy Ratio", ThresholdValue = 15.0m, ThresholdType = "MINIMUM", SeverityIfBreached = "CRITICAL", Description = "Deposit Money Banks should maintain at least 15% CAR for international and systemically important prudential posture.", CircularReference = "BSD/1/2004", IsActive = true },
             new ForeSightRegulatoryThreshold { Id = 2, Regulator = "CBN", LicenceCategory = "MFB", MetricCode = "CAR", MetricLabel = "Capital Adequacy Ratio", ThresholdValue = 10.0m, ThresholdType = "MINIMUM", SeverityIfBreached = "CRITICAL", Description = "Microfinance banks should maintain at least 10% CAR.", CircularReference = "RPSD/DIR/GEN/12/005", IsActive = true },
             new ForeSightRegulatoryThreshold { Id = 3, Regulator = "CBN", LicenceCategory = "PMB", MetricCode = "CAR", MetricLabel = "Capital Adequacy Ratio", ThresholdValue = 10.0m, ThresholdType = "MINIMUM", SeverityIfBreached = "CRITICAL", Description = "Primary mortgage banks should maintain at least 10% CAR.", CircularReference = "BSD/1/2004", IsActive = true },
@@ -168,7 +171,7 @@ public sealed class ForeSightRegulatoryThresholdConfiguration : IEntityTypeConfi
             new ForeSightRegulatoryThreshold { Id = 9, Regulator = "NAICOM", LicenceCategory = "GENERAL_INSURER", MetricCode = "SOLVENCY_MARGIN", MetricLabel = "Solvency Margin", ThresholdValue = 100.0m, ThresholdType = "MINIMUM", SeverityIfBreached = "CRITICAL", Description = "General insurers should sustain a solvency margin above 100%.", CircularReference = "NAICOM Act 1997", IsActive = true },
             new ForeSightRegulatoryThreshold { Id = 10, Regulator = "NAICOM", LicenceCategory = "LIFE_INSURER", MetricCode = "SOLVENCY_MARGIN", MetricLabel = "Solvency Margin", ThresholdValue = 100.0m, ThresholdType = "MINIMUM", SeverityIfBreached = "CRITICAL", Description = "Life insurers should sustain a solvency margin above 100%.", CircularReference = "NAICOM Act 1997", IsActive = true },
             new ForeSightRegulatoryThreshold { Id = 11, Regulator = "SEC", LicenceCategory = "BROKER_DEALER", MetricCode = "CAPITAL_ADEQUACY", MetricLabel = "Capital Adequacy", ThresholdValue = 10.0m, ThresholdType = "MINIMUM", SeverityIfBreached = "CRITICAL", Description = "Broker-dealers should maintain capital adequacy above 10%.", CircularReference = "SEC Rules 2013", IsActive = true },
-            new ForeSightRegulatoryThreshold { Id = 12, Regulator = "SEC", LicenceCategory = "BROKER_DEALER", MetricCode = "SEGREGATION_RATIO", MetricLabel = "Client Funds Segregation Ratio", ThresholdValue = 100.0m, ThresholdType = "MINIMUM", SeverityIfBreached = "CRITICAL", Description = "Client funds should remain fully segregated.", CircularReference = "ISA 2007 s.148", IsActive = true });
+            new ForeSightRegulatoryThreshold { Id = 12, Regulator = "SEC", LicenceCategory = "BROKER_DEALER", MetricCode = "SEGREGATION_RATIO", MetricLabel = "Client Funds Segregation Ratio", ThresholdValue = 100.0m, ThresholdType = "MINIMUM", SeverityIfBreached = "CRITICAL", Description = "Client funds should remain fully segregated.", CircularReference = "ISA 2007 s.148", IsActive = true }); */
 
         _ = seedDate;
     }

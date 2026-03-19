@@ -46,6 +46,8 @@ public static class TemplateEndpoints
             CancellationToken ct) =>
         {
             var actingUser = ResolveUserIdentity(principal);
+            if (string.IsNullOrWhiteSpace(request.CreatedBy))
+                request.CreatedBy = actingUser;
             var template = await templateService.CreateTemplate(request, ct);
             return Results.Created($"/api/v1/templates/{template.ReturnCode}", template);
         })

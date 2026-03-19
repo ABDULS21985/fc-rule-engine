@@ -226,7 +226,9 @@ app.MapPost("/account/login", async (
                 ExpiresUtc = DateTimeOffset.UtcNow.AddHours(8)
             });
 
-        context.Response.Redirect(SafeRedirect(returnUrl));
+        // Prefer challenge's stored returnUrl (from original login), fall back to form's returnUrl
+        var mfaRedirect = !string.IsNullOrWhiteSpace(challenge.ReturnUrl) ? challenge.ReturnUrl : returnUrl;
+        context.Response.Redirect(SafeRedirect(mfaRedirect));
         return;
     }
 
@@ -254,7 +256,8 @@ app.MapPost("/account/login", async (
         {
             UserId = user.Id,
             UserType = "PortalUser",
-            Username = user.Username
+            Username = user.Username,
+            ReturnUrl = returnUrl
         }, context.RequestAborted);
 
         await mfaService.SendMfaCodeSms(user.Id, "PortalUser", context.RequestAborted);

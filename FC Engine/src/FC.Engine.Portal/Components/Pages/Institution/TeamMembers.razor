@@ -789,10 +789,11 @@
     // ── Role descriptions ──────────────────────────────────────────────────
     private readonly List<(string Role, string Description)> _roleDescriptions = new()
     {
-        ("Maker",   "Can create and submit regulatory returns. Cannot approve."),
-        ("Checker", "Can review and approve returns submitted by Makers."),
-        ("Viewer",  "Read-only access. Can view reports but cannot submit or approve."),
-        ("Admin",   "Full access: manage team, settings, and all returns.")
+        ("Maker",    "Can create and submit regulatory returns. Cannot approve."),
+        ("Checker",  "Can review and approve returns submitted by Makers."),
+        ("Approver", "Can approve submissions and sign off on regulatory filings."),
+        ("Viewer",   "Read-only access. Can view reports but cannot submit or approve."),
+        ("Admin",    "Full access: manage team, settings, and all returns.")
     };
 
     // ── Permission matrix data ─────────────────────────────────────────────
@@ -800,10 +801,11 @@
     // 0=No, 1=Yes, 2=Partial
     private readonly List<(string Role, int[] Cells)> _permMatrix = new()
     {
-        ("Maker",   new[] { 1, 0, 2, 0, 0, 1 }),
-        ("Checker", new[] { 2, 1, 1, 0, 0, 1 }),
-        ("Viewer",  new[] { 0, 0, 1, 0, 0, 1 }),
-        ("Admin",   new[] { 1, 1, 1, 1, 1, 1 }),
+        ("Maker",    new[] { 1, 0, 2, 0, 0, 1 }),
+        ("Checker",  new[] { 2, 1, 1, 0, 0, 1 }),
+        ("Approver", new[] { 0, 1, 1, 0, 0, 1 }),
+        ("Viewer",   new[] { 0, 0, 1, 0, 0, 1 }),
+        ("Admin",    new[] { 1, 1, 1, 1, 1, 1 }),
     };
 
     // ── Computed ───────────────────────────────────────────────────────────
@@ -1223,18 +1225,20 @@
 
     private static List<PermItem> GetRolePermissions(string role) => role switch
     {
-        "Admin"   => new() { new("Submit",true), new("Approve",true), new("Reports",true), new("Manage Team",true) },
-        "Checker" => new() { new("Submit",true), new("Approve",true), new("Reports",true), new("Manage Team",false) },
-        "Maker"   => new() { new("Submit",true), new("Approve",false), new("Reports",true), new("Manage Team",false) },
-        _         => new() { new("Submit",false), new("Approve",false), new("Reports",true), new("Manage Team",false) }
+        "Admin"    => new() { new("Submit",true), new("Approve",true), new("Reports",true), new("Manage Team",true) },
+        "Checker"  => new() { new("Submit",true), new("Approve",true), new("Reports",true), new("Manage Team",false) },
+        "Approver" => new() { new("Submit",false), new("Approve",true), new("Reports",true), new("Manage Team",false) },
+        "Maker"    => new() { new("Submit",true), new("Approve",false), new("Reports",true), new("Manage Team",false) },
+        _          => new() { new("Submit",false), new("Approve",false), new("Reports",true), new("Manage Team",false) }
     };
 
     private string GetRoleBadgeClass(string role) => role switch
     {
-        "Admin"   => "portal-badge-accent",
-        "Maker"   => "portal-badge-success",
-        "Checker" => "portal-badge-warning",
-        "Viewer"  => "portal-badge-info",
+        "Admin"    => "portal-badge-accent",
+        "Maker"    => "portal-badge-success",
+        "Checker"  => "portal-badge-warning",
+        "Approver" => "portal-badge-warning",
+        "Viewer"   => "portal-badge-info",
         _ => "portal-badge-neutral"
     };
 

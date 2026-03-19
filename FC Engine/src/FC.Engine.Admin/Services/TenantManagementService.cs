@@ -207,14 +207,14 @@ public class TenantManagementService
         await LogPlatformAction("TenantReactivated", tenantId, ct);
     }
 
-    public async Task DeactivateTenantAsync(Guid tenantId, CancellationToken ct = default)
+    public async Task DeactivateTenantAsync(Guid tenantId, string? actor = null, CancellationToken ct = default)
     {
         await using var db = await _dbFactory.CreateDbContextAsync(ct);
         var tenant = await db.Tenants.FindAsync(new object[] { tenantId }, ct)
             ?? throw new InvalidOperationException("Tenant not found");
         tenant.Deactivate();
         await db.SaveChangesAsync(ct);
-        await LogPlatformAction("TenantDeactivated", tenantId, ct);
+        await LogPlatformAction("TenantDeactivated", tenantId, actor, ct);
     }
 
     public async Task<List<TenantLicenceType>> GetTenantLicencesAsync(Guid tenantId, CancellationToken ct = default)
@@ -575,7 +575,10 @@ public class TenantManagementService
         };
     }
 
-    private async Task LogPlatformAction(string action, Guid tenantId, CancellationToken ct)
+    private Task LogPlatformAction(string action, Guid tenantId, CancellationToken ct)
+        => LogPlatformAction(action, tenantId, null, ct);
+
+    private async Task LogPlatformAction(string action, Guid tenantId, string? explicitActor, CancellationToken ct)
     {
         await _auditLogger.Log(
             "Tenant",
@@ -588,7 +591,7 @@ public class TenantManagementService
                 ImpersonatedTenantId = _tenantContext.ImpersonatingTenantId,
                 TenantId = tenantId
             },
-            ResolvePlatformActor(),
+            explicitActor ?? ResolvePlatformActor(),
             explicitTenantId: tenantId,
             ct);
     }

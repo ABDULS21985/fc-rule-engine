@@ -9,6 +9,7 @@
 @using FC.Engine.Application.Services
 @inject ITemplateMetadataCache Cache
 @inject FormulaService FormulaService
+@inject TemplateService TemplateService
 @inject ITemplateRepository TemplateRepo
 @inject ToastService Toast
 @inject DialogService Dialog
@@ -322,11 +323,30 @@
 
         try
         {
-            var template = await Cache.GetPublishedTemplate(_addTemplateCode);
-            _selectedTemplateId = template.TemplateId;
-            _selectedVersionId = template.CurrentVersion.Id;
-            _selectedTemplateFields = template.CurrentVersion.Fields
-                .Select(f => f.FieldName).OrderBy(x => x).ToList();
+            // Use TemplateService to get all versions (including Draft) — formulas can only be
+            // added to Draft versions, so prefer the Draft version if one exists.
+            var detail = await TemplateService.GetTemplateDetail(_addTemplateCode);
+            if (detail is not null)
+            {
+                _selectedTemplateId = detail.Id;
+                var draftVersion = detail.Versions.FirstOrDefault(v => v.Status == "Draft");
+                var targetVersion = draftVersion ?? detail.Versions.FirstOrDefault();
+                if (targetVersion is not null)
+                {
+                    _selectedVersionId = targetVersion.Id;
+                    _selectedTemplateFields = targetVersion.Fields
+                        .Select(f => f.FieldName).OrderBy(x => x).ToList();
+                }
+            }
+            else
+            {
+                // Fallback to cache for published-only templates (read-only field list)
+                var template = await Cache.GetPublishedTemplate(_addTemplateCode);
+                _selectedTemplateId = template.TemplateId;
+                _selectedVersionId = template.CurrentVersion.Id;
+                _selectedTemplateFields = template.CurrentVersion.Fields
+                    .Select(f => f.FieldName).OrderBy(x => x).ToList();
+            }
         }
         catch { }
     }
@@ -370,7 +390,8 @@
                 _addRuleCode, _addRuleName, _addFormulaType,
                 _addTargetField, operandJson,
                 _addFormulaType == FormulaType.Custom ? _addExpression : null,
-                _addTolerance, _addSeverity, _currentUser);
+                _addTolerance, _addSeverity, _currentUser,
+                string.IsNullOrWhiteSpace(_addTargetLineCode) ? null : _addTargetLineCode.Trim());
 
             Toast.Success($"Formula '{_addRuleCode}' added successfully.", "Formula Added");
             _showAddForm = false;

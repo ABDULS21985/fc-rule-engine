@@ -1000,7 +1000,8 @@
         _savingStatus = true;
         try
         {
-            await TenantService.DeactivateTenantAsync(TenantId);
+            var actor = await GetActor();
+            await TenantService.DeactivateTenantAsync(TenantId, actor);
             await LoadAsync();
             Toast.Info($"{_data?.TenantName} deactivated.");
         }

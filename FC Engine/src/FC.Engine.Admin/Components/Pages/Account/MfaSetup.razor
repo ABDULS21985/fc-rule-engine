@@ -60,6 +60,7 @@
     private List<string> _backupCodes = new();
     private int _userId;
     private string _email = string.Empty;
+    private string _userType = "PortalUser";
 
     protected override async Task OnInitializedAsync()
     {
@@ -77,11 +78,14 @@
             return;
         }
 
+        // Determine user type from claims — InstitutionUsers have an InstitutionId claim
+        _userType = user.HasClaim(c => c.Type == "InstitutionId") ? "InstitutionUser" : "PortalUser";
+
         _email = user.FindFirst(ClaimTypes.Email)?.Value
                  ?? user.FindFirst("email")?.Value
                  ?? "admin@regos.local";
 
-        _setupResult = await MfaService.InitiateSetup(_userId, "PortalUser", _email);
+        _setupResult = await MfaService.InitiateSetup(_userId, _userType, _email);
     }
 
     private async Task VerifyAndActivate()
@@ -92,7 +96,7 @@
             return;
         }
 
-        var activation = await MfaService.ActivateWithVerification(_userId, "PortalUser", _verificationCode.Trim());
+        var activation = await MfaService.ActivateWithVerification(_userId, _userType, _verificationCode.Trim());
         if (!activation.Success)
         {
             _error = "Invalid verification code. Try again.";

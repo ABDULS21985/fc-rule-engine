@@ -48,6 +48,7 @@ public class FormulaService
         string targetFieldName, string operandFields,
         string? customExpression, decimal toleranceAmount,
         ValidationSeverity severity, string createdBy,
+        string? targetLineCode = null,
         CancellationToken ct = default)
     {
         var template = await _templateRepo.GetById(templateId, ct)
@@ -64,6 +65,7 @@ public class FormulaService
             RuleName = ruleName,
             FormulaType = formulaType,
             TargetFieldName = targetFieldName,
+            TargetLineCode = targetLineCode,
             OperandFields = operandFields,
             CustomExpression = customExpression,
             ToleranceAmount = toleranceAmount,

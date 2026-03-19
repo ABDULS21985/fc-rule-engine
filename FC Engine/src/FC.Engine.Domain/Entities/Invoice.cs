@@ -63,8 +63,8 @@ public class Invoice
 
     public void Void(string reason)
     {
-        if (Status == InvoiceStatus.Paid)
-            throw new InvalidOperationException("Cannot void a paid invoice");
+        if (Status is InvoiceStatus.Paid or InvoiceStatus.Voided)
+            throw new InvalidOperationException($"Cannot void a {Status.ToString().ToLowerInvariant()} invoice");
 
         Status = InvoiceStatus.Voided;
         VoidedAt = DateTime.UtcNow;
