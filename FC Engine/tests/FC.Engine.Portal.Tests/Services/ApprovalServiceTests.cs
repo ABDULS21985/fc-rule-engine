@@ -103,6 +103,7 @@ public class ApprovalServiceTests
             submissionRepo.Object,
             approvalRepo.Object,
             Mock.Of<IInstitutionUserRepository>(),
+            null,
             Mock.Of<INotificationOrchestrator>(),
             Mock.Of<IFilingCalendarService>(),
             NullLogger<WorkflowService>.Instance);

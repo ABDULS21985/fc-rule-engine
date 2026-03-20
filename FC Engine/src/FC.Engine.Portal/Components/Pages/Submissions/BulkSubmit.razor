@@ -1,5 +1,6 @@
 @page "/submit/bulk"
 @attribute [Authorize(Policy = "InstitutionMaker")]
+@using FC.Engine.Portal.Services
 @using FC.Engine.Domain.Enums
 @using FC.Engine.Infrastructure.DragDrop
 @inject SubmissionService SubmissionService
@@ -1751,7 +1752,7 @@
                     ? await BulkUploadService.ProcessExcelUpload(file.BufferedContent, _tenantId.Value, file.DetectedReturnCode, _institutionId, _selectedPeriodId, _userId)
                     : await BulkUploadService.ProcessCsvUpload(file.BufferedContent, _tenantId.Value, file.DetectedReturnCode, _institutionId, _selectedPeriodId, _userId);
 
-                file.Result = BuildSubmissionResultFromBulk(file.DetectedReturnCode, bulkResult);
+                file.Result = BulkUploadValidationPresenter.BuildSubmissionResult(file.DetectedReturnCode, bulkResult);
                 file.ErrorFileBytes = bulkResult.ErrorFile;
                 file.ErrorFileName = bulkResult.ErrorFileName;
 
@@ -1794,57 +1795,17 @@
 
     private async Task DownloadAllErrorsCsv()
     {
-        var sb = new System.Text.StringBuilder();
-        sb.AppendLine("File,ReturnCode,Row,Severity,Category,Rule,Field,Message,ExpectedFormat");
-
-        foreach (var file in _files.Where(f => f.Result?.ValidationReport?.Errors.Any() == true))
-        {
-            int rowNum = 1;
-            foreach (var err in file.Result!.ValidationReport!.Errors)
-            {
-                var msg      = (err.Message  ?? "").Replace("\"", "\"\"");
-                var field    = (err.Field    ?? "").Replace("\"", "\"\"");
-                var category = (err.Category ?? "").Replace("\"", "\"\"");
-                var expected = !string.IsNullOrEmpty(err.ExpectedValue)
-                    ? err.ExpectedValue.Replace("\"", "\"\"")
-                    : err.Category switch
-                    {
-                        "TypeRange" => "Numeric value within allowed range",
-                        "Required"  => "Non-empty value required",
-                        "Format"    => "Expected date/code format per schema",
-                        _           => err.Category ?? ""
-                    };
-                sb.AppendLine($"\"{file.FileName}\",\"{file.DetectedReturnCode}\",\"{rowNum}\",\"{err.Severity}\",\"{category}\",\"{err.RuleId}\",\"{field}\",\"{msg}\",\"{expected}\"");
-                rowNum++;
-            }
-        }
-
-        await JS.InvokeVoidAsync("portalDownloadFile", sb.ToString(), "bulk_error_report.csv", "text/csv");
-    }
-
-    private static SubmissionResultDto BuildSubmissionResultFromBulk(string returnCode, BulkUploadResult bulkResult)
-    {
-        return new SubmissionResultDto
-        {
-            SubmissionId = bulkResult.SubmissionId,
-            ReturnCode = returnCode,
-            Status = bulkResult.Status,
-            ValidationReport = new ValidationReportDto
-            {
-                IsValid = bulkResult.Success,
-                ErrorCount = bulkResult.Errors.Count(x => string.Equals(x.Severity, "Error", StringComparison.OrdinalIgnoreCase)),
-                WarningCount = bulkResult.Errors.Count(x => string.Equals(x.Severity, "Warning", StringComparison.OrdinalIgnoreCase)),
-                Errors = bulkResult.Errors.Select(x => new ValidationErrorDto
+        var csv = BulkUploadValidationPresenter.BuildErrorReportCsv(
+            _files
+                .Where(f => f.Result?.ValidationReport?.Errors.Any() == true)
+                .Select(f => new BulkUploadValidationExportFile
                 {
-                    RuleId = "BULK",
-                    Field = x.FieldCode,
-                    Message = x.Message,
-                    Severity = x.Severity,
-                    Category = x.Category,
-                    ExpectedValue = x.ExpectedValue
-                }).ToList()
-            }
-        };
+                    FileName = f.FileName,
+                    ReturnCode = f.DetectedReturnCode,
+                    Errors = f.Result!.ValidationReport!.Errors
+                }));
+
+        await JS.InvokeVoidAsync("portalDownloadFile", csv, "bulk_error_report.csv", "text/csv");
     }
 
     private async Task DownloadErrorFile(BulkFileEntry file)

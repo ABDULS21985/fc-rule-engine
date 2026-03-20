@@ -152,7 +152,9 @@ public class BulkUploadService : IBulkUploadService
             {
                 RowNumber = 0,
                 FieldCode = "CSV",
-                Message = "CSV file is empty or missing headers."
+                Message = "CSV file is empty or missing headers.",
+                Category = BulkUploadErrorCategories.Format,
+                ExpectedValue = "CSV header row with template column names"
             });
             return result;
         }
@@ -191,7 +193,9 @@ public class BulkUploadService : IBulkUploadService
                     {
                         RowNumber = rowNumber,
                         FieldCode = column.Value.FieldName,
-                        Message = ex.Message
+                        Message = ex.Message,
+                        Category = ResolveConversionCategory(column.Value.DataType),
+                        ExpectedValue = DescribeExpectedValue(column.Value.DataType)
                     });
                 }
             }
@@ -222,7 +226,8 @@ public class BulkUploadService : IBulkUploadService
                 Field = parseError.FieldCode,
                 Message = parseError.Message,
                 Severity = ValidationSeverity.Error,
-                Category = ValidationCategory.TypeRange
+                Category = ValidationCategory.TypeRange,
+                ExpectedValue = parseError.ExpectedValue
             });
         }
 
@@ -388,7 +393,9 @@ public class BulkUploadService : IBulkUploadService
                     {
                         RowNumber = rowNumber,
                         FieldCode = column.Value.FieldName,
-                        Message = ex.Message
+                        Message = ex.Message,
+                        Category = ResolveConversionCategory(column.Value.DataType),
+                        ExpectedValue = DescribeExpectedValue(column.Value.DataType)
                     });
                 }
             }
@@ -417,7 +424,9 @@ public class BulkUploadService : IBulkUploadService
                 {
                     RowNumber = row.RowNumber,
                     FieldCode = field.FieldName,
-                    Message = $"Required field '{field.DisplayName}' is missing."
+                    Message = $"Required field '{field.DisplayName}' is missing.",
+                    Category = BulkUploadErrorCategories.Required,
+                    ExpectedValue = "Non-empty value"
                 });
             }
         }
@@ -677,6 +686,29 @@ public class BulkUploadService : IBulkUploadService
             .Replace("*", string.Empty, StringComparison.Ordinal)
             .Trim()
             .ToLowerInvariant();
+    }
+
+    private static string ResolveConversionCategory(FieldDataType dataType)
+    {
+        return dataType switch
+        {
+            FieldDataType.Date or FieldDataType.Boolean => BulkUploadErrorCategories.Format,
+            FieldDataType.Integer or FieldDataType.Money or FieldDataType.Decimal or FieldDataType.Percentage => BulkUploadErrorCategories.TypeRange,
+            _ => BulkUploadErrorCategories.Format
+        };
+    }
+
+    private static string DescribeExpectedValue(FieldDataType dataType)
+    {
+        return dataType switch
+        {
+            FieldDataType.Integer => "Whole number",
+            FieldDataType.Money or FieldDataType.Decimal => "Numeric value",
+            FieldDataType.Percentage => "Percentage value",
+            FieldDataType.Date => "Valid date",
+            FieldDataType.Boolean => "true or false",
+            _ => "Valid value"
+        };
     }
 
     private sealed class ParsedRows

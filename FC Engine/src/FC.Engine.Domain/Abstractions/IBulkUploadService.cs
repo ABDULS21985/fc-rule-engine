@@ -40,6 +40,13 @@ public class BulkUploadError
     public string FieldCode { get; set; } = string.Empty;
     public string Message { get; set; } = string.Empty;
     public string Severity { get; set; } = "Error";
-    public string Category { get; set; } = "TypeRange";
+    public string Category { get; set; } = string.Empty;
     public string? ExpectedValue { get; set; }
+}
+
+public static class BulkUploadErrorCategories
+{
+    public const string TypeRange = "TypeRange";
+    public const string Required = "Required";
+    public const string Format = "Format";
 }
