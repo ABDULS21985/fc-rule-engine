@@ -234,6 +234,23 @@ public class TemplateVersioningServiceTests
     }
 
     [Fact]
+    public async Task CreateNewDraftVersion_WhenDraftAlreadyExists_ThrowsInvalidOperationException()
+    {
+        _templateRepo
+            .Setup(r => r.HasExistingDraft(1, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+
+        var service = CreateService();
+
+        var act = () => service.CreateNewDraftVersion(1, "analyst");
+
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*active draft or review version*");
+
+        _templateRepo.Verify(r => r.GetById(It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
     public async Task CreateNewDraftVersion_AssignsIncrementingVersionNumber()
     {
         // Arrange - template already has version 1 (published) and version 2 (deprecated)

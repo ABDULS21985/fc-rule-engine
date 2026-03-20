@@ -112,29 +112,9 @@ public class TemplateService
 
         var field = new TemplateField
         {
-            FieldName = request.FieldName,
-            DisplayName = request.DisplayName,
-            XmlElementName = request.XmlElementName,
-            LineCode = request.LineCode,
-            SectionName = request.SectionName,
-            SectionOrder = request.SectionOrder,
-            FieldOrder = request.FieldOrder,
-            DataType = request.DataType,
-            SqlType = _sqlTypeMapper.MapToSqlType(request.DataType),
-            IsRequired = request.IsRequired,
-            IsComputed = request.IsComputed,
-            IsKeyField = request.IsKeyField,
-            DefaultValue = request.DefaultValue,
-            MinValue = request.MinValue,
-            MaxValue = request.MaxValue,
-            MaxLength = request.MaxLength,
-            AllowedValues = request.AllowedValues,
-            HelpText = request.HelpText,
-            ValidationNote = request.ValidationNote,
-            RegulatoryReference = request.RegulatoryReference,
-            DataClassification = request.DataClassification,
             CreatedAt = DateTime.UtcNow
         };
+        ApplyFieldRequest(field, request);
 
         version.AddField(field);
         await _templateRepo.Update(template, ct);

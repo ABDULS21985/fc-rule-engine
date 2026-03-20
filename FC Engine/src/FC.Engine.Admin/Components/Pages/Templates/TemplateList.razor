@@ -7,6 +7,7 @@
 @using FC.Engine.Application.DTOs
 @using FC.Engine.Application.Services
 @inject ITemplateMetadataCache Cache
+@inject IModuleService ModuleService
 @inject TemplateService TemplateService
 @inject NavigationManager Nav
 @inject ToastService Toast
@@ -17,7 +18,7 @@
             Subtitle="Manage all published return templates, their fields, formulas, and physical table mappings"
             CountBadge="@(!_loading ? _templates.Count : null)">
     <PrimaryAction>
-        <AuthorizeView Roles="Admin,Approver">
+        <AuthorizeView Policy="CanEditTemplates">
             <Authorized>
                 <button class="fc-btn fc-btn--gold" @onclick="ShowCreateForm">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16" aria-hidden="true"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
@@ -83,6 +84,16 @@
                 <div class="form-group">
                     <label>Description</label>
                     <input class="form-control" @bind="_createRequest.Description" placeholder="Optional description" />
+                </div>
+                <div class="form-group">
+                    <label>Module</label>
+                    <select class="form-control" @bind="_createModuleId">
+                        <option value="">Global / Unassigned</option>
+                        @foreach (var module in _moduleOptions.Where(m => m.IsActive))
+                        {
+                            <option value="@module.Id">@module.ModuleCode - @module.ModuleName</option>
+                        }
+                    </select>
                 </div>
             </div>
             <div class="fc-list-form-actions">
@@ -200,6 +211,8 @@
     // Create form
     private bool _showCreateForm;
     private CreateTemplateRequest _createRequest = new();
+    private IReadOnlyList<ModuleSummaryDto> _moduleOptions = Array.Empty<ModuleSummaryDto>();
+    private string _createModuleId = "";
     private ReturnFrequency _createFrequency = ReturnFrequency.Monthly;
     private StructuralCategory _createCategory = StructuralCategory.FixedRow;
 
@@ -227,6 +240,7 @@
     {
         var state = AuthState is null ? null : await AuthState;
         _currentUser = UserIdentityResolver.ResolveActor(state?.User);
+        _moduleOptions = await ModuleService.GetModuleSummaries();
 
         // Register loader so NavMenu hover-prefetch can warm this data
         DataCache.RegisterLoader("/templates", async () =>
@@ -312,6 +326,7 @@
     private void ShowCreateForm()
     {
         _showCreateForm = true;
+        _createModuleId = "";
         _createRequest = new CreateTemplateRequest { CreatedBy = _currentUser };
     }
 
@@ -324,6 +339,7 @@
             _createRequest.Frequency = _createFrequency;
             _createRequest.StructuralCategory = _createCategory;
             _createRequest.CreatedBy = _currentUser;
+            _createRequest.ModuleId = int.TryParse(_createModuleId, out var moduleId) ? moduleId : null;
             var result = await TemplateService.CreateTemplate(_createRequest);
             DataCache.Invalidate("templates:all");
             Toast.Success($"Template '{result.ReturnCode}' created successfully.", "Template Created");

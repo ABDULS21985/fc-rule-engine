@@ -1,6 +1,6 @@
 @page "/users"
 @using Microsoft.AspNetCore.Authorization
-@attribute [Authorize(Policy = "AdminOnly")]
+@attribute [Authorize(Policy = "CanManageUsers")]
 @using FC.Engine.Domain.Abstractions
 @using FC.Engine.Domain.Entities
 @using FC.Engine.Domain.Enums
@@ -8,6 +8,7 @@
 @using FC.Engine.Admin.Services
 @using Microsoft.EntityFrameworkCore
 @inject IPortalUserRepository UserRepo
+@inject IPortalRoleCatalogService RoleCatalog
 @inject AuthService AuthService
 @inject ToastService Toast
 @inject DialogService Dialog
@@ -34,7 +35,7 @@
         <div class="fc-toolbar-filter">
             <select @bind="_roleFilter" aria-label="Filter by role">
                 <option value="">All Roles</option>
-                @foreach (var role in Enum.GetValues<PortalRole>())
+                @foreach (var role in _roleOptions.Select(r => r.Role).Distinct())
                 {
                     <option value="@role">@role</option>
                 }
@@ -175,15 +176,15 @@
                 </div>
             }
 
-            <div class="fc-form-group">
-                <label class="fc-form-label">Tenant Scope</label>
-                <select class="fc-form-input" @bind="_formTenantId">
-                    <option value="">Platform Admin (no tenant)</option>
-                    @foreach (var t in _tenantOptions)
-                    {
-                        <option value="@t.TenantId">@t.TenantName</option>
-                    }
-                </select>
+                <div class="fc-form-group">
+                    <label class="fc-form-label">Tenant Scope</label>
+                    <select class="fc-form-input" value="@_formTenantId" @onchange="OnTenantScopeChanged">
+                        <option value="">Platform Admin (no tenant)</option>
+                        @foreach (var t in _tenantOptions)
+                        {
+                            <option value="@t.TenantId">@t.TenantName</option>
+                        }
+                    </select>
                 <small class="fc-form-hint">Leave as "Platform Admin" for users who need cross-tenant access.</small>
             </div>
 
@@ -210,35 +211,18 @@
         <div class="fc-mt-6">
             <div class="fc-form-section-label">Role Assignment</div>
             <div class="fc-role-cards">
-                <label class="fc-role-card fc-role-card-admin @(_formRole == PortalRole.Admin ? "fc-role-card-selected" : "")"
-                       tabindex="0" @onkeydown="e => HandleRoleKeyDown(e, PortalRole.Admin)">
-                    <input type="radio" name="fc-role-select" checked="@(_formRole == PortalRole.Admin)" @onchange="() => _formRole = PortalRole.Admin" />
-                    <div class="fc-role-card-radio"><div class="fc-role-card-radio-inner"></div></div>
-                    <div class="fc-role-card-content">
-                        <div class="fc-role-card-title">Admin</div>
-                        <div class="fc-role-card-desc">Full platform administration access including user management, system configuration, and all data operations.</div>
-                    </div>
-                </label>
-
-                <label class="fc-role-card fc-role-card-approver @(_formRole == PortalRole.Approver ? "fc-role-card-selected" : "")"
-                       tabindex="0" @onkeydown="e => HandleRoleKeyDown(e, PortalRole.Approver)">
-                    <input type="radio" name="fc-role-select" checked="@(_formRole == PortalRole.Approver)" @onchange="() => _formRole = PortalRole.Approver" />
-                    <div class="fc-role-card-radio"><div class="fc-role-card-radio-inner"></div></div>
-                    <div class="fc-role-card-content">
-                        <div class="fc-role-card-title">Approver</div>
-                        <div class="fc-role-card-desc">Can review, approve, and manage template workflows, version publishing, and submission oversight.</div>
-                    </div>
-                </label>
-
-                <label class="fc-role-card fc-role-card-viewer @(_formRole == PortalRole.Viewer ? "fc-role-card-selected" : "")"
-                       tabindex="0" @onkeydown="e => HandleRoleKeyDown(e, PortalRole.Viewer)">
-                    <input type="radio" name="fc-role-select" checked="@(_formRole == PortalRole.Viewer)" @onchange="() => _formRole = PortalRole.Viewer" />
-                    <div class="fc-role-card-radio"><div class="fc-role-card-radio-inner"></div></div>
-                    <div class="fc-role-card-content">
-                        <div class="fc-role-card-title">Viewer</div>
-                        <div class="fc-role-card-desc">Read-only access to permitted templates, submissions, and dashboard analytics.</div>
-                    </div>
-                </label>
+                @foreach (var roleOption in _roleOptions)
+                {
+                    <label class="fc-role-card @GetRoleCardClass(roleOption.Role) @(_formRole == roleOption.Role ? "fc-role-card-selected" : "")"
+                           tabindex="0" @onkeydown="e => HandleRoleKeyDown(e, roleOption.Role)">
+                        <input type="radio" name="fc-role-select" checked="@(_formRole == roleOption.Role)" @onchange="() => _formRole = roleOption.Role" />
+                        <div class="fc-role-card-radio"><div class="fc-role-card-radio-inner"></div></div>
+                        <div class="fc-role-card-content">
+                            <div class="fc-role-card-title">@roleOption.DisplayName</div>
+                            <div class="fc-role-card-desc">@roleOption.Description</div>
+                        </div>
+                    </label>
+                }
             </div>
         </div>
     </ChildContent>
@@ -301,6 +285,7 @@
 
     // Tenant options for scoping
     private List<TenantOption> _tenantOptions = new();
+    private IReadOnlyList<PortalRoleOption> _roleOptions = Array.Empty<PortalRoleOption>();
 
     // Password reset modal
     private bool _showPasswordModal;
@@ -325,6 +310,7 @@
     protected override async Task OnInitializedAsync()
     {
         _users = await UserRepo.GetAll();
+        _roleOptions = await RoleCatalog.GetPortalRoles(null);
         await using var db = await DbFactory.CreateDbContextAsync();
         _tenantOptions = await db.Tenants
             .Where(t => t.Status == Domain.Enums.TenantStatus.Active)
@@ -357,8 +343,15 @@
         _ => "fc-role-badge-viewer"
     };
 
+    private static string GetRoleCardClass(PortalRole role) => role switch
+    {
+        PortalRole.Admin => "fc-role-card-admin",
+        PortalRole.Approver => "fc-role-card-approver",
+        _ => "fc-role-card-viewer"
+    };
+
     // --- Create / Edit Modal ---
-    private void OpenCreateModal()
+    private async Task OpenCreateModal()
     {
         _editingUser = null;
         _formUsername = "";
@@ -368,10 +361,11 @@
         _formRole = PortalRole.Viewer;
         _formTenantId = "";
         _formError = null;
+        await LoadRoleOptions(null);
         _showModal = true;
     }
 
-    private void OpenEditModal(PortalUser user)
+    private async Task OpenEditModal(PortalUser user)
     {
         _editingUser = user;
         _formDisplayName = user.DisplayName;
@@ -379,6 +373,7 @@
         _formRole = user.Role;
         _formTenantId = user.TenantId?.ToString() ?? "";
         _formError = null;
+        await LoadRoleOptions(user.TenantId);
         _showModal = true;
     }
 
@@ -455,29 +450,9 @@
                     return;
                 }
 
-                // Apply changes only after validation passes — avoid mutating entity before save
-                var previousDisplayName = _editingUser.DisplayName;
-                var previousEmail = _editingUser.Email;
-                var previousRole = _editingUser.Role;
-                var previousTenantId = _editingUser.TenantId;
-                try
-                {
-                    _editingUser.DisplayName = _formDisplayName.Trim();
-                    _editingUser.Email = _formEmail.Trim();
-                    _editingUser.Role = _formRole;
-                    _editingUser.TenantId = string.IsNullOrEmpty(_formTenantId) ? null : Guid.TryParse(_formTenantId, out var etid) ? etid : null;
-                    await UserRepo.Update(_editingUser);
-                    Toast.Success($"User '{_editingUser.DisplayName}' updated successfully.");
-                }
-                catch
-                {
-                    // Revert local entity on failure so UI stays consistent
-                    _editingUser.DisplayName = previousDisplayName;
-                    _editingUser.Email = previousEmail;
-                    _editingUser.Role = previousRole;
-                    _editingUser.TenantId = previousTenantId;
-                    throw;
-                }
+                Guid? tenantId = string.IsNullOrEmpty(_formTenantId) ? null : Guid.TryParse(_formTenantId, out var etid) ? etid : null;
+                await AuthService.UpdateUser(_editingUser.Id, _formDisplayName.Trim(), _formEmail.Trim(), _formRole, tenantId);
+                Toast.Success($"User '{_formDisplayName.Trim()}' updated successfully.");
             }
 
             _users = await UserRepo.GetAll();
@@ -546,19 +521,42 @@
 
         if (!confirmed) return;
 
-        var previousActive = user.IsActive;
         try
         {
-            user.IsActive = !user.IsActive;
-            await UserRepo.Update(user);
+            await AuthService.SetUserStatus(user.Id, !user.IsActive);
             _users = await UserRepo.GetAll();
-            Toast.Success($"User '{user.DisplayName}' has been {(user.IsActive ? "enabled" : "disabled")}.");
+            var updated = _users.FirstOrDefault(u => u.Id == user.Id);
+            if (updated is not null)
+                Toast.Success($"User '{updated.DisplayName}' has been {(updated.IsActive ? "enabled" : "disabled")}.");
         }
         catch (Exception ex)
         {
-            user.IsActive = previousActive;
             Toast.Error($"Failed to {action.ToLower()} user: {ex.Message}");
         }
+    }
+
+    private async Task OnTenantScopeChanged(ChangeEventArgs e)
+    {
+        _formTenantId = e.Value?.ToString() ?? "";
+        Guid? tenantId = string.IsNullOrEmpty(_formTenantId) ? null : Guid.TryParse(_formTenantId, out var tid) ? tid : null;
+        await LoadRoleOptions(tenantId);
+    }
+
+    private async Task LoadRoleOptions(Guid? tenantId)
+    {
+        _roleOptions = await RoleCatalog.GetPortalRoles(tenantId);
+        if (_roleOptions.Count == 0)
+        {
+            _roleOptions = new[]
+            {
+                new PortalRoleOption { Role = PortalRole.Admin, DisplayName = "Admin", Description = "Role configuration unavailable." },
+                new PortalRoleOption { Role = PortalRole.Approver, DisplayName = "Approver", Description = "Role configuration unavailable." },
+                new PortalRoleOption { Role = PortalRole.Viewer, DisplayName = "Viewer", Description = "Role configuration unavailable." }
+            };
+        }
+
+        if (!_roleOptions.Any(r => r.Role == _formRole))
+            _formRole = _roleOptions[0].Role;
     }
 
     private sealed class TenantOption

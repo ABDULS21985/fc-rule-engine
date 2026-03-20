@@ -287,6 +287,35 @@ public class TemplateServiceTests
         draftVersion.CreatedBy.Should().Be("seed-user");
     }
 
+    [Fact]
+    public async Task CreateTemplate_UsesCurrentTenantAndRequestedModule()
+    {
+        var request = MakeCreateRequest();
+        var tenantId = Guid.NewGuid();
+        request.ModuleId = 42;
+
+        _tenantContext.SetupGet(t => t.CurrentTenantId).Returns(tenantId);
+        _templateRepo.Setup(r => r.ExistsByReturnCode(request.ReturnCode, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(false);
+
+        ReturnTemplate? capturedTemplate = null;
+        _templateRepo.Setup(r => r.Add(It.IsAny<ReturnTemplate>(), It.IsAny<CancellationToken>()))
+            .Callback<ReturnTemplate, CancellationToken>((t, _) => capturedTemplate = t)
+            .Returns(Task.CompletedTask);
+        _audit.Setup(a => a.Log(
+                It.IsAny<string>(), It.IsAny<int>(), It.IsAny<string>(),
+                It.IsAny<object?>(), It.IsAny<object?>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        var service = CreateService();
+
+        await service.CreateTemplate(request);
+
+        capturedTemplate.Should().NotBeNull();
+        capturedTemplate!.TenantId.Should().Be(tenantId);
+        capturedTemplate.ModuleId.Should().Be(42);
+    }
+
     [Theory]
     [InlineData("MFCR 300", "mfcr_300", "MFCR300", "urn:cbn:dfis:fc:mfcr300")]
     [InlineData("QFCR 100", "qfcr_100", "QFCR100", "urn:cbn:dfis:fc:qfcr100")]
@@ -906,5 +935,87 @@ public class TemplateServiceTests
                 "supervisor.jones",
                 It.IsAny<CancellationToken>()),
             Times.Once);
+    }
+
+    [Fact]
+    public async Task UpdateFieldInVersion_DraftVersion_UpdatesExistingField()
+    {
+        var template = MakeTemplate(id: 1, versionId: 10, versionStatus: TemplateStatus.Draft);
+        template.GetVersion(10).AddField(new TemplateField
+        {
+            Id = 55,
+            FieldName = "cash_notes",
+            DisplayName = "Notes",
+            XmlElementName = "CashNotes",
+            DataType = FieldDataType.Money,
+            SqlType = "DECIMAL(18,2)",
+            FieldOrder = 1
+        });
+
+        var request = MakeFieldRequest(
+            fieldName: "cash_balance",
+            displayName: "Cash Balance",
+            xmlElementName: "CashBalance",
+            fieldOrder: 2,
+            dataType: FieldDataType.Decimal);
+
+        _templateRepo.Setup(r => r.GetById(1, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(template);
+        _templateRepo.Setup(r => r.Update(It.IsAny<ReturnTemplate>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+        _audit.Setup(a => a.Log(
+                It.IsAny<string>(), It.IsAny<int>(), It.IsAny<string>(),
+                It.IsAny<object?>(), It.IsAny<object?>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+        _sqlTypeMapper.Setup(m => m.MapToSqlType(FieldDataType.Decimal, null))
+            .Returns("DECIMAL(18,4)");
+
+        var service = CreateService();
+
+        await service.UpdateFieldInVersion(1, 10, 55, request, "editor");
+
+        var field = template.GetVersion(10).GetField(55);
+        field.FieldName.Should().Be("cash_balance");
+        field.DisplayName.Should().Be("Cash Balance");
+        field.XmlElementName.Should().Be("CashBalance");
+        field.FieldOrder.Should().Be(2);
+        field.DataType.Should().Be(FieldDataType.Decimal);
+        field.SqlType.Should().Be("DECIMAL(18,4)");
+
+        _templateRepo.Verify(r => r.Update(template, It.IsAny<CancellationToken>()), Times.Once);
+        _audit.Verify(a => a.Log("TemplateField", 55, "Updated", It.IsAny<object>(), It.IsAny<object>(), "editor", It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task RemoveFieldFromVersion_DraftVersion_RemovesField()
+    {
+        var template = MakeTemplate(id: 1, versionId: 10, versionStatus: TemplateStatus.Draft);
+        template.GetVersion(10).AddField(new TemplateField
+        {
+            Id = 55,
+            FieldName = "cash_notes",
+            DisplayName = "Notes",
+            XmlElementName = "CashNotes",
+            DataType = FieldDataType.Money,
+            SqlType = "DECIMAL(18,2)",
+            FieldOrder = 1
+        });
+
+        _templateRepo.Setup(r => r.GetById(1, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(template);
+        _templateRepo.Setup(r => r.Update(It.IsAny<ReturnTemplate>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+        _audit.Setup(a => a.Log(
+                It.IsAny<string>(), It.IsAny<int>(), It.IsAny<string>(),
+                It.IsAny<object?>(), It.IsAny<object?>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        var service = CreateService();
+
+        await service.RemoveFieldFromVersion(1, 10, 55, "editor");
+
+        template.GetVersion(10).Fields.Should().BeEmpty();
+        _templateRepo.Verify(r => r.Update(template, It.IsAny<CancellationToken>()), Times.Once);
+        _audit.Verify(a => a.Log("TemplateField", 55, "Removed", It.IsAny<object>(), null, "editor", It.IsAny<CancellationToken>()), Times.Once);
     }
 }

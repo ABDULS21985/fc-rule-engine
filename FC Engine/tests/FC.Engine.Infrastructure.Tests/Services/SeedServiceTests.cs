@@ -185,5 +185,8 @@ public class SeedServiceTests
 
         public Task<TemplateVersion?> GetLatestDraftVersion(string returnCode, CancellationToken ct = default) =>
             Task.FromResult<TemplateVersion?>(null);
+
+        public Task<bool> HasExistingDraft(int templateId, CancellationToken ct = default) =>
+            Task.FromResult(Templates.Any(t => t.Id == templateId && t.Versions.Any(v => v.Status is TemplateStatus.Draft or TemplateStatus.Review)));
     }
 }

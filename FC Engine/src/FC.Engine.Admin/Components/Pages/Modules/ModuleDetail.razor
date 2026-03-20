@@ -4,12 +4,8 @@
 @using Microsoft.AspNetCore.Components.Authorization
 @using FC.Engine.Admin.Utilities
 @using FC.Engine.Domain.Abstractions
-@using FC.Engine.Domain.Enums
-@using FC.Engine.Domain.Metadata
 @using FC.Engine.Admin.Services
-@using FC.Engine.Infrastructure.Metadata
-@using Microsoft.EntityFrameworkCore
-@inject IDbContextFactory<MetadataDbContext> DbFactory
+@inject IModuleService ModuleService
 @inject IModuleImportService ModuleImportService
 @inject NavigationManager Navigation
 @inject ToastService Toast
@@ -23,7 +19,7 @@
             StatusVariant="@(_module?.IsActive == true ? "success" : "neutral")"
             BackUrl="/modules">
     <PrimaryAction>
-        @if (!_loading && _templateRows.Count == 0)
+        @if (!_loading && (_module?.Templates.Count ?? 0) == 0)
         {
             <button class="fc-btn fc-btn--outline" @onclick="OpenImport" type="button">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16" aria-hidden="true"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
@@ -87,7 +83,7 @@
         <div class="fc-card fc-card--mb">
             <div class="fc-card__header"><h2 class="fc-card__title">Module Versions</h2></div>
             <div class="fc-card__body fc-card-body--flush">
-                @if (_moduleVersions.Count == 0)
+                @if (_module!.Versions.Count == 0)
                 {
                     <div class="fc-table-empty-cell">No module version records yet.</div>
                 }
@@ -96,7 +92,7 @@
                     <table class="fc-table">
                         <thead><tr><th>Version</th><th>Status</th><th>Published</th><th>Deprecated</th></tr></thead>
                         <tbody>
-                            @foreach (var version in _moduleVersions)
+                            @foreach (var version in _module.Versions)
                             {
                                 <tr>
                                     <td><code>@version.VersionCode</code></td>
@@ -117,7 +113,7 @@
         <div class="fc-card">
             <div class="fc-card__header"><h2 class="fc-card__title">Templates</h2></div>
             <div class="fc-card__body fc-card-body--flush">
-                @if (_templateRows.Count == 0)
+                @if (_module.Templates.Count == 0)
                 {
                     <div class="fc-table-empty-cell">No templates are linked to this module.</div>
                 }
@@ -136,7 +132,7 @@
                             </tr>
                         </thead>
                         <tbody>
-                            @foreach (var row in _templateRows)
+                            @foreach (var row in _module.Templates)
                             {
                                 <tr>
                                     <td><code>@row.ReturnCode</code></td>
@@ -162,71 +158,12 @@
 
     private bool _loading = true;
     private bool _publishing;
-    private FC.Engine.Domain.Entities.Module? _module;
-    private List<FC.Engine.Domain.Entities.ModuleVersion> _moduleVersions = new();
-    private List<TemplateRow> _templateRows = new();
+    private ModuleDetailDto? _module;
 
     protected override async Task OnParametersSetAsync()
     {
         _loading = true;
-        await using var db = await DbFactory.CreateDbContextAsync();
-
-        _module = await db.Modules
-            .AsNoTracking()
-            .FirstOrDefaultAsync(m => m.ModuleCode == ModuleCode);
-
-        if (_module != null)
-        {
-            _moduleVersions = await db.ModuleVersions
-                .AsNoTracking()
-                .Where(v => v.ModuleId == _module.Id)
-                .OrderByDescending(v => v.Id)
-                .ToListAsync();
-
-            var templates = await db.ReturnTemplates
-                .AsNoTracking()
-                .Where(t => t.ModuleId == _module.Id)
-                .OrderBy(t => t.ReturnCode)
-                .ToListAsync();
-
-            var templateIds = templates.Select(t => t.Id).ToList();
-            var versions = await db.TemplateVersions
-                .AsNoTracking()
-                .Where(v => templateIds.Contains(v.TemplateId))
-                .OrderByDescending(v => v.VersionNumber)
-                .ToListAsync();
-            var versionIds = versions.Select(v => v.Id).ToList();
-
-            var fieldCounts = await db.TemplateFields
-                .AsNoTracking()
-                .Where(f => versionIds.Contains(f.TemplateVersionId))
-                .GroupBy(f => f.TemplateVersionId)
-                .Select(g => new { VersionId = g.Key, Count = g.Count() })
-                .ToDictionaryAsync(x => x.VersionId, x => x.Count);
-
-            var formulaCounts = await db.IntraSheetFormulas
-                .AsNoTracking()
-                .Where(f => versionIds.Contains(f.TemplateVersionId) && f.IsActive)
-                .GroupBy(f => f.TemplateVersionId)
-                .Select(g => new { VersionId = g.Key, Count = g.Count() })
-                .ToDictionaryAsync(x => x.VersionId, x => x.Count);
-
-            _templateRows = templates.Select(t =>
-            {
-                var latest = versions.FirstOrDefault(v => v.TemplateId == t.Id);
-                return new TemplateRow
-                {
-                    ReturnCode = t.ReturnCode,
-                    Name = t.Name,
-                    PhysicalTableName = t.PhysicalTableName,
-                    VersionNumber = latest?.VersionNumber ?? 0,
-                    Status = latest?.Status.ToString() ?? "N/A",
-                    FieldCount = latest != null && fieldCounts.TryGetValue(latest.Id, out var f) ? f : 0,
-                    FormulaCount = latest != null && formulaCounts.TryGetValue(latest.Id, out var fm) ? fm : 0
-                };
-            }).ToList();
-        }
-
+        _module = await ModuleService.GetModuleDetail(ModuleCode);
         _loading = false;
     }
 
@@ -290,15 +227,4 @@
         "Deprecated" => "fc-badge--danger",
         _ => "fc-badge--neutral"
     };
-
-    private sealed class TemplateRow
-    {
-        public string ReturnCode { get; set; } = string.Empty;
-        public string Name { get; set; } = string.Empty;
-        public string PhysicalTableName { get; set; } = string.Empty;
-        public int VersionNumber { get; set; }
-        public string Status { get; set; } = string.Empty;
-        public int FieldCount { get; set; }
-        public int FormulaCount { get; set; }
-    }
 }

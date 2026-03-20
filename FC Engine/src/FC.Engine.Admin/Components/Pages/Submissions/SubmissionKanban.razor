@@ -24,7 +24,7 @@
 @if (_loading)
 {
     <div class="fc-kanban-skeleton" aria-label="Loading submissions kanban" role="status">
-        @for (var col = 0; col < 5; col++)
+        @for (var col = 0; col < 7; col++)
         {
             <div class="fc-kanban-skeleton-col">
                 <div class="fc-skel" style="--skel-w:120px;--skel-h:18px;--skel-mb:12px"></div>
@@ -131,11 +131,13 @@ else
 
     private static readonly List<KanbanColumn> _columns = new()
     {
-        new("Draft",                         "Draft",       "var(--cbn-gray-400)"),
-        new("PendingApproval",               "Submitted",   "var(--cbn-accent)"),
-        new("Validating,Parsing",            "In Review",   "#8b5cf6"),
-        new("Accepted,AcceptedWithWarnings", "Approved",    "var(--cbn-primary)"),
-        new("Rejected,ApprovalRejected",     "Rejected",    "var(--cbn-danger)")
+        new("Draft",                                                                 "Draft",       "var(--cbn-gray-400)"),
+        new("PendingApproval",                                                       "Submitted",   "var(--cbn-accent)"),
+        new("Validating,Parsing",                                                    "In Review",   "#8b5cf6"),
+        new("Accepted,AcceptedWithWarnings",                                         "Approved",    "var(--cbn-primary)"),
+        new("SubmittedToRegulator,RegulatorAcknowledged,RegulatorAccepted,RegulatorQueriesRaised", "Regulator",   "#0f766e"),
+        new("Rejected,ApprovalRejected",                                             "Rejected",    "var(--cbn-danger)"),
+        new("Historical",                                                            "Archived",    "var(--cbn-gray-500)")
     };
 
     private bool _loading = true;
@@ -186,15 +188,21 @@ else
         var sub = _submissions.FirstOrDefault(s => s.Id == id);
         if (sub == null) return;
 
+        var targetGroupStatuses = ParseColumnStatuses(newColumnStatus);
+        if (targetGroupStatuses.Contains(sub.Status))
+            return;
+
         // Map column key to actual SubmissionStatus
         var targetStatus = newColumnStatus switch
         {
-            "Draft"                         => SubmissionStatus.Draft,
-            "PendingApproval"               => SubmissionStatus.PendingApproval,
-            "Validating,Parsing"            => SubmissionStatus.Validating,
-            "Accepted,AcceptedWithWarnings" => SubmissionStatus.Accepted,
-            "Rejected,ApprovalRejected"     => SubmissionStatus.Rejected,
-            _                               => sub.Status
+            "Draft"                                                                 => SubmissionStatus.Draft,
+            "PendingApproval"                                                       => SubmissionStatus.PendingApproval,
+            "Validating,Parsing"                                                    => SubmissionStatus.Validating,
+            "Accepted,AcceptedWithWarnings"                                         => SubmissionStatus.Accepted,
+            "SubmittedToRegulator,RegulatorAcknowledged,RegulatorAccepted,RegulatorQueriesRaised" => SubmissionStatus.SubmittedToRegulator,
+            "Rejected,ApprovalRejected"                                             => SubmissionStatus.Rejected,
+            "Historical"                                                            => SubmissionStatus.Historical,
+            _                                                                       => sub.Status
         };
 
         if (targetStatus == sub.Status) return;
@@ -216,7 +224,7 @@ else
         // Persist to database; roll back optimistic update on failure
         try
         {
-            await SubmissionRepo.Update(sub);
+            await SubmissionRepo.UpdateStatus(sub.Id, sub.Status);
         }
         catch
         {
@@ -250,6 +258,14 @@ else
         if (span.TotalHours < 24) return $"{(int)span.TotalHours}h ago";
         if (span.TotalDays < 7) return $"{(int)span.TotalDays}d ago";
         return utcTime.ToString("dd MMM");
+    }
+
+    private static HashSet<SubmissionStatus> ParseColumnStatuses(string statusKey)
+    {
+        return statusKey
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(Enum.Parse<SubmissionStatus>)
+            .ToHashSet();
     }
 
     public async ValueTask DisposeAsync()

@@ -26,7 +26,7 @@
     <PrimaryAction>
         @if (_activeVersion?.Status == "Draft")
         {
-            <AuthorizeView Roles="Admin,Approver">
+            <AuthorizeView Policy="CanEditTemplates">
                 <Authorized>
                     <button class="fc-btn fc-btn--outline fc-btn--sm" @onclick="SubmitForReview">Submit for Review</button>
                 </Authorized>
@@ -34,7 +34,7 @@
         }
         @if (_activeVersion?.Status == "Review")
         {
-            <AuthorizeView Roles="Admin">
+            <AuthorizeView Policy="CanPublishTemplates">
                 <Authorized>
                     <button class="fc-btn fc-btn--outline fc-btn--sm" @onclick="PreviewDdl">Preview DDL</button>
                     <button class="fc-btn fc-btn--primary fc-btn--sm" @onclick="PublishVersion">Publish</button>
@@ -43,7 +43,7 @@
         }
         @if (_activeVersion?.Status == "Published")
         {
-            <AuthorizeView Roles="Admin,Approver">
+            <AuthorizeView Policy="CanEditTemplates">
                 <Authorized>
                     <button class="fc-btn fc-btn--primary fc-btn--sm" @onclick="CreateDraftVersion">New Draft</button>
                 </Authorized>
@@ -269,17 +269,21 @@
                     </h3>
                     @if (_activeVersion?.Status == "Draft")
                     {
-                        <button class="fc-btn fc-btn--primary fc-btn--sm" @onclick="ShowAddField">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                            Add Field
-                        </button>
+                        <AuthorizeView Policy="CanEditTemplates">
+                            <Authorized>
+                                <button class="fc-btn fc-btn--primary fc-btn--sm" @onclick="ShowAddField">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                                    Add Field
+                                </button>
+                            </Authorized>
+                        </AuthorizeView>
                     }
                 </div>
 
                 @if (_showAddField && _activeVersion?.Status == "Draft")
                 {
                     <div class="fc-detail-add-panel">
-                        <h3>Add New Field</h3>
+                        <h3>@(_editingFieldId.HasValue ? "Edit Field" : "Add New Field")</h3>
                         <div class="fc-detail-add-grid">
                             <div class="fc-detail-float-field">
                                 <input class="fc-detail-float-input" placeholder=" " @bind="_newField.FieldName" />
@@ -341,11 +345,11 @@
                             </div>
                         </div>
                         <div class="fc-detail-add-actions">
-                            <button class="fc-btn fc-btn--primary fc-btn--sm" @onclick="AddField">
+                            <button class="fc-btn fc-btn--primary fc-btn--sm" @onclick="SaveField">
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
-                                Add Field
+                                @(_editingFieldId.HasValue ? "Save Field" : "Add Field")
                             </button>
-                            <button class="fc-btn fc-btn--outline fc-btn--sm" @onclick="() => _showAddField = false">Cancel</button>
+                            <button class="fc-btn fc-btn--outline fc-btn--sm" @onclick="CloseFieldEditor">Cancel</button>
                         </div>
                     </div>
                 }
@@ -365,10 +369,18 @@
                                     <th>SQL Type</th>
                                     <th>Required</th>
                                     <th>Flags</th>
+                                    @if (_activeVersion?.Status == "Draft")
+                                    {
+                                        <AuthorizeView Policy="CanEditTemplates">
+                                            <Authorized>
+                                                <th>Actions</th>
+                                            </Authorized>
+                                        </AuthorizeView>
+                                    }
                                 </tr>
                             </thead>
                             <tbody>
-                                @foreach (var f in _activeVersion.Fields)
+                                @foreach (var f in _activeVersion?.Fields ?? Enumerable.Empty<TemplateFieldDto>())
                                 {
                                     <tr>
                                         <td class="fc-detail-field-drag" aria-label="Drag to reorder">
@@ -392,6 +404,19 @@
                                                 @if (f.IsComputed) { <span class="fc-badge fc-badge--review">Computed</span> }
                                             </div>
                                         </td>
+                                        @if (_activeVersion?.Status == "Draft")
+                                        {
+                                            <AuthorizeView Policy="CanEditTemplates">
+                                                <Authorized>
+                                                    <td>
+                                                        <div class="fc-flex-row--gap1">
+                                                            <button class="fc-btn fc-btn--ghost fc-btn--xs" @onclick="() => EditField(f)">Edit</button>
+                                                            <button class="fc-btn fc-btn--ghost fc-btn--xs" @onclick="() => DeleteField(f)">Delete</button>
+                                                        </div>
+                                                    </td>
+                                                </Authorized>
+                                            </AuthorizeView>
+                                        }
                                     </tr>
                                 }
                             </tbody>
@@ -725,6 +750,7 @@
 
     // Add field
     private bool _showAddField;
+    private int? _editingFieldId;
     private AddFieldRequest _newField = new();
     private FieldDataType _newFieldDataType = FieldDataType.Money;
     private string _newFieldRequired = "false";
@@ -743,6 +769,7 @@
     private async Task LoadTemplate()
     {
         _loading = true;
+        CloseFieldEditor();
         _detail = await TemplateService.GetTemplateDetail(ReturnCode);
         if (_detail != null)
         {
@@ -774,6 +801,7 @@
     private async Task SelectVersion(TemplateVersionDto v)
     {
         _activeVersion = v;
+        CloseFieldEditor();
         try { _formulas = await FormulaRepo.GetIntraSheetFormulas(v.Id); }
         catch { _formulas = Array.Empty<IntraSheetFormula>(); }
     }
@@ -827,6 +855,7 @@
     private void ShowAddField()
     {
         _showAddField = true;
+        _editingFieldId = null;
         _activeTab = "fields";
         _newField = new AddFieldRequest
         {
@@ -838,7 +867,47 @@
         _newFieldIsComputed = "false";
     }
 
-    private async Task AddField()
+    private void CloseFieldEditor()
+    {
+        _showAddField = false;
+        _editingFieldId = null;
+    }
+
+    private void EditField(TemplateFieldDto field)
+    {
+        _editingFieldId = field.Id;
+        _showAddField = true;
+        _activeTab = "fields";
+        _newField = new AddFieldRequest
+        {
+            FieldName = field.FieldName,
+            DisplayName = field.DisplayName,
+            XmlElementName = field.XmlElementName,
+            LineCode = field.LineCode,
+            SectionName = field.SectionName,
+            SectionOrder = field.SectionOrder,
+            FieldOrder = field.FieldOrder,
+            DataType = Enum.Parse<FieldDataType>(field.DataType),
+            IsRequired = field.IsRequired,
+            IsComputed = field.IsComputed,
+            IsKeyField = field.IsKeyField,
+            DefaultValue = field.DefaultValue,
+            MinValue = field.MinValue,
+            MaxValue = field.MaxValue,
+            MaxLength = field.MaxLength,
+            AllowedValues = field.AllowedValues,
+            HelpText = field.HelpText,
+            ValidationNote = field.ValidationNote,
+            RegulatoryReference = field.RegulatoryReference,
+            DataClassification = Enum.Parse<DataClassification>(field.DataClassification)
+        };
+        _newFieldDataType = _newField.DataType;
+        _newFieldRequired = _newField.IsRequired ? "true" : "false";
+        _newFieldIsKeyField = _newField.IsKeyField ? "true" : "false";
+        _newFieldIsComputed = _newField.IsComputed ? "true" : "false";
+    }
+
+    private async Task SaveField()
     {
         try
         {
@@ -849,9 +918,42 @@
             if (string.IsNullOrWhiteSpace(_newField.XmlElementName))
                 _newField.XmlElementName = _newField.FieldName;
 
-            await TemplateService.AddFieldToVersion(_detail!.Id, _activeVersion!.Id, _newField, CurrentUser);
-            Toast.Success($"Field '{_newField.FieldName}' added successfully.", "Field Added");
-            _showAddField = false;
+            if (_editingFieldId.HasValue)
+            {
+                await TemplateService.UpdateFieldInVersion(_detail!.Id, _activeVersion!.Id, _editingFieldId.Value, _newField, CurrentUser);
+                Toast.Success($"Field '{_newField.FieldName}' updated successfully.", "Field Updated");
+            }
+            else
+            {
+                await TemplateService.AddFieldToVersion(_detail!.Id, _activeVersion!.Id, _newField, CurrentUser);
+                Toast.Success($"Field '{_newField.FieldName}' added successfully.", "Field Added");
+            }
+
+            CloseFieldEditor();
+            await LoadTemplate();
+        }
+        catch (Exception ex) { SetError(ex.Message); }
+    }
+
+    private async Task DeleteField(TemplateFieldDto field)
+    {
+        var confirmed = await Dialog.Confirm(new ConfirmRequest
+        {
+            Title = "Delete Field",
+            Message = $"Delete field '{field.FieldName}' from this draft version?",
+            ConfirmText = "Delete",
+            IsDestructive = true,
+            Icon = "delete"
+        });
+
+        if (!confirmed)
+            return;
+
+        try
+        {
+            await TemplateService.RemoveFieldFromVersion(_detail!.Id, _activeVersion!.Id, field.Id, CurrentUser);
+            Toast.Success($"Field '{field.FieldName}' deleted successfully.", "Field Deleted");
+            CloseFieldEditor();
             await LoadTemplate();
         }
         catch (Exception ex) { SetError(ex.Message); }

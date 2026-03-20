@@ -1,10 +1,8 @@
 @page "/modules"
 @attribute [Authorize(Policy = "PlatformAdmin")]
 @using Microsoft.AspNetCore.Authorization
-@using FC.Engine.Domain.Entities
-@using FC.Engine.Infrastructure.Metadata
-@using Microsoft.EntityFrameworkCore
-@inject IDbContextFactory<MetadataDbContext> DbFactory
+@using FC.Engine.Domain.Abstractions
+@inject IModuleService ModuleService
 @inject NavigationManager Navigation
 
 <PageTitle>Module Registry</PageTitle>
@@ -41,7 +39,7 @@
         </div>
     }
 
-    <DataTable TItem="ModuleListRow"
+    <DataTable TItem="ModuleSummaryDto"
                Items="@FilteredModules.ToList()"
                Loading="_loading"
                WrapperClass="fc-dt-wrapper--modules"
@@ -65,19 +63,19 @@
             </div>
         </ToolbarContent>
         <ChildContent>
-            <DataColumn TItem="ModuleListRow" Title="Code" SortKey="x => x.ModuleCode" Width="120px">
+            <DataColumn TItem="ModuleSummaryDto" Title="Code" SortKey="x => x.ModuleCode" Width="120px">
                 <CellTemplate><code>@context.ModuleCode</code></CellTemplate>
             </DataColumn>
-            <DataColumn TItem="ModuleListRow" Title="Name" SortKey="x => x.ModuleName" MinWidth="220px">
+            <DataColumn TItem="ModuleSummaryDto" Title="Name" SortKey="x => x.ModuleName" MinWidth="220px">
                 <CellTemplate><span class="fc-modules-cell-text fc-fw-500">@context.ModuleName</span></CellTemplate>
             </DataColumn>
-            <DataColumn TItem="ModuleListRow" Title="Regulator" SortKey="x => x.RegulatorCode" MinWidth="180px">
+            <DataColumn TItem="ModuleSummaryDto" Title="Regulator" SortKey="x => x.RegulatorCode" MinWidth="180px">
                 <CellTemplate><span class="fc-modules-cell-text">@context.RegulatorCode</span></CellTemplate>
             </DataColumn>
-            <DataColumn TItem="ModuleListRow" Title="Sheets" Width="80px">
+            <DataColumn TItem="ModuleSummaryDto" Title="Sheets" Width="80px">
                 <CellTemplate><span class="fc-badge fc-badge--neutral">@context.SheetCount</span></CellTemplate>
             </DataColumn>
-            <DataColumn TItem="ModuleListRow" Title="Version" Width="80px">
+            <DataColumn TItem="ModuleSummaryDto" Title="Version" Width="80px">
                 <CellTemplate>
                     @if (context.CurrentVersion is not null)
                     {
@@ -89,7 +87,7 @@
                     }
                 </CellTemplate>
             </DataColumn>
-            <DataColumn TItem="ModuleListRow" Title="Status" Width="80px">
+            <DataColumn TItem="ModuleSummaryDto" Title="Status" Width="80px">
                 <CellTemplate>
                     @if (context.IsActive)
                     {
@@ -101,10 +99,10 @@
                     }
                 </CellTemplate>
             </DataColumn>
-            <DataColumn TItem="ModuleListRow" Title="Tenants" Width="80px">
+            <DataColumn TItem="ModuleSummaryDto" Title="Tenants" Width="80px">
                 <CellTemplate><span class="fc-badge fc-badge--neutral">@context.ActiveTenants</span></CellTemplate>
             </DataColumn>
-            <DataColumn TItem="ModuleListRow" Title="Actions" Width="100px" Align="right">
+            <DataColumn TItem="ModuleSummaryDto" Title="Actions" Width="100px" Align="right">
                 <CellTemplate>
                     <button class="fc-btn fc-btn--ghost" @onclick:stopPropagation="true" @onclick="() => OpenDetail(context.ModuleCode)" type="button" title="View module details">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
@@ -123,11 +121,11 @@
     [Parameter, SupplyParameterFromQuery(Name = "status")] public string? QStatus { get; set; }
 
     private bool _loading = true;
-    private List<ModuleListRow> _rows = new();
+    private List<ModuleSummaryDto> _rows = new();
     private string _searchQuery = "";
     private string _statusFilter = "";
 
-    private IEnumerable<ModuleListRow> FilteredModules => _rows
+    private IEnumerable<ModuleSummaryDto> FilteredModules => _rows
         .Where(r => string.IsNullOrEmpty(_searchQuery) ||
                     r.ModuleCode.Contains(_searchQuery, StringComparison.OrdinalIgnoreCase) ||
                     r.ModuleName.Contains(_searchQuery, StringComparison.OrdinalIgnoreCase) ||
@@ -148,52 +146,7 @@
 
     protected override async Task OnInitializedAsync()
     {
-        await using var db = await DbFactory.CreateDbContextAsync();
-        var modules = await db.Modules
-            .AsNoTracking()
-            .OrderBy(m => m.DisplayOrder)
-            .ThenBy(m => m.ModuleCode)
-            .ToListAsync();
-
-        // Load all versions then group client-side — EF Core cannot translate
-        // OrderByDescending().First() inside a GroupBy projection to SQL.
-        var allVersions = await db.ModuleVersions
-            .AsNoTracking()
-            .OrderByDescending(v => v.Id)
-            .ToListAsync();
-        var versions = allVersions
-            .GroupBy(v => v.ModuleId)
-            .Select(g => g.First())
-            .ToList();
-
-        // Materialize the join first; GroupBy with Distinct().Count() inside a server-side
-        // projection is not guaranteed to translate across all EF Core provider versions.
-        var rawTenantRows = await db.SubscriptionModules
-            .AsNoTracking()
-            .Where(sm => sm.IsActive)
-            .Join(db.Subscriptions.AsNoTracking(), sm => sm.SubscriptionId, s => s.Id,
-                (sm, s) => new { sm.ModuleId, s.TenantId })
-            .ToListAsync();
-
-        var tenantCounts = rawTenantRows
-            .GroupBy(x => x.ModuleId)
-            .Select(g => new { ModuleId = g.Key, Tenants = g.Select(x => x.TenantId).Distinct().Count() })
-            .ToList();
-
-        var versionMap = versions.ToDictionary(v => v.ModuleId);
-        var tenantMap = tenantCounts.ToDictionary(v => v.ModuleId, v => v.Tenants);
-
-        _rows = modules.Select(m => new ModuleListRow
-        {
-            ModuleCode = m.ModuleCode,
-            ModuleName = m.ModuleName,
-            RegulatorCode = m.RegulatorCode,
-            SheetCount = m.SheetCount,
-            IsActive = m.IsActive,
-            CurrentVersion = versionMap.TryGetValue(m.Id, out var version) ? version.VersionCode : null,
-            ActiveTenants = tenantMap.TryGetValue(m.Id, out var count) ? count : 0
-        }).ToList();
-
+        _rows = (await ModuleService.GetModuleSummaries()).ToList();
         _loading = false;
     }
 
@@ -238,15 +191,4 @@
 
     private void OpenImport() => Navigation.NavigateTo("/modules/import");
     private void OpenDetail(string moduleCode) => Navigation.NavigateTo($"/modules/{moduleCode}");
-
-    private sealed class ModuleListRow
-    {
-        public string ModuleCode { get; set; } = string.Empty;
-        public string ModuleName { get; set; } = string.Empty;
-        public string RegulatorCode { get; set; } = string.Empty;
-        public int SheetCount { get; set; }
-        public bool IsActive { get; set; }
-        public string? CurrentVersion { get; set; }
-        public int ActiveTenants { get; set; }
-    }
 }

@@ -422,6 +422,35 @@ public class AuthServiceTests
         result!.Username.Should().Be("roundtrip");
     }
 
+    [Fact]
+    public async Task UpdateUser_ExistingUser_UpdatesProfileFields()
+    {
+        var user = CreateTestUser(role: PortalRole.Viewer);
+        _userRepoMock.Setup(r => r.GetById(user.Id, It.IsAny<CancellationToken>())).ReturnsAsync(user);
+        _userRepoMock.Setup(r => r.Update(It.IsAny<PortalUser>(), It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
+
+        var tenantId = Guid.NewGuid();
+        await _sut.UpdateUser(user.Id, "Updated Name", "updated@test.com", PortalRole.Admin, tenantId);
+
+        user.DisplayName.Should().Be("Updated Name");
+        user.Email.Should().Be("updated@test.com");
+        user.Role.Should().Be(PortalRole.Admin);
+        user.TenantId.Should().Be(tenantId);
+    }
+
+    [Fact]
+    public async Task SetUserStatus_ExistingUser_UpdatesIsActive()
+    {
+        var user = CreateTestUser(isActive: true);
+        _userRepoMock.Setup(r => r.GetById(user.Id, It.IsAny<CancellationToken>())).ReturnsAsync(user);
+        _userRepoMock.Setup(r => r.Update(It.IsAny<PortalUser>(), It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
+
+        await _sut.SetUserStatus(user.Id, false);
+
+        user.IsActive.Should().BeFalse();
+        _userRepoMock.Verify(r => r.Update(It.Is<PortalUser>(u => !u.IsActive), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
     // ═══════════════════════════════════════════════════
     // ChangePassword
     // ═══════════════════════════════════════════════════
