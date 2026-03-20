@@ -95,7 +95,6 @@ public class Subscription
 
     public bool IsActiveForEntitlement()
     {
-        return Status is SubscriptionStatus.Trial or SubscriptionStatus.Active
-            or SubscriptionStatus.PastDue or SubscriptionStatus.Suspended;
+        return Status.GrantsEntitlement();
     }
 }

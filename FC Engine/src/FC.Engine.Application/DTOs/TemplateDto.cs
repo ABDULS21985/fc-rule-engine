@@ -13,6 +13,9 @@ public class TemplateDto
     public string PhysicalTableName { get; set; } = string.Empty;
     public int? PublishedVersionId { get; set; }
     public int? PublishedVersionNumber { get; set; }
+    public int? CurrentVersionId { get; set; }
+    public int? CurrentVersionNumber { get; set; }
+    public string? CurrentVersionStatus { get; set; }
     public int FieldCount { get; set; }
     public DateTime CreatedAt { get; set; }
 }

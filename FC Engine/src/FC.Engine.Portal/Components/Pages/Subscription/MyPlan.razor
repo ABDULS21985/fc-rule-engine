@@ -79,8 +79,16 @@
                 <p class="portal-sub-plan-hero-kicker">Current Subscription</p>
                 <h2 class="portal-sub-plan-hero-name">@(_subscription.Plan?.PlanName ?? _subscription.Plan?.PlanCode ?? "—")</h2>
                 <p class="portal-sub-plan-hero-price">
-                    NGN @FormatCurrency(_subscription.Plan?.BasePriceMonthly ?? 0)
-                    <span>/ month</span>
+                    @if (_subscription.BillingFrequency == BillingFrequency.Annual)
+                    {
+                        <text>NGN @FormatCurrency(_subscription.Plan?.BasePriceAnnual ?? 0)</text>
+                        <span>/ year</span>
+                    }
+                    else
+                    {
+                        <text>NGN @FormatCurrency(_subscription.Plan?.BasePriceMonthly ?? 0)</text>
+                        <span>/ month</span>
+                    }
                 </p>
                 <div class="portal-sub-plan-hero-meta">
                     <span class="portal-badge @GetStatusBadgeClass(_subscription.Status)">@_subscription.Status</span>

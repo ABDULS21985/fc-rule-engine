@@ -33,7 +33,9 @@ public class SubscriptionOverdueStateService
         try
         {
             var stats = await _subscriptionService.GetInvoiceStats(tenantId);
-            _overdueAmount = stats.OutstandingAmount;
+            // Only report the overdue amount when there are actually overdue invoices,
+            // not the full outstanding amount which includes non-due issued invoices
+            _overdueAmount = stats.OverdueCount > 0 ? stats.OutstandingAmount : 0;
         }
         catch
         {

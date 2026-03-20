@@ -151,10 +151,7 @@ public class FeatureFlagService : IFeatureFlagService
         var planCode = await _db.Subscriptions
             .AsNoTracking()
             .Where(s => s.TenantId == tenantId)
-            .Where(s => s.Status == SubscriptionStatus.Active
-                     || s.Status == SubscriptionStatus.Trial
-                     || s.Status == SubscriptionStatus.PastDue
-                     || s.Status == SubscriptionStatus.Suspended)
+            .Where(s => SubscriptionStatusRules.EntitlementEligibleStatuses.Contains(s.Status))
             .OrderByDescending(s => s.UpdatedAt)
             .Select(s => s.Plan != null ? s.Plan.PlanCode : null)
             .FirstOrDefaultAsync();

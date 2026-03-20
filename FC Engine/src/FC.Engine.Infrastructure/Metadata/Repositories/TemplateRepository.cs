@@ -51,6 +51,9 @@ public class TemplateRepository : ITemplateRepository
     {
         return await _db.ReturnTemplates
             .Include(t => t.Versions)
+                .ThenInclude(v => v.Fields)
+            .Include(t => t.Versions)
+                .ThenInclude(v => v.ItemCodes)
             .OrderBy(t => t.ReturnCode)
             .ToListAsync(ct);
     }

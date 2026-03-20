@@ -572,7 +572,7 @@ public class SubmissionService
             reviewNotificationContext);
 
         // Check if maker-checker routing is needed
-        var isAccepted = result.Status == "Accepted" || result.Status == "AcceptedWithWarnings";
+        var isAccepted = SubmissionStatusNames.IsAcceptedLike(result.Status);
         if (!isAccepted || submittedByUserId is null)
         {
             if (isAccepted)
@@ -655,7 +655,7 @@ public class SubmissionService
             await _approvalRepo.Create(approval);
 
             // Update the result DTO
-            result.Status = "PendingApproval";
+            result.Status = SubmissionStatusNames.PendingApproval;
         }
 
         return result;

@@ -29,6 +29,12 @@ public class InstitutionUser
 
     public InstitutionRole Role { get; set; }
 
+    /// <summary>
+    /// Optional JSON array of permission codes that overrides the role default permissions for this user.
+    /// Null means "use role defaults".
+    /// </summary>
+    public string? PermissionOverridesJson { get; set; }
+
     public bool IsActive { get; set; } = true;
 
     /// <summary>Force password change on first login.</summary>

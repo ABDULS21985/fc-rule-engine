@@ -1,9 +1,13 @@
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
 using FC.Engine.Domain.Abstractions;
 using FC.Engine.Domain.Entities;
 using FC.Engine.Domain.Enums;
 using FC.Engine.Domain.Models;
 using FC.Engine.Infrastructure.Metadata;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using QuestPDF.Fluent;
 using QuestPDF.Helpers;
@@ -20,18 +24,22 @@ public class StressTestService : IStressTestService
     private static readonly string[] DepositKeys = { "totaldeposits", "totaldeposit", "deposits", "customerdeposits" };
     private static readonly string[] FxExposureKeys = { "fxexposure", "foreignexchangeexposure", "fxposition", "netfxposition" };
     private static readonly string[] Tier1Keys = { "tier1", "tier1ratio", "tier1capital" };
+    private static readonly TimeSpan CacheTtl = TimeSpan.FromMinutes(15);
 
     private readonly MetadataDbContext _db;
     private readonly ISystemicRiskService _systemicRisk;
+    private readonly IMemoryCache _cache;
     private readonly ILogger<StressTestService> _logger;
 
     public StressTestService(
         MetadataDbContext db,
         ISystemicRiskService systemicRisk,
+        IMemoryCache cache,
         ILogger<StressTestService> logger)
     {
         _db = db;
         _systemicRisk = systemicRisk;
+        _cache = cache;
         _logger = logger;
     }
 
@@ -198,6 +206,14 @@ public class StressTestService : IStressTestService
     public async Task<StressTestReport> RunStressTestAsync(
         string regulatorCode, StressTestRequest request, CancellationToken ct = default)
     {
+        var cacheKey = BuildReportCacheKey(regulatorCode, request);
+        if (_cache.TryGetValue(cacheKey, out StressTestReport? cachedReport) && cachedReport is not null)
+        {
+            _logger.LogDebug("Returning cached stress test report for {ScenarioType} and regulator {RegulatorCode}",
+                request.ScenarioType, regulatorCode);
+            return cachedReport;
+        }
+
         _logger.LogInformation("Running stress test: {ScenarioType} for regulator {RegulatorCode}",
             request.ScenarioType, regulatorCode);
 
@@ -234,7 +250,7 @@ public class StressTestService : IStressTestService
         // 7. Generate recommendations
         var recommendations = GenerateRecommendations(aggregation, contagionResults, parameters);
 
-        return new StressTestReport
+        var report = new StressTestReport
         {
             ScenarioName = parameters.ScenarioName,
             ScenarioType = request.ScenarioType,
@@ -248,11 +264,24 @@ public class StressTestService : IStressTestService
             GeneratedAt = DateTime.UtcNow,
             RegulatorCode = regulatorCode
         };
+
+        _cache.Set(cacheKey, report, new MemoryCacheEntryOptions
+        {
+            SlidingExpiration = CacheTtl
+        });
+
+        return report;
     }
 
     public Task<byte[]> GenerateReportPdfAsync(
         string regulatorCode, StressTestReport report, CancellationToken ct = default)
     {
+        var cacheKey = BuildPdfCacheKey(regulatorCode, report);
+        if (_cache.TryGetValue(cacheKey, out byte[]? cachedPdf) && cachedPdf is not null)
+        {
+            return Task.FromResult(cachedPdf);
+        }
+
         QuestPDF.Settings.License = LicenseType.Community;
 
         var primaryColor = "#006B3F";
@@ -435,7 +464,37 @@ public class StressTestService : IStressTestService
             });
         }).GeneratePdf();
 
+        _cache.Set(cacheKey, pdf, new MemoryCacheEntryOptions
+        {
+            SlidingExpiration = CacheTtl
+        });
+
         return Task.FromResult(pdf);
+    }
+
+    private static string BuildReportCacheKey(string regulatorCode, StressTestRequest request)
+    {
+        var payload = JsonSerializer.Serialize(request);
+        return $"stress-test:report:{regulatorCode}:{ComputeHash(payload)}";
+    }
+
+    private static string BuildPdfCacheKey(string regulatorCode, StressTestReport report)
+    {
+        var payload = JsonSerializer.Serialize(new
+        {
+            regulatorCode,
+            report.ScenarioType,
+            report.GeneratedAt,
+            report.ScenarioName,
+            EntityCount = report.EntityResults.Count
+        });
+        return $"stress-test:pdf:{regulatorCode}:{ComputeHash(payload)}";
+    }
+
+    private static string ComputeHash(string value)
+    {
+        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(value));
+        return Convert.ToHexString(bytes);
     }
 
     // ── Private Methods ─────────────────────────────────────────────

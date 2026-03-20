@@ -152,7 +152,7 @@ public class TenantManagementService
         var actor = ResolvePlatformActor();
         await _auditLogger.Log(
             "Tenant",
-            0,
+            onboarding.TenantId.ToString(),
             "TenantProvisioned",
             null,
             new
@@ -165,7 +165,8 @@ public class TenantManagementService
                 Warnings = result.Warnings
             },
             actor,
-            ct);
+            explicitTenantId: onboarding.TenantId,
+            ct: ct);
 
         return result;
     }

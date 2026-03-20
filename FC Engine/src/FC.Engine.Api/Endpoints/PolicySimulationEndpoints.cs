@@ -13,7 +13,7 @@ public static class PolicySimulationEndpoints
     public static IEndpointRouteBuilder MapPolicySimulationEndpoints(this IEndpointRouteBuilder app)
     {
         // ── Regulator-facing endpoints ─────────────────────────────────
-        var regulator = app.MapGroup("/api/v1/regulator/policies")
+        var regulator = app.MapGroup("/regulator/policies")
             .RequireAuthorization("RegulatorApi")
             .WithTags("Policy Simulation — Regulator");
 
@@ -23,7 +23,9 @@ public static class PolicySimulationEndpoints
             HttpContext ctx, CancellationToken ct) =>
         {
             var regulatorId = GetRegulatorId(ctx);
+            if (regulatorId == 0) return Results.Forbid();
             var userId = GetUserId(ctx);
+            if (userId == 0) return Results.Forbid();
             var id = await svc.CreateScenarioAsync(
                 regulatorId, req.Title, req.Description, req.Domain,
                 req.TargetEntityTypes, req.BaselineDate, userId, ct);
@@ -41,6 +43,7 @@ public static class PolicySimulationEndpoints
             CancellationToken ct = default) =>
         {
             var regulatorId = GetRegulatorId(ctx);
+            if (regulatorId == 0) return Results.Forbid();
             var result = await svc.ListScenariosAsync(regulatorId, domain, status, page, pageSize, ct);
             return Results.Ok(result);
         }).WithName("ListPolicyScenarios")
@@ -52,6 +55,7 @@ public static class PolicySimulationEndpoints
             HttpContext ctx, CancellationToken ct) =>
         {
             var regulatorId = GetRegulatorId(ctx);
+            if (regulatorId == 0) return Results.Forbid();
             var result = await svc.GetScenarioAsync(scenarioId, regulatorId, ct);
             return Results.Ok(result);
         }).WithName("GetPolicyScenario")
@@ -64,7 +68,9 @@ public static class PolicySimulationEndpoints
             HttpContext ctx, CancellationToken ct) =>
         {
             var regulatorId = GetRegulatorId(ctx);
+            if (regulatorId == 0) return Results.Forbid();
             var userId = GetUserId(ctx);
+            if (userId == 0) return Results.Forbid();
             await svc.AddParameterAsync(scenarioId, regulatorId, req.ParameterCode,
                 req.ProposedValue, req.ApplicableEntityTypes, userId, ct);
             return Results.NoContent();
@@ -105,7 +111,9 @@ public static class PolicySimulationEndpoints
             HttpContext ctx, CancellationToken ct) =>
         {
             var regulatorId = GetRegulatorId(ctx);
+            if (regulatorId == 0) return Results.Forbid();
             var userId = GetUserId(ctx);
+            if (userId == 0) return Results.Forbid();
             var result = await engine.RunAssessmentAsync(scenarioId, regulatorId, userId, ct);
             return Results.Ok(result);
         }).WithName("RunImpactAssessment")
@@ -283,7 +291,7 @@ public static class PolicySimulationEndpoints
           .WithSummary("List regulatory parameter presets, optionally filtered by domain");
 
         // ── Institution-facing endpoints ───────────────────────────────
-        var institution = app.MapGroup("/api/v1/institution/consultations")
+        var institution = app.MapGroup("/institution/consultations")
             .RequireAuthorization("InstitutionApi")
             .WithTags("Policy Consultation — Institution");
 
@@ -292,6 +300,7 @@ public static class PolicySimulationEndpoints
             HttpContext ctx, CancellationToken ct) =>
         {
             var institutionId = GetInstitutionId(ctx);
+            if (institutionId == 0) return Results.Forbid();
             var consultations = await svc.GetOpenConsultationsAsync(institutionId, ct);
             return Results.Ok(consultations);
         }).WithName("ListOpenConsultations")
@@ -304,7 +313,9 @@ public static class PolicySimulationEndpoints
             HttpContext ctx, CancellationToken ct) =>
         {
             var institutionId = GetInstitutionId(ctx);
+            if (institutionId == 0) return Results.Forbid();
             var userId = GetUserId(ctx);
+            if (userId == 0) return Results.Forbid();
             var feedbackId = await svc.SubmitFeedbackAsync(
                 consultationId, institutionId, req.OverallPosition,
                 req.GeneralComments, req.ProvisionFeedback, userId, ct);
@@ -319,12 +330,15 @@ public static class PolicySimulationEndpoints
 
     // ── Claim helpers ──────────────────────────────────────────────────
 
+    /// <summary>Returns 0 when claim is missing — callers must check before using.</summary>
     private static int GetRegulatorId(HttpContext ctx) =>
         ApiClaimResolvers.GetRegulatorId(ctx.User);
 
+    /// <summary>Returns 0 when claim is missing — callers must check before using.</summary>
     private static int GetUserId(HttpContext ctx) =>
         ApiClaimResolvers.GetUserId(ctx.User);
 
+    /// <summary>Returns 0 when claim is missing — callers must check before using.</summary>
     private static int GetInstitutionId(HttpContext ctx) =>
         ApiClaimResolvers.GetInstitutionId(ctx.User);
 }

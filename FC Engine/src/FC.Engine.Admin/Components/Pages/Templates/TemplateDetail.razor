@@ -887,7 +887,7 @@
             SectionName = field.SectionName,
             SectionOrder = field.SectionOrder,
             FieldOrder = field.FieldOrder,
-            DataType = Enum.Parse<FieldDataType>(field.DataType),
+            DataType = Enum.TryParse<FieldDataType>(field.DataType, true, out var parsedDataType) ? parsedDataType : FieldDataType.Text,
             IsRequired = field.IsRequired,
             IsComputed = field.IsComputed,
             IsKeyField = field.IsKeyField,
@@ -899,7 +899,7 @@
             HelpText = field.HelpText,
             ValidationNote = field.ValidationNote,
             RegulatoryReference = field.RegulatoryReference,
-            DataClassification = Enum.Parse<DataClassification>(field.DataClassification)
+            DataClassification = Enum.TryParse<DataClassification>(field.DataClassification, true, out var parsedClassification) ? parsedClassification : DataClassification.Internal
         };
         _newFieldDataType = _newField.DataType;
         _newFieldRequired = _newField.IsRequired ? "true" : "false";

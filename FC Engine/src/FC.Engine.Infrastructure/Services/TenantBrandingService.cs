@@ -23,14 +23,6 @@ public class TenantBrandingService : ITenantBrandingService
 
     private const long MaxAssetSizeBytes = 2 * 1024 * 1024;
     private static readonly TimeSpan CacheTtl = TimeSpan.FromMinutes(30);
-    private static readonly List<SubscriptionStatus> ActiveSubscriptionStatuses =
-    [
-        SubscriptionStatus.Active,
-        SubscriptionStatus.Trial,
-        SubscriptionStatus.PastDue,
-        SubscriptionStatus.Suspended
-    ];
-
     private readonly IMemoryCache _cache;
     private readonly IFileStorageService _storage;
     private readonly IServiceScopeFactory _scopeFactory;
@@ -175,7 +167,7 @@ public class TenantBrandingService : ITenantBrandingService
 
         var featureBlob = await db.Subscriptions
             .AsNoTracking()
-            .Where(s => s.TenantId == tenantId && ActiveSubscriptionStatuses.Contains(s.Status))
+            .Where(s => s.TenantId == tenantId && SubscriptionStatusRules.EntitlementEligibleStatuses.Contains(s.Status))
             .Join(
                 db.SubscriptionPlans.AsNoTracking(),
                 s => s.PlanId,

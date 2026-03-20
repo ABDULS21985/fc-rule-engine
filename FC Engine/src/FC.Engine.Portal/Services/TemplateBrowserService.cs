@@ -331,14 +331,21 @@ public class TemplateBrowserService
                 g =>
                 {
                     var latest = g.OrderByDescending(s => s.SubmittedAt).First();
-                    return latest.Status.ToString() switch
+                    return latest.Status switch
                     {
-                        "Accepted" or "AcceptedWithWarnings"
-                            or "SubmittedToRegulator" or "RegulatorAcknowledged"
-                            or "RegulatorAccepted" or "Historical" => "Submitted",
-                        "Rejected" or "ApprovalRejected" or "RegulatorQueriesRaised" => "Overdue",
-                        "PendingApproval" or "Validating" or "Parsing" => "Pending",
-                        "Draft" => "Pending",
+                        SubmissionStatus.Accepted
+                            or SubmissionStatus.AcceptedWithWarnings
+                            or SubmissionStatus.SubmittedToRegulator
+                            or SubmissionStatus.RegulatorAcknowledged
+                            or SubmissionStatus.RegulatorAccepted
+                            or SubmissionStatus.Historical => "Submitted",
+                        SubmissionStatus.Rejected
+                            or SubmissionStatus.ApprovalRejected
+                            or SubmissionStatus.RegulatorQueriesRaised => "Overdue",
+                        SubmissionStatus.PendingApproval
+                            or SubmissionStatus.Validating
+                            or SubmissionStatus.Parsing
+                            or SubmissionStatus.Draft => "Pending",
                         _ => "Pending"
                     };
                 },

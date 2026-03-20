@@ -41,4 +41,5 @@ public class BulkUploadError
     public string Message { get; set; } = string.Empty;
     public string Severity { get; set; } = "Error";
     public string Category { get; set; } = "TypeRange";
+    public string? ExpectedValue { get; set; }
 }

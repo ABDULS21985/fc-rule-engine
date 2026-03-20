@@ -6,7 +6,6 @@
 @using FC.Engine.Domain.Enums
 @using FC.Engine.Application.DTOs
 @using FC.Engine.Application.Services
-@inject ITemplateMetadataCache Cache
 @inject IModuleService ModuleService
 @inject TemplateService TemplateService
 @inject NavigationManager Nav
@@ -15,7 +14,7 @@
 @implements IDisposable
 
 <PageHeader Title="Return Templates"
-            Subtitle="Manage all published return templates, their fields, formulas, and physical table mappings"
+            Subtitle="Manage draft and published return templates, their fields, formulas, and physical table mappings"
             CountBadge="@(!_loading ? _templates.Count : null)">
     <PrimaryAction>
         <AuthorizeView Policy="CanEditTemplates">
@@ -103,7 +102,7 @@
         </div>
     }
 
-    <DataTable TItem="CachedTemplate"
+    <DataTable TItem="TemplateDto"
                Items="@FilteredTemplates.ToList()"
                Loading="_loading"
                PageSize="25"
@@ -140,44 +139,58 @@
             </div>
         </ToolbarContent>
         <ChildContent>
-            <DataColumn TItem="CachedTemplate" Title="Return Code" SortKey="x => x.ReturnCode" Width="120px">
+            <DataColumn TItem="TemplateDto" Title="Return Code" SortKey="x => x.ReturnCode" Width="120px">
                 <CellTemplate>
                     <span class="fc-list-cell-code">@context.ReturnCode</span>
                 </CellTemplate>
             </DataColumn>
-            <DataColumn TItem="CachedTemplate" Title="Name" SortKey="x => x.Name">
+            <DataColumn TItem="TemplateDto" Title="Name" SortKey="x => x.Name">
                 <CellTemplate>
                     <span class="fc-list-cell-strong">@context.Name</span>
                 </CellTemplate>
             </DataColumn>
-            <DataColumn TItem="CachedTemplate" Title="Category" Width="110px">
+            <DataColumn TItem="TemplateDto" Title="Status" Width="100px">
+                <CellTemplate>
+                    <span class="fc-badge @StatusBadge(context.CurrentVersionStatus)">
+                        @(context.CurrentVersionStatus ?? "Unknown")
+                    </span>
+                </CellTemplate>
+            </DataColumn>
+            <DataColumn TItem="TemplateDto" Title="Category" Width="110px">
                 <CellTemplate>
                     <span class="fc-badge @CategoryBadge(context.StructuralCategory)">
                         @context.StructuralCategory
                     </span>
                 </CellTemplate>
             </DataColumn>
-            <DataColumn TItem="CachedTemplate" Title="Frequency" Width="110px">
+            <DataColumn TItem="TemplateDto" Title="Frequency" Width="110px">
                 <CellTemplate>
                     <span class="fc-list-cell-muted">@GetFrequency(context)</span>
                 </CellTemplate>
             </DataColumn>
-            <DataColumn TItem="CachedTemplate" Title="Fields" Width="60px">
+            <DataColumn TItem="TemplateDto" Title="Fields" Width="60px">
                 <CellTemplate>
-                    @context.CurrentVersion.Fields.Count
+                    @context.FieldCount
                 </CellTemplate>
             </DataColumn>
-            <DataColumn TItem="CachedTemplate" Title="Formulas" Width="80px">
+            <DataColumn TItem="TemplateDto" Title="Version" Width="80px">
                 <CellTemplate>
-                    @context.CurrentVersion.IntraSheetFormulas.Count
+                    @if (context.CurrentVersionNumber.HasValue)
+                    {
+                        <span class="fc-list-cell-muted">v@context.CurrentVersionNumber</span>
+                    }
+                    else
+                    {
+                        <span class="fc-list-cell-muted">—</span>
+                    }
                 </CellTemplate>
             </DataColumn>
-            <DataColumn TItem="CachedTemplate" Title="Physical Table" Width="150px">
+            <DataColumn TItem="TemplateDto" Title="Physical Table" Width="150px">
                 <CellTemplate>
                     <span class="fc-list-cell-code">@context.PhysicalTableName</span>
                 </CellTemplate>
             </DataColumn>
-            <DataColumn TItem="CachedTemplate" Title="" Width="60px">
+            <DataColumn TItem="TemplateDto" Title="" Width="60px">
                 <CellTemplate>
                     <div class="fc-list-row-actions">
                         <button class="fc-btn fc-btn--ghost fc-btn--xs" @onclick="() => ViewTemplate(context.ReturnCode)" @onclick:stopPropagation="true">
@@ -200,7 +213,7 @@
 
     private bool _loading = true;
     private string _currentUser = string.Empty;
-    private IReadOnlyList<CachedTemplate> _templates = Array.Empty<CachedTemplate>();
+    private IReadOnlyList<TemplateDto> _templates = Array.Empty<TemplateDto>();
     private string _searchTerm = "";
     private string _filterTerm = "";   // debounced; FilteredTemplates uses this
     private bool _searchTyping;
@@ -216,7 +229,7 @@
     private ReturnFrequency _createFrequency = ReturnFrequency.Monthly;
     private StructuralCategory _createCategory = StructuralCategory.FixedRow;
 
-    private IEnumerable<CachedTemplate> FilteredTemplates => _templates
+    private IEnumerable<TemplateDto> FilteredTemplates => _templates
         .Where(t => string.IsNullOrEmpty(_filterTerm) ||
                     t.ReturnCode.Contains(_filterTerm, StringComparison.OrdinalIgnoreCase) ||
                     t.Name.Contains(_filterTerm, StringComparison.OrdinalIgnoreCase))
@@ -245,13 +258,13 @@
         // Register loader so NavMenu hover-prefetch can warm this data
         DataCache.RegisterLoader("/templates", async () =>
         {
-            var data = await Cache.GetAllPublishedTemplates();
+            var data = await TemplateService.GetAllTemplates();
             DataCache.Set("templates:all", data);
         });
 
         _templates = await DataCache.GetOrFetchAsync(
             "templates:all",
-            () => Cache.GetAllPublishedTemplates(),
+            () => TemplateService.GetAllTemplates(),
             TimeSpan.FromMinutes(5),
             updated => { _templates = updated; InvokeAsync(StateHasChanged); }
         );
@@ -360,9 +373,19 @@
         _ => "fc-badge--neutral"
     };
 
-    private static string GetFrequency(CachedTemplate template) => template.Frequency switch
+    private static string StatusBadge(string? status) => status switch
     {
-        ReturnFrequency.SemiAnnual => "Semi-Annual",
-        _ => template.Frequency.ToString()
+        nameof(TemplateStatus.Published) => "fc-badge--success",
+        nameof(TemplateStatus.Review) => "fc-badge--warning",
+        nameof(TemplateStatus.Draft) => "fc-badge--neutral",
+        nameof(TemplateStatus.Deprecated) => "fc-badge--danger",
+        nameof(TemplateStatus.Retired) => "fc-badge--neutral",
+        _ => "fc-badge--neutral"
+    };
+
+    private static string GetFrequency(TemplateDto template) => template.Frequency switch
+    {
+        nameof(ReturnFrequency.SemiAnnual) => "Semi-Annual",
+        _ => template.Frequency
     };
 }

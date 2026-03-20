@@ -440,10 +440,6 @@ app.MapGet("/platform/tenants/export", async (
     HttpContext context,
     FC.Engine.Admin.Services.PlatformAdminService platformAdminService) =>
 {
-    if (!context.User.IsInRole("PlatformAdmin") && !context.User.HasClaim("IsPlatformAdmin", "true"))
-    {
-        return Results.Forbid();
-    }
 
     var query = new FC.Engine.Admin.Services.PlatformTenantListQuery
     {
@@ -468,7 +464,7 @@ app.MapGet("/platform/tenants/export", async (
         bytes,
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         fileName);
-});
+}).RequireAuthorization("PlatformAdmin");
 
 // PlatformAdmin impersonation endpoint
 app.MapGet("/platform/impersonate", async (
@@ -476,11 +472,6 @@ app.MapGet("/platform/impersonate", async (
     MetadataDbContext db,
     IAuditLogger auditLogger) =>
 {
-    if (!context.User.IsInRole("PlatformAdmin") && !context.User.HasClaim("IsPlatformAdmin", "true"))
-    {
-        context.Response.StatusCode = 403;
-        return;
-    }
 
     var tenantIdStr = context.Request.Query["tenantId"].ToString();
     if (Guid.TryParse(tenantIdStr, out var tenantId))
@@ -520,19 +511,13 @@ app.MapGet("/platform/impersonate", async (
     }
 
     context.Response.Redirect("/");
-});
+}).RequireAuthorization("PlatformAdmin");
 
 // Stop impersonation
 app.MapGet("/platform/stop-impersonation", async (
     HttpContext context,
     IAuditLogger auditLogger) =>
 {
-    if (!context.User.IsInRole("PlatformAdmin") && !context.User.HasClaim("IsPlatformAdmin", "true"))
-    {
-        context.Response.StatusCode = 403;
-        return;
-    }
-
     if (context.Request.Cookies.TryGetValue("ImpersonateTenantId", out var existingTenantId))
     {
         if (!FC.Engine.Admin.Utilities.UserIdentityResolver.TryResolveActor(context.User, out var performedBy))
@@ -557,7 +542,7 @@ app.MapGet("/platform/stop-impersonation", async (
 
     context.Response.Cookies.Delete("ImpersonateTenantId");
     context.Response.Redirect("/platform/tenants");
-});
+}).RequireAuthorization("PlatformAdmin");
 
 // Session ping — extends the sliding auth cookie; called by FCSession.ping() JS
 app.MapPost("/api/session/ping", (HttpContext ctx) =>

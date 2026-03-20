@@ -42,7 +42,7 @@ public class TemplateService
         {
             TenantId = tenantId,
             ModuleId = request.ModuleId,
-            ReturnCode = request.ReturnCode,
+            ReturnCode = returnCode.Value,
             Name = request.Name,
             Description = request.Description,
             Frequency = request.Frequency,
@@ -231,6 +231,7 @@ public class TemplateService
     private static TemplateDto MapToDto(ReturnTemplate t)
     {
         var published = t.CurrentPublishedVersion;
+        var current = published ?? t.Versions.OrderByDescending(v => v.VersionNumber).FirstOrDefault();
         return new TemplateDto
         {
             Id = t.Id,
@@ -242,7 +243,10 @@ public class TemplateService
             PhysicalTableName = t.PhysicalTableName,
             PublishedVersionId = published?.Id,
             PublishedVersionNumber = published?.VersionNumber,
-            FieldCount = published?.Fields.Count ?? 0,
+            CurrentVersionId = current?.Id,
+            CurrentVersionNumber = current?.VersionNumber,
+            CurrentVersionStatus = current?.Status.ToString(),
+            FieldCount = current?.Fields.Count ?? 0,
             CreatedAt = t.CreatedAt
         };
     }
@@ -264,9 +268,13 @@ public class TemplateService
         };
 
         var published = t.CurrentPublishedVersion;
+        var current = published ?? t.Versions.OrderByDescending(v => v.VersionNumber).FirstOrDefault();
         dto.PublishedVersionId = published?.Id;
         dto.PublishedVersionNumber = published?.VersionNumber;
-        dto.FieldCount = published?.Fields.Count ?? 0;
+        dto.CurrentVersionId = current?.Id;
+        dto.CurrentVersionNumber = current?.VersionNumber;
+        dto.CurrentVersionStatus = current?.Status.ToString();
+        dto.FieldCount = current?.Fields.Count ?? 0;
 
         dto.Versions = t.Versions.OrderByDescending(v => v.VersionNumber).Select(v => new TemplateVersionDto
         {

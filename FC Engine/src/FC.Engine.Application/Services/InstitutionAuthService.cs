@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Security.Claims;
+using System.Text.Json;
 using FC.Engine.Domain.Abstractions;
 using FC.Engine.Domain.Entities;
 using FC.Engine.Domain.Enums;
@@ -110,6 +111,16 @@ public class InstitutionAuthService
     /// <summary>
     /// Creates a new institution user with hashed password.
     /// </summary>
+    public Task<InstitutionUser> CreateUser(
+        int institutionId,
+        string username,
+        string email,
+        string displayName,
+        string password,
+        InstitutionRole role,
+        CancellationToken ct = default)
+        => CreateUser(institutionId, username, email, displayName, password, role, permissionOverrides: null, ct);
+
     public async Task<InstitutionUser> CreateUser(
         int institutionId,
         string username,
@@ -117,6 +128,7 @@ public class InstitutionAuthService
         string displayName,
         string password,
         InstitutionRole role,
+        IEnumerable<string>? permissionOverrides,
         CancellationToken ct = default)
     {
         if (await _userRepo.UsernameExists(username, ct))
@@ -143,6 +155,7 @@ public class InstitutionAuthService
             PasswordHash = HashPassword(password),
             PreferredLanguage = "en",
             Role = role,
+            PermissionOverridesJson = SerializePermissionOverrides(permissionOverrides),
             IsActive = true,
             MustChangePassword = true,
             CreatedAt = DateTime.UtcNow
@@ -272,7 +285,7 @@ public class InstitutionAuthService
             return principal;
         }
 
-        var permissions = await _permissionService.GetPermissions(user.TenantId, user.Role.ToString(), ct);
+        var permissions = await ResolvePermissions(user, ct);
         foreach (var permission in permissions.Distinct(StringComparer.OrdinalIgnoreCase))
         {
             identity.AddClaim(new Claim("perm", permission));
@@ -289,7 +302,7 @@ public class InstitutionAuthService
 
     public async Task<AuthenticatedUser> BuildAuthenticatedUser(InstitutionUser user, CancellationToken ct = default)
     {
-        var permissions = await _permissionService.GetPermissions(user.TenantId, user.Role.ToString(), ct);
+        var permissions = await ResolvePermissions(user, ct);
         var entitlement = await _entitlementService.ResolveEntitlements(user.TenantId, ct);
 
         return new AuthenticatedUser
@@ -304,6 +317,56 @@ public class InstitutionAuthService
             Permissions = permissions.ToList(),
             EntitledModules = entitlement.ActiveModules.Select(m => m.ModuleCode).ToList()
         };
+    }
+
+    private async Task<IReadOnlyList<string>> ResolvePermissions(InstitutionUser user, CancellationToken ct)
+    {
+        var overrides = DeserializePermissionOverrides(user.PermissionOverridesJson);
+        if (overrides is not null)
+        {
+            return overrides;
+        }
+
+        return await _permissionService.GetPermissions(user.TenantId, user.Role.ToString(), ct);
+    }
+
+    private static string? SerializePermissionOverrides(IEnumerable<string>? permissionOverrides)
+    {
+        if (permissionOverrides is null)
+        {
+            return null;
+        }
+
+        var normalized = permissionOverrides
+            .Where(permission => !string.IsNullOrWhiteSpace(permission))
+            .Select(permission => permission.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(permission => permission, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        return JsonSerializer.Serialize(normalized);
+    }
+
+    private static IReadOnlyList<string>? DeserializePermissionOverrides(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return null;
+        }
+
+        try
+        {
+            return JsonSerializer.Deserialize<List<string>>(json)?
+                .Where(permission => !string.IsNullOrWhiteSpace(permission))
+                .Select(permission => permission.Trim())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList()
+                ?? [];
+        }
+        catch
+        {
+            return [];
+        }
     }
 
     // ── Password Hashing (identical to AuthService) ──

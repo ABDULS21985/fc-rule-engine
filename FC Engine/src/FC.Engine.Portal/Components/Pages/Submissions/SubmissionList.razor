@@ -880,7 +880,11 @@
     private static string RelativeTime(DateTime? dt)
     {
         if (dt is null) return "—";
-        var diff = DateTime.UtcNow - dt.Value.ToUniversalTime();
+        // Treat Unspecified-kind DateTimes as UTC (database stores UTC values)
+        var utcValue = dt.Value.Kind == DateTimeKind.Unspecified
+            ? DateTime.SpecifyKind(dt.Value, DateTimeKind.Utc)
+            : dt.Value.ToUniversalTime();
+        var diff = DateTime.UtcNow - utcValue;
         if (diff.TotalMinutes < 2) return "just now";
         if (diff.TotalMinutes < 60) return $"{(int)diff.TotalMinutes}m ago";
         if (diff.TotalHours < 24) return $"{(int)diff.TotalHours}h ago";

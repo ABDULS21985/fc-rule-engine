@@ -53,7 +53,7 @@ public class PortalUserRepository : IPortalUserRepository
 
     public async Task<bool> UsernameExists(string username, CancellationToken ct = default)
     {
-        return await _db.PortalUsers.AnyAsync(u => u.Username == username, ct);
+        return await _db.PortalUsers.AnyAsync(u => u.Username == username && u.DeletedAt == null, ct);
     }
 
     public async Task<bool> EmailExists(string email, int? excludeUserId = null, CancellationToken ct = default)

@@ -81,6 +81,11 @@ public static class WebhookEndpoints
             if (tenantId == Guid.Empty)
                 return Results.Forbid();
 
+            // Verify the endpoint belongs to the current tenant
+            var existing = await webhookService.GetEndpointAsync(id, ct);
+            if (existing is null || existing.TenantId != tenantId)
+                return Results.NotFound();
+
             try
             {
                 await webhookService.UpdateEndpointAsync(
@@ -106,6 +111,11 @@ public static class WebhookEndpoints
             if (tenantId == Guid.Empty)
                 return Results.Forbid();
 
+            // Verify the endpoint belongs to the current tenant
+            var existing = await webhookService.GetEndpointAsync(id, ct);
+            if (existing is null || existing.TenantId != tenantId)
+                return Results.NotFound();
+
             await webhookService.DeleteEndpointAsync(id, ct);
             return Results.NoContent();
         })
@@ -121,6 +131,11 @@ public static class WebhookEndpoints
             var tenantId = tenantContext.CurrentTenantId ?? Guid.Empty;
             if (tenantId == Guid.Empty)
                 return Results.Forbid();
+
+            // Verify the endpoint belongs to the current tenant
+            var existing = await webhookService.GetEndpointAsync(id, ct);
+            if (existing is null || existing.TenantId != tenantId)
+                return Results.NotFound();
 
             try
             {
@@ -144,6 +159,11 @@ public static class WebhookEndpoints
             var tenantId = tenantContext.CurrentTenantId ?? Guid.Empty;
             if (tenantId == Guid.Empty)
                 return Results.Forbid();
+
+            // Verify the endpoint belongs to the current tenant
+            var existing = await webhookService.GetEndpointAsync(id, ct);
+            if (existing is null || existing.TenantId != tenantId)
+                return Results.NotFound();
 
             try
             {
@@ -174,7 +194,7 @@ public static class WebhookEndpoints
             if (take > 500) take = 500;
 
             var endpoint = await webhookService.GetEndpointAsync(id, ct);
-            if (endpoint is null)
+            if (endpoint is null || endpoint.TenantId != tenantId)
             {
                 return Results.NotFound();
             }

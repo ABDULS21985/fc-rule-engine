@@ -1,6 +1,7 @@
 using FC.Engine.Application.DTOs;
 using FC.Engine.Application.Services;
 using FC.Engine.Domain.Abstractions;
+using FC.Engine.Domain.Enums;
 using FC.Engine.Infrastructure.Metadata;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -53,7 +54,7 @@ public static class SubmissionEndpoints
             var result = await orchestrator.Process(
                 request.Body, returnCode, institutionId, returnPeriodId, ct);
 
-            if (result.Status is "Accepted" or "AcceptedWithWarnings")
+            if (SubmissionStatusNames.IsAcceptedLike(result.Status))
             {
                 try
                 {
@@ -68,8 +69,8 @@ public static class SubmissionEndpoints
 
             return result.Status switch
             {
-                "Accepted" or "AcceptedWithWarnings" => Results.Created($"/api/{(string.IsNullOrEmpty(versionSuffix) ? "v1" : versionSuffix)}/submissions/{result.SubmissionId}", result),
-                "Rejected" => Results.UnprocessableEntity(result),
+                SubmissionStatusNames.Accepted or SubmissionStatusNames.AcceptedWithWarnings => Results.Created($"/api/{(string.IsNullOrEmpty(versionSuffix) ? "v1" : versionSuffix)}/submissions/{result.SubmissionId}", result),
+                SubmissionStatusNames.Rejected => Results.UnprocessableEntity(result),
                 _ => Results.Ok(result)
             };
         })

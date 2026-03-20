@@ -17,6 +17,7 @@ public class InstitutionUserConfiguration : IEntityTypeConfiguration<Institution
         builder.Property(e => e.PhoneNumber).HasMaxLength(32);
         builder.Property(e => e.DisplayName).HasMaxLength(200).IsRequired();
         builder.Property(e => e.PasswordHash).HasMaxLength(500).IsRequired();
+        builder.Property(e => e.PermissionOverridesJson);
         builder.Property(e => e.PreferredLanguage).HasMaxLength(10).IsRequired().HasDefaultValue("en");
         builder.Property(e => e.Role).HasMaxLength(20).IsRequired()
             .HasConversion<string>();

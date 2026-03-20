@@ -5,6 +5,7 @@ using FC.Engine.Domain.Abstractions;
 using FC.Engine.Domain.Entities;
 using FC.Engine.Domain.Enums;
 using FC.Engine.Domain.Notifications;
+using FC.Engine.Domain.Security;
 using Microsoft.Extensions.Configuration;
 
 namespace FC.Engine.Portal.Services;
@@ -22,6 +23,47 @@ public class InstitutionManagementService
         ["image/jpg"] = ".jpg",
         ["image/svg+xml"] = ".svg"
     };
+
+    private static readonly IReadOnlyDictionary<string, IReadOnlyList<string>> InviteCapabilityPermissions =
+        new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Submit Returns"] =
+            [
+                PermissionCatalog.TemplateRead,
+                PermissionCatalog.SubmissionRead,
+                PermissionCatalog.SubmissionCreate,
+                PermissionCatalog.SubmissionEdit,
+                PermissionCatalog.SubmissionValidate,
+                PermissionCatalog.SubmissionSubmit,
+                PermissionCatalog.SubmissionDirectSubmit,
+                PermissionCatalog.SubmissionDirectStatus
+            ],
+            ["Approve Returns"] =
+            [
+                PermissionCatalog.TemplateRead,
+                PermissionCatalog.SubmissionRead,
+                PermissionCatalog.SubmissionReview,
+                PermissionCatalog.SubmissionApprove,
+                PermissionCatalog.SubmissionReject,
+                PermissionCatalog.SubmissionDirectStatus
+            ],
+            ["View Reports"] =
+            [
+                PermissionCatalog.TemplateRead,
+                PermissionCatalog.SubmissionRead,
+                PermissionCatalog.ReportRead,
+                PermissionCatalog.CalendarRead,
+                PermissionCatalog.ComplianceHealthView
+            ],
+            ["Manage Team"] =
+            [
+                PermissionCatalog.UserRead,
+                PermissionCatalog.UserCreate,
+                PermissionCatalog.UserEdit,
+                PermissionCatalog.UserDeactivate,
+                PermissionCatalog.UserRoleAssign
+            ]
+        };
 
     private readonly IInstitutionRepository _institutionRepo;
     private readonly IInstitutionUserRepository _userRepo;
@@ -573,7 +615,8 @@ public class InstitutionManagementService
             Role = parsedRole.ToString(),
             SentAt = DateTime.UtcNow,
             ExpiresAt = DateTime.UtcNow.AddDays(7),
-            GrantedPermissions = grantedPermissions ?? new List<string>()
+            HasPermissionOverrides = grantedPermissions is not null,
+            GrantedPermissions = ResolveInvitePermissions(parsedRole, grantedPermissions)
         };
         invite.InvitationUrl = BuildInvitationUrl(institutionId, invite.Id);
 
@@ -703,6 +746,7 @@ public class InstitutionManagementService
                 normalizedDisplayName,
                 password,
                 parsedRole,
+                invite.HasPermissionOverrides ? invite.GrantedPermissions : null,
                 ct);
 
             user.MustChangePassword = false;
@@ -913,8 +957,44 @@ public class InstitutionManagementService
         Role = invite.Role,
         SentAt = invite.SentAt,
         ExpiresAt = invite.ExpiresAt,
-        InvitationUrl = invite.InvitationUrl
+        InvitationUrl = invite.InvitationUrl,
+        HasPermissionOverrides = invite.HasPermissionOverrides,
+        GrantedPermissions = new List<string>(invite.GrantedPermissions)
     };
+
+    private static List<string> ResolveInvitePermissions(InstitutionRole role, IEnumerable<string>? grantedPermissions)
+    {
+        if (grantedPermissions is null)
+        {
+            return [];
+        }
+
+        var selectedCapabilities = grantedPermissions
+            .Where(permission => !string.IsNullOrWhiteSpace(permission))
+            .Select(permission => permission.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        var resolved = PermissionCatalog.DefaultRolePermissions.TryGetValue(role.ToString(), out var defaults)
+            ? defaults.ToHashSet(StringComparer.OrdinalIgnoreCase)
+            : new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var capability in InviteCapabilityPermissions)
+        {
+            if (selectedCapabilities.Contains(capability.Key))
+            {
+                resolved.UnionWith(capability.Value);
+            }
+            else
+            {
+                resolved.ExceptWith(capability.Value);
+            }
+        }
+
+        return resolved
+            .OrderBy(permission => permission, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
 
     private static string GetInitials(string name)
     {
@@ -937,7 +1017,8 @@ public class PendingInviteModel
     public DateTime SentAt { get; set; } = DateTime.UtcNow;
     public DateTime ExpiresAt { get; set; } = DateTime.UtcNow.AddDays(7);
     public string? InvitationUrl { get; set; }
-    /// <summary>Permission overrides selected during invite (e.g. "Submit Returns", "View Reports").</summary>
+    public bool HasPermissionOverrides { get; set; }
+    /// <summary>Resolved permission codes selected during invite.</summary>
     public List<string> GrantedPermissions { get; set; } = new();
 }
 

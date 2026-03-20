@@ -562,7 +562,9 @@ public class BulkUploadService : IBulkUploadService
                 RowNumber = row,
                 FieldCode = string.IsNullOrWhiteSpace(field) ? error.Field : field,
                 Message = error.Message,
-                Severity = error.Severity.ToString()
+                Severity = error.Severity.ToString(),
+                Category = error.Category.ToString(),
+                ExpectedValue = error.ExpectedValue
             });
         }
 
