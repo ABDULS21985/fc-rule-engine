@@ -7,6 +7,7 @@
 @implements IAsyncDisposable
 @inject NavigationManager Navigation
 @inject IJSRuntime JS
+@inject ILogger<TeamMembers> Logger
 
 <PageTitle>Team Members — RegOS™ Portal</PageTitle>
 
@@ -103,7 +104,7 @@
 
             <span class="portal-tmh-active-badge">
                 <span class="portal-tmh-active-dot"></span>
-                @teamMembers.Count(m => m.IsActive) active today
+                @teamMembers.Count(m => m.IsActive) active members
             </span>
         </div>
 
@@ -725,6 +726,7 @@
 
     // ── Page state ─────────────────────────────────────────────────────────
     private bool isLoading = true;
+    private string? _loadError;
     private bool isAdmin;
     private int currentUserId;
     private int institutionId;
@@ -866,7 +868,11 @@
 
             await LoadData();
         }
-        catch { }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to load team members for institution {InstitutionId}", institutionId);
+            _loadError = "Unable to load team data. Please try again.";
+        }
         finally { isLoading = false; }
     }
 

@@ -7,6 +7,7 @@ using FC.Engine.Domain.Entities;
 using FC.Engine.Domain.Enums;
 using FC.Engine.Infrastructure.Metadata;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 
 /// <summary>
@@ -27,6 +28,7 @@ public class SubmissionService
     private readonly IFilingCalendarService _filingCalendarService;
     private readonly ITemplateMetadataCache _templateCache;
     private readonly ILogger<SubmissionService> _logger;
+    private readonly IHttpContextAccessor _httpContextAccessor;
 
     public SubmissionService(
         TemplateService templateService,
@@ -39,7 +41,8 @@ public class SubmissionService
         NotificationService notificationSvc,
         IFilingCalendarService filingCalendarService,
         ITemplateMetadataCache templateCache,
-        ILogger<SubmissionService> logger)
+        ILogger<SubmissionService> logger,
+        IHttpContextAccessor httpContextAccessor)
     {
         _templateService = templateService;
         _entitlementService = entitlementService;
@@ -52,6 +55,7 @@ public class SubmissionService
         _filingCalendarService = filingCalendarService;
         _templateCache = templateCache;
         _logger = logger;
+        _httpContextAccessor = httpContextAccessor;
     }
 
     // ── List & Detail reads (service-layer replacements for direct repo access) ──
@@ -560,7 +564,7 @@ public class SubmissionService
                 PeriodLabel = period is null
                     ? DateTime.UtcNow.ToString("MMM yyyy")
                     : new DateTime(period.Year, period.Month, 1).ToString("MMM yyyy"),
-                PortalBaseUrl = "https://portal.regos.app"
+                PortalBaseUrl = GetPortalBaseUrl()
             };
         }
 
@@ -671,5 +675,13 @@ public class SubmissionService
         {
             _logger.LogWarning(ex, "SLA recording failed for period {PeriodId}, submission {SubmissionId}", periodId, submissionId);
         }
+    }
+
+    private string GetPortalBaseUrl()
+    {
+        var request = _httpContextAccessor.HttpContext?.Request;
+        if (request is not null)
+            return $"{request.Scheme}://{request.Host}";
+        return "https://portal.regos.app"; // fallback for background tasks
     }
 }

@@ -105,10 +105,10 @@
                         <a class="fc-list-cell-link" href="/templates/@context.ReturnCode">@context.ReturnCode</a>
                     </CellTemplate>
                 </DataColumn>
-                <DataColumn TItem="Submission" Title="Institution" SortKey="x => x.Institution!.InstitutionName" CellClass="fc-list-cell-strong">
+                <DataColumn TItem="Submission" Title="Institution" SortKey="x => x.Institution?.InstitutionName ?? string.Empty" CellClass="fc-list-cell-strong">
                     <CellTemplate>@(context.Institution?.InstitutionName ?? "—")</CellTemplate>
                 </DataColumn>
-                <DataColumn TItem="Submission" Title="Period" SortKey="x => x.ReturnPeriod!.ReportingDate" CellClass="fc-list-cell-muted">
+                <DataColumn TItem="Submission" Title="Period" SortKey="x => x.ReturnPeriod?.ReportingDate ?? DateTime.MinValue" CellClass="fc-list-cell-muted">
                     <CellTemplate>@(context.ReturnPeriod?.ReportingDate.ToString("yyyy-MM-dd") ?? "—")</CellTemplate>
                 </DataColumn>
                 <DataColumn TItem="Submission" Title="Status" SortKey="x => x.Status">
@@ -130,7 +130,7 @@
                         }
                     </CellTemplate>
                 </DataColumn>
-                <DataColumn TItem="Submission" Title="Errors" SortKey="x => x.ValidationReport!.Errors.Count">
+                <DataColumn TItem="Submission" Title="Errors" SortKey="x => x.ValidationReport?.Errors.Count ?? 0">
                     <CellTemplate>
                         @{
                             var errCount = context.ValidationReport?.Errors.Count ?? 0;

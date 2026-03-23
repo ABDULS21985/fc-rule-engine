@@ -12,6 +12,7 @@
 @inject OnboardingStateService OnboardingState
 @inject IJSRuntime JS
 @inject PortalShortcutService ShortcutService
+@inject AuthenticationStateProvider AuthStateProvider
 @implements IAsyncDisposable
 
 <TenantThemeProvider />
@@ -348,6 +349,20 @@
 
     protected override async Task OnInitializedAsync()
     {
+        // Enforce MustChangePassword — redirect to change-password page if flag is set
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var mustChange = authState.User.FindFirst("MustChangePassword")?.Value;
+        if (string.Equals(mustChange, "true", StringComparison.OrdinalIgnoreCase))
+        {
+            var currentPath = new Uri(Navigation.Uri).AbsolutePath;
+            if (!currentPath.Equals("/change-password", StringComparison.OrdinalIgnoreCase)
+                && !currentPath.StartsWith("/account/", StringComparison.OrdinalIgnoreCase))
+            {
+                Navigation.NavigateTo("/change-password");
+                return;
+            }
+        }
+
         if (TenantContext.CurrentTenantId.HasValue)
         {
             _branding = await BrandingService.GetBrandingConfig(TenantContext.CurrentTenantId.Value);

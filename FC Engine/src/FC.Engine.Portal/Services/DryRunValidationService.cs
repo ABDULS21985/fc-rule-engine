@@ -364,6 +364,12 @@ public class DryRunValidationService
                         fieldStatus.Status = "Error";
                         fieldStatus.Message = dt == FieldDataType.Integer ? "Must be a whole number" : "Must be a number";
                     }
+                    else if (dt == FieldDataType.Integer && numVal != Math.Truncate(numVal))
+                    {
+                        // Integer fields must not have a fractional part
+                        fieldStatus.Status = "Error";
+                        fieldStatus.Message = "Must be a whole number (no decimals)";
+                    }
                     else
                     {
                         // Range checks

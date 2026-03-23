@@ -7,6 +7,7 @@
 @inject IComplianceHealthService ChsService
 @inject ChartJsInterop Charts
 @inject IJSRuntime JS
+@inject FC.Engine.Domain.Abstractions.ITenantContext TenantContext
 
 <PageTitle>Compliance Health Score — RegOS™ Portal</PageTitle>
 
@@ -322,10 +323,20 @@ else
         new("Health Score", IsCurrent: true)
     };
 
+    [CascadingParameter]
+    private Task<AuthenticationState>? AuthState { get; set; }
+
     protected override async Task OnInitializedAsync()
     {
-        // Use a well-known tenant ID from the simulated pool for demo
-        _tenantId = Guid.Parse("a1000001-0000-0000-0000-000000000002");
+        // Resolve tenant from the authenticated user's context
+        _tenantId = TenantContext.CurrentTenantId ?? Guid.Empty;
+        if (_tenantId == Guid.Empty)
+        {
+            var state = await AuthState!;
+            var tidClaim = state.User.FindFirst("TenantId")?.Value ?? state.User.FindFirst("tid")?.Value;
+            if (Guid.TryParse(tidClaim, out var parsed))
+                _tenantId = parsed;
+        }
         await LoadAsync();
     }
 

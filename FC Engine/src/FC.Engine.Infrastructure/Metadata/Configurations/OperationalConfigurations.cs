@@ -71,6 +71,7 @@ public class InstitutionConfiguration : IEntityTypeConfiguration<Institution>
         builder.Property(i => i.SubscriptionTier).HasMaxLength(50).HasDefaultValue("Basic");
         builder.Property(i => i.MakerCheckerEnabled).HasDefaultValue(false);
         builder.Property(i => i.SettingsJson).HasColumnType("nvarchar(max)");
+        builder.Property(i => i.RowVersion).IsRowVersion();
         // Navigation to InstitutionUsers is configured in InstitutionUserConfiguration
         // Navigation to Tenant is configured in TenantConfiguration
 

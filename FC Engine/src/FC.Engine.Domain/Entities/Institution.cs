@@ -58,6 +58,9 @@ public class Institution
     /// <summary>JSON-serialized portal preferences for this institution.</summary>
     public string? SettingsJson { get; set; }
 
+    /// <summary>Optimistic concurrency token to prevent lost updates on SettingsJson.</summary>
+    public byte[]? RowVersion { get; set; }
+
     // ── Navigation ──
 
     /// <summary>FI Portal users belonging to this institution.</summary>

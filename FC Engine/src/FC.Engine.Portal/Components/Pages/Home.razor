@@ -34,7 +34,33 @@
         </div>
     </div>
 }
-else if (data is not null)
+else if (data is null)
+{
+    <!-- Error / No Data State -->
+    <div class="portal-dashboard">
+        <div class="portal-empty-state" style="padding:var(--space-12) var(--space-6); text-align:center;">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--cbn-text-muted, #6b7280)" stroke-width="1.5" aria-hidden="true">
+                <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+            </svg>
+            <h2 style="margin:var(--space-3) 0 var(--space-2); font-size:1.125rem; color:var(--cbn-text, #1f2937);">Unable to load dashboard</h2>
+            <p style="color:var(--cbn-text-muted, #6b7280); margin-bottom:var(--space-4);">
+                @if (institutionId <= 0)
+                {
+                    <text>Your account is not linked to an institution. Please contact your administrator.</text>
+                }
+                else
+                {
+                    <text>We couldn't retrieve your dashboard data. This may be a temporary issue.</text>
+                }
+            </p>
+            @if (institutionId > 0)
+            {
+                <button class="portal-btn portal-btn-primary portal-btn-sm" @onclick="LoadDashboard">Retry</button>
+            }
+        </div>
+    </div>
+}
+else
 {
     var nextDeadline = data.UpcomingDeadlines
         .OrderBy(d => d.Status == DeadlineStatus.Overdue ? 0 : d.Status == DeadlineStatus.Submitted ? 2 : 1)

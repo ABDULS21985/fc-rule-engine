@@ -453,19 +453,19 @@ public class ExportService
         sb.AppendLine("@media print { @page { margin: 1cm; } body { print-color-adjust: exact; -webkit-print-color-adjust: exact; } }");
         sb.AppendLine("</style></head>");
         sb.AppendLine("<body onload=\"window.print()\">");
-        sb.AppendLine($"<div class=\"header\"><h1>Audit Trail Report</h1><p>{Esc(institutionName)} &mdash; {submission.ReturnCode} ({period})</p></div>");
-        sb.AppendLine($"<div class=\"meta-strip\"><span>Submission ID: <strong>#{submission.Id}</strong></span><span>Status: <strong>{submission.Status}</strong></span><span>Generated: <strong>{generatedAt}</strong></span></div>");
+        sb.AppendLine($"<div class=\"header\"><h1>Audit Trail Report</h1><p>{HtmlEnc(institutionName)} &mdash; {HtmlEnc(submission.ReturnCode)} ({HtmlEnc(period)})</p></div>");
+        sb.AppendLine($"<div class=\"meta-strip\"><span>Submission ID: <strong>#{submission.Id}</strong></span><span>Status: <strong>{HtmlEnc(submission.Status.ToString())}</strong></span><span>Generated: <strong>{generatedAt}</strong></span></div>");
         sb.AppendLine("<table><thead><tr><th>Timestamp</th><th>Actor</th><th>Action</th><th>Detail</th></tr></thead><tbody>");
 
         foreach (var (at, actor, action, detail, comment) in entries)
         {
-            var actionClass = action.Replace(" ", "-");
-            var commentHtml = string.IsNullOrEmpty(comment) ? "" : $"<div class=\"comment\">&ldquo;{Esc(comment)}&rdquo;</div>";
-            sb.AppendLine($"<tr><td>{at.ToLocalTime():dd MMM yyyy HH:mm:ss}</td><td class=\"actor\">{Esc(actor)}</td><td><span class=\"action action-{actionClass}\">{action}</span></td><td>{Esc(detail)}{commentHtml}</td></tr>");
+            var actionClass = HtmlEnc(action.Replace(" ", "-"));
+            var commentHtml = string.IsNullOrEmpty(comment) ? "" : $"<div class=\"comment\">&ldquo;{HtmlEnc(comment)}&rdquo;</div>";
+            sb.AppendLine($"<tr><td>{at.ToLocalTime():dd MMM yyyy HH:mm:ss}</td><td class=\"actor\">{HtmlEnc(actor)}</td><td><span class=\"action action-{actionClass}\">{HtmlEnc(action)}</span></td><td>{HtmlEnc(detail)}{commentHtml}</td></tr>");
         }
 
         sb.AppendLine("</tbody></table>");
-        sb.AppendLine($"<div class=\"footer\">This document was generated automatically by RegOS™ on {generatedAt}. Submission #{submission.Id} &bull; {submission.ReturnCode} &bull; {Esc(institutionName)}</div>");
+        sb.AppendLine($"<div class=\"footer\">This document was generated automatically by RegOS™ on {generatedAt}. Submission #{submission.Id} &bull; {HtmlEnc(submission.ReturnCode)} &bull; {HtmlEnc(institutionName)}</div>");
         sb.AppendLine("</body></html>");
 
         return Encoding.UTF8.GetBytes(sb.ToString());
@@ -575,6 +575,20 @@ public class ExportService
         if (value.Contains(',') || value.Contains('"') || value.Contains('\n') || value.Contains('\r'))
             return "\"" + value.Replace("\"", "\"\"") + "\"";
         return value;
+    }
+
+    /// <summary>
+    /// HTML-encode a string to prevent XSS in generated HTML documents.
+    /// </summary>
+    private static string HtmlEnc(string? value)
+    {
+        if (string.IsNullOrEmpty(value)) return "";
+        return value
+            .Replace("&", "&amp;")
+            .Replace("<", "&lt;")
+            .Replace(">", "&gt;")
+            .Replace("\"", "&quot;")
+            .Replace("'", "&#39;");
     }
 
     private async Task<Dictionary<string, ModuleContext>> BuildModuleContextLookupAsync(IEnumerable<string> returnCodes)

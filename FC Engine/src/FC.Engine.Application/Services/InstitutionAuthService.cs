@@ -269,7 +269,8 @@ public class InstitutionAuthService
             new("lang", string.IsNullOrWhiteSpace(user.PreferredLanguage) ? "en" : user.PreferredLanguage),
             new("InstitutionId", user.InstitutionId.ToString()),
             new("InstitutionName", user.Institution?.InstitutionName ?? "Unknown"),
-            new("TenantId", user.TenantId.ToString())
+            new("TenantId", user.TenantId.ToString()),
+            new("MustChangePassword", user.MustChangePassword.ToString().ToLowerInvariant())
         };
 
         var identity = new ClaimsIdentity(claims, "FC.Portal.Auth");

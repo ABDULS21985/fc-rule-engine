@@ -426,6 +426,7 @@
 @code {
     // ── State ────────────────────────────────────────────────────
     private bool isLoading = true;
+    private string? _settingsLoadError;
     private string activeSection = "profile";
     private bool isAdmin;
     private int userId;
@@ -482,9 +483,10 @@
 
             institution = await SettingsSvc.GetInstitutionDetail(userId);
         }
-        catch
+        catch (Exception ex)
         {
-            // Logged via Serilog pipeline
+            _settingsLoadError = "Unable to load settings. Please try again.";
+            System.Diagnostics.Debug.WriteLine($"Settings load error: {ex.Message}");
         }
         finally
         {
@@ -568,9 +570,9 @@
             return;
         }
 
-        if (newPassword.Length < 8)
+        if (newPassword.Length < 12)
         {
-            newPasswordError = "Password must be at least 8 characters.";
+            newPasswordError = "Password must be at least 12 characters.";
             return;
         }
 

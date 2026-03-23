@@ -139,6 +139,32 @@ if (signalRSettings?.RedisBackplane == true)
     }
 }
 
+// Rate limiting for public endpoints (invitation acceptance, login)
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.GlobalLimiter = System.Threading.RateLimiting.PartitionedRateLimiter.Create<HttpContext>(context =>
+    {
+        // Only rate-limit public invitation and login paths
+        var path = context.Request.Path.Value ?? "";
+        if (path.StartsWith("/institution/invite", StringComparison.OrdinalIgnoreCase)
+            || path.Equals("/account/login", StringComparison.OrdinalIgnoreCase))
+        {
+            var remoteIp = context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+            return System.Threading.RateLimiting.RateLimitPartition.GetFixedWindowLimiter(
+                $"public_{remoteIp}",
+                _ => new System.Threading.RateLimiting.FixedWindowRateLimiterOptions
+                {
+                    PermitLimit = 15,
+                    Window = TimeSpan.FromMinutes(1),
+                    QueueProcessingOrder = System.Threading.RateLimiting.QueueProcessingOrder.OldestFirst,
+                    QueueLimit = 0
+                });
+        }
+        return System.Threading.RateLimiting.RateLimitPartition.GetNoLimiter("no-limit");
+    });
+});
+
 // Blazor Server
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
@@ -169,6 +195,7 @@ if (requireHttps)
     app.UseHttpsRedirection();
 }
 
+app.UseRateLimiter();
 app.UseTenantResolution();
 app.UseTenantFavicon();
 app.UseStaticFiles();

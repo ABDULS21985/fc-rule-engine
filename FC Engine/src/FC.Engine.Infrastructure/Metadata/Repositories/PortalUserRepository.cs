@@ -7,10 +7,23 @@ namespace FC.Engine.Infrastructure.Metadata.Repositories;
 public class PortalUserRepository : IPortalUserRepository
 {
     private readonly MetadataDbContext _db;
+    private readonly ITenantContext _tenantContext;
 
-    public PortalUserRepository(MetadataDbContext db)
+    public PortalUserRepository(MetadataDbContext db, ITenantContext tenantContext)
     {
         _db = db;
+        _tenantContext = tenantContext;
+    }
+
+    /// <summary>
+    /// Applies tenant scoping to queries. Platform admins (no tenant) see all users.
+    /// </summary>
+    private IQueryable<PortalUser> ApplyTenantFilter(IQueryable<PortalUser> query)
+    {
+        var tenantId = _tenantContext.CurrentTenantId;
+        if (tenantId.HasValue)
+            query = query.Where(u => u.TenantId == tenantId.Value);
+        return query;
     }
 
     public async Task<PortalUser?> GetByUsername(string username, CancellationToken ct = default)
@@ -27,12 +40,13 @@ public class PortalUserRepository : IPortalUserRepository
 
     public async Task<PortalUser?> GetById(int id, CancellationToken ct = default)
     {
-        return await _db.PortalUsers.FindAsync([id], ct);
+        return await ApplyTenantFilter(_db.PortalUsers)
+            .FirstOrDefaultAsync(u => u.Id == id, ct);
     }
 
     public async Task<IReadOnlyList<PortalUser>> GetAll(CancellationToken ct = default)
     {
-        return await _db.PortalUsers
+        return await ApplyTenantFilter(_db.PortalUsers)
             .Where(u => u.DeletedAt == null)
             .OrderBy(u => u.Username)
             .ToListAsync(ct);

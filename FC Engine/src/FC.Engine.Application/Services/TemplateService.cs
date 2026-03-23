@@ -32,10 +32,17 @@ public class TemplateService
 
     public async Task<TemplateDto> CreateTemplate(CreateTemplateRequest request, CancellationToken ct = default)
     {
-        if (await _templateRepo.ExistsByReturnCode(request.ReturnCode, ct))
-            throw new InvalidOperationException($"Template '{request.ReturnCode}' already exists");
+        if (string.IsNullOrWhiteSpace(request.ReturnCode))
+            throw new InvalidOperationException("Return code is required.");
+        if (string.IsNullOrWhiteSpace(request.Name))
+            throw new InvalidOperationException("Template name is required.");
 
         var returnCode = Domain.ValueObjects.ReturnCode.Parse(request.ReturnCode);
+
+        // Use normalized return code value for duplicate check to prevent bypass via casing/spacing differences
+        if (await _templateRepo.ExistsByReturnCode(returnCode.Value, ct))
+            throw new InvalidOperationException($"Template '{returnCode.Value}' already exists");
+
         var tenantId = request.TenantId ?? _tenantContext.CurrentTenantId;
 
         var template = new ReturnTemplate

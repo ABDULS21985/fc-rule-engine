@@ -257,7 +257,8 @@ public sealed class BulkUploadHarnessWebApplicationFactory : WebApplicationFacto
             notificationService,
             Mock.Of<IFilingCalendarService>(),
             templateCache.Object,
-            NullLogger<SubmissionService>.Instance);
+            NullLogger<SubmissionService>.Instance,
+            Mock.Of<Microsoft.AspNetCore.Http.IHttpContextAccessor>());
     }
 
     private static ReturnTemplate CreatePublishedTemplate()

@@ -205,7 +205,8 @@ public class SubmissionServiceTests
             null!,
             Mock.Of<IFilingCalendarService>(),
             Mock.Of<ITemplateMetadataCache>(),
-            Mock.Of<ILogger<SubmissionService>>());
+            Mock.Of<ILogger<SubmissionService>>(),
+            Mock.Of<Microsoft.AspNetCore.Http.IHttpContextAccessor>());
     }
 
     private static Mock<IEntitlementService> CreateEntitlementService(Guid tenantId, IReadOnlyList<EntitledModule> activeModules)

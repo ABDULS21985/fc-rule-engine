@@ -73,6 +73,11 @@ public class FormDataToXmlService
             for (int i = 0; i < rows.Count; i++)
             {
                 sb.AppendLine("    <Row>");
+                // For ItemCoded templates, include the item code key for each row
+                if (rowKeys is not null && i < rowKeys.Count && !string.IsNullOrEmpty(rowKeys[i]))
+                {
+                    sb.AppendLine($"      <ItemCode>{Escape(rowKeys[i])}</ItemCode>");
+                }
                 WriteRowFields(sb, rows[i], fields, fieldXmlMap, "      ");
                 sb.AppendLine("    </Row>");
             }

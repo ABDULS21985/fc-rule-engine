@@ -81,9 +81,9 @@ public class DashboardService
 
         // ── Stat Cards ───────────────────────────────────────────
 
-        // Due this month: count of all monthly templates
-        // (quarterly/semi-annual templates are due in their respective months)
-        dashboard.DueThisMonth = allTemplates.Count;
+        // Due this month: only count templates whose frequency aligns with the current month
+        var dueTemplates = allTemplates.Where(t => IsTemplateDueThisMonth(t.Frequency, now)).ToList();
+        dashboard.DueThisMonth = dueTemplates.Count;
 
         // Submissions this period
         var thisMonthSubmissions = submissions
@@ -105,9 +105,7 @@ public class DashboardService
             .Distinct()
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-        dashboard.OverdueCount = allTemplates.Count(t => !submittedReturnCodes.Contains(t.ReturnCode))
-            - Math.Max(0, allTemplates.Count - submittedReturnCodes.Count);
-        dashboard.OverdueCount = Math.Max(0, allTemplates.Count - submittedReturnCodes.Count);
+        dashboard.OverdueCount = Math.Max(0, dueTemplates.Count(t => !submittedReturnCodes.Contains(t.ReturnCode)));
 
         // Average validation score: percentage of accepted submissions
         dashboard.AverageValidationScore = thisMonthSubmissions.Count > 0
@@ -117,7 +115,7 @@ public class DashboardService
             : 0;
 
         // ── Compliance Score ─────────────────────────────────────
-        dashboard.TotalReturnsDue = allTemplates.Count;
+        dashboard.TotalReturnsDue = dueTemplates.Count;
         dashboard.TotalReturnsSubmitted = submittedReturnCodes.Count;
         dashboard.CompliancePercentage = dashboard.TotalReturnsDue > 0
             ? Math.Round(dashboard.TotalReturnsSubmitted * 100m / dashboard.TotalReturnsDue, 1)
@@ -636,6 +634,23 @@ public class DashboardService
                 })
                 .ToList(),
             StringComparer.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Determines whether a template with the given frequency is due in the current month.
+    /// Monthly templates are always due. Quarterly templates are due in months 3, 6, 9, 12.
+    /// Semi-annual templates are due in months 6 and 12. Computed templates are always included.
+    /// </summary>
+    private static bool IsTemplateDueThisMonth(ReturnFrequency frequency, DateTime now)
+    {
+        return frequency switch
+        {
+            ReturnFrequency.Monthly => true,
+            ReturnFrequency.Quarterly => now.Month % 3 == 0,
+            ReturnFrequency.SemiAnnual => now.Month % 6 == 0,
+            ReturnFrequency.Computed => true, // always include computed/ad-hoc templates
+            _ => true
+        };
     }
 
     private static string FormatPeriod(Submission submission)

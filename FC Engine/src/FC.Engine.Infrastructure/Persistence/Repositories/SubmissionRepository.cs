@@ -152,6 +152,15 @@ public class SubmissionRepository : ISubmissionRepository
     {
         await using var db = await _dbFactory.CreateDbContextAsync(ct);
 
+        // Verify submission exists and belongs to current tenant before updating
+        var existing = await ApplyTenantFilter(db.Submissions)
+            .Where(s => s.Id == submissionId)
+            .Select(s => s.Id)
+            .FirstOrDefaultAsync(ct);
+
+        if (existing == 0)
+            throw new InvalidOperationException($"Submission {submissionId} not found or not accessible.");
+
         var submission = new Submission
         {
             Id = submissionId,
