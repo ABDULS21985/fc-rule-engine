@@ -66,7 +66,11 @@ public partial class DynamicSqlBuilder
                $"WHERE submission_id = @submissionId{tenantFilter} ORDER BY id";
     }
 
-    public string BuildSelectByInstitutionAndPeriod(string tableName, IReadOnlyList<TemplateField> fields, Guid? tenantId = null)
+    public string BuildSelectByInstitutionAndPeriod(
+        string tableName,
+        string returnCode,
+        IReadOnlyList<TemplateField> fields,
+        Guid? tenantId = null)
     {
         ValidateName(tableName);
 
@@ -77,14 +81,20 @@ public partial class DynamicSqlBuilder
             columns.Add($"d.[{f.FieldName}]");
         }
 
-        var tenantFilter = tenantId.HasValue
-            ? " AND d.TenantId = @TenantId AND s.TenantId = @TenantId"
-            : "";
+        var rowTenantFilter = tenantId.HasValue ? " AND d.TenantId = @TenantId" : "";
+        var submissionTenantFilter = tenantId.HasValue ? " AND s.TenantId = @TenantId" : "";
 
         return $"SELECT {string.Join(", ", columns)} FROM dbo.[{tableName}] d " +
-               "INNER JOIN dbo.return_submissions s ON d.submission_id = s.id " +
-               $"WHERE s.InstitutionId = @institutionId AND s.ReturnPeriodId = @returnPeriodId{tenantFilter} " +
-               "ORDER BY d.id";
+               "WHERE d.submission_id = (" +
+               "SELECT TOP 1 s.Id FROM dbo.return_submissions s " +
+               "WHERE s.InstitutionId = @institutionId " +
+               "AND s.ReturnPeriodId = @returnPeriodId " +
+               "AND s.ReturnCode = @returnCode " +
+               "AND s.Status NOT IN ('Historical', 'Rejected')" +
+               $"{submissionTenantFilter} " +
+               "ORDER BY s.SubmittedAt DESC, s.Id DESC)" +
+               rowTenantFilter +
+               " ORDER BY d.id";
     }
 
     public string BuildDeleteBySubmission(string tableName, Guid? tenantId = null)

@@ -103,10 +103,10 @@ public class GenericDataRepository : IGenericDataRepository
         var category = Enum.Parse<StructuralCategory>(template.StructuralCategory);
         var tenantId = _tenantContext.CurrentTenantId;
 
-        var sql = _sqlBuilder.BuildSelectByInstitutionAndPeriod(tableName, fields, tenantId);
+        var sql = _sqlBuilder.BuildSelectByInstitutionAndPeriod(tableName, returnCode, fields, tenantId);
         object queryParams = tenantId.HasValue
-            ? new { institutionId, returnPeriodId, TenantId = tenantId.Value }
-            : new { institutionId, returnPeriodId };
+            ? new { institutionId, returnPeriodId, returnCode, TenantId = tenantId.Value }
+            : new { institutionId, returnPeriodId, returnCode };
 
         using var connection = await CreateConnectionAsync(ct);
         var rows = await connection.QueryAsync(

@@ -60,11 +60,14 @@ public class DynamicSqlBuilderTests
     {
         var fields = CreateFields("cash_notes");
 
-        var sql = _builder.BuildSelectByInstitutionAndPeriod("mfcr_300", fields);
+        var sql = _builder.BuildSelectByInstitutionAndPeriod("mfcr_300", "MFCR_300", fields);
 
-        sql.Should().Contain("INNER JOIN dbo.return_submissions");
+        sql.Should().Contain("SELECT TOP 1 s.Id FROM dbo.return_submissions s");
         sql.Should().Contain("s.InstitutionId = @institutionId");
         sql.Should().Contain("s.ReturnPeriodId = @returnPeriodId");
+        sql.Should().Contain("s.ReturnCode = @returnCode");
+        sql.Should().Contain("s.Status NOT IN ('Historical', 'Rejected')");
+        sql.Should().Contain("ORDER BY s.SubmittedAt DESC, s.Id DESC");
     }
 
     [Fact]

@@ -380,6 +380,19 @@ public sealed class DmbDemoWorkspaceService
             return coordinatedCrossModuleValue;
         }
 
+        if (string.Equals(returnCode, "DMB_OPR", StringComparison.OrdinalIgnoreCase))
+        {
+            if (normalized is "gross_income_year2")
+            {
+                return 1000m;
+            }
+
+            if (normalized is "gross_income_year3")
+            {
+                return 3020m - reportingDate.Year;
+            }
+        }
+
         var allowed = ParseAllowedValues(field.AllowedValues);
         if (allowed.Count > 0)
         {
@@ -1083,6 +1096,8 @@ public sealed class DmbDemoWorkspaceService
         int demoUserId,
         CancellationToken ct)
     {
+        await ArchiveExistingVerificationBundleAsync(templates, institution, verificationPeriod, ct);
+
         var created = 0;
         var submittedAtBase = DateTime.UtcNow;
 
@@ -1129,6 +1144,51 @@ public sealed class DmbDemoWorkspaceService
         }
 
         return created;
+    }
+
+    private async Task ArchiveExistingVerificationBundleAsync(
+        IReadOnlyList<CachedTemplate> templates,
+        Institution institution,
+        ReturnPeriod verificationPeriod,
+        CancellationToken ct)
+    {
+        var returnCodes = templates
+            .Select(x => x.ReturnCode)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        var existingSubmissions = await _db.Submissions
+            .Where(x => x.TenantId == institution.TenantId
+                        && x.InstitutionId == institution.Id
+                        && x.ReturnPeriodId == verificationPeriod.Id
+                        && x.Status != SubmissionStatus.Historical
+                        && returnCodes.Contains(x.ReturnCode))
+            .ToListAsync(ct);
+
+        if (existingSubmissions.Count == 0)
+        {
+            return;
+        }
+
+        var submissionIds = existingSubmissions
+            .Select(x => x.Id)
+            .ToList();
+
+        var pendingApprovals = await _db.SubmissionApprovals
+            .Where(x => submissionIds.Contains(x.SubmissionId))
+            .ToListAsync(ct);
+
+        if (pendingApprovals.Count > 0)
+        {
+            _db.SubmissionApprovals.RemoveRange(pendingApprovals);
+        }
+
+        foreach (var submission in existingSubmissions)
+        {
+            submission.ApprovalRequired = false;
+            submission.Status = SubmissionStatus.Historical;
+        }
+
+        await _db.SaveChangesAsync(ct);
     }
 
     private async Task<IReadOnlyList<CachedTemplate>> LoadDmbTemplatesAsync(CancellationToken ct)
