@@ -143,7 +143,7 @@ public sealed class BDCFXSurveillance : IBDCFXSurveillance
         var lookback = (int)RuleParamLoader.Get(parameters, "LookbackDays", 30m);
 
         var spikes = await conn.QueryAsync<VolumeSpikeRow>(
-            """
+            $"""
             WITH VolumeStats AS (
                 SELECT t.InstitutionId,
                        t.TransactionDate,
@@ -151,12 +151,12 @@ public sealed class BDCFXSurveillance : IBDCFXSurveillance
                        AVG(CAST(t.BuyVolumeUSD + t.SellVolumeUSD AS FLOAT)) OVER (
                            PARTITION BY t.InstitutionId
                            ORDER BY t.TransactionDate
-                           ROWS BETWEEN @Lookback PRECEDING AND 1 PRECEDING
+                           ROWS BETWEEN {lookback} PRECEDING AND 1 PRECEDING
                        ) AS RollingAvg,
                        STDEV(CAST(t.BuyVolumeUSD + t.SellVolumeUSD AS FLOAT)) OVER (
                            PARTITION BY t.InstitutionId
                            ORDER BY t.TransactionDate
-                           ROWS BETWEEN @Lookback PRECEDING AND 1 PRECEDING
+                           ROWS BETWEEN {lookback} PRECEDING AND 1 PRECEDING
                        ) AS RollingStDev
                 FROM dbo.BDCFXTransactions t
                 WHERE t.TenantId = @TenantId
@@ -183,7 +183,6 @@ public sealed class BDCFXSurveillance : IBDCFXSurveillance
                 TenantId = context.TenantId,
                 RegulatorCode = context.RegulatorCode,
                 PeriodCode = periodCode,
-                Lookback = lookback,
                 ZThreshold = zThreshold
             });
 
@@ -275,7 +274,7 @@ public sealed class BDCFXSurveillance : IBDCFXSurveillance
                 circular.InstitutionA,
                 circular.InstitutionB,
                 circular.TotalAtoB + circular.TotalBtoA,
-                circular.TxnCount,
+                checked((int)circular.TxnCount),
                 DateOnly.FromDateTime(circular.WindowStart),
                 DateOnly.FromDateTime(circular.WindowEnd)));
 
@@ -318,13 +317,14 @@ public sealed class BDCFXSurveillance : IBDCFXSurveillance
         double ZScore
     );
 
-    private sealed record CircularTxnRow(
-        int InstitutionA,
-        int InstitutionB,
-        decimal TotalAtoB,
-        decimal TotalBtoA,
-        int TxnCount,
-        DateTime WindowStart,
-        DateTime WindowEnd
-    );
+    private sealed class CircularTxnRow
+    {
+        public int InstitutionA { get; set; }
+        public int InstitutionB { get; set; }
+        public decimal TotalAtoB { get; set; }
+        public decimal TotalBtoA { get; set; }
+        public long TxnCount { get; set; }
+        public DateTime WindowStart { get; set; }
+        public DateTime WindowEnd { get; set; }
+    }
 }

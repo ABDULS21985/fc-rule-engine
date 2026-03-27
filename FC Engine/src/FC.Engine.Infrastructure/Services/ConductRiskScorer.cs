@@ -71,7 +71,7 @@ public sealed class ConductRiskScorer : IConductRiskScorer
                   AND RegulatorCode = @RegulatorCode
                 UNION
                 SELECT InstitutionId
-                FROM dbo.submission_items
+                FROM meta.submission_items
                 WHERE RegulatorCode = @RegulatorCode
             ) q
             ORDER BY InstitutionId
@@ -240,7 +240,7 @@ public sealed class ConductRiskScorer : IConductRiskScorer
         var lateFilings = await conn.ExecuteScalarAsync<int>(
             """
             SELECT COUNT(*)
-            FROM dbo.submission_items
+            FROM meta.submission_items
             WHERE InstitutionId = @InstitutionId
               AND RegulatorCode = @RegulatorCode
               AND Status = 'OVERDUE'

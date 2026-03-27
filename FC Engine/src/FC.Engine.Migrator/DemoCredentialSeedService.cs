@@ -19,7 +19,7 @@ public sealed class DemoCredentialSeedService
     private static readonly DemoPortalUserSpec[] PlatformUsers =
     [
         new("admin", "System Administrator", "admin@fcengine.local", PortalRole.Admin, RequiresMfa: false),
-        new("platformapprover", "Platform Approver", "platform.approver@fcengine.local", PortalRole.Approver, RequiresMfa: true),
+        new("platformapprover", "Platform Approver", "platform.approver@fcengine.local", PortalRole.Approver, RequiresMfa: false),
         new("platformviewer", "Platform Viewer", "platform.viewer@fcengine.local", PortalRole.Viewer, RequiresMfa: false)
     ];
 
