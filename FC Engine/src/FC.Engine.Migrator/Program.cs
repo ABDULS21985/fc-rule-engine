@@ -16,6 +16,8 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
 var builder = Host.CreateApplicationBuilder(args);
+builder.Logging.AddFilter("Microsoft.EntityFrameworkCore.Database.Command", LogLevel.Warning);
+builder.Logging.AddFilter("Microsoft.EntityFrameworkCore.Query", LogLevel.Warning);
 var configurationBasePath = ResolveConfigurationBasePath();
 builder.Configuration
     .AddJsonFile(Path.Combine(configurationBasePath, "appsettings.json"), optional: true, reloadOnChange: false)
@@ -53,6 +55,7 @@ builder.Services.AddScoped<DmbDemoWorkspaceService>();
 builder.Services.AddScoped<DemoCredentialSeedService>();
 builder.Services.AddScoped<EndToEndDemoSeedService>();
 builder.Services.AddScoped<BulkInstitutionDemoSeedService>();
+builder.Services.AddScoped<CrossBorderDemoSeedService>();
 
 var host = builder.Build();
 var logger = host.Services.GetRequiredService<ILogger<Program>>();
@@ -470,6 +473,25 @@ try
             result.PeriodsCreated,
             result.SubmissionsCreated,
             demoCredentialPath);
+        return;
+    }
+
+    if (string.Equals(command, "seed-cross-border-demo", StringComparison.OrdinalIgnoreCase))
+    {
+        var crossBorderSeeder = scope.ServiceProvider.GetRequiredService<CrossBorderDemoSeedService>();
+        var result = await crossBorderSeeder.SeedAsync();
+
+        logger.LogInformation(
+            "Cross-border demo seeded: {Groups} groups, {Subsidiaries} subsidiaries, {Runs} runs, {Snapshots} snapshots, {Deadlines} deadlines, {Divergences} divergences, {Notifications} notifications, {Flows} flows, {Executions} executions.",
+            result.GroupsSeeded,
+            result.SubsidiariesSeeded,
+            result.ConsolidationRunsSeeded,
+            result.ConsolidationSnapshotsSeeded,
+            result.DeadlinesSeeded,
+            result.DivergencesSeeded,
+            result.NotificationsSeeded,
+            result.FlowsSeeded,
+            result.ExecutionsSeeded);
         return;
     }
 

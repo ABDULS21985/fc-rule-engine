@@ -176,7 +176,7 @@
                 </section>
 
                 @* ── Main + Sidebar ────────────────────────────────────── *@
-                <section class="rg-premium-content-grid">
+                <section class="rg-premium-content-grid rg-cc-shell rg-cc-shell--deputy">
                     <div class="rg-premium-main">
 
                         @* ── Dual charts: Domain + Priority ───────────── *@
@@ -229,56 +229,35 @@
                                     @(BuildNextDueDate())
                                 </div>
                             </div>
-                            <div class="rg-premium-panel__body rg-premium-panel__body--table">
+                            <div class="rg-premium-panel__body">
                                 @if (_data.InterventionQueue.Count == 0)
                                 {
                                     <div class="rg-premium-empty">No active interventions are currently queued.</div>
                                 }
                                 else
                                 {
-                                    <DataTable TItem="InterventionQueueRow" Items="@_data.InterventionQueue" PageSize="20" Sortable="true" ShowExport="true" ExportFileName="deputy-interventions">
-                                        <ChildContent>
-                                            <DataColumn TItem="InterventionQueueRow" Title="Domain" Width="120px" SortKey="@(x => x.Domain)">
-                                                <CellTemplate><span class="fc-badge fc-badge--neutral">@context.Domain</span></CellTemplate>
-                                            </DataColumn>
-                                            <DataColumn TItem="InterventionQueueRow" Title="Subject" SortKey="@(x => x.Subject)">
-                                                <CellTemplate><strong>@context.Subject</strong></CellTemplate>
-                                            </DataColumn>
-                                            <DataColumn TItem="InterventionQueueRow" Title="Signal" Width="90px" SortKey="@(x => x.Signal)">
-                                                <CellTemplate><span class="fc-badge @SignalBadge(context.Signal)">@context.Signal</span></CellTemplate>
-                                            </DataColumn>
-                                            <DataColumn TItem="InterventionQueueRow" Title="Priority" Width="100px" SortKey="@(x => x.Priority)">
-                                                <CellTemplate><span class="fc-badge @PriorityBadge(context.Priority)">@context.Priority</span></CellTemplate>
-                                            </DataColumn>
-                                            <DataColumn TItem="InterventionQueueRow" Title="Next Action" SortKey="@(x => x.NextAction)">
-                                                <CellTemplate>@context.NextAction</CellTemplate>
-                                            </DataColumn>
-                                            <DataColumn TItem="InterventionQueueRow" Title="Owner" Width="110px" SortKey="@(x => x.OwnerLane)">
-                                                <CellTemplate>@context.OwnerLane</CellTemplate>
-                                            </DataColumn>
-                                            <DataColumn TItem="InterventionQueueRow" Title="Due" Width="140px" SortKey="@(x => x.DueDate)">
-                                                <CellTemplate>
-                                                    @{
-                                                        var days = (context.DueDate.Date - DateTime.UtcNow.Date).Days;
-                                                    }
-                                                    <span class="rg-deputy-due">
-                                                        <span class="rg-deputy-due__date">@context.DueDate.ToString("dd MMM yyyy")</span>
-                                                        @if (context.Signal != "Resolved")
-                                                        {
-                                                            @if (days < 0)
-                                                            {
-                                                                <span class="fc-badge fc-badge--danger fc-badge--sm">@Math.Abs(days)d overdue</span>
-                                                            }
-                                                            else if (days <= 7)
-                                                            {
-                                                                <span class="fc-badge fc-badge--warning fc-badge--sm">@(days)d left</span>
-                                                            }
-                                                        }
-                                                    </span>
-                                                </CellTemplate>
-                                            </DataColumn>
-                                        </ChildContent>
-                                    </DataTable>
+                                    <div class="rg-cc-queue-grid">
+                                        @foreach (var item in _data.InterventionQueue.Take(8))
+                                        {
+                                            var days = (item.DueDate.Date - DateTime.UtcNow.Date).Days;
+                                            <article class="rg-cc-queue-card">
+                                                <div class="rg-cc-queue-card__top">
+                                                    <span class="fc-badge fc-badge--neutral">@item.Domain</span>
+                                                    <span class="fc-badge @PriorityBadge(item.Priority)">@item.Priority</span>
+                                                </div>
+                                                <h3 class="rg-cc-queue-card__title">@item.Subject</h3>
+                                                <p class="rg-cc-queue-card__copy">@item.NextAction</p>
+                                                <div class="rg-cc-statline">
+                                                    <span class="rg-cc-statline__item">@item.OwnerLane</span>
+                                                    <span class="rg-cc-statline__item">@DueStateLabel(item.Signal, days)</span>
+                                                </div>
+                                                <div class="rg-premium-list__tags">
+                                                    <span class="fc-badge @SignalBadge(item.Signal)">@item.Signal</span>
+                                                    <span class="fc-badge fc-badge--neutral">@item.DueDate.ToString("dd MMM yyyy")</span>
+                                                </div>
+                                            </article>
+                                        }
+                                    </div>
                                 }
                             </div>
                         </section>
@@ -296,44 +275,75 @@
                                     @(_data.InstitutionScorecards.FirstOrDefault()?.InstitutionName ?? "No queue")
                                 </div>
                             </div>
-                            <div class="rg-premium-panel__body rg-premium-panel__body--table">
-                                <DataTable TItem="InstitutionScorecardRow" Items="@_data.InstitutionScorecards" PageSize="15" Sortable="true" ShowExport="true" ExportFileName="deputy-scorecards">
-                                    <ChildContent>
-                                        <DataColumn TItem="InstitutionScorecardRow" Title="Institution" SortKey="@(x => x.InstitutionName)">
-                                            <CellTemplate><strong>@context.InstitutionName</strong></CellTemplate>
-                                        </DataColumn>
-                                        <DataColumn TItem="InstitutionScorecardRow" Title="Licence" Width="120px" SortKey="@(x => x.LicenceType)">
-                                            <CellTemplate><span class="fc-badge fc-badge--neutral">@context.LicenceType</span></CellTemplate>
-                                        </DataColumn>
-                                        <DataColumn TItem="InstitutionScorecardRow" Title="Overdue" Width="90px" SortKey="@(x => x.OverdueObligations)">
-                                            <CellTemplate><span class="@(context.OverdueObligations > 0 ? "fc-text-danger fc-text-bold" : string.Empty)">@context.OverdueObligations</span></CellTemplate>
-                                        </DataColumn>
-                                        <DataColumn TItem="InstitutionScorecardRow" Title="Due Soon" Width="90px" SortKey="@(x => x.DueSoonObligations)">
-                                            <CellTemplate><span class="@(context.DueSoonObligations > 0 ? "fc-text-warning" : string.Empty)">@context.DueSoonObligations</span></CellTemplate>
-                                        </DataColumn>
-                                        <DataColumn TItem="InstitutionScorecardRow" Title="Capital" Width="90px" SortKey="@(x => x.CapitalScore)">
-                                            <CellTemplate>
-                                                @if (context.CapitalScore.HasValue)
-                                                {
-                                                    <span class="@CapitalScoreClass(context.CapitalScore.Value)">@context.CapitalScore.Value.ToString("F1")</span>
-                                                }
-                                                else
-                                                {
-                                                    <span>—</span>
-                                                }
-                                            </CellTemplate>
-                                        </DataColumn>
-                                        <DataColumn TItem="InstitutionScorecardRow" Title="Incidents" Width="90px" SortKey="@(x => x.OpenResilienceIncidents)">
-                                            <CellTemplate><span class="@(context.OpenResilienceIncidents > 0 ? "fc-text-warning" : string.Empty)">@context.OpenResilienceIncidents</span></CellTemplate>
-                                        </DataColumn>
-                                        <DataColumn TItem="InstitutionScorecardRow" Title="Alerts" Width="80px" SortKey="@(x => x.OpenSecurityAlerts)">
-                                            <CellTemplate><span class="@(context.OpenSecurityAlerts > 0 ? "fc-text-danger" : string.Empty)">@context.OpenSecurityAlerts</span></CellTemplate>
-                                        </DataColumn>
-                                        <DataColumn TItem="InstitutionScorecardRow" Title="Priority" Width="100px" SortKey="@(x => x.Priority)">
-                                            <CellTemplate><span class="fc-badge @PriorityBadge(context.Priority)">@context.Priority</span></CellTemplate>
-                                        </DataColumn>
-                                    </ChildContent>
-                                </DataTable>
+                            <div class="rg-premium-panel__body">
+                                @if (_data.InstitutionScorecards.Count == 0)
+                                {
+                                    <div class="rg-premium-empty">No institution scorecards are currently available.</div>
+                                }
+                                else
+                                {
+                                    <div class="rg-cc-institution-stack">
+                                        @foreach (var ranked in _data.InstitutionScorecards.Take(10).Select((institution, index) => new { institution, index }))
+                                        {
+                                            var pressure = CombinedPressure(ranked.institution);
+                                            <article class="rg-cc-institution-card">
+                                                <div class="rg-cc-institution-card__top">
+                                                    <div>
+                                                        <div class="rg-cc-institution-card__rank">#@(ranked.index + 1)</div>
+                                                        <h3 class="rg-cc-institution-card__title">@ranked.institution.InstitutionName</h3>
+                                                        <p class="rg-cc-institution-card__copy">@BuildInstitutionPressureCopy(ranked.institution)</p>
+                                                    </div>
+                                                    <div class="rg-cc-kpi-pack">
+                                                        <div class="rg-cc-kpi-pack__value">@pressure</div>
+                                                        <div class="rg-cc-kpi-pack__label">Pressure</div>
+                                                    </div>
+                                                </div>
+                                                <div class="rg-cc-pressure-bar" aria-label="Portfolio pressure breakdown">
+                                                    @if (ranked.institution.OverdueObligations > 0)
+                                                    {
+                                                        <span class="rg-cc-pressure-bar__segment rg-cc-pressure-bar__segment--danger" style="flex:@ranked.institution.OverdueObligations"></span>
+                                                    }
+                                                    @if (ranked.institution.DueSoonObligations > 0)
+                                                    {
+                                                        <span class="rg-cc-pressure-bar__segment rg-cc-pressure-bar__segment--warning" style="flex:@ranked.institution.DueSoonObligations"></span>
+                                                    }
+                                                    @if (ranked.institution.OpenResilienceIncidents > 0)
+                                                    {
+                                                        <span class="rg-cc-pressure-bar__segment rg-cc-pressure-bar__segment--info" style="flex:@ranked.institution.OpenResilienceIncidents"></span>
+                                                    }
+                                                    @if (ranked.institution.OpenSecurityAlerts > 0)
+                                                    {
+                                                        <span class="rg-cc-pressure-bar__segment rg-cc-pressure-bar__segment--purple" style="flex:@ranked.institution.OpenSecurityAlerts"></span>
+                                                    }
+                                                </div>
+                                                <div class="rg-cc-statline">
+                                                    <span class="rg-cc-statline__item">@ranked.institution.LicenceType</span>
+                                                    <span class="rg-cc-statline__item">@(ranked.institution.CapitalScore?.ToString("F1") ?? "No capital score")</span>
+                                                    <span class="rg-cc-statline__item">@BuildInstitutionActionLabel(ranked.institution)</span>
+                                                </div>
+                                                <div class="rg-premium-list__tags">
+                                                    <span class="fc-badge @PriorityBadge(ranked.institution.Priority)">@ranked.institution.Priority</span>
+                                                    @if (ranked.institution.OverdueObligations > 0)
+                                                    {
+                                                        <span class="fc-badge fc-badge--danger">@($"{ranked.institution.OverdueObligations} overdue")</span>
+                                                    }
+                                                    @if (ranked.institution.DueSoonObligations > 0)
+                                                    {
+                                                        <span class="fc-badge fc-badge--warning">@($"{ranked.institution.DueSoonObligations} due soon")</span>
+                                                    }
+                                                    @if (ranked.institution.OpenResilienceIncidents > 0)
+                                                    {
+                                                        <span class="fc-badge fc-badge--info">@($"{ranked.institution.OpenResilienceIncidents} incidents")</span>
+                                                    }
+                                                    @if (ranked.institution.OpenSecurityAlerts > 0)
+                                                    {
+                                                        <span class="fc-badge fc-badge--purple">@($"{ranked.institution.OpenSecurityAlerts} alerts")</span>
+                                                    }
+                                                </div>
+                                            </article>
+                                        }
+                                    </div>
+                                }
                             </div>
                         </section>
                     </div>
@@ -738,6 +748,82 @@
         score >= 80m ? "fc-text-success" :
         score >= 65m ? "fc-text-warning" :
         "fc-text-danger";
+
+    private static int CombinedPressure(InstitutionScorecardRow institution) =>
+        institution.OverdueObligations
+        + institution.DueSoonObligations
+        + institution.OpenResilienceIncidents
+        + institution.OpenSecurityAlerts;
+
+    private static string BuildInstitutionPressureCopy(InstitutionScorecardRow institution)
+    {
+        if (!string.IsNullOrWhiteSpace(institution.Summary))
+        {
+            return institution.Summary;
+        }
+
+        if (institution.OverdueObligations > 0)
+        {
+            return "Overdue obligations are driving this institution into the front of the deputy queue.";
+        }
+
+        if (institution.DueSoonObligations > 0)
+        {
+            return "Due-soon obligations are pushing this institution toward active sequencing.";
+        }
+
+        return "This institution remains visible because its supervisory signals still need portfolio management attention.";
+    }
+
+    private static string BuildInstitutionActionLabel(InstitutionScorecardRow institution)
+    {
+        if (institution.OverdueObligations > 0)
+        {
+            return "Escalate filing";
+        }
+
+        if (institution.DueSoonObligations > 0)
+        {
+            return "Protect deadline";
+        }
+
+        if (institution.OpenSecurityAlerts > 0)
+        {
+            return "Tighten alerts";
+        }
+
+        if (institution.OpenResilienceIncidents > 0)
+        {
+            return "Contain incident";
+        }
+
+        return "Monitor";
+    }
+
+    private static string DueStateLabel(string signal, int days)
+    {
+        if (signal == "Resolved")
+        {
+            return "Resolved lane";
+        }
+
+        if (days < 0)
+        {
+            return $"{Math.Abs(days)}d overdue";
+        }
+
+        if (days == 0)
+        {
+            return "Due today";
+        }
+
+        if (days <= 7)
+        {
+            return $"{days}d left";
+        }
+
+        return $"Due {days}d out";
+    }
 
     private static string PriorityBadge(string priority) => priority switch
     {

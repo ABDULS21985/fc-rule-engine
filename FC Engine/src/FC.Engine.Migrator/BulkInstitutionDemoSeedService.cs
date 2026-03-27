@@ -39,10 +39,6 @@ public sealed class BulkInstitutionDemoSeedService
 
     private static readonly HashSet<string> CoordinatedFieldKeys = new(StringComparer.OrdinalIgnoreCase)
     {
-        "BDC_BRN:branch_fx_volume",
-        "BDC_BRN:head_office_branch_fx_volume",
-        "BDC_BRN:total_branch_fx_volume",
-        "BDC_FXV:total_buying_volume",
         "BDC_FIN:fx_trading_income_basis",
         "BDC_CAP:total_assets",
         "BDC_FIN:total_assets"
@@ -398,6 +394,7 @@ public sealed class BulkInstitutionDemoSeedService
             ct);
 
         var submissionsCreated = 0;
+        var createdSubmissions = new List<SeededSubmissionArtifact>();
         foreach (var batchPeriods in ensuredPeriods)
         {
             var periodsByKey = batchPeriods.Result.Periods.ToDictionary(
@@ -407,10 +404,22 @@ public sealed class BulkInstitutionDemoSeedService
             foreach (var periodSpec in batchPeriods.Batch.PeriodSpecs)
             {
                 var period = periodsByKey[BuildPeriodLookupKey(periodSpec.Year, periodSpec.Month, periodSpec.Frequency)];
-                foreach (var template in batchPeriods.Batch.Templates)
+                for (var templateIndex = 0; templateIndex < batchPeriods.Batch.Templates.Count; templateIndex++)
                 {
+                    var template = batchPeriods.Batch.Templates[templateIndex];
                     var submissionKey = $"{template.ReturnCode}:{period.Id}";
                     if (existingSubmissionKeys.Contains(submissionKey))
+                    {
+                        continue;
+                    }
+
+                    var disposition = ResolveSubmissionDisposition(
+                        spec,
+                        periodSpec,
+                        templateIndex,
+                        batchPeriods.Batch.Templates.Count,
+                        institutionSequence);
+                    if (disposition == SubmissionSeedDisposition.Missing)
                     {
                         continue;
                     }
@@ -434,7 +443,7 @@ public sealed class BulkInstitutionDemoSeedService
                     var xml = BuildXml(template, record, ensured.Institution.InstitutionCode, period.ReportingDate.Date);
 
                     var submittedAt = periodSpec.SubmittedAt.AddMinutes(institutionSequence);
-                    await CreateSubmissionAsync(
+                    var submissionArtifact = await CreateSubmissionAsync(
                         template,
                         prototype,
                         record,
@@ -443,18 +452,34 @@ public sealed class BulkInstitutionDemoSeedService
                         ensured.AdminUser.Id,
                         period.Id,
                         submittedAt,
+                        periodSpec,
+                        disposition,
                         ct);
 
                     submissionsCreated++;
+                    createdSubmissions.Add(submissionArtifact);
                     existingSubmissionKeys.Add(submissionKey);
                 }
             }
         }
 
-        await UpdateInstitutionSubmissionStampAsync(
-            ensured.Institution.Id,
-            batches.SelectMany(x => x.PeriodSpecs).Max(x => x.SubmittedAt),
-            ct);
+        if (createdSubmissions.Count > 0)
+        {
+            await UpdateInstitutionSubmissionStampAsync(
+                ensured.Institution.Id,
+                createdSubmissions.Max(x => x.SubmittedAt),
+                ct);
+        }
+
+        if (ShouldRefreshInstitutionSignalData(batches))
+        {
+            await RefreshInstitutionSignalDataAsync(
+                ensured.Institution,
+                spec,
+                batches,
+                createdSubmissions,
+                ct);
+        }
 
         var credentialGroup = BuildCredentialGroup(
             ensured.Institution,
@@ -567,9 +592,12 @@ public sealed class BulkInstitutionDemoSeedService
     {
         var tracked = await _db.Institutions.FirstAsync(x => x.Id == institutionId, ct);
         tracked.IsActive = true;
+        tracked.InstitutionName = spec.InstitutionName;
         tracked.ContactEmail = spec.ContactEmail;
         tracked.ContactPhone = spec.ContactPhone;
         tracked.Address = spec.Address;
+        tracked.Location = $"{spec.City}, {spec.State}";
+        tracked.LicenseType = spec.LicenceTypeCode;
         tracked.SubscriptionTier = EnterprisePlanCode;
         tracked.MakerCheckerEnabled = false;
         await _db.SaveChangesAsync(ct);
@@ -811,53 +839,32 @@ public sealed class BulkInstitutionDemoSeedService
         }
 
         var submissionIdList = submissions.Select(x => x.Id).ToList();
-        var validationReportIds = await _db.ValidationReports
-            .AsNoTracking()
+        var validationReportIds = _db.ValidationReports
             .Where(x => submissionIdList.Contains(x.SubmissionId))
-            .Select(x => x.Id)
-            .ToListAsync(ct);
+            .Select(x => x.Id);
 
-        if (validationReportIds.Count > 0)
-        {
-            var validationErrors = await _db.ValidationErrors
-                .Where(x => validationReportIds.Contains(x.ValidationReportId))
-                .ToListAsync(ct);
-            if (validationErrors.Count > 0)
-            {
-                _db.ValidationErrors.RemoveRange(validationErrors);
-            }
+        await _db.ValidationErrors
+            .Where(x => validationReportIds.Contains(x.ValidationReportId))
+            .ExecuteDeleteAsync(ct);
 
-            var validationReports = await _db.ValidationReports
-                .Where(x => validationReportIds.Contains(x.Id))
-                .ToListAsync(ct);
-            _db.ValidationReports.RemoveRange(validationReports);
-        }
-
-        var approvals = await _db.SubmissionApprovals
+        await _db.ValidationReports
             .Where(x => submissionIdList.Contains(x.SubmissionId))
-            .ToListAsync(ct);
-        if (approvals.Count > 0)
-        {
-            _db.SubmissionApprovals.RemoveRange(approvals);
-        }
+            .ExecuteDeleteAsync(ct);
 
-        var trackedSubmissions = await _db.Submissions
+        await _db.SubmissionApprovals
+            .Where(x => submissionIdList.Contains(x.SubmissionId))
+            .ExecuteDeleteAsync(ct);
+
+        await _db.ReturnPeriods
+            .Where(x => x.AutoCreatedReturnId.HasValue && submissionIdList.Contains(x.AutoCreatedReturnId.Value))
+            .ExecuteUpdateAsync(
+                setters => setters.SetProperty(x => x.AutoCreatedReturnId, (int?)null),
+                ct);
+
+        await _db.Submissions
             .Where(x => submissionIdList.Contains(x.Id))
-            .ToListAsync(ct);
-        if (trackedSubmissions.Count > 0)
-        {
-            var autoCreatedPeriods = await _db.ReturnPeriods
-                .Where(x => x.AutoCreatedReturnId.HasValue && submissionIdList.Contains(x.AutoCreatedReturnId.Value))
-                .ToListAsync(ct);
-            foreach (var period in autoCreatedPeriods)
-            {
-                period.AutoCreatedReturnId = null;
-            }
+            .ExecuteDeleteAsync(ct);
 
-            _db.Submissions.RemoveRange(trackedSubmissions);
-        }
-
-        await _db.SaveChangesAsync(ct);
         _db.ChangeTracker.Clear();
     }
 
@@ -1087,6 +1094,33 @@ public sealed class BulkInstitutionDemoSeedService
             }
         }
 
+        if (string.Equals(returnCode, "BDC_FIN", StringComparison.OrdinalIgnoreCase))
+        {
+            var value = BuildBdcFinancialValue(normalized);
+            if (value is not null)
+            {
+                return value;
+            }
+        }
+
+        if (string.Equals(returnCode, "BDC_FXV", StringComparison.OrdinalIgnoreCase))
+        {
+            var value = BuildBdcFxValue(normalized);
+            if (value is not null)
+            {
+                return value;
+            }
+        }
+
+        if (string.Equals(returnCode, "BDC_BRN", StringComparison.OrdinalIgnoreCase))
+        {
+            var value = BuildBdcBranchValue(normalized, rowIndex);
+            if (value is not null)
+            {
+                return value;
+            }
+        }
+
         if (string.Equals(returnCode, "MFB_CAP", StringComparison.OrdinalIgnoreCase))
         {
             var value = BuildMfbCapitalValue(field, normalized, institution.InstitutionCode);
@@ -1305,8 +1339,8 @@ public sealed class BulkInstitutionDemoSeedService
             var s when s.Contains("address", StringComparison.OrdinalIgnoreCase) => spec.Address,
             var s when s.Contains("currency", StringComparison.OrdinalIgnoreCase) => "NGN",
             var s when s.Contains("country", StringComparison.OrdinalIgnoreCase) => "NG",
-            var s when s.Contains("city", StringComparison.OrdinalIgnoreCase) => "Lagos",
-            var s when s.Contains("state", StringComparison.OrdinalIgnoreCase) => "Lagos",
+            var s when s.Contains("city", StringComparison.OrdinalIgnoreCase) => spec.City,
+            var s when s.Contains("state", StringComparison.OrdinalIgnoreCase) => spec.State,
             var s when s.Contains("branch", StringComparison.OrdinalIgnoreCase) => $"{institution.InstitutionCode} Branch {sampleIndex + 1}",
             var s when s.Contains("item_description", StringComparison.OrdinalIgnoreCase) && itemCode is not null => itemCode.ItemDescription,
             _ => $"{returnCode}_{field.FieldName}_{sampleIndex + 1}"
@@ -1381,6 +1415,76 @@ public sealed class BulkInstitutionDemoSeedService
             _ => null
         };
     }
+
+    private static object? BuildBdcFinancialValue(string normalizedFieldName)
+        => normalizedFieldName switch
+        {
+            "fx_trading_income" => 800_000m,
+            "commission_income" => 150_000m,
+            "other_income" => 50_000m,
+            "total_income" => 1_000_000m,
+            "staff_costs" => 250_000m,
+            "rent" => 100_000m,
+            "utilities" => 50_000m,
+            "depreciation" => 25_000m,
+            "other_expenses" => 75_000m,
+            "total_expenses" => 500_000m,
+            "profit_before_tax" => 500_000m,
+            "tax_provision" => 75_000m,
+            "profit_after_tax" => 425_000m,
+            "cash_and_bank" => 2_000_000m,
+            "receivables" => 300_000m,
+            "fixed_assets" => 450_000m,
+            "other_assets" => 250_000m,
+            "total_assets" => 3_000_000m,
+            "payables" => 600_000m,
+            "other_liabilities" => 400_000m,
+            "total_liabilities" => 1_000_000m,
+            "shareholders_funds" or "shareholders_fund" => 2_000_000m,
+            _ => null
+        };
+
+    private static object? BuildBdcFxValue(string normalizedFieldName)
+        => normalizedFieldName switch
+        {
+            "usd_buying_volume" => 100_000m,
+            "usd_buying_rate_avg" => 1_495m,
+            "usd_selling_volume" => 90_000m,
+            "usd_selling_rate_avg" => 1_505m,
+            "gbp_buying_volume" => 50_000m,
+            "gbp_buying_rate_avg" => 1_890m,
+            "gbp_selling_volume" => 40_000m,
+            "gbp_selling_rate_avg" => 1_910m,
+            "eur_buying_volume" => 75_000m,
+            "eur_buying_rate_avg" => 1_640m,
+            "eur_selling_volume" => 70_000m,
+            "eur_selling_rate_avg" => 1_660m,
+            "cny_buying_volume" => 25_000m,
+            "cny_buying_rate_avg" => 205m,
+            "cny_selling_volume" => 20_000m,
+            "cny_selling_rate_avg" => 215m,
+            "other_buying_volume" => 10_000m,
+            "other_buying_rate_avg" => 980m,
+            "other_selling_volume" => 8_000m,
+            "other_selling_rate_avg" => 1_020m,
+            _ => null
+        };
+
+    private static object? BuildBdcBranchValue(string normalizedFieldName, int rowIndex)
+        => normalizedFieldName switch
+        {
+            "branch_fx_volume" => rowIndex switch
+            {
+                0 => 70_000m,
+                1 => 62_000m,
+                _ => 48_000m
+            },
+            "active_branches" => 4,
+            "inactive_branches" => 1,
+            "head_office_branch_fx_volume" => 80_000m,
+            "other_branches_fx_volume" => 180_000m,
+            _ => null
+        };
 
     private static string ResolveItemCodeRaw(TemplateItemCode? itemCode, int rowIndex)
         => string.IsNullOrWhiteSpace(itemCode?.ItemCode)
@@ -1668,7 +1772,7 @@ public sealed class BulkInstitutionDemoSeedService
                             reportingDate,
                             rowIndex: 0,
                             institution: new Institution { InstitutionCode = "FCDEMO", InstitutionName = "Finance Company Demo" },
-                            spec: new InstitutionSeedSpec("FC", "FCDEMO", "Finance Company Demo", "fcdemo", "fcdemoadmin", "fcdemoadmin@regos.demo.local", "Finance Company Demo Admin", "fcdemo@regos.demo.local", "+2348000000000", "1 Demo Avenue, Lagos"),
+                            spec: new InstitutionSeedSpec("FC", "FCDEMO", "Finance Company Demo", "fcdemo", "fcdemoadmin", "fcdemoadmin@regos.demo.local", "Finance Company Demo Admin", "fcdemo@regos.demo.local", "+2348000000000", "1 Demo Avenue, Lagos", "Lagos", "Lagos", DemoInstitutionPersona.Baseline),
                             itemCode: null));
                         continue;
                     }
@@ -1836,7 +1940,473 @@ public sealed class BulkInstitutionDemoSeedService
         return decimal.Round((numerator / denominator) * 100m, 2, MidpointRounding.AwayFromZero);
     }
 
-    private async Task CreateSubmissionAsync(
+    private static bool ShouldRefreshInstitutionSignalData(IReadOnlyList<TemplateSeedBatch> batches)
+        => batches.Any(x => x.Module.ModuleCode is "BDC_CBN" or "DMB_BASEL3" or "FC_RETURNS" or "MFB_PAR");
+
+    private static SubmissionSeedDisposition ResolveSubmissionDisposition(
+        InstitutionSeedSpec spec,
+        DemoPeriodSpec periodSpec,
+        int templateIndex,
+        int templateCount,
+        int institutionSequence)
+    {
+        if (!periodSpec.IsCurrent || templateCount <= 0)
+        {
+            return SubmissionSeedDisposition.Accepted;
+        }
+
+        var (missingCount, returnedCount, warningCount) = ResolveCurrentDispositionCounts(spec.Persona, templateCount);
+        var rotatedIndex = (templateIndex + institutionSequence) % templateCount;
+
+        if (rotatedIndex < missingCount)
+        {
+            return SubmissionSeedDisposition.Missing;
+        }
+
+        if (rotatedIndex < missingCount + returnedCount)
+        {
+            return SubmissionSeedDisposition.Returned;
+        }
+
+        if (rotatedIndex < missingCount + returnedCount + warningCount)
+        {
+            return SubmissionSeedDisposition.AcceptedWithWarnings;
+        }
+
+        return SubmissionSeedDisposition.Accepted;
+    }
+
+    private static (int MissingCount, int ReturnedCount, int WarningCount) ResolveCurrentDispositionCounts(
+        DemoInstitutionPersona persona,
+        int templateCount)
+    {
+        var (missingRatio, returnedRatio, warningRatio) = persona switch
+        {
+            DemoInstitutionPersona.Baseline => (0m, 0m, 0.08m),
+            DemoInstitutionPersona.FilingWatch => (0.18m, 0m, 0.08m),
+            DemoInstitutionPersona.ReturnedSubmission => (0.05m, 0.14m, 0.08m),
+            DemoInstitutionPersona.CapitalFragile => (0.08m, 0.08m, 0.08m),
+            DemoInstitutionPersona.ResilienceStress => (0.06m, 0.06m, 0.08m),
+            DemoInstitutionPersona.CyberElevated => (0.04m, 0.08m, 0.10m),
+            DemoInstitutionPersona.RecoveryTrack => (0.04m, 0.05m, 0.14m),
+            DemoInstitutionPersona.CompoundPressure => (0.24m, 0.12m, 0.06m),
+            _ => (0m, 0m, 0m)
+        };
+
+        var missingCount = ComputeScaledDispositionCount(templateCount, missingRatio);
+        var returnedCount = ComputeScaledDispositionCount(templateCount, returnedRatio);
+        var warningCount = ComputeScaledDispositionCount(templateCount, warningRatio);
+
+        var total = missingCount + returnedCount + warningCount;
+        if (total <= templateCount)
+        {
+            return (missingCount, returnedCount, warningCount);
+        }
+
+        var overflow = total - templateCount;
+        if (warningCount > 0)
+        {
+            var reduceWarning = Math.Min(warningCount, overflow);
+            warningCount -= reduceWarning;
+            overflow -= reduceWarning;
+        }
+
+        if (overflow > 0 && returnedCount > 0)
+        {
+            var reduceReturned = Math.Min(returnedCount, overflow);
+            returnedCount -= reduceReturned;
+            overflow -= reduceReturned;
+        }
+
+        if (overflow > 0 && missingCount > 0)
+        {
+            missingCount = Math.Max(0, missingCount - overflow);
+        }
+
+        return (missingCount, returnedCount, warningCount);
+    }
+
+    private static int ComputeScaledDispositionCount(int templateCount, decimal ratio)
+    {
+        if (templateCount <= 0 || ratio <= 0m)
+        {
+            return 0;
+        }
+
+        return Math.Max(1, (int)Math.Round(templateCount * ratio, MidpointRounding.AwayFromZero));
+    }
+
+    private async Task RefreshInstitutionSignalDataAsync(
+        Institution institution,
+        InstitutionSeedSpec spec,
+        IReadOnlyList<TemplateSeedBatch> batches,
+        IReadOnlyList<SeededSubmissionArtifact> createdSubmissions,
+        CancellationToken ct)
+    {
+        var currentExpectedCount = batches.Sum(x => x.Templates.Count);
+        var currentSubmissions = createdSubmissions.Where(x => x.IsCurrentPeriod).ToList();
+        var currentSubmittedCount = currentSubmissions.Count;
+        var currentReturnedCount = currentSubmissions.Count(x => x.Status is SubmissionStatus.Rejected or SubmissionStatus.ApprovalRejected);
+        var currentWarningCount = currentSubmissions.Count(x => x.Status == SubmissionStatus.AcceptedWithWarnings);
+        var currentMissingCount = Math.Max(0, currentExpectedCount - currentSubmittedCount);
+        var profile = BuildInstitutionSignalProfile(
+            spec.Persona,
+            currentExpectedCount,
+            currentMissingCount,
+            currentReturnedCount,
+            currentWarningCount);
+
+        await CleanupInstitutionSignalDataAsync(institution.TenantId, ct);
+
+        var snapshots = BuildChsSnapshots(institution, profile);
+        var incidents = BuildDataBreachIncidents(institution, spec, profile);
+        var alerts = BuildSecurityAlerts(institution, spec, profile);
+        var fieldChanges = BuildFieldChanges(institution, spec, profile, createdSubmissions);
+
+        if (snapshots.Count > 0)
+        {
+            _db.ChsScoreSnapshots.AddRange(snapshots);
+        }
+
+        if (incidents.Count > 0)
+        {
+            _db.DataBreachIncidents.AddRange(incidents);
+        }
+
+        if (alerts.Count > 0)
+        {
+            _db.SecurityAlerts.AddRange(alerts);
+        }
+
+        if (fieldChanges.Count > 0)
+        {
+            _db.FieldChangeHistory.AddRange(fieldChanges);
+        }
+
+        await _db.SaveChangesAsync(ct);
+        _db.ChangeTracker.Clear();
+    }
+
+    private async Task CleanupInstitutionSignalDataAsync(Guid tenantId, CancellationToken ct)
+    {
+        var snapshots = await _db.ChsScoreSnapshots.Where(x => x.TenantId == tenantId).ToListAsync(ct);
+        var incidents = await _db.DataBreachIncidents.Where(x => x.TenantId == tenantId).ToListAsync(ct);
+        var alerts = await _db.SecurityAlerts.Where(x => x.TenantId == tenantId).ToListAsync(ct);
+        var fieldChanges = await _db.FieldChangeHistory.Where(x => x.TenantId == tenantId).ToListAsync(ct);
+
+        if (snapshots.Count > 0)
+        {
+            _db.ChsScoreSnapshots.RemoveRange(snapshots);
+        }
+
+        if (incidents.Count > 0)
+        {
+            _db.DataBreachIncidents.RemoveRange(incidents);
+        }
+
+        if (alerts.Count > 0)
+        {
+            _db.SecurityAlerts.RemoveRange(alerts);
+        }
+
+        if (fieldChanges.Count > 0)
+        {
+            _db.FieldChangeHistory.RemoveRange(fieldChanges);
+        }
+
+        if (snapshots.Count > 0 || incidents.Count > 0 || alerts.Count > 0 || fieldChanges.Count > 0)
+        {
+            await _db.SaveChangesAsync(ct);
+            _db.ChangeTracker.Clear();
+        }
+    }
+
+    private static InstitutionSignalProfile BuildInstitutionSignalProfile(
+        DemoInstitutionPersona persona,
+        int currentExpectedCount,
+        int currentMissingCount,
+        int currentReturnedCount,
+        int currentWarningCount)
+    {
+        var baseProfile = persona switch
+        {
+            DemoInstitutionPersona.Baseline => new InstitutionSignalProfile(96m, 94m, 88m, 90m, 91m, 0, 0, 0, 1.2m),
+            DemoInstitutionPersona.FilingWatch => new InstitutionSignalProfile(74m, 85m, 79m, 82m, 77m, 0, 0, 0, -1.6m),
+            DemoInstitutionPersona.ReturnedSubmission => new InstitutionSignalProfile(84m, 69m, 76m, 74m, 78m, 0, 0, 1, -1.8m),
+            DemoInstitutionPersona.CapitalFragile => new InstitutionSignalProfile(79m, 81m, 42m, 70m, 73m, 0, 1, 1, -1.4m),
+            DemoInstitutionPersona.ResilienceStress => new InstitutionSignalProfile(82m, 78m, 71m, 76m, 80m, 1, 1, 1, -1.2m),
+            DemoInstitutionPersona.CyberElevated => new InstitutionSignalProfile(86m, 77m, 74m, 79m, 83m, 0, 2, 1, -1.1m),
+            DemoInstitutionPersona.RecoveryTrack => new InstitutionSignalProfile(91m, 88m, 68m, 86m, 90m, 0, 0, 1, 2.4m),
+            DemoInstitutionPersona.CompoundPressure => new InstitutionSignalProfile(58m, 55m, 34m, 52m, 60m, 2, 3, 3, -2.7m),
+            _ => new InstitutionSignalProfile(90m, 85m, 80m, 84m, 86m, 0, 0, 0, 0m)
+        };
+
+        var coveragePercent = currentExpectedCount <= 0
+            ? 100m
+            : decimal.Round((currentExpectedCount - currentMissingCount) * 100m / currentExpectedCount, 1, MidpointRounding.AwayFromZero);
+        var filingTimeliness = ClampScore((coveragePercent * 0.72m) + (baseProfile.FilingTimeliness * 0.28m) - (currentReturnedCount * 2.5m));
+        var dataQuality = ClampScore(baseProfile.DataQuality - (currentReturnedCount * 7m) - (currentWarningCount * 2.5m));
+        var regulatoryCapital = ClampScore(baseProfile.RegulatoryCapital);
+        var auditGovernance = ClampScore(baseProfile.AuditGovernance - (currentReturnedCount * 1.5m));
+        var engagement = ClampScore(baseProfile.Engagement - (currentMissingCount * 1.2m));
+        var overallScore = ClampScore(
+            (filingTimeliness * 0.24m)
+            + (dataQuality * 0.20m)
+            + (regulatoryCapital * 0.28m)
+            + (auditGovernance * 0.14m)
+            + (engagement * 0.14m));
+
+        return baseProfile with
+        {
+            FilingTimeliness = filingTimeliness,
+            DataQuality = dataQuality,
+            RegulatoryCapital = regulatoryCapital,
+            AuditGovernance = auditGovernance,
+            Engagement = engagement,
+            OverallScore = overallScore,
+            Rating = MapChsRating(overallScore)
+        };
+    }
+
+    private static List<ChsScoreSnapshot> BuildChsSnapshots(
+        Institution institution,
+        InstitutionSignalProfile profile)
+    {
+        var snapshots = new List<ChsScoreSnapshot>(3);
+        for (var index = 0; index < 3; index++)
+        {
+            var weeksAgo = 2 - index;
+            var overall = ClampScore(profile.OverallScore - (profile.WeeklyTrendDelta * weeksAgo));
+            var filing = ClampScore(profile.FilingTimeliness - (profile.WeeklyTrendDelta * 0.85m * weeksAgo));
+            var dataQuality = ClampScore(profile.DataQuality - (profile.WeeklyTrendDelta * 0.70m * weeksAgo));
+            var capital = ClampScore(profile.RegulatoryCapital - (profile.WeeklyTrendDelta * 0.95m * weeksAgo));
+            var audit = ClampScore(profile.AuditGovernance - (profile.WeeklyTrendDelta * 0.55m * weeksAgo));
+            var engagement = ClampScore(profile.Engagement - (profile.WeeklyTrendDelta * 0.50m * weeksAgo));
+            var computedAt = DateTime.UtcNow.Date.AddDays(-(weeksAgo * 7)).AddHours(8);
+
+            snapshots.Add(new ChsScoreSnapshot
+            {
+                TenantId = institution.TenantId,
+                PeriodLabel = $"{computedAt:yyyy}-W{ISOWeek.GetWeekOfYear(computedAt):00}",
+                ComputedAt = computedAt,
+                OverallScore = overall,
+                Rating = MapChsRating(overall),
+                FilingTimeliness = filing,
+                DataQuality = dataQuality,
+                RegulatoryCapital = capital,
+                AuditGovernance = audit,
+                Engagement = engagement
+            });
+        }
+
+        return snapshots;
+    }
+
+    private static List<DataBreachIncident> BuildDataBreachIncidents(
+        Institution institution,
+        InstitutionSeedSpec spec,
+        InstitutionSignalProfile profile)
+    {
+        var incidents = new List<DataBreachIncident>();
+        var seedTime = DateTime.UtcNow.Date.AddHours(9);
+
+        void AddIncident(
+            DataBreachSeverity severity,
+            DataBreachStatus status,
+            string title,
+            string description,
+            int affectedSubjects,
+            int daysAgo,
+            bool isOpen)
+        {
+            var detectedAt = seedTime.AddDays(-daysAgo);
+            incidents.Add(new DataBreachIncident
+            {
+                TenantId = institution.TenantId,
+                Severity = severity,
+                Status = status,
+                Title = title,
+                Description = description,
+                DataSubjectsAffected = affectedSubjects,
+                DataCategoriesAffected = "customer_profile, transaction_metadata",
+                DetectedAt = detectedAt,
+                ContainedAt = isOpen ? null : detectedAt.AddHours(14),
+                NitdaNotificationDeadline = detectedAt.AddDays(3),
+                NitdaNotifiedAt = isOpen ? null : detectedAt.AddDays(1),
+                RemediatedAt = isOpen ? null : detectedAt.AddDays(4),
+                DpoNotes = $"demo-persona:{spec.Persona}"
+            });
+        }
+
+        switch (spec.Persona)
+        {
+            case DemoInstitutionPersona.ResilienceStress:
+                AddIncident(
+                    DataBreachSeverity.HIGH,
+                    DataBreachStatus.Assessed,
+                    $"{spec.City} branch endpoint containment case",
+                    "Endpoint telemetry shows repeated malware callbacks on a branch workstation pending full eradication.",
+                    420,
+                    daysAgo: 5,
+                    isOpen: true);
+                break;
+            case DemoInstitutionPersona.CyberElevated:
+                AddIncident(
+                    DataBreachSeverity.MEDIUM,
+                    DataBreachStatus.Contained,
+                    "Privileged credential leakage investigation",
+                    "Compromised service credentials were rotated after abnormal authentication activity was traced to a third-party device.",
+                    185,
+                    daysAgo: 8,
+                    isOpen: false);
+                break;
+            case DemoInstitutionPersona.RecoveryTrack:
+                AddIncident(
+                    DataBreachSeverity.HIGH,
+                    DataBreachStatus.Remediated,
+                    "Customer data disclosure case remediated",
+                    "A previously reported disclosure incident was fully remediated and residual control actions were closed.",
+                    260,
+                    daysAgo: 18,
+                    isOpen: false);
+                break;
+            case DemoInstitutionPersona.CompoundPressure:
+                AddIncident(
+                    DataBreachSeverity.CRITICAL,
+                    DataBreachStatus.Assessed,
+                    "Core channel data-loss event pending executive closure",
+                    "A material data-loss event remains under active containment with regulator notification packs still open.",
+                    2_150,
+                    daysAgo: 3,
+                    isOpen: true);
+                AddIncident(
+                    DataBreachSeverity.HIGH,
+                    DataBreachStatus.Contained,
+                    "Vendor integration breach investigation",
+                    "An upstream vendor integration transmitted malformed files that triggered high-risk breach review.",
+                    690,
+                    daysAgo: 11,
+                    isOpen: true);
+                break;
+        }
+
+        return incidents;
+    }
+
+    private static List<SecurityAlert> BuildSecurityAlerts(
+        Institution institution,
+        InstitutionSeedSpec spec,
+        InstitutionSignalProfile profile)
+    {
+        var alerts = new List<SecurityAlert>();
+        var seedTime = DateTime.UtcNow.Date.AddHours(11);
+
+        void AddAlert(string alertType, string severity, string status, string title, string description, int hoursAgo)
+        {
+            alerts.Add(new SecurityAlert
+            {
+                Id = Guid.NewGuid(),
+                TenantId = institution.TenantId,
+                AlertType = alertType,
+                Severity = severity,
+                Title = title,
+                Description = description,
+                Status = status,
+                EvidenceJson = $$"""{"source":"demo-persona","persona":"{{spec.Persona}}"}""",
+                CreatedAt = seedTime.AddHours(-hoursAgo)
+            });
+        }
+
+        if (profile.OpenAlertCount == 0 && spec.Persona != DemoInstitutionPersona.RecoveryTrack)
+        {
+            return alerts;
+        }
+
+        switch (spec.Persona)
+        {
+            case DemoInstitutionPersona.CapitalFragile:
+                AddAlert("control-gap", "medium", "open", "Capital committee evidence refresh overdue", "Capital remediation evidence has not been refreshed on schedule.", 38);
+                break;
+            case DemoInstitutionPersona.ResilienceStress:
+                AddAlert("branch-network", "medium", "investigating", "Branch network latency spike", "The branch network remains in heightened monitoring while containment actions are validated.", 21);
+                break;
+            case DemoInstitutionPersona.CyberElevated:
+                AddAlert("iam", "high", "open", "Privileged access anomaly", "A privileged account initiated access from an unusual source range and remains under analyst review.", 9);
+                AddAlert("endpoint", "medium", "investigating", "Endpoint control policy drift", "Security baselines drifted on a monitored endpoint fleet pending policy reconciliation.", 33);
+                break;
+            case DemoInstitutionPersona.RecoveryTrack:
+                AddAlert("endpoint", "low", "closed", "Endpoint hardening closure", "Residual hardening actions from a prior security case were closed after validation.", 72);
+                break;
+            case DemoInstitutionPersona.CompoundPressure:
+                AddAlert("identity", "critical", "open", "Privileged identity compromise alert", "Multiple privileged sign-ins matched high-confidence takeover patterns and remain open.", 6);
+                AddAlert("network", "high", "investigating", "Suspicious east-west movement", "Lateral movement indicators persist across segmented workloads under investigation.", 15);
+                AddAlert("control-gap", "medium", "open", "Log retention gap flagged", "Security telemetry retention dropped below policy for a monitored perimeter device.", 47);
+                break;
+        }
+
+        return alerts;
+    }
+
+    private static List<FieldChangeHistory> BuildFieldChanges(
+        Institution institution,
+        InstitutionSeedSpec spec,
+        InstitutionSignalProfile profile,
+        IReadOnlyList<SeededSubmissionArtifact> createdSubmissions)
+    {
+        if (profile.ModelReviewCount <= 0 || createdSubmissions.Count == 0)
+        {
+            return [];
+        }
+
+        var anchorSubmissions = createdSubmissions
+            .Where(x => x.IsCurrentPeriod)
+            .DefaultIfEmpty(createdSubmissions.OrderByDescending(x => x.SubmittedAt).First())
+            .ToList();
+        var fields = new[]
+        {
+            "capital_buffer_override",
+            "validation_rule_scalar",
+            "scenario_weight_adjustment",
+            "portfolio_pd_scalar"
+        };
+
+        var changes = new List<FieldChangeHistory>(profile.ModelReviewCount);
+        for (var index = 0; index < profile.ModelReviewCount; index++)
+        {
+            var anchor = anchorSubmissions[index % anchorSubmissions.Count];
+            changes.Add(new FieldChangeHistory
+            {
+                TenantId = institution.TenantId,
+                SubmissionId = anchor.SubmissionId,
+                ReturnCode = anchor.ReturnCode,
+                FieldName = fields[index % fields.Length],
+                OldValue = (1.0m + (index * 0.1m)).ToString("0.0#", CultureInfo.InvariantCulture),
+                NewValue = (1.2m + (index * 0.15m)).ToString("0.0#", CultureInfo.InvariantCulture),
+                ChangeSource = "System",
+                SourceDetail = $"demo-persona:{spec.Persona}",
+                ChangedBy = "demo-seed",
+                ChangedAt = DateTime.UtcNow.AddHours(-(index + 2))
+            });
+        }
+
+        return changes;
+    }
+
+    private static decimal ClampScore(decimal value)
+        => decimal.Round(Math.Clamp(value, 30m, 99m), 1, MidpointRounding.AwayFromZero);
+
+    private static int MapChsRating(decimal overallScore)
+        => (int)(overallScore switch
+        {
+            >= 90m => FC.Engine.Domain.Models.ChsRating.APlus,
+            >= 80m => FC.Engine.Domain.Models.ChsRating.A,
+            >= 70m => FC.Engine.Domain.Models.ChsRating.B,
+            >= 60m => FC.Engine.Domain.Models.ChsRating.C,
+            >= 50m => FC.Engine.Domain.Models.ChsRating.D,
+            _ => FC.Engine.Domain.Models.ChsRating.F
+        });
+
+    private async Task<SeededSubmissionArtifact> CreateSubmissionAsync(
         CachedTemplate template,
         ValidatedSubmissionPrototype prototype,
         ReturnDataRecord record,
@@ -1845,6 +2415,8 @@ public sealed class BulkInstitutionDemoSeedService
         int submittedByUserId,
         int returnPeriodId,
         DateTime submittedAt,
+        DemoPeriodSpec periodSpec,
+        SubmissionSeedDisposition disposition,
         CancellationToken ct)
     {
         var submission = Submission.Create(institution.Id, returnPeriodId, template.ReturnCode, institution.TenantId);
@@ -1866,7 +2438,11 @@ public sealed class BulkInstitutionDemoSeedService
         validationReport.AddErrors(prototype.ValidationErrors.Select(CloneValidationError));
         validationReport.FinalizeAt(submittedAt.AddSeconds(2));
         submission.AttachValidationReport(validationReport);
-        if (validationReport.HasWarnings)
+        if (disposition == SubmissionSeedDisposition.Returned)
+        {
+            submission.MarkRejected();
+        }
+        else if (disposition == SubmissionSeedDisposition.AcceptedWithWarnings || validationReport.HasWarnings)
         {
             submission.MarkAcceptedWithWarnings();
         }
@@ -1876,7 +2452,16 @@ public sealed class BulkInstitutionDemoSeedService
         }
 
         await _db.SaveChangesAsync(ct);
+        var seededStatus = submission.Status;
         _db.ChangeTracker.Clear();
+
+        return new SeededSubmissionArtifact(
+            submission.Id,
+            template.ReturnCode,
+            periodSpec.Frequency,
+            periodSpec.IsCurrent,
+            seededStatus,
+            submittedAt);
     }
 
     private async Task UpdateInstitutionSubmissionStampAsync(int institutionId, DateTime lastSubmissionAt, CancellationToken ct)
@@ -2049,14 +2634,9 @@ public sealed class BulkInstitutionDemoSeedService
                 ? $"FCD{index:000}"
                 : $"{licenceTypeCode}{index:000}";
             var lowerCode = code.ToLowerInvariant();
-            var institutionName = licenceTypeCode.ToUpperInvariant() switch
-            {
-                "BDC" => $"RegOS Demo BDC {index:000} Ltd",
-                "DMB" => $"RegOS Demo DMB {index:000} Plc",
-                "FC" => $"RegOS Demo Finance Company {index:000} Ltd",
-                "MFB" => $"RegOS Demo Microfinance Bank {index:000} Ltd",
-                _ => $"RegOS Demo {licenceTypeCode.ToUpperInvariant()} {index:000}"
-            };
+            var persona = ResolvePersona(licenceTypeCode, index);
+            var (city, state) = ResolveInstitutionLocation(index);
+            var institutionName = BuildInstitutionName(licenceTypeCode, index, city);
 
             specs.Add(new InstitutionSeedSpec(
                 licenceTypeCode,
@@ -2067,11 +2647,138 @@ public sealed class BulkInstitutionDemoSeedService
                 $"{lowerCode}admin@regos.demo.local",
                 $"{institutionName} Admin",
                 $"{lowerCode}@regos.demo.local",
-                $"+23480{index:000000}",
-                $"{10 + index} Demo Avenue, Lagos"));
+                $"+234{ResolvePhonePrefix(index)}{index:000000}",
+                BuildInstitutionAddress(index, city, state),
+                city,
+                state,
+                persona));
         }
 
         return specs;
+    }
+
+    private static DemoInstitutionPersona ResolvePersona(string licenceTypeCode, int index)
+    {
+        var slot = (index - 1) % 10;
+        return licenceTypeCode.ToUpperInvariant() switch
+        {
+            "BDC" => slot switch
+            {
+                0 or 1 or 2 => DemoInstitutionPersona.Baseline,
+                3 or 4 => DemoInstitutionPersona.FilingWatch,
+                5 => DemoInstitutionPersona.ReturnedSubmission,
+                6 => DemoInstitutionPersona.CyberElevated,
+                7 => DemoInstitutionPersona.ResilienceStress,
+                8 => DemoInstitutionPersona.RecoveryTrack,
+                _ => DemoInstitutionPersona.CompoundPressure
+            },
+            "DMB" => slot switch
+            {
+                0 or 1 => DemoInstitutionPersona.Baseline,
+                2 or 3 => DemoInstitutionPersona.CapitalFragile,
+                4 => DemoInstitutionPersona.ReturnedSubmission,
+                5 => DemoInstitutionPersona.ResilienceStress,
+                6 => DemoInstitutionPersona.CyberElevated,
+                7 or 8 => DemoInstitutionPersona.CompoundPressure,
+                _ => DemoInstitutionPersona.RecoveryTrack
+            },
+            "FC" => slot switch
+            {
+                0 or 1 or 2 => DemoInstitutionPersona.Baseline,
+                3 => DemoInstitutionPersona.FilingWatch,
+                4 or 5 => DemoInstitutionPersona.CapitalFragile,
+                6 => DemoInstitutionPersona.ReturnedSubmission,
+                7 => DemoInstitutionPersona.CyberElevated,
+                8 => DemoInstitutionPersona.RecoveryTrack,
+                _ => DemoInstitutionPersona.CompoundPressure
+            },
+            "MFB" => slot switch
+            {
+                0 or 1 => DemoInstitutionPersona.Baseline,
+                2 or 3 => DemoInstitutionPersona.FilingWatch,
+                4 => DemoInstitutionPersona.ReturnedSubmission,
+                5 => DemoInstitutionPersona.CapitalFragile,
+                6 or 7 => DemoInstitutionPersona.ResilienceStress,
+                8 => DemoInstitutionPersona.RecoveryTrack,
+                _ => DemoInstitutionPersona.CompoundPressure
+            },
+            _ => DemoInstitutionPersona.Baseline
+        };
+    }
+
+    private static (string City, string State) ResolveInstitutionLocation(int index)
+    {
+        string[] locations =
+        [
+            "Lagos:Lagos",
+            "Abuja:FCT",
+            "Port Harcourt:Rivers",
+            "Ibadan:Oyo",
+            "Kano:Kano",
+            "Enugu:Enugu",
+            "Benin City:Edo",
+            "Uyo:Akwa Ibom",
+            "Kaduna:Kaduna",
+            "Ilorin:Kwara",
+            "Abeokuta:Ogun",
+            "Jos:Plateau"
+        ];
+
+        var parts = locations[(index - 1) % locations.Length].Split(':', 2);
+        return (parts[0], parts[1]);
+    }
+
+    private static string BuildInstitutionName(string licenceTypeCode, int index, string city)
+    {
+        return licenceTypeCode.ToUpperInvariant() switch
+        {
+            "BDC" => BuildSectorName(
+                index,
+                city,
+                ["Marina", "Crown", "Meridian", "Northfield", "Summit", "Heritage", "Atlas", "BlueGate"],
+                ["Exchange Bureau", "FX Desk", "Forex Hub", "Capital Exchange", "Treasury Exchange", "Currency House"],
+                "Ltd"),
+            "DMB" => BuildSectorName(
+                index,
+                city,
+                ["Union", "Citadel", "Northbridge", "Harbour", "Anchor", "Metropolitan", "First Meridian"],
+                ["Commercial Bank", "Trust Bank", "Merchant Bank", "Bank"],
+                "Plc"),
+            "FC" => BuildSectorName(
+                index,
+                city,
+                ["Cardinal", "Summit", "Axis", "Oakline", "Bluecrest", "Primefield", "Northgate", "Bridgepoint", "Sterling", "Crestview", "Pinnacle", "Westbay"],
+                ["Finance Company", "Credit House", "Capital Finance", "Finance House", "Consumer Finance", "Lending Company", "Financial Services", "Commercial Finance", "Asset Finance", "Finance & Leasing"],
+                "Ltd"),
+            "MFB" => BuildSectorName(
+                index,
+                city,
+                ["Unity", "Bridge", "Harvest", "Cedar", "Shoreline", "Prosperity"],
+                ["Microfinance Bank", "Community Bank", "Microfinance", "Cooperative Bank"],
+                "Ltd"),
+            _ => $"RegOS {licenceTypeCode.ToUpperInvariant()} {index:000} {city}"
+        };
+    }
+
+    private static string BuildSectorName(
+        int index,
+        string city,
+        IReadOnlyList<string> prefixes,
+        IReadOnlyList<string> sectors,
+        string suffix)
+    {
+        var prefix = prefixes[(index - 1) % prefixes.Count];
+        var sector = sectors[((index - 1) / prefixes.Count) % sectors.Count];
+        return $"{prefix} {city} {sector} {suffix}";
+    }
+
+    private static string BuildInstitutionAddress(int index, string city, string state)
+        => $"{12 + ((index - 1) % 48)} Market Square, {city}, {state}";
+
+    private static string ResolvePhonePrefix(int index)
+    {
+        string[] prefixes = ["803", "805", "806", "807", "808", "809", "810", "812", "813", "814", "815", "816", "817", "818"];
+        return prefixes[(index - 1) % prefixes.Length];
     }
 
     private static int ResolveInstitutionCategoryCode(string institutionCode, int maxCategory)
@@ -2864,7 +3571,10 @@ internal sealed record InstitutionSeedSpec(
     string AdminDisplayName,
     string ContactEmail,
     string ContactPhone,
-    string Address);
+    string Address,
+    string City,
+    string State,
+    DemoInstitutionPersona Persona);
 
 internal sealed record DemoPeriodSpec(
     int Index,
@@ -2907,3 +3617,44 @@ internal sealed record InstitutionSeedExecutionResult(
     int PeriodsCreated,
     int SubmissionsCreated,
     DemoCredentialGroup CredentialGroup);
+
+internal sealed record SeededSubmissionArtifact(
+    int SubmissionId,
+    string ReturnCode,
+    string Frequency,
+    bool IsCurrentPeriod,
+    SubmissionStatus Status,
+    DateTime SubmittedAt);
+
+internal sealed record InstitutionSignalProfile(
+    decimal FilingTimeliness,
+    decimal DataQuality,
+    decimal RegulatoryCapital,
+    decimal AuditGovernance,
+    decimal Engagement,
+    int OpenIncidentCount,
+    int OpenAlertCount,
+    int ModelReviewCount,
+    decimal WeeklyTrendDelta,
+    decimal OverallScore = 0m,
+    int Rating = 0);
+
+internal enum DemoInstitutionPersona
+{
+    Baseline,
+    FilingWatch,
+    ReturnedSubmission,
+    CapitalFragile,
+    ResilienceStress,
+    CyberElevated,
+    RecoveryTrack,
+    CompoundPressure
+}
+
+internal enum SubmissionSeedDisposition
+{
+    Accepted,
+    AcceptedWithWarnings,
+    Returned,
+    Missing
+}

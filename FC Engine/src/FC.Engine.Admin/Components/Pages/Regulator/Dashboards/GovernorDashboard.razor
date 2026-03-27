@@ -120,7 +120,7 @@
                     </article>
                 </section>
 
-                <section class="rg-premium-content-grid">
+                <section class="rg-premium-content-grid rg-cc-shell rg-cc-shell--governor">
                     <div class="rg-premium-main">
                         <div class="rg-premium-dual-grid">
                             <section class="rg-premium-panel">
@@ -161,41 +161,136 @@
                         <section class="rg-premium-panel">
                             <div class="rg-premium-panel__header">
                                 <div>
+                                    <div class="rg-premium-panel__eyebrow">Governor briefing</div>
+                                    <h2 class="rg-premium-panel__title">Strategic watchpoints</h2>
+                                    <p class="rg-premium-panel__subtitle">Three fast cues for what is improving, what is concentrated, and what could bend the next governor briefing.</p>
+                                </div>
+                                <div class="rg-premium-panel__metric">
+                                    <span class="rg-premium-panel__metric-label">Supervisory estate</span>
+                                    @_data.TotalInstitutions institutions
+                                </div>
+                            </div>
+                            <div class="rg-premium-panel__body">
+                                <div class="rg-cc-focus-grid">
+                                    <article class="rg-cc-focus-card">
+                                        <div class="rg-cc-focus-card__eyebrow">Filing discipline</div>
+                                        <div class="rg-cc-focus-card__value">@($"{_data.ComplianceRatePercent:F1}%")</div>
+                                        <p class="rg-cc-focus-card__copy">
+                                            @(_data.ComplianceRatePercent >= 95m
+                                                ? "Most institutions are filing without overdue obligations, so the pressure story is driven by specific outliers rather than broad slippage."
+                                                : "The filing posture is soft enough to deserve senior attention before the next major reporting window closes.")
+                                        </p>
+                                        <div class="rg-cc-focus-card__footer">@($"{_data.TotalInstitutions - _data.TopRiskInstitutions.Count(x => x.OverdueObligations > 0)} institutions are currently clear of overdue pressure.")</div>
+                                    </article>
+                                    <article class="rg-cc-focus-card">
+                                        <div class="rg-cc-focus-card__eyebrow">Capital watch</div>
+                                        <div class="rg-cc-focus-card__value">@_data.CapitalWatchlistCount</div>
+                                        <p class="rg-cc-focus-card__copy">
+                                            @(_data.CapitalWatchlistCount == 0
+                                                ? "No institutions are currently sitting inside the capital watchlist lane."
+                                                : $"{_data.CapitalWatchlistCount} institutions are already inside the capital watchlist and should remain anchored in the governor briefing pack.")
+                                        </p>
+                                        <div class="rg-cc-focus-card__footer">@($"Average capital score holds at {_data.AverageCapitalScore:F1}/100 across the visible estate.")</div>
+                                    </article>
+                                    <article class="rg-cc-focus-card">
+                                        <div class="rg-cc-focus-card__eyebrow">Warning surface</div>
+                                        <div class="rg-cc-focus-card__value">@_data.OpenWarnings</div>
+                                        <p class="rg-cc-focus-card__copy">
+                                            @(_data.OpenWarnings == 0
+                                                ? "No open warning surge is currently reshaping the governor agenda."
+                                                : $"{_data.OpenWarnings} warning items remain live, with resilience and model-risk signals still contributing to the current supervisory narrative.")
+                                        </p>
+                                        <div class="rg-cc-focus-card__footer">@($"{_data.OpenResilienceIncidents} resilience incidents · {_data.ModelsUnderReview} model review items")</div>
+                                    </article>
+                                </div>
+                            </div>
+                        </section>
+
+                        <section class="rg-premium-panel">
+                            <div class="rg-premium-panel__header">
+                                <div>
                                     <div class="rg-premium-panel__eyebrow">Institution ranking</div>
-                                    <h2 class="rg-premium-panel__title">Top risk institutions</h2>
-                                    <p class="rg-premium-panel__subtitle">Institutions ordered by combined overdue obligations, resilience incidents, and open security pressure.</p>
+                                    <h2 class="rg-premium-panel__title">Institutions shaping the governor brief</h2>
+                                    <p class="rg-premium-panel__subtitle">Ranked cards that combine filing pressure, capital posture, resilience load, and alert exposure into a single briefing surface.</p>
                                 </div>
                                 <div class="rg-premium-panel__metric">
                                     <span class="rg-premium-panel__metric-label">Leading risk</span>
                                     @(_data.TopRiskInstitutions.FirstOrDefault()?.InstitutionName ?? "No concentration")
                                 </div>
                             </div>
-                            <div class="rg-premium-panel__body rg-premium-panel__body--table">
-                                <DataTable TItem="InstitutionScorecardRow" Items="@_data.TopRiskInstitutions" PageSize="10" Sortable="true" ShowExport="true" ExportFileName="governor-top-risk">
-                                    <ChildContent>
-                                        <DataColumn TItem="InstitutionScorecardRow" Title="Institution" SortKey="@(x => x.InstitutionName)">
-                                            <CellTemplate><strong>@context.InstitutionName</strong></CellTemplate>
-                                        </DataColumn>
-                                        <DataColumn TItem="InstitutionScorecardRow" Title="Licence" Width="120px" SortKey="@(x => x.LicenceType)">
-                                            <CellTemplate><span class="fc-badge fc-badge--neutral">@context.LicenceType</span></CellTemplate>
-                                        </DataColumn>
-                                        <DataColumn TItem="InstitutionScorecardRow" Title="Priority" Width="100px" SortKey="@(x => x.Priority)">
-                                            <CellTemplate><span class="fc-badge @PriorityBadge(context.Priority)">@context.Priority</span></CellTemplate>
-                                        </DataColumn>
-                                        <DataColumn TItem="InstitutionScorecardRow" Title="Capital" Width="90px" SortKey="@(x => x.CapitalScore)">
-                                            <CellTemplate>@(context.CapitalScore?.ToString("F1") ?? "—")</CellTemplate>
-                                        </DataColumn>
-                                        <DataColumn TItem="InstitutionScorecardRow" Title="Overdue" Width="90px" SortKey="@(x => x.OverdueObligations)">
-                                            <CellTemplate><span class="@(context.OverdueObligations > 0 ? "fc-text-danger" : string.Empty)">@context.OverdueObligations</span></CellTemplate>
-                                        </DataColumn>
-                                        <DataColumn TItem="InstitutionScorecardRow" Title="Incidents" Width="90px" SortKey="@(x => x.OpenResilienceIncidents)">
-                                            <CellTemplate>@context.OpenResilienceIncidents</CellTemplate>
-                                        </DataColumn>
-                                        <DataColumn TItem="InstitutionScorecardRow" Title="Alerts" Width="80px" SortKey="@(x => x.OpenSecurityAlerts)">
-                                            <CellTemplate>@context.OpenSecurityAlerts</CellTemplate>
-                                        </DataColumn>
-                                    </ChildContent>
-                                </DataTable>
+                            <div class="rg-premium-panel__body">
+                                @if (_data.TopRiskInstitutions.Count == 0)
+                                {
+                                    <div class="rg-premium-empty">No institutions are currently concentrating enough pressure to shape the governor brief.</div>
+                                }
+                                else
+                                {
+                                    <div class="rg-cc-institution-stack">
+                                        @foreach (var ranked in _data.TopRiskInstitutions.Take(8).Select((institution, index) => new { institution, index }))
+                                        {
+                                            var pressure = CombinedPressure(ranked.institution);
+                                            <article class="rg-cc-institution-card">
+                                                <div class="rg-cc-institution-card__top">
+                                                    <div>
+                                                        <div class="rg-cc-institution-card__rank">#@(ranked.index + 1)</div>
+                                                        <h3 class="rg-cc-institution-card__title">@ranked.institution.InstitutionName</h3>
+                                                        <p class="rg-cc-institution-card__copy">@BuildInstitutionLeadCopy(ranked.institution)</p>
+                                                    </div>
+                                                    <div class="rg-cc-kpi-pack">
+                                                        <div class="rg-cc-kpi-pack__value">@(ranked.institution.CapitalScore?.ToString("F1") ?? "—")</div>
+                                                        <div class="rg-cc-kpi-pack__label">Capital</div>
+                                                    </div>
+                                                </div>
+                                                <div class="rg-cc-pressure-bar" aria-label="Combined pressure mix">
+                                                    @if (ranked.institution.OverdueObligations > 0)
+                                                    {
+                                                        <span class="rg-cc-pressure-bar__segment rg-cc-pressure-bar__segment--danger" style="flex:@ranked.institution.OverdueObligations"></span>
+                                                    }
+                                                    @if (ranked.institution.DueSoonObligations > 0)
+                                                    {
+                                                        <span class="rg-cc-pressure-bar__segment rg-cc-pressure-bar__segment--warning" style="flex:@ranked.institution.DueSoonObligations"></span>
+                                                    }
+                                                    @if (ranked.institution.OpenResilienceIncidents > 0)
+                                                    {
+                                                        <span class="rg-cc-pressure-bar__segment rg-cc-pressure-bar__segment--info" style="flex:@ranked.institution.OpenResilienceIncidents"></span>
+                                                    }
+                                                    @if (ranked.institution.OpenSecurityAlerts > 0)
+                                                    {
+                                                        <span class="rg-cc-pressure-bar__segment rg-cc-pressure-bar__segment--purple" style="flex:@ranked.institution.OpenSecurityAlerts"></span>
+                                                    }
+                                                    @if (ranked.institution.ModelReviewItems > 0)
+                                                    {
+                                                        <span class="rg-cc-pressure-bar__segment rg-cc-pressure-bar__segment--success" style="flex:@ranked.institution.ModelReviewItems"></span>
+                                                    }
+                                                </div>
+                                                <div class="rg-cc-statline">
+                                                    <span class="rg-cc-statline__item">@($"{pressure} combined pressure")</span>
+                                                    <span class="rg-cc-statline__item">@ranked.institution.LicenceType</span>
+                                                    <span class="rg-cc-statline__item">@BuildInstitutionActionLabel(ranked.institution)</span>
+                                                </div>
+                                                <div class="rg-premium-list__tags">
+                                                    <span class="fc-badge @PriorityBadge(ranked.institution.Priority)">@ranked.institution.Priority</span>
+                                                    @if (ranked.institution.OverdueObligations > 0)
+                                                    {
+                                                        <span class="fc-badge fc-badge--danger">@($"{ranked.institution.OverdueObligations} overdue")</span>
+                                                    }
+                                                    @if (ranked.institution.DueSoonObligations > 0)
+                                                    {
+                                                        <span class="fc-badge fc-badge--warning">@($"{ranked.institution.DueSoonObligations} due soon")</span>
+                                                    }
+                                                    @if (ranked.institution.OpenResilienceIncidents > 0)
+                                                    {
+                                                        <span class="fc-badge fc-badge--info">@($"{ranked.institution.OpenResilienceIncidents} incidents")</span>
+                                                    }
+                                                    @if (ranked.institution.OpenSecurityAlerts > 0)
+                                                    {
+                                                        <span class="fc-badge fc-badge--purple">@($"{ranked.institution.OpenSecurityAlerts} alerts")</span>
+                                                    }
+                                                </div>
+                                            </article>
+                                        }
+                                    </div>
+                                }
                             </div>
                         </section>
                     </div>
@@ -204,36 +299,63 @@
                         <section class="rg-premium-panel">
                             <div class="rg-premium-panel__header">
                                 <div>
-                                    <div class="rg-premium-panel__eyebrow">Watchlist preview</div>
-                                    <h2 class="rg-premium-panel__title">Institutions shaping today’s briefing</h2>
-                                    <p class="rg-premium-panel__subtitle">Quick-read cards for the institutions most likely to influence senior supervisory decisions.</p>
+                                    <div class="rg-premium-panel__eyebrow">Estate mix</div>
+                                    <h2 class="rg-premium-panel__title">Licence concentration</h2>
+                                    <p class="rg-premium-panel__subtitle">The licence cohorts carrying the most visible supervisory surface area in the current workspace.</p>
                                 </div>
                             </div>
                             <div class="rg-premium-panel__body">
-                                @if (_data.TopRiskInstitutions.Count == 0)
+                                @if (_data.LicenceDistribution.Count == 0)
                                 {
-                                    <div class="rg-premium-empty">No high-concentration institutions are currently surfaced by the intelligence model.</div>
+                                    <div class="rg-premium-empty">No licence distribution is available yet.</div>
                                 }
                                 else
                                 {
-                                    <div class="rg-premium-list">
-                                        @foreach (var institution in _data.TopRiskInstitutions.Take(5))
+                                    <div class="rg-cc-bar-list">
+                                        @foreach (var licence in _data.LicenceDistribution.Take(6))
                                         {
-                                            <article class="rg-premium-list__item">
-                                                <div class="rg-premium-list__top">
-                                                    <div class="rg-premium-list__heading">@institution.InstitutionName</div>
-                                                    <div class="rg-premium-list__value">@(institution.CapitalScore?.ToString("F1") ?? "—")</div>
+                                            <div class="rg-cc-bar-row">
+                                                <div class="rg-cc-bar-row__top">
+                                                    <span class="rg-cc-bar-row__label">@licence.Label</span>
+                                                    <span class="rg-cc-bar-row__value">@licence.Count</span>
                                                 </div>
-                                                <div class="rg-premium-list__meta">@institution.Summary</div>
-                                                <div class="rg-premium-list__tags">
-                                                    <span class="fc-badge fc-badge--neutral">@institution.LicenceType</span>
-                                                    <span class="fc-badge @PriorityBadge(institution.Priority)">@institution.Priority</span>
-                                                    @if (institution.OverdueObligations > 0)
-                                                    {
-                                                        <span class="fc-badge fc-badge--danger">@($"{institution.OverdueObligations} overdue")</span>
-                                                    }
+                                                <div class="rg-cc-bar-row__track">
+                                                    <span class="rg-cc-bar-row__fill" style="width:@BuildShareWidth(licence.Count, MaxDistributionCount(_data.LicenceDistribution))"></span>
                                                 </div>
-                                            </article>
+                                            </div>
+                                        }
+                                    </div>
+                                }
+                            </div>
+                        </section>
+
+                        <section class="rg-premium-panel">
+                            <div class="rg-premium-panel__header">
+                                <div>
+                                    <div class="rg-premium-panel__eyebrow">Pressure spread</div>
+                                    <h2 class="rg-premium-panel__title">Priority bands</h2>
+                                    <p class="rg-premium-panel__subtitle">A qualitative read on how supervisory load is clustering across priority lanes.</p>
+                                </div>
+                            </div>
+                            <div class="rg-premium-panel__body">
+                                @if (_data.PriorityDistribution.Count == 0)
+                                {
+                                    <div class="rg-premium-empty">Priority concentration will appear here once the scorecard estate is materialised.</div>
+                                }
+                                else
+                                {
+                                    <div class="rg-cc-bar-list">
+                                        @foreach (var priority in _data.PriorityDistribution)
+                                        {
+                                            <div class="rg-cc-bar-row">
+                                                <div class="rg-cc-bar-row__top">
+                                                    <span class="rg-cc-bar-row__label">@priority.Label</span>
+                                                    <span class="rg-cc-bar-row__value">@priority.Count</span>
+                                                </div>
+                                                <div class="rg-cc-bar-row__track">
+                                                    <span class="rg-cc-bar-row__fill @PriorityFillClass(priority.Label)" style="width:@BuildShareWidth(priority.Count, MaxDistributionCount(_data.PriorityDistribution))"></span>
+                                                </div>
+                                            </div>
                                         }
                                     </div>
                                 }
@@ -522,6 +644,72 @@
         "High" => "#E07C24",
         "Medium" => "#C8A415",
         _ => "#9CA3AF"
+    };
+
+    private static int CombinedPressure(InstitutionScorecardRow institution) =>
+        institution.OverdueObligations
+        + institution.DueSoonObligations
+        + institution.OpenResilienceIncidents
+        + institution.OpenSecurityAlerts
+        + institution.ModelReviewItems;
+
+    private static int MaxDistributionCount(IEnumerable<FC.Engine.Admin.Services.Dashboards.LabelCount> rows) =>
+        rows.Any() ? rows.Max(x => x.Count) : 0;
+
+    private static string BuildShareWidth(int count, int max) =>
+        max <= 0 ? "0%" : $"{Math.Max(12m, Math.Round((decimal)count / max * 100m, 1)):0.0}%";
+
+    private static string BuildInstitutionLeadCopy(InstitutionScorecardRow institution)
+    {
+        if (!string.IsNullOrWhiteSpace(institution.Summary))
+        {
+            return institution.Summary;
+        }
+
+        return institution.Priority switch
+        {
+            "Critical" => "Pressure is concentrated enough here to alter the senior supervisory storyline.",
+            "High" => "This institution is moving toward the upper end of the supervisory attention lane.",
+            _ => "This institution remains inside the monitored estate with manageable visible pressure."
+        };
+    }
+
+    private static string BuildInstitutionActionLabel(InstitutionScorecardRow institution)
+    {
+        if (institution.OverdueObligations > 0)
+        {
+            return "Filing recovery";
+        }
+
+        if (institution.CapitalScore is < 45m)
+        {
+            return "Capital restoration";
+        }
+
+        if (institution.OpenSecurityAlerts > 0)
+        {
+            return "Alert containment";
+        }
+
+        if (institution.OpenResilienceIncidents > 0)
+        {
+            return "Resilience follow-up";
+        }
+
+        if (institution.ModelReviewItems > 0)
+        {
+            return "Model governance";
+        }
+
+        return "Monitor";
+    }
+
+    private static string PriorityFillClass(string priority) => priority switch
+    {
+        "Critical" => "rg-cc-bar-row__fill--danger",
+        "High" => "rg-cc-bar-row__fill--warning",
+        "Medium" => "rg-cc-bar-row__fill--info",
+        _ => "rg-cc-bar-row__fill--neutral"
     };
 
     private static string SeverityBadge(string severity) => severity switch

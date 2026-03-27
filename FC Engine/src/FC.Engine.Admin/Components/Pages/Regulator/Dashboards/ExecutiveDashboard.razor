@@ -117,8 +117,56 @@
                     </article>
                 </section>
 
-                <section class="rg-premium-content-grid">
+                <section class="rg-premium-content-grid rg-cc-shell rg-cc-shell--executive">
                     <div class="rg-premium-main">
+                        <section class="rg-premium-panel">
+                            <div class="rg-premium-panel__header">
+                                <div>
+                                    <div class="rg-premium-panel__eyebrow">Leadership snapshot</div>
+                                    <h2 class="rg-premium-panel__title">Executive watch cues</h2>
+                                    <p class="rg-premium-panel__subtitle">Three fast reads on filing discipline, deadline compression, and where open findings are clustering across the estate.</p>
+                                </div>
+                                <div class="rg-premium-panel__metric">
+                                    <span class="rg-premium-panel__metric-label">Dominant lane</span>
+                                    @BuildDominantDomainLabel()
+                                </div>
+                            </div>
+                            <div class="rg-premium-panel__body">
+                                <div class="rg-cc-focus-grid">
+                                    <article class="rg-cc-focus-card">
+                                        <div class="rg-cc-focus-card__eyebrow">Filing posture</div>
+                                        <div class="rg-cc-focus-card__value">@($"{_data.FilingCompliancePercent:F1}%")</div>
+                                        <p class="rg-cc-focus-card__copy">
+                                            @(_data.FilingCompliancePercent >= 95m
+                                                ? "Filing discipline is broadly steady and allows leadership attention to move toward concentration pockets."
+                                                : "Filing discipline is soft enough to stay inside the executive decision lane.")
+                                        </p>
+                                        <div class="rg-cc-focus-card__footer">@($"{_data.ActiveInterventions} interventions still shape the operating posture.")</div>
+                                    </article>
+                                    <article class="rg-cc-focus-card">
+                                        <div class="rg-cc-focus-card__eyebrow">Decision window</div>
+                                        <div class="rg-cc-focus-card__value">@($"{_data.DaysToNextDeadline}d")</div>
+                                        <p class="rg-cc-focus-card__copy">
+                                            @(_data.DaysToNextDeadline <= 3
+                                                ? "The next material deadline is close enough to dominate today’s executive agenda."
+                                                : "There is still enough time to steer the next deadline window deliberately.")
+                                        </p>
+                                        <div class="rg-cc-focus-card__footer">@BuildDeadlineSummary()</div>
+                                    </article>
+                                    <article class="rg-cc-focus-card">
+                                        <div class="rg-cc-focus-card__eyebrow">Findings pressure</div>
+                                        <div class="rg-cc-focus-card__value">@_data.OpenFindings</div>
+                                        <p class="rg-cc-focus-card__copy">
+                                            @(_data.OpenFindings == 0
+                                                ? "Open findings are currently low enough not to distort the leadership brief."
+                                                : $"{_data.OpenFindings} unresolved findings remain visible across compliance, resilience, and model-risk lanes.")
+                                        </p>
+                                        <div class="rg-cc-focus-card__footer">@BuildDominantDomainCopy()</div>
+                                    </article>
+                                </div>
+                            </div>
+                        </section>
+
                         <section class="rg-premium-panel">
                             <div class="rg-premium-panel__header">
                                 <div>
@@ -148,41 +196,66 @@
                                     @(_data.TopInstitutions.FirstOrDefault()?.InstitutionName ?? "No escalation")
                                 </div>
                             </div>
-                            <div class="rg-premium-panel__body rg-premium-panel__body--table">
+                            <div class="rg-premium-panel__body">
                                 @if (_data.TopInstitutions.Count == 0)
                                 {
                                     <div class="rg-premium-empty">No institutions currently require immediate executive escalation.</div>
                                 }
                                 else
                                 {
-                                    <DataTable TItem="InstitutionScorecardRow" Items="@_data.TopInstitutions" PageSize="10" Sortable="true" ShowExport="true" ExportFileName="executive-institutions">
-                                        <ChildContent>
-                                            <DataColumn TItem="InstitutionScorecardRow" Title="Institution" SortKey="@(x => x.InstitutionName)">
-                                                <CellTemplate><strong>@context.InstitutionName</strong></CellTemplate>
-                                            </DataColumn>
-                                            <DataColumn TItem="InstitutionScorecardRow" Title="Licence" Width="120px" SortKey="@(x => x.LicenceType)">
-                                                <CellTemplate><span class="fc-badge fc-badge--neutral">@context.LicenceType</span></CellTemplate>
-                                            </DataColumn>
-                                            <DataColumn TItem="InstitutionScorecardRow" Title="Priority" Width="100px" SortKey="@(x => x.Priority)">
-                                                <CellTemplate><span class="fc-badge @PriorityBadge(context.Priority)">@context.Priority</span></CellTemplate>
-                                            </DataColumn>
-                                            <DataColumn TItem="InstitutionScorecardRow" Title="Capital" Width="90px" SortKey="@(x => x.CapitalScore)">
-                                                <CellTemplate>@(context.CapitalScore?.ToString("F1") ?? "—")</CellTemplate>
-                                            </DataColumn>
-                                            <DataColumn TItem="InstitutionScorecardRow" Title="Overdue" Width="90px" SortKey="@(x => x.OverdueObligations)">
-                                                <CellTemplate><span class="@(context.OverdueObligations > 0 ? "fc-text-danger" : string.Empty)">@context.OverdueObligations</span></CellTemplate>
-                                            </DataColumn>
-                                            <DataColumn TItem="InstitutionScorecardRow" Title="Incidents" Width="90px" SortKey="@(x => x.OpenResilienceIncidents)">
-                                                <CellTemplate>@context.OpenResilienceIncidents</CellTemplate>
-                                            </DataColumn>
-                                            <DataColumn TItem="InstitutionScorecardRow" Title="Model Items" Width="100px" SortKey="@(x => x.ModelReviewItems)">
-                                                <CellTemplate>@context.ModelReviewItems</CellTemplate>
-                                            </DataColumn>
-                                            <DataColumn TItem="InstitutionScorecardRow" Title="Summary" SortKey="@(x => x.Summary)">
-                                                <CellTemplate><span class="fc-text-muted">@context.Summary</span></CellTemplate>
-                                            </DataColumn>
-                                        </ChildContent>
-                                    </DataTable>
+                                    <div class="rg-cc-institution-stack">
+                                        @foreach (var ranked in _data.TopInstitutions.Take(8).Select((institution, index) => new { institution, index }))
+                                        {
+                                            var pressure = CombinedPressure(ranked.institution);
+                                            <article class="rg-cc-institution-card">
+                                                <div class="rg-cc-institution-card__top">
+                                                    <div>
+                                                        <div class="rg-cc-institution-card__rank">#@(ranked.index + 1)</div>
+                                                        <h3 class="rg-cc-institution-card__title">@ranked.institution.InstitutionName</h3>
+                                                        <p class="rg-cc-institution-card__copy">@BuildInstitutionLeadCopy(ranked.institution)</p>
+                                                    </div>
+                                                    <div class="rg-cc-kpi-pack">
+                                                        <div class="rg-cc-kpi-pack__value">@pressure</div>
+                                                        <div class="rg-cc-kpi-pack__label">Load</div>
+                                                    </div>
+                                                </div>
+                                                <div class="rg-cc-pressure-bar">
+                                                    @if (ranked.institution.OverdueObligations > 0)
+                                                    {
+                                                        <span class="rg-cc-pressure-bar__segment rg-cc-pressure-bar__segment--danger" style="flex:@ranked.institution.OverdueObligations"></span>
+                                                    }
+                                                    @if (ranked.institution.DueSoonObligations > 0)
+                                                    {
+                                                        <span class="rg-cc-pressure-bar__segment rg-cc-pressure-bar__segment--warning" style="flex:@ranked.institution.DueSoonObligations"></span>
+                                                    }
+                                                    @if (ranked.institution.OpenResilienceIncidents > 0)
+                                                    {
+                                                        <span class="rg-cc-pressure-bar__segment rg-cc-pressure-bar__segment--info" style="flex:@ranked.institution.OpenResilienceIncidents"></span>
+                                                    }
+                                                    @if (ranked.institution.ModelReviewItems > 0)
+                                                    {
+                                                        <span class="rg-cc-pressure-bar__segment rg-cc-pressure-bar__segment--success" style="flex:@ranked.institution.ModelReviewItems"></span>
+                                                    }
+                                                </div>
+                                                <div class="rg-cc-statline">
+                                                    <span class="rg-cc-statline__item">@ranked.institution.LicenceType</span>
+                                                    <span class="rg-cc-statline__item">@(ranked.institution.CapitalScore?.ToString("F1") ?? "No capital score")</span>
+                                                    <span class="rg-cc-statline__item">@BuildInstitutionActionLabel(ranked.institution)</span>
+                                                </div>
+                                                <div class="rg-premium-list__tags">
+                                                    <span class="fc-badge @PriorityBadge(ranked.institution.Priority)">@ranked.institution.Priority</span>
+                                                    @if (ranked.institution.OverdueObligations > 0)
+                                                    {
+                                                        <span class="fc-badge fc-badge--danger">@($"{ranked.institution.OverdueObligations} overdue")</span>
+                                                    }
+                                                    @if (ranked.institution.ModelReviewItems > 0)
+                                                    {
+                                                        <span class="fc-badge fc-badge--success">@($"{ranked.institution.ModelReviewItems} model items")</span>
+                                                    }
+                                                </div>
+                                            </article>
+                                        }
+                                    </div>
                                 }
                             </div>
                         </section>
@@ -466,6 +539,57 @@
 
     private static string BuildDomainItemCopy(FC.Engine.Admin.Services.Dashboards.LabelCount domain) =>
         $"{domain.Count} open items are currently attached to this domain lane.";
+
+    private static int CombinedPressure(InstitutionScorecardRow institution) =>
+        institution.OverdueObligations
+        + institution.DueSoonObligations
+        + institution.OpenResilienceIncidents
+        + institution.ModelReviewItems;
+
+    private static string BuildInstitutionLeadCopy(InstitutionScorecardRow institution)
+    {
+        if (!string.IsNullOrWhiteSpace(institution.Summary))
+        {
+            return institution.Summary;
+        }
+
+        if (institution.OverdueObligations > 0)
+        {
+            return "Overdue obligations are what currently pull this institution into the executive attention lane.";
+        }
+
+        if (institution.ModelReviewItems > 0)
+        {
+            return "Model-governance items are materially influencing the leadership posture for this institution.";
+        }
+
+        return "This institution remains inside the executive view because its current mix of deadlines and findings still matters.";
+    }
+
+    private static string BuildInstitutionActionLabel(InstitutionScorecardRow institution)
+    {
+        if (institution.OverdueObligations > 0)
+        {
+            return "Protect filing";
+        }
+
+        if (institution.DueSoonObligations > 0)
+        {
+            return "Sequence deadline";
+        }
+
+        if (institution.ModelReviewItems > 0)
+        {
+            return "Review model";
+        }
+
+        if (institution.OpenResilienceIncidents > 0)
+        {
+            return "Stabilise ops";
+        }
+
+        return "Monitor";
+    }
 
     private static string PriorityBadge(string priority) => priority switch
     {
