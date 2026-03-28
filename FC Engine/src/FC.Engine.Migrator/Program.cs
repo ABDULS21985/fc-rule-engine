@@ -56,6 +56,7 @@ builder.Services.AddScoped<DemoCredentialSeedService>();
 builder.Services.AddScoped<EndToEndDemoSeedService>();
 builder.Services.AddScoped<BulkInstitutionDemoSeedService>();
 builder.Services.AddScoped<CrossBorderDemoSeedService>();
+builder.Services.AddScoped<PortalTenantDemoSeedService>();
 
 var host = builder.Build();
 var logger = host.Services.GetRequiredService<ILogger<Program>>();
@@ -492,6 +493,24 @@ try
             result.NotificationsSeeded,
             result.FlowsSeeded,
             result.ExecutionsSeeded);
+        return;
+    }
+
+    if (string.Equals(command, "seed-portal-demo-tenant", StringComparison.OrdinalIgnoreCase))
+    {
+        var portalTenantSeeder = scope.ServiceProvider.GetRequiredService<PortalTenantDemoSeedService>();
+        var result = await portalTenantSeeder.SeedComplianceIqAsync();
+
+        logger.LogInformation(
+            "Portal demo tenant seeded: {PeriodsCreated} periods, {SubmissionsCreated} submissions created, {SubmissionsUpdated} submissions updated, {ValidationReportsSeeded} validation reports, {SlaRecordsUpserted} SLA rows, {ChsSnapshotsUpserted} CHS snapshots, {PeerStatsUpserted} peer stats, {InstitutionUsersUpdated} institution users normalized.",
+            result.PeriodsCreated,
+            result.SubmissionsCreated,
+            result.SubmissionsUpdated,
+            result.ValidationReportsSeeded,
+            result.SlaRecordsUpserted,
+            result.ChsSnapshotsUpserted,
+            result.PeerStatsUpserted,
+            result.InstitutionUsersUpdated);
         return;
     }
 

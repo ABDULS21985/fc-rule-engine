@@ -387,6 +387,18 @@
             _selfRef = DotNetObjectReference.Create(this);
             StartBackgroundPolling();
         }
+
+        if (isOpen)
+        {
+            try
+            {
+                await JS.InvokeVoidAsync("portalNotifHub.positionDrawer");
+            }
+            catch
+            {
+                // Drawer positioning is progressive enhancement only.
+            }
+        }
     }
 
     // ── 30-second background polling ─────────────────────────────────────

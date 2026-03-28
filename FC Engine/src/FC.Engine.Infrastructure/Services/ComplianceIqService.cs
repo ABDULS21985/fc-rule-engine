@@ -1,9 +1,11 @@
 using System.Collections.Concurrent;
+using System.Data;
 using System.Diagnostics;
 using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using Dapper;
 using FC.Engine.Domain.Abstractions;
 using FC.Engine.Domain.Entities;
 using FC.Engine.Domain.Enums;
@@ -98,6 +100,11 @@ public sealed partial class ComplianceIqService : IComplianceIqService
         var turnNumber = conversation.TurnCount + 1;
         var intent = await ClassifyIntentAsync(request);
         var entities = await ExtractEntitiesAsync(db, request.Query, intent.IntentCode, request, config, ct);
+        entities = await HydrateEntitiesFromConversationAsync(db, conversation.Id, entities, ct);
+        if (!request.IsRegulatorContext)
+        {
+            await ResolveTenantModuleContextAsync(db, request.TenantId, entities, ct);
+        }
 
         ComplianceIqQueryPlan? plan = null;
         ExecutionResult execution = ExecutionResult.Empty;
@@ -665,6 +672,155 @@ public sealed partial class ComplianceIqService : IComplianceIqService
         return entities;
     }
 
+    private async Task<ComplianceIqExtractedEntities> HydrateEntitiesFromConversationAsync(
+        MetadataDbContext db,
+        Guid conversationId,
+        ComplianceIqExtractedEntities current,
+        CancellationToken ct)
+    {
+        if (current.FieldCodes.Count > 0 &&
+            !string.IsNullOrWhiteSpace(current.ModuleCode) &&
+            !string.IsNullOrWhiteSpace(current.LicenceCategory))
+        {
+            return current;
+        }
+
+        var previousEntitiesJson = await db.ComplianceIqTurns
+            .AsNoTracking()
+            .Where(x =>
+                x.ConversationId == conversationId &&
+                !string.IsNullOrWhiteSpace(x.ExtractedEntitiesJson))
+            .OrderByDescending(x => x.TurnNumber)
+            .Select(x => x.ExtractedEntitiesJson)
+            .FirstOrDefaultAsync(ct);
+
+        if (string.IsNullOrWhiteSpace(previousEntitiesJson))
+        {
+            return current;
+        }
+
+        ComplianceIqExtractedEntities? previous;
+        try
+        {
+            previous = JsonSerializer.Deserialize<ComplianceIqExtractedEntities>(previousEntitiesJson, JsonOptions);
+        }
+        catch (JsonException)
+        {
+            return current;
+        }
+
+        if (previous is null)
+        {
+            return current;
+        }
+
+        if (current.FieldCodes.Count == 0)
+        {
+            current.FieldCodes.AddRange(previous.FieldCodes
+                .Where(x => !current.FieldCodes.Contains(x, StringComparer.OrdinalIgnoreCase)));
+        }
+
+        if (current.FieldNames.Count == 0)
+        {
+            current.FieldNames.AddRange(previous.FieldNames
+                .Where(x => !current.FieldNames.Contains(x, StringComparer.OrdinalIgnoreCase)));
+        }
+
+        current.ModuleCode ??= previous.ModuleCode;
+        current.RegulatorCode ??= previous.RegulatorCode;
+        current.PeriodCode ??= previous.PeriodCode;
+        current.ComparisonPeriodCode ??= previous.ComparisonPeriodCode;
+        current.LicenceCategory ??= previous.LicenceCategory;
+        current.SearchKeyword ??= previous.SearchKeyword;
+        current.CircularReference ??= previous.CircularReference;
+        current.ScenarioMultiplier ??= previous.ScenarioMultiplier;
+
+        if (current.EntityNames.Count == 0)
+        {
+            current.EntityNames.AddRange(previous.EntityNames
+                .Where(x => !current.EntityNames.Contains(x, StringComparer.OrdinalIgnoreCase)));
+        }
+
+        if (current.RequestedTopCount <= 0)
+        {
+            current.RequestedTopCount = previous.RequestedTopCount;
+        }
+
+        if (current.PeriodCount <= 0)
+        {
+            current.PeriodCount = previous.PeriodCount;
+        }
+
+        current.WantsOverdueItems |= previous.WantsOverdueItems;
+        return current;
+    }
+
+    private async Task ResolveTenantModuleContextAsync(
+        MetadataDbContext db,
+        Guid tenantId,
+        ComplianceIqExtractedEntities entities,
+        CancellationToken ct)
+    {
+        entities.LicenceCategory ??= await ResolveLicenceCategoryAsync(db, tenantId, ct);
+
+        var snapshots = await LoadSnapshotsAsync(db, tenantId, null, includeDraftFallback: true, ct);
+        if (snapshots.Count == 0)
+        {
+            return;
+        }
+
+        if (entities.FieldCodes.Count > 0)
+        {
+            var fieldCode = entities.FieldCodes[0];
+            var sameModuleMatches = string.IsNullOrWhiteSpace(entities.ModuleCode)
+                ? new List<SubmissionSnapshot>()
+                : snapshots
+                    .Where(x =>
+                        string.Equals(x.ModuleCode, entities.ModuleCode, StringComparison.OrdinalIgnoreCase) &&
+                        x.Metrics.ContainsKey(fieldCode))
+                    .ToList();
+
+            if (sameModuleMatches.Count > 0)
+            {
+                entities.RegulatorCode ??= sameModuleMatches[0].RegulatorCode;
+                return;
+            }
+
+            var fieldMatch = snapshots
+                .Where(x => x.Metrics.ContainsKey(fieldCode))
+                .OrderByDescending(x => x.PeriodSortKey)
+                .ThenByDescending(x => IsAcceptedSnapshot(x.Status))
+                .ThenByDescending(x => x.SubmittedAt)
+                .FirstOrDefault();
+
+            if (fieldMatch is not null)
+            {
+                entities.ModuleCode = fieldMatch.ModuleCode;
+                entities.RegulatorCode ??= fieldMatch.RegulatorCode;
+                return;
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(entities.ModuleCode))
+        {
+            return;
+        }
+
+        var latestSnapshot = snapshots
+            .OrderByDescending(x => x.PeriodSortKey)
+            .ThenByDescending(x => IsAcceptedSnapshot(x.Status))
+            .ThenByDescending(x => x.SubmittedAt)
+            .FirstOrDefault();
+
+        if (latestSnapshot is null)
+        {
+            return;
+        }
+
+        entities.ModuleCode = latestSnapshot.ModuleCode;
+        entities.RegulatorCode ??= latestSnapshot.RegulatorCode;
+    }
+
     private static void ExtractPeriods(
         string query,
         ComplianceIqExtractedEntities entities,
@@ -1125,8 +1281,14 @@ public sealed partial class ComplianceIqService : IComplianceIqService
             return new List<Dictionary<string, object?>>();
         }
 
-        var snapshots = await LoadSnapshotsAsync(db, request.TenantId, entities.ModuleCode, ct);
         var fieldCode = entities.FieldCodes[0];
+        var snapshots = await LoadRelevantSnapshotsAsync(
+            db,
+            request.TenantId,
+            entities.ModuleCode,
+            fieldCode,
+            includeDraftFallback: !request.IsRegulatorContext,
+            ct);
 
         var latest = snapshots
             .Where(x => x.Metrics.ContainsKey(fieldCode))
@@ -1149,6 +1311,7 @@ public sealed partial class ComplianceIqService : IComplianceIqService
                 ("period_code", latest.PeriodCode),
                 ("module_code", latest.ModuleCode),
                 ("institution_name", latest.InstitutionName),
+                ("submission_status", latest.Status.ToString()),
                 ("submitted_at", latest.SubmittedAt))
         ];
     }
@@ -1159,7 +1322,21 @@ public sealed partial class ComplianceIqService : IComplianceIqService
         ComplianceIqQueryRequest request,
         CancellationToken ct)
     {
-        var snapshots = await LoadSnapshotsAsync(db, request.TenantId, entities.ModuleCode ?? "CBN_PRUDENTIAL", ct);
+        var snapshots = await LoadSnapshotsAsync(
+            db,
+            request.TenantId,
+            entities.ModuleCode ?? "CBN_PRUDENTIAL",
+            includeDraftFallback: !request.IsRegulatorContext,
+            ct);
+        if (snapshots.Count == 0)
+        {
+            snapshots = await LoadSnapshotsAsync(
+                db,
+                request.TenantId,
+                null,
+                includeDraftFallback: !request.IsRegulatorContext,
+                ct);
+        }
         var latest = snapshots
             .OrderByDescending(x => x.PeriodSortKey)
             .ThenByDescending(x => x.SubmittedAt)
@@ -1179,7 +1356,8 @@ public sealed partial class ComplianceIqService : IComplianceIqService
                 ("value", metric.Value),
                 ("period_code", latest.PeriodCode),
                 ("module_code", latest.ModuleCode),
-                ("institution_name", latest.InstitutionName)))
+                ("institution_name", latest.InstitutionName),
+                ("submission_status", latest.Status.ToString())))
             .ToList();
     }
 
@@ -1195,7 +1373,13 @@ public sealed partial class ComplianceIqService : IComplianceIqService
         }
 
         var fieldCode = entities.FieldCodes[0];
-        var snapshots = await LoadSnapshotsAsync(db, request.TenantId, entities.ModuleCode, ct);
+        var snapshots = await LoadRelevantSnapshotsAsync(
+            db,
+            request.TenantId,
+            entities.ModuleCode,
+            fieldCode,
+            includeDraftFallback: !request.IsRegulatorContext,
+            ct);
 
         return snapshots
             .Where(x => x.Metrics.ContainsKey(fieldCode))
@@ -1212,7 +1396,8 @@ public sealed partial class ComplianceIqService : IComplianceIqService
                     ("value", metric.Value),
                     ("period_code", x.PeriodCode),
                     ("module_code", x.ModuleCode),
-                    ("institution_name", x.InstitutionName));
+                    ("institution_name", x.InstitutionName),
+                    ("submission_status", x.Status.ToString()));
             })
             .ToList();
     }
@@ -1298,7 +1483,13 @@ public sealed partial class ComplianceIqService : IComplianceIqService
         }
 
         var fieldCode = entities.FieldCodes[0];
-        var snapshots = await LoadSnapshotsAsync(db, request.TenantId, entities.ModuleCode, ct);
+        var snapshots = await LoadRelevantSnapshotsAsync(
+            db,
+            request.TenantId,
+            entities.ModuleCode,
+            fieldCode,
+            includeDraftFallback: !request.IsRegulatorContext,
+            ct);
         var withMetric = snapshots
             .Where(x => x.Metrics.ContainsKey(fieldCode))
             .OrderByDescending(x => x.PeriodSortKey)
@@ -1512,7 +1703,21 @@ public sealed partial class ComplianceIqService : IComplianceIqService
         CancellationToken ct)
     {
         var multiplier = entities.ScenarioMultiplier ?? ParseDecimal(config, "scenario.default_npl_multiplier", 2m);
-        var snapshots = await LoadSnapshotsAsync(db, request.TenantId, "CBN_PRUDENTIAL", ct);
+        var snapshots = await LoadSnapshotsAsync(
+            db,
+            request.TenantId,
+            "CBN_PRUDENTIAL",
+            includeDraftFallback: !request.IsRegulatorContext,
+            ct);
+        if (snapshots.Count == 0)
+        {
+            snapshots = await LoadSnapshotsAsync(
+                db,
+                request.TenantId,
+                null,
+                includeDraftFallback: !request.IsRegulatorContext,
+                ct);
+        }
         var latest = snapshots
             .OrderByDescending(x => x.PeriodSortKey)
             .ThenByDescending(x => x.SubmittedAt)
@@ -1642,7 +1847,7 @@ public sealed partial class ComplianceIqService : IComplianceIqService
             return new List<Dictionary<string, object?>>();
         }
 
-        var allSnapshots = await LoadSnapshotsAsync(db, null, entities.ModuleCode, ct);
+        var allSnapshots = await LoadSnapshotsAsync(db, null, entities.ModuleCode, includeDraftFallback: false, ct);
         var fieldCode = entities.FieldCodes[0];
         var filtered = allSnapshots
             .Where(x => x.Metrics.ContainsKey(fieldCode))
@@ -1709,7 +1914,7 @@ public sealed partial class ComplianceIqService : IComplianceIqService
             return new List<Dictionary<string, object?>>();
         }
 
-        var snapshots = await LoadSnapshotsAsync(db, null, entities.ModuleCode, ct);
+        var snapshots = await LoadSnapshotsAsync(db, null, entities.ModuleCode, includeDraftFallback: false, ct);
         return institutions
             .Select(inst =>
             {
@@ -1842,7 +2047,7 @@ public sealed partial class ComplianceIqService : IComplianceIqService
         {
             var row = rows[0];
             var label = row["field_label"]?.ToString() ?? row["field_code"]?.ToString() ?? "metric";
-            return $"{label} is {FormatFieldValue(row["value"], row["field_code"]?.ToString())} as of {row["period_code"]} from {row["module_code"]}.";
+            return $"{label} is {FormatFieldValue(row["value"], row["field_code"]?.ToString())} as of {row["period_code"]} from {row["module_code"]}{BuildSubmissionStatusNote(row)}.";
         }
 
         var periodCode = rows[0]["period_code"]?.ToString() ?? "the latest filing";
@@ -1863,8 +2068,11 @@ public sealed partial class ComplianceIqService : IComplianceIqService
         var change = end - start;
         var direction = change > 0m ? "up" : change < 0m ? "down" : "flat";
         var label = last["field_label"]?.ToString() ?? last["field_code"]?.ToString() ?? "metric";
+        var statusNote = rows.Any(HasNonFinalSubmissionStatus)
+            ? " The latest point currently comes from in-progress workspace data."
+            : string.Empty;
 
-        return $"{label} moved {direction} from {FormatFieldValue(start, last["field_code"]?.ToString())} in {first["period_code"]} to {FormatFieldValue(end, last["field_code"]?.ToString())} in {last["period_code"]}.";
+        return $"{label} moved {direction} from {FormatFieldValue(start, last["field_code"]?.ToString())} in {first["period_code"]} to {FormatFieldValue(end, last["field_code"]?.ToString())} in {last["period_code"]}.{statusNote}";
     }
 
     private static string BuildPeerComparisonAnswer(IReadOnlyList<Dictionary<string, object?>> rows)
@@ -1875,7 +2083,7 @@ public sealed partial class ComplianceIqService : IComplianceIqService
         var peerMedian = FormatFieldValue(row["peer_median"], row["field_code"]?.ToString());
         var deviation = Convert.ToDecimal(row["deviation_pct"] ?? 0m, CultureInfo.InvariantCulture);
         var direction = deviation >= 0m ? "above" : "below";
-        return $"{label} is {myValue} for {row["period_code"]}, versus a peer median of {peerMedian}. That is {Math.Abs(deviation):N2}% {direction} the peer median for the {row["licence_category"]} segment.";
+        return $"{label} is {myValue} for {row["period_code"]}, versus a peer median of {peerMedian}. That is {Math.Abs(deviation):N2}% {direction} the peer median for the {row["licence_category"]} segment{BuildSubmissionStatusNote(row)}.";
     }
 
     private static string BuildPeriodComparisonAnswer(IReadOnlyList<Dictionary<string, object?>> rows)
@@ -1887,7 +2095,10 @@ public sealed partial class ComplianceIqService : IComplianceIqService
         var secondValue = Convert.ToDecimal(second["value"] ?? 0m, CultureInfo.InvariantCulture);
         var pct = firstValue == 0m ? 0m : decimal.Round(((secondValue - firstValue) / Math.Abs(firstValue)) * 100m, 2);
         var label = first["field_label"]?.ToString() ?? first["field_code"]?.ToString() ?? "metric";
-        return $"{label} changed from {FormatFieldValue(firstValue, first["field_code"]?.ToString())} in {first["period_code"]} to {FormatFieldValue(secondValue, second["field_code"]?.ToString())} in {second["period_code"]}, a movement of {pct:N2}%.";
+        var statusNote = ordered.Any(HasNonFinalSubmissionStatus)
+            ? " The latest comparison includes in-progress workspace data."
+            : string.Empty;
+        return $"{label} changed from {FormatFieldValue(firstValue, first["field_code"]?.ToString())} in {first["period_code"]} to {FormatFieldValue(secondValue, second["field_code"]?.ToString())} in {second["period_code"]}, a movement of {pct:N2}%.{statusNote}";
     }
 
     private static string BuildDeadlineAnswer(IReadOnlyList<Dictionary<string, object?>> rows)
@@ -1965,8 +2176,8 @@ public sealed partial class ComplianceIqService : IComplianceIqService
     private static string BuildNoDataMessage(string intentCode, ComplianceIqExtractedEntities entities) =>
         intentCode switch
         {
-            "CURRENT_VALUE" => $"I could not find an accepted return containing {entities.FieldNames.FirstOrDefault() ?? entities.FieldCodes.FirstOrDefault() ?? "the requested metric"}.",
-            "TREND" => "I could not find enough accepted historical data to build that trend.",
+            "CURRENT_VALUE" => $"I could not find a return containing {entities.FieldNames.FirstOrDefault() ?? entities.FieldCodes.FirstOrDefault() ?? "the requested metric"} in your workspace data.",
+            "TREND" => "I could not find enough historical return data to build that trend.",
             "DEADLINE" => "I could not find matching filing calendar items for that question.",
             "ANOMALY_STATUS" => "I could not find anomaly reports matching that question yet.",
             _ => "I could not find grounded data for that question."
@@ -2196,30 +2407,72 @@ public sealed partial class ComplianceIqService : IComplianceIqService
         }
     }
 
+    private async Task<List<SubmissionSnapshot>> LoadRelevantSnapshotsAsync(
+        MetadataDbContext db,
+        Guid tenantId,
+        string? moduleCode,
+        string fieldCode,
+        bool includeDraftFallback,
+        CancellationToken ct)
+    {
+        var snapshots = await LoadSnapshotsAsync(db, tenantId, moduleCode, includeDraftFallback, ct);
+        var matching = snapshots.Where(x => x.Metrics.ContainsKey(fieldCode)).ToList();
+        if (matching.Count > 0 || string.IsNullOrWhiteSpace(moduleCode))
+        {
+            return snapshots;
+        }
+
+        return await LoadSnapshotsAsync(db, tenantId, null, includeDraftFallback, ct);
+    }
+
     private async Task<List<SubmissionSnapshot>> LoadSnapshotsAsync(
         MetadataDbContext db,
         Guid? tenantId,
         string? moduleCode,
+        bool includeDraftFallback,
         CancellationToken ct)
     {
-        var query = db.Submissions
+        var baseQuery = db.Submissions
             .AsNoTracking()
             .Include(x => x.ReturnPeriod)
             .ThenInclude(x => x!.Module)
             .Include(x => x.Institution)
-            .Where(x => AnomalySupport.AcceptedStatuses.Contains(x.Status) && x.ReturnPeriod != null && x.ReturnPeriod.Module != null);
+            .Where(x =>
+                x.ParsedDataJson != null &&
+                x.ReturnPeriod != null &&
+                x.ReturnPeriod.Module != null);
 
         if (tenantId.HasValue)
         {
-            query = query.Where(x => x.TenantId == tenantId.Value);
+            baseQuery = baseQuery.Where(x => x.TenantId == tenantId.Value);
         }
 
         if (!string.IsNullOrWhiteSpace(moduleCode))
         {
-            query = query.Where(x => x.ReturnPeriod!.Module!.ModuleCode == moduleCode);
+            baseQuery = baseQuery.Where(x => x.ReturnPeriod!.Module!.ModuleCode == moduleCode);
         }
 
-        var rows = await query.ToListAsync(ct);
+        List<Submission> rows;
+        if (includeDraftFallback)
+        {
+            rows = await baseQuery
+                .Where(x => x.Status != SubmissionStatus.Rejected && x.Status != SubmissionStatus.ApprovalRejected)
+                .ToListAsync(ct);
+
+            return rows
+                .GroupBy(x => new { x.TenantId, x.ReturnPeriodId })
+                .Select(group => group
+                    .OrderByDescending(x => SnapshotStatusRank(x.Status))
+                    .ThenByDescending(x => x.SubmittedAt ?? x.CreatedAt)
+                    .First())
+                .Select(ToSnapshot)
+                .ToList();
+        }
+
+        rows = await baseQuery
+            .Where(x => AnomalySupport.AcceptedStatuses.Contains(x.Status))
+            .ToListAsync(ct);
+
         return rows.Select(ToSnapshot).ToList();
     }
 
@@ -2237,6 +2490,7 @@ public sealed partial class ComplianceIqService : IComplianceIqService
             RegulatorAnalyticsSupport.FormatPeriodCode(period),
             PeriodSortKey(period),
             submission.SubmittedAt ?? default,
+            submission.Status,
             AnomalySupport.ExtractSubmissionMetrics(submission.ParsedDataJson));
     }
 
@@ -2259,11 +2513,42 @@ public sealed partial class ComplianceIqService : IComplianceIqService
             ("value", metric.Value),
             ("period_code", snapshot.PeriodCode),
             ("module_code", snapshot.ModuleCode),
-            ("institution_name", snapshot.InstitutionName));
+            ("institution_name", snapshot.InstitutionName),
+            ("submission_status", snapshot.Status.ToString()));
     }
 
     private static decimal GetMetricValue(SubmissionSnapshot snapshot, string fieldCode, decimal fallback = 0m) =>
         snapshot.Metrics.TryGetValue(fieldCode, out var metric) ? metric.Value : fallback;
+
+    private static bool IsAcceptedSnapshot(SubmissionStatus status)
+        => AnomalySupport.AcceptedStatuses.Contains(status);
+
+    private static int SnapshotStatusRank(SubmissionStatus status)
+        => IsAcceptedSnapshot(status) ? 2 : 1;
+
+    private static bool HasNonFinalSubmissionStatus(IReadOnlyDictionary<string, object?> row)
+    {
+        var status = row.GetValueOrDefault("submission_status")?.ToString();
+        if (string.IsNullOrWhiteSpace(status))
+        {
+            return false;
+        }
+
+        return !Enum.TryParse<SubmissionStatus>(status, true, out var parsed) || !IsAcceptedSnapshot(parsed);
+    }
+
+    private static string BuildSubmissionStatusNote(IReadOnlyDictionary<string, object?> row)
+    {
+        var status = row.GetValueOrDefault("submission_status")?.ToString();
+        if (string.IsNullOrWhiteSpace(status) ||
+            !Enum.TryParse<SubmissionStatus>(status, true, out var parsed) ||
+            IsAcceptedSnapshot(parsed))
+        {
+            return string.Empty;
+        }
+
+        return $" using your latest {status} return";
+    }
 
     private async Task<string?> ResolveLicenceCategoryAsync(MetadataDbContext db, Guid tenantId, CancellationToken ct)
     {
@@ -2297,11 +2582,41 @@ public sealed partial class ComplianceIqService : IComplianceIqService
             .Include(x => x.LicenceType)
             .ToListAsync(ct);
 
-        return licenceRows
+        var licenceMap = licenceRows
             .GroupBy(x => x.TenantId)
             .ToDictionary(
                 x => x.Key,
                 x => x.Select(y => y.LicenceType?.Code).FirstOrDefault());
+
+        var unresolvedTenantIds = tenantIds
+            .Where(x => !licenceMap.ContainsKey(x) || string.IsNullOrWhiteSpace(licenceMap[x]))
+            .ToList();
+
+        if (unresolvedTenantIds.Count == 0)
+        {
+            return licenceMap;
+        }
+
+        var institutionFallbacks = await db.Institutions
+            .AsNoTracking()
+            .Where(x => unresolvedTenantIds.Contains(x.TenantId))
+            .GroupBy(x => x.TenantId)
+            .Select(x => new
+            {
+                TenantId = x.Key,
+                LicenceCode = x.Select(y => y.LicenseType).FirstOrDefault()
+            })
+            .ToListAsync(ct);
+
+        foreach (var fallback in institutionFallbacks)
+        {
+            if (!string.IsNullOrWhiteSpace(fallback.LicenceCode))
+            {
+                licenceMap[fallback.TenantId] = fallback.LicenceCode;
+            }
+        }
+
+        return licenceMap;
     }
 
     private async Task<AnomalyPeerGroupStatistic?> BuildFallbackPeerStatsAsync(
@@ -2313,20 +2628,149 @@ public sealed partial class ComplianceIqService : IComplianceIqService
         string licenceCategory,
         CancellationToken ct)
     {
-        var snapshots = await LoadSnapshotsAsync(db, null, moduleCode, ct);
-        var licenceMap = await ResolveLicenceCategoryMapAsync(db, snapshots.Select(x => x.TenantId).Distinct().ToList(), ct);
+        RegulatorAnalyticsSupport.TryParsePeriodCode(periodCode, out var filter);
+        List<PeerFallbackSubmissionRow> candidates;
+        if (db.Database.IsRelational())
+        {
+            await db.Database.OpenConnectionAsync(ct);
+            var connection = db.Database.GetDbConnection();
+            var acceptedStatuses = AnomalySupport.AcceptedStatuses
+                .Select(x => x.ToString())
+                .ToArray();
 
-        var values = snapshots
-            .Where(x => x.TenantId != currentTenantId &&
-                        x.PeriodCode == periodCode &&
-                        x.Metrics.ContainsKey(fieldCode) &&
-                        string.Equals(licenceMap.GetValueOrDefault(x.TenantId), licenceCategory, StringComparison.OrdinalIgnoreCase))
-            .Select(x => x.Metrics[fieldCode].Value)
-            .OrderBy(x => x)
+            const string peerSql = """
+                SELECT
+                    s.TenantId,
+                    s.ParsedDataJson,
+                    i.LicenseType
+                FROM dbo.return_submissions s
+                INNER JOIN dbo.return_periods rp ON rp.Id = s.ReturnPeriodId
+                INNER JOIN dbo.modules m ON m.Id = rp.ModuleId
+                INNER JOIN dbo.institutions i ON i.Id = s.InstitutionId
+                WHERE s.ParsedDataJson IS NOT NULL
+                  AND s.Status IN @AcceptedStatuses
+                  AND (@ModuleCode IS NULL OR m.ModuleCode = @ModuleCode)
+                  AND (@Year IS NULL OR rp.Year = @Year)
+                  AND (@Month IS NULL OR rp.Month = @Month)
+                  AND (@Quarter IS NULL OR rp.Quarter = @Quarter);
+                """;
+
+            candidates = (await connection.QueryAsync<PeerFallbackSubmissionRow>(
+                new CommandDefinition(
+                    peerSql,
+                    new
+                    {
+                        AcceptedStatuses = acceptedStatuses,
+                        ModuleCode = string.IsNullOrWhiteSpace(moduleCode) ? null : moduleCode,
+                        Year = filter?.Year,
+                        Month = filter?.Month,
+                        Quarter = filter?.Quarter
+                    },
+                    cancellationToken: ct)))
+                .ToList();
+        }
+        else
+        {
+            var candidateQuery = db.Submissions
+                .AsNoTracking()
+                .Include(x => x.ReturnPeriod)
+                .ThenInclude(x => x!.Module)
+                .Include(x => x.Institution)
+                .Where(x =>
+                    x.ParsedDataJson != null &&
+                    x.ReturnPeriod != null &&
+                    x.ReturnPeriod.Module != null);
+
+            if (!string.IsNullOrWhiteSpace(moduleCode))
+            {
+                candidateQuery = candidateQuery.Where(x => x.ReturnPeriod!.Module!.ModuleCode == moduleCode);
+            }
+
+            if (filter is not null)
+            {
+                candidateQuery = candidateQuery.Where(x =>
+                    x.ReturnPeriod!.Year == filter.Year &&
+                    (filter.Month.HasValue ? x.ReturnPeriod.Month == filter.Month.Value : true) &&
+                    (filter.Quarter.HasValue ? x.ReturnPeriod.Quarter == filter.Quarter.Value : true));
+            }
+
+            candidates = (await candidateQuery.ToListAsync(ct))
+                .Where(x => AnomalySupport.AcceptedStatuses.Contains(x.Status))
+                .Select(x => new PeerFallbackSubmissionRow
+                {
+                    TenantId = x.TenantId,
+                    ParsedDataJson = x.ParsedDataJson,
+                    LicenseType = x.Institution?.LicenseType
+                })
+                .ToList();
+        }
+
+        var unresolvedTenantIds = candidates
+            .Where(x => x.TenantId != currentTenantId && string.IsNullOrWhiteSpace(x.LicenseType))
+            .Select(x => x.TenantId)
+            .Distinct()
             .ToList();
+
+        var fallbackLicenceMap = unresolvedTenantIds.Count == 0
+            ? new Dictionary<Guid, string?>()
+            : await ResolveLicenceCategoryMapAsync(db, unresolvedTenantIds, ct);
+
+        var values = new List<decimal>();
+        var otherTenantCount = 0;
+        var licenceMatchedCount = 0;
+        var metricMatchedCount = 0;
+        foreach (var candidate in candidates)
+        {
+            if (candidate.TenantId == currentTenantId)
+            {
+                continue;
+            }
+
+            otherTenantCount++;
+
+            var candidateLicence = candidate.LicenseType;
+            if (string.IsNullOrWhiteSpace(candidateLicence))
+            {
+                candidateLicence = fallbackLicenceMap.GetValueOrDefault(candidate.TenantId);
+            }
+
+            if (!string.Equals(candidateLicence, licenceCategory, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            licenceMatchedCount++;
+            var metrics = AnomalySupport.ExtractSubmissionMetrics(candidate.ParsedDataJson);
+            if (metrics.TryGetValue(fieldCode, out var metric))
+            {
+                values.Add(metric.Value);
+                metricMatchedCount++;
+                continue;
+            }
+
+            var extractedValues = RegulatorAnalyticsSupport.ExtractMetricValues(candidate.ParsedDataJson, [fieldCode]);
+            if (extractedValues.Count > 0)
+            {
+                values.Add(extractedValues.Sum());
+                metricMatchedCount++;
+            }
+        }
+
+        values.Sort();
 
         if (values.Count < 3)
         {
+            _logger.LogWarning(
+                "ComplianceIQ peer fallback returned insufficient cohort for tenant {TenantId}: field={FieldCode}, module={ModuleCode}, period={PeriodCode}, licence={LicenceCategory}, acceptedCandidates={AcceptedCandidateCount}, otherTenantCandidates={OtherTenantCount}, licenceMatched={LicenceMatchedCount}, metricMatched={MetricMatchedCount}",
+                currentTenantId,
+                fieldCode,
+                moduleCode ?? "ALL",
+                periodCode,
+                licenceCategory,
+                candidates.Count,
+                otherTenantCount,
+                licenceMatchedCount,
+                metricMatchedCount);
             return null;
         }
 
@@ -2346,6 +2790,13 @@ public sealed partial class ComplianceIqService : IComplianceIqService
             PeriodCode = periodCode,
             ModuleCode = moduleCode ?? string.Empty
         };
+    }
+
+    private sealed record PeerFallbackSubmissionRow
+    {
+        public Guid TenantId { get; init; }
+        public string? ParsedDataJson { get; init; }
+        public string? LicenseType { get; init; }
     }
 
     private static Dictionary<string, object?> Row(params (string Key, object? Value)[] pairs)
@@ -2466,6 +2917,7 @@ public sealed partial class ComplianceIqService : IComplianceIqService
         string PeriodCode,
         int PeriodSortKey,
         DateTime SubmittedAt,
+        SubmissionStatus Status,
         Dictionary<string, AnomalySupport.MetricPoint> Metrics);
 
     private sealed record ExecutionResult(List<Dictionary<string, object?>> Rows, int ExecutionTimeMs)

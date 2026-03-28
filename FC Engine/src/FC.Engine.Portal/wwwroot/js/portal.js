@@ -949,6 +949,74 @@ window.portalNotifHub = (function () {
         }, { once: true });
     }
 
+    // ── Drawer Positioning ──────────────────────────────────────────────────
+    function positionDrawer() {
+        var wrapper = document.querySelector('.portal-notif-bell-wrapper');
+        var drawer = document.querySelector('.portal-notif-drawer');
+        var trigger = wrapper ? (wrapper.querySelector('.portal-topbar-notification') || wrapper) : null;
+        if (!wrapper || !drawer || !trigger) return false;
+
+        var viewportGutter = 16;
+        var drawerGap = 14;
+        var triggerRect = trigger.getBoundingClientRect();
+        drawer.style.position = 'fixed';
+        drawer.style.right = 'auto';
+        drawer.style.bottom = 'auto';
+        drawer.style.left = '0px';
+        drawer.style.top = '0px';
+        drawer.style.transform = 'none';
+        drawer.style.animation = 'none';
+        drawer.style.opacity = '1';
+
+        var resolvedWidth = Math.min(420, Math.max(280, window.innerWidth - (viewportGutter * 2)));
+        drawer.style.width = resolvedWidth + 'px';
+        drawer.style.maxWidth = resolvedWidth + 'px';
+
+        var drawerRect = drawer.getBoundingClientRect();
+        var drawerWidth = Math.min(drawerRect.width || resolvedWidth, window.innerWidth - (viewportGutter * 2));
+        var desiredLeft = triggerRect.right - drawerWidth;
+        var left = Math.max(viewportGutter, Math.min(desiredLeft, window.innerWidth - drawerWidth - viewportGutter));
+        var top = triggerRect.bottom + drawerGap;
+        var maxHeight = Math.max(320, window.innerHeight - top - viewportGutter);
+
+        if (top + 320 > window.innerHeight - viewportGutter) {
+            top = Math.max(viewportGutter, triggerRect.top - Math.min(drawerRect.height || 520, window.innerHeight - (viewportGutter * 2)) - drawerGap);
+            maxHeight = Math.max(280, window.innerHeight - top - viewportGutter);
+        }
+
+        drawer.style.left = Math.round(left) + 'px';
+        drawer.style.top = Math.round(top) + 'px';
+        drawer.style.maxHeight = Math.round(maxHeight) + 'px';
+        drawer.style.transformOrigin = triggerRect.right > window.innerWidth / 2 ? 'top right' : 'top left';
+
+        var settledRect = drawer.getBoundingClientRect();
+        var horizontalDrift = settledRect.left - left;
+        var verticalDrift = settledRect.top - top;
+
+        if (Math.abs(horizontalDrift) > 1 || Math.abs(verticalDrift) > 1) {
+            left -= horizontalDrift;
+            top -= verticalDrift;
+            drawer.style.left = Math.round(left) + 'px';
+            drawer.style.top = Math.round(top) + 'px';
+            settledRect = drawer.getBoundingClientRect();
+        }
+
+        if (settledRect.right > window.innerWidth - viewportGutter) {
+            left -= (settledRect.right - (window.innerWidth - viewportGutter));
+        }
+        if (settledRect.left < viewportGutter) {
+            left += (viewportGutter - settledRect.left);
+        }
+        if (settledRect.top < viewportGutter) {
+            top += (viewportGutter - settledRect.top);
+        }
+
+        drawer.style.left = Math.round(left) + 'px';
+        drawer.style.top = Math.round(top) + 'px';
+
+        return true;
+    }
+
     // ── Poll Dot Flash ──────────────────────────────────────────────────────
     function flashPollDot() {
         var dot = document.querySelector('.portal-notif-poll-dot');
@@ -1172,6 +1240,7 @@ window.portalNotifHub = (function () {
     return {
         animateBell:               animateBell,
         animateBadge:              animateBadge,
+        positionDrawer:            positionDrawer,
         flashPollDot:              flashPollDot,
         startPolling:              startPolling,
         stopPolling:               stopPolling,

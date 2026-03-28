@@ -146,6 +146,365 @@ public class ComplianceIqServiceTests
             text.Contains("What is our current CAR?", StringComparison.Ordinal));
     }
 
+    [Fact]
+    public async Task QueryAsync_CurrentValueQuestion_FallsBackToTenantModuleAndDraftWorkspaceData()
+    {
+        var factory = CreateFactory(nameof(QueryAsync_CurrentValueQuestion_FallsBackToTenantModuleAndDraftWorkspaceData));
+        Guid tenantId;
+
+        await using (var seedDb = await factory.CreateDbContextAsync())
+        {
+            seedDb.Database.EnsureDeleted();
+            seedDb.Database.EnsureCreated();
+            tenantId = SeedInstitutionEnvironment(
+                seedDb,
+                "Buzz BDC",
+                "buzz-bdc",
+                18.65m,
+                moduleCode: "BDC_CBN",
+                moduleName: "BDC Monthly Prudential",
+                licenceCode: "BDC",
+                licenceName: "Bureau De Change",
+                submissionStatus: SubmissionStatus.Draft,
+                year: 2026,
+                month: 3,
+                frequency: "Monthly");
+
+            SeedSubmissionForExistingTenant(
+                seedDb,
+                "buzz-bdc",
+                17.10m,
+                moduleCode: "BDC_CBN",
+                submissionStatus: SubmissionStatus.AcceptedWithWarnings,
+                year: 2026,
+                month: 2,
+                frequency: "Monthly");
+
+            await seedDb.SaveChangesAsync();
+        }
+
+        var sut = CreateSut(factory);
+
+        var response = await sut.QueryAsync(new ComplianceIqQueryRequest
+        {
+            Query = "What is our current CAR?",
+            TenantId = tenantId,
+            UserId = "portal.admin",
+            UserRole = "Admin",
+            IsRegulatorContext = false
+        });
+
+        response.IsError.Should().BeFalse();
+        response.IntentCode.Should().Be("CURRENT_VALUE");
+        response.Rows.Should().ContainSingle();
+        response.Rows[0]["module_code"].Should().Be("BDC_CBN");
+        Convert.ToDecimal(response.Rows[0]["value"]).Should().Be(18.65m);
+        response.Answer.Should().Contain("18.65%");
+        response.Answer.Should().Contain("latest Draft return");
+    }
+
+    [Fact]
+    public async Task QueryAsync_FollowUpPeerQuestion_UsesConversationFieldContext()
+    {
+        var factory = CreateFactory(nameof(QueryAsync_FollowUpPeerQuestion_UsesConversationFieldContext));
+        Guid tenantId;
+
+        await using (var seedDb = await factory.CreateDbContextAsync())
+        {
+            seedDb.Database.EnsureDeleted();
+            seedDb.Database.EnsureCreated();
+
+            tenantId = SeedInstitutionEnvironment(
+                seedDb,
+                "Buzz BDC",
+                "buzz-bdc",
+                18.65m,
+                moduleCode: "BDC_CBN",
+                moduleName: "BDC Monthly Prudential",
+                licenceCode: "BDC",
+                licenceName: "Bureau De Change",
+                submissionStatus: SubmissionStatus.Draft,
+                year: 2026,
+                month: 3,
+                frequency: "Monthly");
+
+            SeedInstitutionEnvironment(
+                seedDb,
+                "Atlas BDC",
+                "atlas-bdc",
+                17.40m,
+                moduleCode: "BDC_CBN",
+                moduleName: "BDC Monthly Prudential",
+                licenceCode: "BDC",
+                licenceName: "Bureau De Change",
+                submissionStatus: SubmissionStatus.Accepted,
+                year: 2026,
+                month: 3,
+                frequency: "Monthly");
+
+            SeedInstitutionEnvironment(
+                seedDb,
+                "Crown BDC",
+                "crown-bdc",
+                18.10m,
+                moduleCode: "BDC_CBN",
+                moduleName: "BDC Monthly Prudential",
+                licenceCode: "BDC",
+                licenceName: "Bureau De Change",
+                submissionStatus: SubmissionStatus.Accepted,
+                year: 2026,
+                month: 3,
+                frequency: "Monthly");
+
+            SeedInstitutionEnvironment(
+                seedDb,
+                "Meridian BDC",
+                "meridian-bdc",
+                19.35m,
+                moduleCode: "BDC_CBN",
+                moduleName: "BDC Monthly Prudential",
+                licenceCode: "BDC",
+                licenceName: "Bureau De Change",
+                submissionStatus: SubmissionStatus.Accepted,
+                year: 2026,
+                month: 3,
+                frequency: "Monthly");
+
+            await seedDb.SaveChangesAsync();
+        }
+
+        var sut = CreateSut(factory);
+
+        var firstResponse = await sut.QueryAsync(new ComplianceIqQueryRequest
+        {
+            Query = "What is our current CAR?",
+            TenantId = tenantId,
+            UserId = "portal.admin",
+            UserRole = "Admin",
+            IsRegulatorContext = false
+        });
+
+        var secondResponse = await sut.QueryAsync(new ComplianceIqQueryRequest
+        {
+            Query = "How does this compare to peers?",
+            TenantId = tenantId,
+            UserId = "portal.admin",
+            UserRole = "Admin",
+            IsRegulatorContext = false,
+            ConversationId = firstResponse.ConversationId
+        });
+
+        secondResponse.IsError.Should().BeFalse();
+        secondResponse.IntentCode.Should().Be("COMPARISON_PEER");
+        secondResponse.Rows.Should().ContainSingle();
+        secondResponse.Rows[0]["field_code"].Should().Be("carratio");
+        secondResponse.Rows[0]["licence_category"].Should().Be("BDC");
+        Convert.ToInt32(secondResponse.Rows[0]["peer_count"]).Should().Be(3);
+        secondResponse.Answer.Should().Contain("peer median");
+    }
+
+    [Fact]
+    public async Task QueryAsync_FollowUpPeerQuestion_FallsBackToInstitutionLicenceType_WhenTenantLicenceMapIsMissing()
+    {
+        var factory = CreateFactory(nameof(QueryAsync_FollowUpPeerQuestion_FallsBackToInstitutionLicenceType_WhenTenantLicenceMapIsMissing));
+        Guid tenantId;
+
+        await using (var seedDb = await factory.CreateDbContextAsync())
+        {
+            seedDb.Database.EnsureDeleted();
+            seedDb.Database.EnsureCreated();
+
+            tenantId = SeedInstitutionEnvironment(
+                seedDb,
+                "Buzz BDC",
+                "buzz-bdc",
+                18.65m,
+                moduleCode: "BDC_CBN",
+                moduleName: "BDC Monthly Prudential",
+                licenceCode: "BDC",
+                licenceName: "Bureau De Change",
+                submissionStatus: SubmissionStatus.Draft,
+                year: 2026,
+                month: 3,
+                frequency: "Monthly");
+
+            SeedInstitutionEnvironment(
+                seedDb,
+                "Atlas BDC",
+                "atlas-bdc",
+                17.40m,
+                moduleCode: "BDC_CBN",
+                moduleName: "BDC Monthly Prudential",
+                licenceCode: "BDC",
+                licenceName: "Bureau De Change",
+                submissionStatus: SubmissionStatus.Accepted,
+                year: 2026,
+                month: 3,
+                frequency: "Monthly");
+
+            SeedInstitutionEnvironment(
+                seedDb,
+                "Crown BDC",
+                "crown-bdc",
+                18.10m,
+                moduleCode: "BDC_CBN",
+                moduleName: "BDC Monthly Prudential",
+                licenceCode: "BDC",
+                licenceName: "Bureau De Change",
+                submissionStatus: SubmissionStatus.Accepted,
+                year: 2026,
+                month: 3,
+                frequency: "Monthly");
+
+            SeedInstitutionEnvironment(
+                seedDb,
+                "Meridian BDC",
+                "meridian-bdc",
+                19.35m,
+                moduleCode: "BDC_CBN",
+                moduleName: "BDC Monthly Prudential",
+                licenceCode: "BDC",
+                licenceName: "Bureau De Change",
+                submissionStatus: SubmissionStatus.Accepted,
+                year: 2026,
+                month: 3,
+                frequency: "Monthly");
+
+            seedDb.TenantLicenceTypes.RemoveRange(seedDb.TenantLicenceTypes.ToList());
+            await seedDb.SaveChangesAsync();
+        }
+
+        var sut = CreateSut(factory);
+
+        var firstResponse = await sut.QueryAsync(new ComplianceIqQueryRequest
+        {
+            Query = "What is our current CAR?",
+            TenantId = tenantId,
+            UserId = "portal.admin",
+            UserRole = "Admin",
+            IsRegulatorContext = false
+        });
+
+        var secondResponse = await sut.QueryAsync(new ComplianceIqQueryRequest
+        {
+            Query = "How does this compare to peers?",
+            TenantId = tenantId,
+            UserId = "portal.admin",
+            UserRole = "Admin",
+            IsRegulatorContext = false,
+            ConversationId = firstResponse.ConversationId
+        });
+
+        secondResponse.IsError.Should().BeFalse();
+        secondResponse.IntentCode.Should().Be("COMPARISON_PEER");
+        secondResponse.Rows.Should().ContainSingle();
+        secondResponse.Rows[0]["licence_category"].Should().Be("BDC");
+        Convert.ToInt32(secondResponse.Rows[0]["peer_count"]).Should().Be(3);
+        secondResponse.Answer.Should().Contain("peer median");
+    }
+
+    [Fact]
+    public async Task QueryAsync_FollowUpPeerQuestion_UsesPortalStyleSubmissionJson_ForPeerFallback()
+    {
+        var factory = CreateFactory(nameof(QueryAsync_FollowUpPeerQuestion_UsesPortalStyleSubmissionJson_ForPeerFallback));
+        Guid tenantId;
+
+        await using (var seedDb = await factory.CreateDbContextAsync())
+        {
+            seedDb.Database.EnsureDeleted();
+            seedDb.Database.EnsureCreated();
+
+            tenantId = SeedInstitutionEnvironment(
+                seedDb,
+                "Buzz BDC",
+                "buzz-bdc",
+                18.65m,
+                moduleCode: "BDC_CBN",
+                moduleName: "BDC Monthly Prudential",
+                licenceCode: "BDC",
+                licenceName: "Bureau De Change",
+                submissionStatus: SubmissionStatus.Draft,
+                year: 2026,
+                month: 3,
+                frequency: "Monthly",
+                usePortalStyleJson: true);
+
+            SeedInstitutionEnvironment(
+                seedDb,
+                "Atlas BDC",
+                "atlas-bdc",
+                15.42m,
+                moduleCode: "BDC_CBN",
+                moduleName: "BDC Monthly Prudential",
+                licenceCode: "BDC",
+                licenceName: "Bureau De Change",
+                submissionStatus: SubmissionStatus.Accepted,
+                year: 2026,
+                month: 3,
+                frequency: "Monthly",
+                usePortalStyleJson: true);
+
+            SeedInstitutionEnvironment(
+                seedDb,
+                "Crown BDC",
+                "crown-bdc",
+                16.18m,
+                moduleCode: "BDC_CBN",
+                moduleName: "BDC Monthly Prudential",
+                licenceCode: "BDC",
+                licenceName: "Bureau De Change",
+                submissionStatus: SubmissionStatus.Accepted,
+                year: 2026,
+                month: 3,
+                frequency: "Monthly",
+                usePortalStyleJson: true);
+
+            SeedInstitutionEnvironment(
+                seedDb,
+                "Meridian BDC",
+                "meridian-bdc",
+                17.06m,
+                moduleCode: "BDC_CBN",
+                moduleName: "BDC Monthly Prudential",
+                licenceCode: "BDC",
+                licenceName: "Bureau De Change",
+                submissionStatus: SubmissionStatus.Accepted,
+                year: 2026,
+                month: 3,
+                frequency: "Monthly",
+                usePortalStyleJson: true);
+
+            await seedDb.SaveChangesAsync();
+        }
+
+        var sut = CreateSut(factory);
+
+        var firstResponse = await sut.QueryAsync(new ComplianceIqQueryRequest
+        {
+            Query = "What is our current CAR?",
+            TenantId = tenantId,
+            UserId = "portal.admin",
+            UserRole = "Admin",
+            IsRegulatorContext = false
+        });
+
+        var secondResponse = await sut.QueryAsync(new ComplianceIqQueryRequest
+        {
+            Query = "How does this compare to peers?",
+            TenantId = tenantId,
+            UserId = "portal.admin",
+            UserRole = "Admin",
+            IsRegulatorContext = false,
+            ConversationId = firstResponse.ConversationId
+        });
+
+        secondResponse.IsError.Should().BeFalse();
+        secondResponse.IntentCode.Should().Be("COMPARISON_PEER");
+        secondResponse.Rows.Should().ContainSingle();
+        Convert.ToInt32(secondResponse.Rows[0]["peer_count"]).Should().Be(3);
+        secondResponse.Answer.Should().Contain("peer median");
+    }
+
     private static ComplianceIqService CreateSut(IDbContextFactory<MetadataDbContext> factory)
     {
         var auditLogger = new Mock<IAuditLogger>();
@@ -205,34 +564,43 @@ public class ComplianceIqServiceTests
         MetadataDbContext db,
         string tenantName,
         string tenantSlug,
-        decimal carRatio)
+        decimal carRatio,
+        string moduleCode = "CBN_PRUDENTIAL",
+        string moduleName = "CBN Prudential Return",
+        string licenceCode = "COMMERCIAL_BANK",
+        string licenceName = "Commercial Bank",
+        SubmissionStatus submissionStatus = SubmissionStatus.Accepted,
+        int year = 2026,
+        int month = 3,
+        string frequency = "Quarterly",
+        bool usePortalStyleJson = false)
     {
-        var module = db.Modules.Local.FirstOrDefault(x => x.ModuleCode == "CBN_PRUDENTIAL")
-            ?? db.Modules.FirstOrDefault(x => x.ModuleCode == "CBN_PRUDENTIAL");
+        var module = db.Modules.Local.FirstOrDefault(x => x.ModuleCode == moduleCode)
+            ?? db.Modules.FirstOrDefault(x => x.ModuleCode == moduleCode);
         if (module is null)
         {
             module = new Module
             {
                 Id = 100,
-                ModuleCode = "CBN_PRUDENTIAL",
-                ModuleName = "CBN Prudential Return",
+                ModuleCode = moduleCode,
+                ModuleName = moduleName,
                 RegulatorCode = "CBN",
-                DefaultFrequency = "Quarterly",
+                DefaultFrequency = frequency,
                 IsActive = true,
                 CreatedAt = DateTime.UtcNow
             };
             db.Modules.Add(module);
         }
 
-        var licenceType = db.LicenceTypes.Local.FirstOrDefault(x => x.Code == "COMMERCIAL_BANK")
-            ?? db.LicenceTypes.FirstOrDefault(x => x.Code == "COMMERCIAL_BANK");
+        var licenceType = db.LicenceTypes.Local.FirstOrDefault(x => x.Code == licenceCode)
+            ?? db.LicenceTypes.FirstOrDefault(x => x.Code == licenceCode);
         if (licenceType is null)
         {
             licenceType = new LicenceType
             {
                 Id = 700,
-                Code = "COMMERCIAL_BANK",
-                Name = "Commercial Bank",
+                Code = licenceCode,
+                Name = licenceName,
                 Regulator = "CBN",
                 CreatedAt = DateTime.UtcNow,
                 IsActive = true
@@ -250,7 +618,7 @@ public class ComplianceIqServiceTests
             TenantId = tenant.TenantId,
             InstitutionCode = tenantSlug.ToUpperInvariant(),
             InstitutionName = tenantName,
-            LicenseType = "COMMERCIAL_BANK",
+            LicenseType = licenceCode,
             IsActive = true,
             CreatedAt = DateTime.UtcNow
         };
@@ -271,12 +639,14 @@ public class ComplianceIqServiceTests
             TenantId = tenant.TenantId,
             ModuleId = module.Id,
             Module = module,
-            Year = 2026,
-            Month = 3,
-            Quarter = 1,
-            Frequency = "Quarterly",
-            ReportingDate = new DateTime(2026, 3, 31, 0, 0, 0, DateTimeKind.Utc),
-            DeadlineDate = new DateTime(2026, 4, 30, 0, 0, 0, DateTimeKind.Utc),
+            Year = year,
+            Month = month,
+            Quarter = frequency.Equals("Quarterly", StringComparison.OrdinalIgnoreCase)
+                ? ((month - 1) / 3) + 1
+                : null,
+            Frequency = frequency,
+            ReportingDate = new DateTime(year, month, DateTime.DaysInMonth(year, month), 0, 0, 0, DateTimeKind.Utc),
+            DeadlineDate = new DateTime(year, month, DateTime.DaysInMonth(year, month), 0, 0, 0, DateTimeKind.Utc).AddDays(30),
             IsOpen = true,
             Status = "Completed",
             CreatedAt = DateTime.UtcNow
@@ -291,11 +661,11 @@ public class ComplianceIqServiceTests
             Institution = institution,
             ReturnPeriodId = period.Id,
             ReturnPeriod = period,
-            ReturnCode = $"{tenantSlug.ToUpperInvariant()}-2026Q1",
-            Status = SubmissionStatus.Accepted,
-            SubmittedAt = new DateTime(2026, 4, 10, 0, 0, 0, DateTimeKind.Utc),
-            CreatedAt = new DateTime(2026, 4, 10, 0, 0, 0, DateTimeKind.Utc),
-            ParsedDataJson = BuildSubmissionJson(carRatio)
+            ReturnCode = moduleCode,
+            Status = submissionStatus,
+            SubmittedAt = new DateTime(year, month, Math.Min(10, DateTime.DaysInMonth(year, month)), 0, 0, 0, DateTimeKind.Utc),
+            CreatedAt = new DateTime(year, month, Math.Min(10, DateTime.DaysInMonth(year, month)), 0, 0, 0, DateTimeKind.Utc),
+            ParsedDataJson = BuildSubmissionJson(carRatio, moduleCode, tenantName, tenantSlug.ToUpperInvariant(), usePortalStyleJson)
         };
         db.Submissions.Add(submission);
 
@@ -314,8 +684,92 @@ public class ComplianceIqServiceTests
             .SingleAsync();
     }
 
-    private static string BuildSubmissionJson(decimal carRatio)
+    private static void SeedSubmissionForExistingTenant(
+        MetadataDbContext db,
+        string tenantSlug,
+        decimal carRatio,
+        string moduleCode,
+        SubmissionStatus submissionStatus,
+        int year,
+        int month,
+        string frequency,
+        bool usePortalStyleJson = false)
     {
+        var tenant = db.Tenants.Local.Single(x => x.TenantSlug == tenantSlug);
+        var institution = db.Institutions.Local.Single(x => x.TenantId == tenant.TenantId);
+        var module = db.Modules.Local.Single(x => x.ModuleCode == moduleCode);
+
+        var period = new ReturnPeriod
+        {
+            Id = NextReturnPeriodId(db),
+            TenantId = tenant.TenantId,
+            ModuleId = module.Id,
+            Module = module,
+            Year = year,
+            Month = month,
+            Quarter = frequency.Equals("Quarterly", StringComparison.OrdinalIgnoreCase)
+                ? ((month - 1) / 3) + 1
+                : null,
+            Frequency = frequency,
+            ReportingDate = new DateTime(year, month, DateTime.DaysInMonth(year, month), 0, 0, 0, DateTimeKind.Utc),
+            DeadlineDate = new DateTime(year, month, DateTime.DaysInMonth(year, month), 0, 0, 0, DateTimeKind.Utc).AddDays(30),
+            IsOpen = true,
+            Status = "Completed",
+            CreatedAt = DateTime.UtcNow
+        };
+        db.ReturnPeriods.Add(period);
+
+        db.Submissions.Add(new Submission
+        {
+            Id = NextSubmissionId(db),
+            TenantId = tenant.TenantId,
+            InstitutionId = institution.Id,
+            Institution = institution,
+            ReturnPeriodId = period.Id,
+            ReturnPeriod = period,
+            ReturnCode = moduleCode,
+            Status = submissionStatus,
+            SubmittedAt = new DateTime(year, month, Math.Min(10, DateTime.DaysInMonth(year, month)), 0, 0, 0, DateTimeKind.Utc),
+            CreatedAt = new DateTime(year, month, Math.Min(10, DateTime.DaysInMonth(year, month)), 0, 0, 0, DateTimeKind.Utc),
+            ParsedDataJson = BuildSubmissionJson(carRatio, moduleCode, institution.InstitutionName, institution.InstitutionCode, usePortalStyleJson)
+        });
+    }
+
+    private static string BuildSubmissionJson(
+        decimal carRatio,
+        string moduleCode = "CBN_PRUDENTIAL",
+        string institutionName = "Sample Institution",
+        string institutionCode = "SAMPLE",
+        bool usePortalStyleJson = false)
+    {
+        if (usePortalStyleJson)
+        {
+            var portalPayload = new
+            {
+                ReturnCode = moduleCode,
+                TemplateVersionId = 0,
+                Category = "FixedRow",
+                Rows = new[]
+                {
+                    new
+                    {
+                        RowKey = (string?)null,
+                        Fields = new Dictionary<string, object?>
+                        {
+                            ["InstitutionCode"] = institutionCode,
+                            ["InstitutionName"] = institutionName,
+                            ["CarRatio"] = carRatio,
+                            ["NplRatio"] = 4.1m,
+                            ["LiquidityRatio"] = 35m,
+                            ["TotalAssets"] = 1_500_000_000m
+                        }
+                    }
+                }
+            };
+
+            return JsonSerializer.Serialize(portalPayload);
+        }
+
         var payload = new
         {
             Rows = new[]
